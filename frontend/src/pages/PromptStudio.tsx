@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from "react";
-import { api, Engine, WorkflowTemplate, FileItem, GalleryItem, Prompt } from "@/lib/api";
+import { api, Engine, WorkflowTemplate, FileItem, GalleryItem, Prompt, PromptSuggestion } from "@/lib/api";
 import { DynamicForm } from "@/components/DynamicForm";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -48,6 +48,7 @@ export default function PromptStudio() {
   const [promptSearch, setPromptSearch] = useState("");
   const [promptLoading, setPromptLoading] = useState(false);
   const [promptError, setPromptError] = useState<string | null>(null);
+  const [promptHints, setPromptHints] = useState<PromptSuggestion[]>([]);
 
   // Vision assistance
   const [visionBusy, setVisionBusy] = useState(false);
@@ -135,6 +136,19 @@ export default function PromptStudio() {
     loadPromptLibrary(promptSearch);
   };
 
+  const handlePromptSearchChange = (value: string) => {
+    setPromptSearch(value);
+    if (!value || value.length < 2) {
+      setPromptHints([]);
+      return;
+    }
+
+    api
+      .getPromptSuggestions(value)
+      .then(setPromptHints)
+      .catch((err) => console.error(err));
+  };
+
   const applyPrompt = (prompt: Prompt) => {
     const params = prompt.parameters || {};
     handleFormChange(params);
@@ -159,6 +173,11 @@ export default function PromptStudio() {
     if (!name) return;
 
     try {
+      const tags = (formData.prompt || "")
+        .split(",")
+        .map((t: string) => t.trim())
+        .filter(Boolean);
+
       await api.savePrompt({
         workflow_id: parseInt(selectedWorkflowId),
         name,
@@ -167,6 +186,7 @@ export default function PromptStudio() {
         positive_text: formData.prompt,
         negative_text: formData.negative_prompt,
         preview_image_path: previewPath || undefined,
+        tags,
       });
 
       await loadPromptLibrary(promptSearch);
@@ -608,10 +628,20 @@ export default function PromptStudio() {
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />
               <Input
                 value={promptSearch}
-                onChange={(e) => setPromptSearch(e.target.value)}
+                onChange={(e) => handlePromptSearchChange(e.target.value)}
                 placeholder="Search prompts"
                 className="pl-9"
+                list="prompt-hints"
               />
+              <datalist id="prompt-hints">
+                {promptHints.map((hint) => (
+                  <option
+                    key={`${hint.type}-${hint.value}`}
+                    value={hint.value}
+                    label={`${hint.type} (${hint.frequency}) ${hint.snippet || ""}`.trim()}
+                  />
+                ))}
+              </datalist>
             </div>
             <Button type="submit" variant="outline" size="sm">Search</Button>
           </form>
@@ -644,21 +674,30 @@ export default function PromptStudio() {
                     <Button size="sm" variant="ghost" className="text-blue-600 hover:text-blue-700" onClick={() => applyPrompt(p)}>
                       Load
                     </Button>
-                  </div>
-                  <div className="flex flex-wrap gap-1 mt-2 text-[11px] text-slate-500">
-                    {p.parameters?.steps && (
-                      <span className="px-2 py-0.5 bg-white border border-slate-200 rounded">Steps: {p.parameters.steps}</span>
-                    )}
-                    {p.parameters?.cfg && (
-                      <span className="px-2 py-0.5 bg-white border border-slate-200 rounded">CFG: {p.parameters.cfg}</span>
-                    )}
-                    {p.parameters?.sampler_name && (
-                      <span className="px-2 py-0.5 bg-white border border-slate-200 rounded">{p.parameters.sampler_name}</span>
-                    )}
-                    {p.updated_at && (
-                      <span className="px-2 py-0.5 bg-white border border-slate-200 rounded">{new Date(p.updated_at).toLocaleDateString()}</span>
-                    )}
-                  </div>
+                </div>
+                <div className="flex flex-wrap gap-1 mt-2 text-[11px] text-slate-500">
+                  {p.tags && p.tags.length > 0 && (
+                    <>
+                      {p.tags.slice(0, 4).map((tag) => (
+                        <span key={tag} className="px-1 py-0.5 bg-indigo-50 text-indigo-600 border border-indigo-100 rounded">
+                          #{tag}
+                        </span>
+                      ))}
+                    </>
+                  )}
+                  {p.parameters?.steps && (
+                    <span className="px-2 py-0.5 bg-white border border-slate-200 rounded">Steps: {p.parameters.steps}</span>
+                  )}
+                  {p.parameters?.cfg && (
+                    <span className="px-2 py-0.5 bg-white border border-slate-200 rounded">CFG: {p.parameters.cfg}</span>
+                  )}
+                  {p.parameters?.sampler_name && (
+                    <span className="px-2 py-0.5 bg-white border border-slate-200 rounded">{p.parameters.sampler_name}</span>
+                  )}
+                  {p.updated_at && (
+                    <span className="px-2 py-0.5 bg-white border border-slate-200 rounded">{new Date(p.updated_at).toLocaleDateString()}</span>
+                  )}
+                </div>
                 </div>
               ))
             )}

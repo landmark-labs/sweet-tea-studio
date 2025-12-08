@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { api, Prompt } from "@/lib/api";
+import { api, Prompt, PromptSuggestion } from "@/lib/api";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Trash2, Search, LayoutTemplate, Sparkles, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ export default function PromptLibrary() {
     const [tagInput, setTagInput] = useState("");
     const [expandedPrompt, setExpandedPrompt] = useState<string>("");
     const [expanding, setExpanding] = useState(false);
+    const [suggestions, setSuggestions] = useState<PromptSuggestion[]>([]);
 
     useEffect(() => {
         loadPrompts();
@@ -27,6 +28,20 @@ export default function PromptLibrary() {
             setError("Failed to load prompts");
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    const fetchSuggestions = async (query: string) => {
+        if (!query || query.length < 2) {
+            setSuggestions([]);
+            return;
+        }
+
+        try {
+            const hints = await api.getPromptSuggestions(query);
+            setSuggestions(hints);
+        } catch (err) {
+            console.error(err);
         }
     };
 
@@ -49,6 +64,9 @@ export default function PromptLibrary() {
         } finally {
             setExpanding(false);
         }
+    const handleSearchChange = (value: string) => {
+        setSearchQuery(value);
+        fetchSuggestions(value);
     };
 
     const handleDelete = async (id: number) => {
@@ -77,8 +95,14 @@ export default function PromptLibrary() {
                             placeholder="Search prompts..."
                             className="pl-9"
                             value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
+                            onChange={(e) => handleSearchChange(e.target.value)}
+                            list="prompt-suggestions"
                         />
+                        <datalist id="prompt-suggestions">
+                            {suggestions.map((s) => (
+                                <option key={`${s.type}-${s.value}`} value={s.value} label={`${s.type} (${s.frequency})`} />
+                            ))}
+                        </datalist>
                     </div>
                 </form>
             </div>
@@ -160,6 +184,18 @@ export default function PromptLibrary() {
                             <p className="text-sm text-slate-500 truncate">{prompt.description || "No description"}</p>
                             {prompt.positive_text && (
                                 <p className="text-xs text-slate-600 mt-1 line-clamp-1">{prompt.positive_text}</p>
+                            )}
+                            {prompt.tags && prompt.tags.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mt-2">
+                                    {prompt.tags.map((tag) => (
+                                        <span
+                                            key={tag}
+                                            className="px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded border border-indigo-100 text-[11px]"
+                                        >
+                                            #{tag}
+                                        </span>
+                                    ))}
+                                </div>
                             )}
                             {/* Mini Params */}
                             <div className="flex gap-4 mt-2 text-xs text-slate-400">
