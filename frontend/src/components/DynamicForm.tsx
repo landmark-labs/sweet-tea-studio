@@ -9,6 +9,25 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { PromptAutocompleteTextarea } from "@/components/PromptAutocompleteTextarea";
+import { sendTelemetryEvent } from "@/lib/telemetry";
+
+type FormSection = "inputs" | "prompts" | "loras" | "nodes";
+
+interface PlacementMeta {
+    key: string;
+    section: FormSection;
+    groupId: string;
+    groupTitle: string;
+    source: "annotation" | "heuristic";
+    reason: string;
+    order: number;
+}
+
+interface GroupMap {
+    title: string;
+    keys: string[];
+    order: number;
+}
 
 interface DynamicFormProps {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -88,21 +107,59 @@ export function DynamicForm({
     };
 
     // Group fields
-    const groups = useMemo(() => {
-        if (!schema) return { inputs: [], prompts: [], loras: [], nodes: {} };
+    const groups = useMemo<{
+        inputs: string[];
+        prompts: string[];
+        loras: string[];
+        nodes: Record<string, GroupMap>;
+        placements: Record<string, PlacementMeta>;
+    }>(() => {
+        if (!schema) return { inputs: [], prompts: [], loras: [], nodes: {}, placements: {} };
 
         const inputs: string[] = [];
-        const prompts: string[] = [];
+        const prompts: PlacementMeta[] = [];
         const loras: string[] = [];
-        const nodes: Record<string, { title: string, keys: string[], order: number }> = {};
+        const nodes: Record<string, GroupMap> = {};
+        const placements: Record<string, PlacementMeta> = {};
 
-        Object.keys(schema).forEach((key) => {
+        const parseOrder = (value?: string | number, fallback = 999) => {
+            if (typeof value === "number") return value;
+            const parsed = parseInt(value || "");
+            return Number.isFinite(parsed) ? parsed : fallback;
+        };
+
+        const resolvePlacement = (key: string): PlacementMeta => {
             const field = schema[key];
-            const isImageUpload = field.widget === "upload" || field.widget === "image_upload" || (field.title && field.title.includes("LoadImage"));
+            const annotations = field.x_form as {
+                section?: FormSection;
+                groupId?: string;
+                groupTitle?: string;
+                order?: number;
+            };
 
+            if (annotations?.section) {
+                return {
+                    key,
+                    section: annotations.section,
+                    groupId: annotations.groupId || annotations.section,
+                    groupTitle: annotations.groupTitle || field.title || annotations.groupId || key,
+                    order: parseOrder(annotations.order ?? field.x_node_id),
+                    source: "annotation",
+                    reason: "explicit_annotation"
+                };
+            }
+
+            const isImageUpload = field.widget === "upload" || field.widget === "image_upload" || (field.title && field.title.includes("LoadImage"));
             if (isImageUpload) {
-                inputs.push(key);
-                return;
+                return {
+                    key,
+                    section: "inputs",
+                    groupId: "inputs",
+                    groupTitle: field.title || "Input Images",
+                    order: parseOrder(field.x_node_id, 0),
+                    source: "heuristic",
+                    reason: "image_upload"
+                };
             }
 
             const isStrictPrompt = field.x_class_type && (
@@ -112,46 +169,106 @@ export function DynamicForm({
             );
 
             if (field.widget === "textarea" && isStrictPrompt) {
-                prompts.push(key);
-                return;
+                return {
+                    key,
+                    section: "prompts",
+                    groupId: field.x_node_id || "prompt",
+                    groupTitle: field.title || "Prompt",
+                    order: parseOrder(field.x_node_id, 0),
+                    source: "heuristic",
+                    reason: "prompt_textarea"
+                };
             }
 
             if (field.x_class_type === "LoraLoader" || (field.title && field.title.includes("LoraLoader"))) {
+                return {
+                    key,
+                    section: "loras",
+                    groupId: "loras",
+                    groupTitle: field.title || "LoRA",
+                    order: parseOrder(field.x_node_id, 0),
+                    source: "heuristic",
+                    reason: "lora_loader"
+                };
+            }
+
+            const fallbackNodeId = field.x_node_id || "default";
+            const fallbackGroupTitle = field.x_title || field.title || "Configuration";
+            const match = field.title?.match(/\((.+)\)$/);
+            const heuristicTitle = match ? match[1] : fallbackGroupTitle;
+            const nodeId = match ? heuristicTitle : fallbackNodeId;
+
+            return {
+                key,
+                section: "nodes",
+                groupId: nodeId,
+                groupTitle: heuristicTitle,
+                order: parseOrder(field.x_node_id),
+                source: "heuristic",
+                reason: match ? "title_annotation_match" : "fallback_configuration"
+            };
+        };
+
+        Object.keys(schema).forEach((key) => {
+            const placement = resolvePlacement(key);
+            placements[key] = placement;
+
+            if (placement.section === "inputs") {
+                inputs.push(key);
+                return;
+            }
+
+            if (placement.section === "prompts") {
+                prompts.push(placement);
+                return;
+            }
+
+            if (placement.section === "loras") {
                 loras.push(key);
                 return;
             }
 
-            let nodeId = field.x_node_id;
-            let groupTitle = field.x_title;
-
-            if (!nodeId) {
-                nodeId = "default";
-                groupTitle = "Configuration";
-                const match = field.title?.match(/\((.+)\)$/);
-                if (match) {
-                    groupTitle = match[1];
-                    nodeId = groupTitle;
-                }
-            }
-
-            if (!nodes[nodeId]) {
-                nodes[nodeId] = {
-                    title: groupTitle || "Advanced",
+            if (!nodes[placement.groupId]) {
+                nodes[placement.groupId] = {
+                    title: placement.groupTitle || "Advanced",
                     keys: [],
-                    order: parseInt(nodeId) || 999
+                    order: placement.order ?? 999
                 };
             }
-            nodes[nodeId].keys.push(key);
+            nodes[placement.groupId].keys.push(key);
         });
 
-        prompts.sort((a, b) => {
-            const nodeA = parseInt(schema[a].x_node_id || "0");
-            const nodeB = parseInt(schema[b].x_node_id || "0");
-            return nodeA - nodeB;
-        });
+        prompts.sort((a, b) => a.order - b.order);
 
-        return { inputs, prompts, loras, nodes };
+        return { inputs, prompts: prompts.map((prompt) => prompt.key), loras, nodes, placements };
     }, [schema]);
+
+    useEffect(() => {
+        if (!schema) return;
+
+        const ambiguous = Object.values(groups.placements).filter(
+            (placement) =>
+                placement.source === "heuristic" &&
+                (placement.groupId === "default" || placement.reason === "fallback_configuration")
+        );
+
+        if (!ambiguous.length) return;
+
+        sendTelemetryEvent("dynamic_form.grouping_signal", {
+            engineId,
+            persistenceKey,
+            fields: ambiguous.map((placement) => ({
+                key: placement.key,
+                groupId: placement.groupId,
+                groupTitle: placement.groupTitle,
+                reason: placement.reason,
+                widget: schema[placement.key]?.widget,
+                title: schema[placement.key]?.title,
+                nodeId: schema[placement.key]?.x_node_id,
+                classType: schema[placement.key]?.x_class_type
+            }))
+        });
+    }, [engineId, groups.placements, persistenceKey, schema]);
 
     const renderField = (key: string) => {
         const field = schema[key];
