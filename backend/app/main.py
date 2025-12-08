@@ -3,12 +3,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.db.init_db import init_db
 from app.api.endpoints import engines, workflows, jobs, gallery, files, library, extensions
+import asyncio
+from app.core.websockets import manager
 
 app = FastAPI(title="Diffusion Studio Backend")
 
 @app.on_event("startup")
 def on_startup():
     init_db()
+    manager.loop = asyncio.get_running_loop()
 
 # CORS
 # Set all CORS enabled origins

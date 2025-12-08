@@ -49,9 +49,23 @@ def generate_schema_from_graph(graph: Dict[str, Any], object_info: Dict[str, Any
             # input_config is [type, config_dict] e.g. ["INT", {"default": 20...}]
             if not isinstance(input_config, list):
                 continue
+            
+            # Check if this input is actually a LINK (connected to another node)
+            # In ComfyUI graph, unconnected inputs have primitive values.
+            # Connected inputs have a list value: [node_id, slot_index]
+            current_val = node.get("inputs", {}).get(input_name)
+            
+            # If default is provided in config, fallback to it if not in node inputs
+            config = input_config[1] if len(input_config) > 1 else {}
+            if current_val is None:
+                current_val = config.get("default")
+
+            # CRITICAL FIX: If current_val is a list, it's a link (or invalid). 
+            # We must NOT expose linked inputs as widgets.
+            if isinstance(current_val, list):
+                continue
                 
             val_type = input_config[0]
-            config = input_config[1] if len(input_config) > 1 else {}
             
             # Helper to map Comfy types to JSON Schema
             field_key = f"{class_type}{suffix}.{input_name}"
@@ -61,7 +75,7 @@ def generate_schema_from_graph(graph: Dict[str, Any], object_info: Dict[str, Any
                 schema[field_key] = {
                     "type": "integer", 
                     "title": f"{input_name} ({class_type}{suffix})",
-                    "default": node.get("inputs", {}).get(input_name, config.get("default", 0)),
+                    "default": current_val if current_val is not None else 0,
                     "minimum": config.get("min"),
                     "maximum": config.get("max"),
                     "x_node_id": node_id,
@@ -72,7 +86,7 @@ def generate_schema_from_graph(graph: Dict[str, Any], object_info: Dict[str, Any
                 schema[field_key] = {
                     "type": "number", 
                     "title": f"{input_name} ({class_type}{suffix})",
-                    "default": node.get("inputs", {}).get(input_name, config.get("default", 0.0)),
+                    "default": current_val if current_val is not None else 0.0,
                     "minimum": config.get("min"),
                     "maximum": config.get("max"),
                     "step": config.get("step", 0.01),
@@ -86,7 +100,7 @@ def generate_schema_from_graph(graph: Dict[str, Any], object_info: Dict[str, Any
                 schema[field_key] = {
                     "type": "string",
                     "title": f"{(node.get('_meta', {}).get('title') or input_name)}", # Use explicit title if available
-                    "default": node.get("inputs", {}).get(input_name, config.get("default", "")),
+                    "default": current_val if current_val is not None else "",
                     "widget": widget,
                     "x_node_id": node_id,
                     "x_class_type": class_type,
@@ -99,7 +113,7 @@ def generate_schema_from_graph(graph: Dict[str, Any], object_info: Dict[str, Any
                     schema[field_key] = {
                         "type": "string",
                         "title": f"Image ({class_type}{suffix})",
-                        "default": node.get("inputs", {}).get(input_name, val_type[0] if val_type else ""),
+                        "default": current_val if current_val is not None else (val_type[0] if val_type else ""),
                         "widget": "image_upload", # Force specialized widget
                         "enum": val_type, # Pass available files as options
                         "x_node_id": node_id,
@@ -110,7 +124,7 @@ def generate_schema_from_graph(graph: Dict[str, Any], object_info: Dict[str, Any
                     schema[field_key] = {
                         "type": "string",
                         "title": f"{input_name} ({class_type}{suffix})",
-                        "default": node.get("inputs", {}).get(input_name, val_type[0]),
+                        "default": current_val if current_val is not None else val_type[0],
                         "enum": val_type,
                         "x_node_id": node_id,
                         "x_class_type": class_type,

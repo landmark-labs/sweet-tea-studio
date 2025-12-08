@@ -5,12 +5,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
-import { Loader2 } from "lucide-react";
+import { Loader2, GripHorizontal } from "lucide-react";
 import { RunningGallery } from "@/components/RunningGallery";
 import { FileExplorer } from "@/components/FileExplorer";
 import { ImageViewer } from "@/components/ImageViewer";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { InstallStatusDialog, InstallStatus } from "@/components/InstallStatusDialog";
+import { PromptConstructor } from "@/components/PromptConstructor";
+import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 
 export default function PromptStudio() {
   const [engines, setEngines] = useState<Engine[]>([]);
@@ -35,6 +37,11 @@ export default function PromptStudio() {
   const [previewPath, setPreviewPath] = useState<string | null>(null);
   const [previewMetadata, setPreviewMetadata] = useState<any>(null);
 
+  // Form Data State
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [formData, setFormData] = useState<any>({});
+  const [focusedField, setFocusedField] = useState<string>("");
+
   // Add a refresh key for gallery
   const [galleryRefresh, setGalleryRefresh] = useState(0);
 
@@ -42,6 +49,8 @@ export default function PromptStudio() {
   const [installOpen, setInstallOpen] = useState(false);
   const [installStatus, setInstallStatus] = useState<InstallStatus | null>(null);
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  const selectedWorkflow = workflows.find((w) => String(w.id) === selectedWorkflowId);
 
   // Persist selections
   useEffect(() => {
@@ -51,6 +60,40 @@ export default function PromptStudio() {
   useEffect(() => {
     if (selectedWorkflowId) localStorage.setItem("ds_selected_workflow", selectedWorkflowId);
   }, [selectedWorkflowId]);
+
+  useEffect(() => {
+    if (selectedWorkflow) {
+      const schema = selectedWorkflow.input_schema;
+      const key = `workflow_form_${selectedWorkflow.id}`;
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let initialData: any = {};
+      Object.keys(schema).forEach((k) => {
+        if (schema[k].default !== undefined) initialData[k] = schema[k].default;
+      });
+      try {
+        const saved = localStorage.getItem(key);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          initialData = { ...initialData, ...parsed };
+        }
+      } catch (e) { /* ignore */ }
+      setFormData(initialData);
+    }
+  }, [selectedWorkflowId, workflows]);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handleFormChange = (newData: any) => {
+    setFormData(newData);
+    if (selectedWorkflowId) {
+      localStorage.setItem(`workflow_form_${selectedWorkflowId}`, JSON.stringify(newData));
+    }
+  };
+
+  const handlePromptUpdate = (field: string, value: string) => {
+    handleFormChange({ ...formData, [field]: value });
+  };
+
 
   useEffect(() => {
     if (!lastJobId) return;
@@ -80,7 +123,6 @@ export default function PromptStudio() {
         setProgress(100);
         setJobImages(data.images);
 
-        // Auto-select first result
         if (data.images && data.images.length > 0) {
           setPreviewPath(data.images[0].path);
           setPreviewMetadata({
@@ -88,7 +130,6 @@ export default function PromptStudio() {
             created_at: new Date().toISOString()
           });
         }
-
         setGalleryRefresh(prev => prev + 1);
       } else if (data.type === "error") {
         setJobStatus("failed");
@@ -160,7 +201,8 @@ export default function PromptStudio() {
     setInstallOpen(false);
   };
 
-  const handleGenerate = async (formData: any) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handleGenerate = async (data: any) => {
     if (!selectedEngineId || !selectedWorkflowId) return;
 
     setIsSubmitting(true);
@@ -169,7 +211,7 @@ export default function PromptStudio() {
       const job = await api.createJob(
         parseInt(selectedEngineId),
         parseInt(selectedWorkflowId),
-        formData
+        data
       );
       setLastJobId(job.id);
     } catch (err) {
@@ -196,8 +238,6 @@ export default function PromptStudio() {
     });
   };
 
-  const selectedWorkflow = workflows.find((w) => String(w.id) === selectedWorkflowId);
-
   const handleGallerySelect = (item: GalleryItem) => {
     setPreviewPath(item.image.path);
     setPreviewMetadata({
@@ -208,12 +248,9 @@ export default function PromptStudio() {
   };
 
   const handleWorkflowSelect = async (workflowId: string, fromImagePath?: string) => {
-    // If switching workflow with an image intent
     if (fromImagePath) {
-      setIsLoading(true); // Short loading state
+      setIsLoading(true);
       try {
-        // 1. Copy image to Input directory so ComfyUI can use it
-        // We reuse the gallery endpoint to get the blob
         const url = `/api/v1/gallery/image/path?path=${encodeURIComponent(fromImagePath)}`;
         const res = await fetch(url);
         const blob = await res.blob();
@@ -222,10 +259,8 @@ export default function PromptStudio() {
 
         const uploaded = await api.uploadFile(file, selectedEngineId ? parseInt(selectedEngineId) : undefined);
 
-        // 2. Inject into target workflow's persistence
         const targetSchema = workflows.find(w => String(w.id) === workflowId)?.input_schema;
         if (targetSchema) {
-          // Find the image field
           const imageFieldKey = Object.keys(targetSchema).find(key => {
             const f = targetSchema[key];
             return f.widget === "upload" || f.widget === "image_upload" || (f.title && f.title.includes("LoadImage"));
@@ -233,19 +268,13 @@ export default function PromptStudio() {
 
           if (imageFieldKey) {
             const key = `workflow_form_${workflowId}`;
-            let stored = {};
-            try {
-              stored = JSON.parse(localStorage.getItem(key) || "{}");
-            } catch (e) { /* ignore */ }
-
-            localStorage.setItem(key, JSON.stringify({
-              ...stored,
-              [imageFieldKey]: uploaded.filename
-            }));
+            const currentStored = JSON.parse(localStorage.getItem(key) || "{}");
+            const newData = { ...currentStored, [imageFieldKey]: uploaded.filename };
+            localStorage.setItem(key, JSON.stringify(newData));
           }
         }
       } catch (e) {
-        console.error("Failed to transfer image to workflow", e);
+        console.error("Failed to transfer image", e);
         setError("Failed to transfer image to workflow");
       } finally {
         setIsLoading(false);
@@ -264,18 +293,40 @@ export default function PromptStudio() {
   }
 
   return (
-    <div className="h-[calc(100vh-4rem)] flex overflow-hidden bg-slate-100">
+    <div className="h-[calc(100vh-4rem)] bg-slate-100 flex overflow-hidden">
 
-      {/* 1. File Explorer (Far Left) */}
-      <div className="w-64 flex-none bg-white border-r hidden xl:block">
-        <FileExplorer engineId={selectedEngineId} onFileSelect={handleFileSelect} />
+      {/* 1. Left Column (Split: Explorer / Constructor) */}
+      <div className="w-[480px] flex-none bg-white border-r hidden xl:block overflow-hidden">
+        <PanelGroup direction="vertical">
+          <Panel defaultSize={40} minSize={20}>
+            <FileExplorer engineId={selectedEngineId} onFileSelect={handleFileSelect} />
+          </Panel>
+
+          <PanelResizeHandle className="h-2 bg-slate-100 hover:bg-slate-200 transition-colors flex items-center justify-center cursor-row-resize border-y border-slate-200">
+            <GripHorizontal size={14} className="text-slate-400" />
+          </PanelResizeHandle>
+
+          <Panel defaultSize={60} minSize={20}>
+            {selectedWorkflow ? (
+              <PromptConstructor
+                schema={selectedWorkflow.input_schema}
+                currentValues={formData}
+                onUpdate={handlePromptUpdate}
+                targetField={focusedField}
+                onTargetChange={setFocusedField} // Allows "Select" internally if we want, but better to clear
+                onFinish={() => setFocusedField("")} // Explicitly clear focus on "Finish"
+              />
+            ) : (
+              <div className="p-4 text-xs text-slate-400">Select a workflow to use Prompt Constructor</div>
+            )}
+          </Panel>
+        </PanelGroup>
       </div>
 
       {/* 2. Configuration (Left) */}
-      <div className="w-[300px] flex-none bg-white border-r overflow-y-auto p-4 flex flex-col gap-4">
+      <div className="w-[340px] flex-none bg-white border-r overflow-y-auto p-4 flex flex-col gap-4">
         <div>
           <h2 className="text-lg font-bold mb-4">Configuration</h2>
-
           <div className="space-y-4">
             <div className="space-y-2">
               <label className="text-xs font-semibold text-slate-500 uppercase">Engine</label>
@@ -292,7 +343,6 @@ export default function PromptStudio() {
                 </SelectContent>
               </Select>
             </div>
-
             <div className="space-y-2">
               <label className="text-xs font-semibold text-slate-500 uppercase">Workflow</label>
               <Select value={selectedWorkflowId} onValueChange={setSelectedWorkflowId}>
@@ -308,7 +358,6 @@ export default function PromptStudio() {
                 </SelectContent>
               </Select>
             </div>
-
             {selectedWorkflow?.description?.includes("[Missing Nodes:") && (
               <Alert className="border-amber-500 bg-amber-50">
                 <AlertTitle className="text-amber-800">Missing Nodes Detected</AlertTitle>
@@ -322,7 +371,7 @@ export default function PromptStudio() {
                     size="sm"
                     variant="default"
                     className="w-full bg-amber-600 hover:bg-amber-700 text-white"
-                    onClick={async () => {
+                    onClick={() => {
                       const match = selectedWorkflow.description.match(/\[Missing Nodes: (.*?)\]/);
                       if (match) {
                         const nodes = match[1].split(",").map(s => s.trim());
@@ -335,7 +384,6 @@ export default function PromptStudio() {
                 </AlertDescription>
               </Alert>
             )}
-
           </div>
         </div>
 
@@ -352,20 +400,16 @@ export default function PromptStudio() {
               schema={selectedWorkflow.input_schema}
               onSubmit={handleGenerate}
               isLoading={isSubmitting}
-              persistenceKey={`workflow_form_${selectedWorkflow.id}`}
               engineId={selectedEngineId}
               submitLabel="Generate"
+              formData={formData}
+              onChange={handleFormChange}
+              onFieldFocus={setFocusedField}
+              activeField={focusedField}
             />
           ) : (
             <div className="text-center py-8 text-slate-400 text-sm">
-              {workflows.length === 0 ? (
-                <div>
-                  <p className="mb-2">No workflows found.</p>
-                  <a href="/workflows">
-                    <Button variant="outline" size="sm">Import Workflow</Button>
-                  </a>
-                </div>
-              ) : "Select workflow"}
+              {workflows.length === 0 ? "No workflows found." : "Select workflow"}
             </div>
           )}
         </div>

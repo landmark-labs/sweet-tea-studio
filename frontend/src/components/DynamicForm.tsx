@@ -17,16 +17,38 @@ interface DynamicFormProps {
     persistenceKey?: string;
     engineId?: string;
     submitLabel?: string;
+    // specific controlled props
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    formData?: any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    onChange?: (data: any) => void;
+    onFieldFocus?: (key: string) => void;
+    onFieldBlur?: (key: string, relatedTarget: Element | null) => void;
+    activeField?: string;
 }
 
-export function DynamicForm({ schema, onSubmit, isLoading, persistenceKey, engineId, submitLabel = "Generate & Upscale" }: DynamicFormProps) {
+export function DynamicForm({
+    schema,
+    onSubmit,
+    isLoading,
+    persistenceKey,
+    engineId,
+    submitLabel = "Generate & Upscale",
+    formData: externalData,
+    onChange: externalOnChange,
+    onFieldFocus,
+    onFieldBlur,
+    activeField
+}: DynamicFormProps) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const [formData, setFormData] = useState<any>({});
+    const [internalData, setInternalData] = useState<any>({});
+
+    const isControlled = externalData !== undefined;
+    const formData = isControlled ? externalData : internalData;
 
     // Initialize defaults or load from storage
     useEffect(() => {
-        if (schema) {
-            // Check storage first
+        if (schema && !isControlled) {
             let storedData = null;
             if (persistenceKey) {
                 try {
@@ -45,19 +67,22 @@ export function DynamicForm({ schema, onSubmit, isLoading, persistenceKey, engin
                 }
             });
 
-            // Merge defaults with stored data (stored takes precedence)
-            setFormData({ ...defaults, ...(storedData || {}) });
+            setInternalData({ ...defaults, ...(storedData || {}) });
         }
-    }, [schema, persistenceKey]);
+    }, [schema, persistenceKey, isControlled]);
 
     const handleChange = (key: string, value: string | number) => {
-        setFormData((prev: any) => {
-            const next = { ...prev, [key]: value };
-            if (persistenceKey) {
-                localStorage.setItem(persistenceKey, JSON.stringify(next));
-            }
-            return next;
-        });
+        const next = { ...formData, [key]: value };
+
+        if (persistenceKey) {
+            localStorage.setItem(persistenceKey, JSON.stringify(next));
+        }
+
+        if (isControlled) {
+            externalOnChange?.(next);
+        } else {
+            setInternalData(next);
+        }
     };
 
     // Group fields
@@ -73,18 +98,15 @@ export function DynamicForm({ schema, onSubmit, isLoading, persistenceKey, engin
             const field = schema[key];
             const isImageUpload = field.widget === "upload" || field.widget === "image_upload" || (field.title && field.title.includes("LoadImage"));
 
-            // 1. Inputs (LoadImage)
             if (isImageUpload) {
                 inputs.push(key);
                 return;
             }
 
-            // 2. Prompts (Textarea) - Only group strict "Prompt" nodes (CLIPTextEncode, String Literal)
-            // Other textareas (filenames, complex logic) should stay with their node.
             const isStrictPrompt = field.x_class_type && (
                 field.x_class_type.includes("CLIPTextEncode") ||
                 field.x_class_type.includes("String Literal") ||
-                field.x_class_type.includes("SimpleWildcards") // Common one
+                field.x_class_type.includes("SimpleWildcards")
             );
 
             if (field.widget === "textarea" && isStrictPrompt) {
@@ -92,29 +114,21 @@ export function DynamicForm({ schema, onSubmit, isLoading, persistenceKey, engin
                 return;
             }
 
-            // 3. LoRAs
             if (field.x_class_type === "LoraLoader" || (field.title && field.title.includes("LoraLoader"))) {
                 loras.push(key);
                 return;
             }
 
-            // 4. Group by Node
-            // Use x_node_id or title prefix fallback or "Advanced"
             let nodeId = field.x_node_id;
             let groupTitle = field.x_title;
 
-            // Fallback for legacy schemas without x_ metadata
             if (!nodeId) {
-                // Heuristic: "seed (KSampler)" -> extract "KSampler" or full grouping
-                // Just group by explicit group title if we had one, or generic "Configuration"
                 nodeId = "default";
                 groupTitle = "Configuration";
-
-                // Try to extract from title
                 const match = field.title?.match(/\((.+)\)$/);
                 if (match) {
                     groupTitle = match[1];
-                    nodeId = groupTitle; // Use title as ID for grouping
+                    nodeId = groupTitle;
                 }
             }
 
@@ -128,7 +142,6 @@ export function DynamicForm({ schema, onSubmit, isLoading, persistenceKey, engin
             nodes[nodeId].keys.push(key);
         });
 
-        // Sort prompts by Node ID order if possible
         prompts.sort((a, b) => {
             const nodeA = parseInt(schema[a].x_node_id || "0");
             const nodeB = parseInt(schema[b].x_node_id || "0");
@@ -141,6 +154,7 @@ export function DynamicForm({ schema, onSubmit, isLoading, persistenceKey, engin
     const renderField = (key: string) => {
         const field = schema[key];
         const isImageUpload = field.widget === "upload" || field.widget === "image_upload" || (field.title && field.title.includes("LoadImage"));
+        const isActive = key === activeField;
 
         if (isImageUpload) {
             return (
@@ -159,14 +173,19 @@ export function DynamicForm({ schema, onSubmit, isLoading, persistenceKey, engin
         if (field.widget === "textarea") {
             return (
                 <div key={key} className="space-y-2">
-                    <Label htmlFor={key}>{field.title || key}</Label>
+                    <Label htmlFor={key} className={cn(isActive && "text-blue-600 font-semibold")}>{field.title || key}</Label>
                     <Textarea
                         id={key}
                         value={formData[key] || ""}
                         onChange={(e) => handleChange(key, e.target.value)}
-                        placeholder={field.default ? String(field.default) : ""}
+                        onFocus={() => onFieldFocus?.(key)}
+                        onBlur={(e) => onFieldBlur?.(key, e.relatedTarget as Element)}
+                        placeholder=""
                         rows={3}
-                        className="text-xs font-mono"
+                        className={cn(
+                            "text-xs font-mono transition-all",
+                            isActive && "ring-2 ring-blue-400 border-blue-400 bg-blue-50/20"
+                        )}
                     />
                 </div>
             );
@@ -174,16 +193,16 @@ export function DynamicForm({ schema, onSubmit, isLoading, persistenceKey, engin
 
         return (
             <div key={key} className="space-y-2">
-                <Label htmlFor={key} className="text-xs text-slate-500">{field.title || key}</Label>
+                <Label htmlFor={key} className={cn("text-xs text-slate-500", isActive && "text-blue-600 font-semibold")}>{field.title || key}</Label>
                 {field.enum ? (
                     <Select
                         value={String(formData[key] || "")}
                         onValueChange={(val) => handleChange(key, val)}
                     >
-                        <SelectTrigger className="w-full h-8 text-xs">
-                            <SelectValue placeholder={field.default ? String(field.default) : "Select..."} />
+                        <SelectTrigger id={key} className={cn("h-8 text-xs", isActive && "ring-1 ring-blue-400 border-blue-400")}>
+                            <SelectValue placeholder="Select..." />
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent position="popper" sideOffset={5} className="max-h-[300px] overflow-y-auto z-50">
                             {field.enum.map((opt: string) => (
                                 <SelectItem key={opt} value={opt} className="text-xs">
                                     {opt}
@@ -194,18 +213,15 @@ export function DynamicForm({ schema, onSubmit, isLoading, persistenceKey, engin
                 ) : (
                     <Input
                         id={key}
-                        type={field.type === "integer" ? "number" : "text"}
+                        type={field.type === "integer" || field.type === "number" ? "number" : "text"}
                         value={formData[key] || ""}
-                        onChange={(e) =>
-                            handleChange(
-                                key,
-                                field.type === "integer"
-                                    ? parseInt(e.target.value) || 0
-                                    : e.target.value
-                            )
-                        }
-                        placeholder={field.default ? String(field.default) : ""}
-                        className="h-8 text-xs"
+                        onChange={(e) => handleChange(key, field.type === "integer" ? parseInt(e.target.value) : field.type === "number" ? parseFloat(e.target.value) : e.target.value)}
+                        onFocus={() => onFieldFocus?.(key)}
+                        placeholder=""
+                        className={cn("h-8 text-xs", isActive && "ring-1 ring-blue-400 border-blue-400")}
+                        step={field.step || (field.type === "integer" ? 1 : 0.01)}
+                        min={field.minimum}
+                        max={field.maximum}
                     />
                 )}
             </div>
@@ -217,58 +233,56 @@ export function DynamicForm({ schema, onSubmit, isLoading, persistenceKey, engin
         onSubmit(formData);
     };
 
-    if (!schema) return <div className="text-gray-500">No parameters available</div>;
-
-    const sortedNodeIds = Object.keys(groups.nodes).sort((a, b) => groups.nodes[a].order - groups.nodes[b].order);
+    if (!schema) return null;
 
     return (
-        <form onSubmit={handleSubmit} className="space-y-6">
-            {/* 1. Global Inputs (Images) */}
+        <form onSubmit={handleSubmit} className="space-y-6 pb-20">
+            {/* 1. Main Inputs (Images) */}
             {groups.inputs.length > 0 && (
-                <div className="space-y-4 p-1">
-                    {groups.inputs.map(renderField)}
+                <div className="space-y-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
+                    <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider">Input Images</h3>
+                    <div className="space-y-4">
+                        {groups.inputs.map(renderField)}
+                    </div>
                 </div>
             )}
 
-            <Accordion type="multiple" collapsible className="w-full" defaultValue={["prompts", "loras"]}>
-                {/* 2. Prompts */}
-                {groups.prompts.length > 0 && (
-                    <AccordionItem value="prompts">
-                        <AccordionTrigger className="text-sm font-semibold hover:no-underline">Prompts & Text</AccordionTrigger>
-                        <AccordionContent className="space-y-4 pt-2 px-1">
-                            {groups.prompts.map(renderField)}
-                        </AccordionContent>
-                    </AccordionItem>
-                )}
+            {/* 2. Prompts */}
+            {groups.prompts.length > 0 && (
+                <div className="space-y-4">
+                    {groups.prompts.map(renderField)}
+                </div>
+            )}
 
-                {/* 3. LoRAs */}
-                {groups.loras.length > 0 && (
-                    <AccordionItem value="loras">
-                        <AccordionTrigger className="text-sm font-semibold hover:no-underline">LoRA Models</AccordionTrigger>
-                        <AccordionContent className="space-y-4 pt-2 px-1">
-                            {/* Group by node title for LoRAs if we want, but flat list is fine per user request "solution for LoRAs" */}
+            {/* 3. LoRAs */}
+            {groups.loras.length > 0 && (
+                <Accordion type="single" collapsible className="w-full">
+                    <AccordionItem value="loras" className="border rounded-lg px-2 bg-white">
+                        <AccordionTrigger className="text-xs font-semibold uppercase text-slate-500 hover:no-underline py-2">LoRA Models</AccordionTrigger>
+                        <AccordionContent className="space-y-4 pt-0 pb-4">
                             {groups.loras.map(renderField)}
                         </AccordionContent>
                     </AccordionItem>
-                )}
+                </Accordion>
+            )}
 
-                {/* 4. Advanced Nodes */}
-                {sortedNodeIds.map(nodeId => {
-                    const group = groups.nodes[nodeId];
-                    return (
-                        <AccordionItem value={`node-${nodeId}`} key={nodeId}>
-                            <AccordionTrigger className="text-sm font-semibold hover:no-underline text-slate-600">
+            {/* 4. Advanced/Node Groups */}
+            <Accordion type="multiple" defaultValue={["Configuration", "default"]} className="w-full space-y-2">
+                {Object.entries(groups.nodes)
+                    .sort(([, a], [, b]) => a.order - b.order)
+                    .map(([id, group]) => (
+                        <AccordionItem key={id} value={id} className="border rounded-lg px-2 bg-white">
+                            <AccordionTrigger className="text-xs font-semibold uppercase text-slate-500 hover:no-underline py-2">
                                 {group.title}
                             </AccordionTrigger>
-                            <AccordionContent className="space-y-3 pt-2 px-1 border-l-2 ml-1 pl-3 border-slate-100">
+                            <AccordionContent className="space-y-4 pt-0 pb-4">
                                 {group.keys.map(renderField)}
                             </AccordionContent>
                         </AccordionItem>
-                    )
-                })}
+                    ))}
             </Accordion>
 
-            <Button type="submit" disabled={isLoading} className="w-full">
+            <Button type="submit" disabled={isLoading} className="w-full bg-slate-900 hover:bg-slate-800 text-white shadow-lg transition-all hover:scale-[1.02]">
                 {isLoading ? "Generating..." : submitLabel}
             </Button>
         </form>

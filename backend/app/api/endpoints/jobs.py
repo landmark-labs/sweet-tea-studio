@@ -57,31 +57,37 @@ def process_job(job_id: int):
             session.add(job)
             session.commit()
             
-            asyncio.run(manager.broadcast({"type": "status", "status": "running", "job_id": job_id}, str(job_id)))
+            manager.broadcast_sync({"type": "status", "status": "running", "job_id": job_id}, str(job_id))
             
             client = ComfyClient(engine)
             final_graph = copy.deepcopy(workflow.graph_json)
             
             working_params = job.input_params.copy()
-            if working_params.get("seed") == -1:
-                working_params["seed"] = random.randint(1, 1125899906842624)
-                
+            
+            # Handle random seed (-1 or "-1") for ANY parameter named like "seed"
+            # This handles "seed", "seed (KSampler)", "noise_seed", etc.
+            for key in list(working_params.keys()):
+                 if "seed" in key.lower() and str(working_params[key]) == "-1":
+                     working_params[key] = random.randint(1, 1125899906842624)
+
             if workflow.node_mapping:
                 apply_params_to_graph(final_graph, workflow.node_mapping, working_params)
             
             def on_progress(data):
                 try:
                     data['job_id'] = job_id
-                    asyncio.run(manager.broadcast(data, str(job_id)))
+                    manager.broadcast_sync(data, str(job_id))
                 except Exception as e:
                     print(f"WebSocket broadcast failed: {e}")
 
+            # Race Condition Fix: Connect BEFORE queuing to catch fast/cached execution events
+            client.connect()
             prompt_id = client.queue_prompt(final_graph)
             job.comfy_prompt_id = prompt_id
             session.add(job)
             session.commit()
             
-            asyncio.run(manager.broadcast({"type": "started", "prompt_id": prompt_id}, str(job_id)))
+            manager.broadcast_sync({"type": "started", "prompt_id": prompt_id}, str(job_id))
             
             images = client.get_images(prompt_id, progress_callback=on_progress)
             
@@ -89,7 +95,7 @@ def process_job(job_id: int):
             job.completed_at = datetime.utcnow()
             session.add(job)
             
-            asyncio.run(manager.broadcast({"type": "completed", "images": images}, str(job_id)))
+            manager.broadcast_sync({"type": "completed", "images": images}, str(job_id))
             
             saved_image_paths = []
             for img_data in images:
@@ -153,7 +159,7 @@ def process_job(job_id: int):
             job.error = str(e)
             session.add(job)
             session.commit()
-            asyncio.run(manager.broadcast({"type": "error", "message": str(e)}, str(job_id)))
+            manager.broadcast_sync({"type": "error", "message": str(e)}, str(job_id))
             print(f"Job {job_id} connection failed: {e}")
 
         except Exception as e:
@@ -161,7 +167,7 @@ def process_job(job_id: int):
             job.error = str(e)
             session.add(job)
             session.commit()
-            asyncio.run(manager.broadcast({"type": "error", "message": str(e)}, str(job_id)))
+            manager.broadcast_sync({"type": "error", "message": str(e)}, str(job_id))
             print(f"Job {job_id} failed: {e}")
 
 @router.post("/", response_model=JobRead)
