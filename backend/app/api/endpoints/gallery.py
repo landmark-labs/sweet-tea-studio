@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Query, Depends
 from typing import List, Dict, Any, Optional
-from sqlalchemy import func, or_
 from datetime import datetime
+from difflib import SequenceMatcher
 from fastapi.responses import FileResponse
 import os
 from sqlmodel import Session, select
@@ -28,6 +28,43 @@ class GalleryItem(BaseModel):
     prompt_name: Optional[str] = None
     engine_id: Optional[int] = None
 
+
+def _build_search_block(
+    prompt_text: Optional[str],
+    negative_prompt: Optional[str],
+    caption: Optional[str],
+    tags: List[str],
+    history: List[Dict[str, Any]],
+) -> str:
+    history_text = " ".join(
+        (
+            (entry.get("positive_text") or "") + " " + (entry.get("negative_text") or "")
+            for entry in history
+            if isinstance(entry, dict)
+        )
+    )
+
+    return " ".join(
+        filter(
+            None,
+            [prompt_text or "", negative_prompt or "", caption or "", " ".join(tags), history_text],
+        )
+    ).lower()
+
+
+def _score_search_match(search: str, text_block: str) -> float:
+    search_lower = (search or "").strip().lower()
+    if not search_lower:
+        return 0.0
+
+    text_lower = text_block.lower()
+    tokens = [t for t in search_lower.replace(",", " ").split() if t]
+    token_hits = sum(1 for t in tokens if t in text_lower)
+    coverage = token_hits / len(tokens) if tokens else 0
+    similarity = SequenceMatcher(None, search_lower, text_lower).ratio()
+    substring_bonus = 0.25 if search_lower in text_lower else 0
+    return (0.6 * coverage) + (0.4 * similarity) + substring_bonus
+
 @router.get("/", response_model=List[GalleryItem])
 def read_gallery(
     skip: int = Query(0, ge=0),
@@ -38,55 +75,21 @@ def read_gallery(
 ):
     try:
         # Join Image, Job, and Prompt
+        fetch_limit = limit * 5 if search else limit
         stmt = (
             select(Image, Job, Prompt)
             .join(Job, Image.job_id == Job.id, isouter=True)
             .join(Prompt, Job.prompt_id == Prompt.id, isouter=True)
             .order_by(Image.created_at.desc())
             .offset(skip)
-            .limit(limit)
+            .limit(fetch_limit)
         )
 
         if kept_only:
             stmt = stmt.where(Image.is_kept == True)
 
-        if search:
-            like = f"%{search.lower()}%"
-            # SQLite specific extraction or generic text search
-            # We assume Job.input_params is JSON. 
-            # Depending on DB (SQLite vs Postgres), json access differs. 
-            # In SQLite with SQLModel, JSON is text or strict JSON type.
-            # We will try a robust text-based search for simplicity if JSON functions fail or just generic ILIKE on known columns.
-            
-            # Using the fork's logic map:
-            # prompt_field = func.lower(func.coalesce(func.json_extract(Job.input_params, '$.prompt'), ""))
-            # For robustness across different SQLite versions/drivers in python, we might stick to what we know works or generic text.
-            # But let's try to stick to the fork's logic since it seemed to rely on `json_extract`.
-            
-            try:
-                prompt_field = func.lower(func.coalesce(func.json_extract(Job.input_params, '$.prompt'), ""))
-                negative_field = func.lower(func.coalesce(func.json_extract(Job.input_params, '$.negative_prompt'), ""))
-                tag_field = func.lower(func.coalesce(func.json_extract(Prompt.tags, '$'), ""))
-            except Exception:
-                # Fallback if json_extract not available (though it should be in modern sqlite)
-                prompt_field = func.lower(func.coalesce(Job.input_params, ""))
-                negative_field = func.lower(func.coalesce(Job.input_params, ""))
-                tag_field = func.lower(func.coalesce(Prompt.tags, ""))
-
-            stmt = stmt.where(
-                or_(
-                    prompt_field.like(like),
-                    negative_field.like(like),
-                    func.lower(func.coalesce(Prompt.positive_text, "")).like(like),
-                    func.lower(func.coalesce(Prompt.negative_text, "")).like(like),
-                    func.lower(func.coalesce(Image.caption, "")).like(like),
-                    tag_field.like(like),
-                )
-            )
-
         results = session.exec(stmt).all()
-
-        items = []
+        scored_items: List[tuple[float, GalleryItem]] = []
         for img, job, prompt in results:
             params = job.input_params if job and job.input_params else {}
             if isinstance(params, str):
@@ -121,12 +124,27 @@ def read_gallery(
             if isinstance(raw_tags, str):
                 try:
                     prompt_tags = json.loads(raw_tags)
-                except:
-                   prompt_tags = []
+                except Exception:
+                    prompt_tags = []
             else:
                 prompt_tags = raw_tags or []
                 
             caption = img.caption
+
+            search_block = _build_search_block(
+                prompt_text=prompt_text,
+                negative_prompt=negative_prompt,
+                caption=caption,
+                tags=prompt_tags,
+                history=history,
+            )
+
+            if search:
+                score = _score_search_match(search, search_block)
+                if score < 0.35:
+                    continue
+            else:
+                score = 1.0
 
             item = GalleryItem(
                 image=img,
@@ -141,9 +159,13 @@ def read_gallery(
                 prompt_name=prompt.name if prompt else None,
                 engine_id=job.engine_id if job else None
             )
-            items.append(item)
-            
-        return items
+            scored_items.append((score, item))
+
+        if search:
+            scored_items.sort(key=lambda r: (r[0], r[1].created_at), reverse=True)
+            return [item for _, item in scored_items[:limit]]
+
+        return [item for _, item in scored_items]
     except Exception as e:
         print(f"Gallery read error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
