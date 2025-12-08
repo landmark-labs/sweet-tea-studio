@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { api, Prompt } from "@/lib/api";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Trash2, Search, LayoutTemplate } from "lucide-react";
+import { Trash2, Search, LayoutTemplate, Sparkles, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -10,6 +10,9 @@ export default function PromptLibrary() {
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState("");
+    const [tagInput, setTagInput] = useState("");
+    const [expandedPrompt, setExpandedPrompt] = useState<string>("");
+    const [expanding, setExpanding] = useState(false);
 
     useEffect(() => {
         loadPrompts();
@@ -30,6 +33,22 @@ export default function PromptLibrary() {
     const handleSearch = (e: React.FormEvent) => {
         e.preventDefault();
         loadPrompts(searchQuery);
+    };
+
+    const handleExpandTags = async () => {
+        const tags = tagInput.split(",").map(t => t.trim()).filter(Boolean);
+        if (tags.length === 0) return;
+        setExpanding(true);
+        setError(null);
+        setExpandedPrompt("");
+        try {
+            const res = await api.tagsToPrompt(tags);
+            setExpandedPrompt(res.prompt);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "Failed to expand tags");
+        } finally {
+            setExpanding(false);
+        }
     };
 
     const handleDelete = async (id: number) => {
@@ -70,6 +89,38 @@ export default function PromptLibrary() {
                     <AlertDescription>{error}</AlertDescription>
                 </Alert>
             )}
+
+            <div className="mb-6 p-4 border border-slate-200 rounded-lg bg-white shadow-sm">
+                <div className="flex items-center gap-2 mb-2">
+                    <Sparkles className="w-4 h-4 text-indigo-600" />
+                    <h3 className="font-semibold text-slate-800">Tag → Prompt</h3>
+                </div>
+                <p className="text-xs text-slate-500 mb-3">Paste comma-separated tags and let the VLM expand them into a prompt.</p>
+                <div className="flex gap-2">
+                    <Input
+                        value={tagInput}
+                        onChange={(e) => setTagInput(e.target.value)}
+                        placeholder="e.g. cyberpunk, rainy night, neon lights"
+                    />
+                    <Button onClick={handleExpandTags} disabled={expanding}>
+                        <Sparkles className="w-4 h-4 mr-1" />
+                        {expanding ? "Expanding..." : "Expand"}
+                    </Button>
+                </div>
+                {expandedPrompt && (
+                    <div className="mt-3 p-3 bg-indigo-50 border border-indigo-100 rounded flex items-start justify-between gap-2">
+                        <p className="text-sm text-indigo-900 flex-1">{expandedPrompt}</p>
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => navigator.clipboard.writeText(expandedPrompt)}
+                            title="Copy prompt"
+                        >
+                            <Copy className="w-4 h-4" />
+                        </Button>
+                    </div>
+                )}
+            </div>
 
             <div className="space-y-4">
                 {filteredPrompts.map((prompt) => (

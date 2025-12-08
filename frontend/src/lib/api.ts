@@ -29,6 +29,20 @@ export interface Job {
     error?: string;
 }
 
+export interface CaptionResponse {
+    caption: string;
+    ranked_tags?: string[];
+    model?: string;
+    backend?: string;
+    image_id?: number;
+}
+
+export interface TagPromptResponse {
+    prompt: string;
+    ordered_tags: string[];
+    prompt_id?: number;
+}
+
 export const api = {
     getEngines: async (): Promise<Engine[]> => {
         const res = await fetch(`${API_BASE}/engines/`);
@@ -159,6 +173,41 @@ export const api = {
         } catch (e) {
             // Ignore connection error as reboot kills server
         }
+    },
+
+    captionImage: async (file: File | Blob, imageId?: number): Promise<CaptionResponse> => {
+        const formData = new FormData();
+        formData.append("image", file);
+        if (imageId) formData.append("image_id", String(imageId));
+
+        const res = await fetch(`${API_BASE}/vlm/caption`, {
+            method: "POST",
+            body: formData,
+        });
+        if (!res.ok) {
+            const errorData = await res.json().catch(() => ({}));
+            throw new Error(errorData.detail || "Failed to caption image");
+        }
+        return res.json();
+    },
+
+    tagsToPrompt: async (tags: string[], promptId?: number): Promise<TagPromptResponse> => {
+        const res = await fetch(`${API_BASE}/vlm/tags`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ tags, prompt_id: promptId }),
+        });
+        if (!res.ok) {
+            const errorData = await res.json().catch(() => ({}));
+            throw new Error(errorData.detail || "Failed to expand tags");
+        }
+        return res.json();
+    },
+
+    vlmHealth: async () => {
+        const res = await fetch(`${API_BASE}/vlm/health`);
+        if (!res.ok) throw new Error("VLM health check failed");
+        return res.json();
     }
 };
 
@@ -168,6 +217,8 @@ export interface Image {
     path: string;
     filename: string;
     created_at: string;
+    caption?: string;
+    tags?: string[];
 }
 
 export interface GalleryItem {
@@ -189,6 +240,8 @@ export interface Prompt {
     preview_image_path?: string;
     positive_text?: string;
     negative_text?: string;
+    tag_prompt?: string;
+    tags?: string[];
     created_at?: string;
     updated_at?: string;
     related_images?: string[];

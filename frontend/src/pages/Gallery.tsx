@@ -3,12 +3,13 @@ import { api, GalleryItem } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Save, Trash2, Calendar, Terminal } from "lucide-react";
+import { Save, Trash2, Calendar, Sparkles } from "lucide-react";
 
 export default function Gallery() {
     const [items, setItems] = useState<GalleryItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [captioningId, setCaptioningId] = useState<number | null>(null);
 
     useEffect(() => {
         loadGallery();
@@ -56,6 +57,26 @@ export default function Gallery() {
             alert("Prompt saved to library!");
         } catch (err) {
             alert("Failed to save prompt");
+        }
+    };
+
+    const handleCaption = async (item: GalleryItem) => {
+        setCaptioningId(item.image.id);
+        try {
+            const res = await fetch(`/api/v1/gallery/image/path?path=${encodeURIComponent(item.image.path)}`);
+            if (!res.ok) throw new Error("Unable to fetch image bytes");
+            const blob = await res.blob();
+            const file = new File([blob], item.image.filename, { type: blob.type || "image/png" });
+            const caption = await api.captionImage(file, item.image.id);
+
+            setItems((prev) => prev.map((i) => i.image.id === item.image.id
+                ? { ...i, image: { ...i.image, caption: caption.caption, tags: caption.ranked_tags || [] } }
+                : i));
+        } catch (err) {
+            console.error(err);
+            alert(err instanceof Error ? err.message : "Caption request failed");
+        } finally {
+            setCaptioningId(null);
         }
     };
 
@@ -117,6 +138,15 @@ export default function Gallery() {
                                         <Save className="w-4 h-4" />
                                     </Button>
                                     <Button
+                                        variant="secondary"
+                                        size="icon"
+                                        onClick={() => handleCaption(item)}
+                                        disabled={captioningId === item.image.id}
+                                        title="Generate caption"
+                                    >
+                                        <Sparkles className="w-4 h-4" />
+                                    </Button>
+                                    <Button
                                         variant="destructive"
                                         size="icon"
                                         onClick={() => handleDelete(item.image.id)}
@@ -127,21 +157,35 @@ export default function Gallery() {
                                 </div>
                             </div>
 
-                            <CardContent className="p-4 text-xs space-y-2 bg-white flex-1">
-                                <div className="flex items-center gap-2 text-slate-500">
-                                    <Calendar className="w-3 h-3" />
-                                    <span>{new Date(item.created_at).toLocaleString()}</span>
-                                </div>
-                                {item.prompt && (
-                                    <p className="line-clamp-2 italic text-slate-600">
-                                        "{item.prompt}"
-                                    </p>
-                                )}
-                                <div className="flex flex-wrap gap-1 mt-2">
-                                    {Object.entries(item.job_params).slice(0, 4).map(([k, v]) => (
-                                        <span key={k} className="px-1.5 py-0.5 bg-slate-100 rounded text-slate-500 border border-slate-200">
-                                            {k}: {String(v)}
-                                        </span>
+        <CardContent className="p-4 text-xs space-y-2 bg-white flex-1">
+            <div className="flex items-center gap-2 text-slate-500">
+                <Calendar className="w-3 h-3" />
+                <span>{new Date(item.created_at).toLocaleString()}</span>
+            </div>
+            {item.prompt && (
+                <p className="line-clamp-2 italic text-slate-600">
+                    "{item.prompt}"
+                </p>
+            )}
+            {item.image.caption && (
+                <p className="text-slate-700 line-clamp-3">
+                    {item.image.caption}
+                </p>
+            )}
+            {item.image.tags && item.image.tags.length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                    {item.image.tags.slice(0, 6).map((tag) => (
+                        <span key={tag} className="px-1.5 py-0.5 bg-indigo-50 text-indigo-700 rounded border border-indigo-200">
+                            #{tag}
+                        </span>
+                    ))}
+                </div>
+            )}
+            <div className="flex flex-wrap gap-1 mt-2">
+                {Object.entries(item.job_params).slice(0, 4).map(([k, v]) => (
+                    <span key={k} className="px-1.5 py-0.5 bg-slate-100 rounded text-slate-500 border border-slate-200">
+                        {k}: {String(v)}
+                    </span>
                                     ))}
                                 </div>
                             </CardContent>

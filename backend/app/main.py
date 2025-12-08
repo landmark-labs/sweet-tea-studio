@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.db.init_db import init_db
-from app.api.endpoints import engines, workflows, jobs, gallery, files, library, extensions
+from app.api.endpoints import engines, workflows, jobs, gallery, files, library, extensions, vlm
 import asyncio
 from app.core.websockets import manager
 
@@ -31,6 +31,7 @@ app.include_router(gallery.router, prefix="/api/v1/gallery", tags=["gallery"])
 app.include_router(files.router, prefix="/api/v1/files", tags=["files"])
 app.include_router(library.router, prefix="/api/v1/library", tags=["library"])
 app.include_router(extensions.router, prefix="/api/v1/extensions", tags=["extensions"])
+app.include_router(vlm.router, prefix="/api/v1/vlm", tags=["vlm"])
 
 @app.get("/")
 def root():

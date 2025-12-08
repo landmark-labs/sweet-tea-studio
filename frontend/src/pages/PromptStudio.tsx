@@ -5,7 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
-import { Loader2, GripHorizontal, Save, Search } from "lucide-react";
+import { Loader2, GripHorizontal, Save, Search, Sparkles } from "lucide-react";
 import { RunningGallery } from "@/components/RunningGallery";
 import { FileExplorer } from "@/components/FileExplorer";
 import { ImageViewer } from "@/components/ImageViewer";
@@ -48,6 +48,13 @@ export default function PromptStudio() {
   const [promptSearch, setPromptSearch] = useState("");
   const [promptLoading, setPromptLoading] = useState(false);
   const [promptError, setPromptError] = useState<string | null>(null);
+
+  // Vision assistance
+  const [visionBusy, setVisionBusy] = useState(false);
+  const [lastCaption, setLastCaption] = useState("");
+  const [captionTags, setCaptionTags] = useState<string[]>([]);
+  const [tagDraft, setTagDraft] = useState("");
+  const [tagExpansion, setTagExpansion] = useState("");
 
   // Add a refresh key for gallery
   const [galleryRefresh, setGalleryRefresh] = useState(0);
@@ -166,6 +173,44 @@ export default function PromptStudio() {
       alert("Prompt saved to library!");
     } catch (err) {
       setPromptError(err instanceof Error ? err.message : "Failed to save prompt");
+    }
+  };
+
+  const runCaptionOnPreview = async () => {
+    if (!previewPath) {
+      setPromptError("Select or generate an image first");
+      return;
+    }
+    setVisionBusy(true);
+    setPromptError(null);
+    try {
+      const res = await fetch(`/api/v1/gallery/image/path?path=${encodeURIComponent(previewPath)}`);
+      if (!res.ok) throw new Error("Unable to download preview image");
+      const blob = await res.blob();
+      const file = new File([blob], previewPath.split(/[\\/]/).pop() || "preview.png", { type: blob.type || "image/png" });
+      const caption = await api.captionImage(file);
+      setLastCaption(caption.caption);
+      setCaptionTags(caption.ranked_tags || []);
+      handleFormChange({ ...formData, prompt: caption.caption });
+    } catch (err) {
+      setPromptError(err instanceof Error ? err.message : "Captioning failed");
+    } finally {
+      setVisionBusy(false);
+    }
+  };
+
+  const expandTagsIntoPrompt = async () => {
+    const tags = tagDraft.split(",").map(t => t.trim()).filter(Boolean);
+    if (tags.length === 0) return;
+    setVisionBusy(true);
+    try {
+      const res = await api.tagsToPrompt(tags);
+      setTagExpansion(res.prompt);
+      handleFormChange({ ...formData, prompt: res.prompt });
+    } catch (err) {
+      setPromptError(err instanceof Error ? err.message : "Failed to expand tags");
+    } finally {
+      setVisionBusy(false);
     }
   };
 
@@ -502,6 +547,49 @@ export default function PromptStudio() {
             </Button>
           </div>
         )}
+
+        <div className="border-t pt-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-indigo-600" />
+            <h3 className="text-sm font-semibold text-slate-800">Vision Assist</h3>
+          </div>
+          <Button
+            onClick={runCaptionOnPreview}
+            disabled={visionBusy || !previewPath}
+            variant="secondary"
+            size="sm"
+          >
+            {visionBusy ? "Captioning..." : "Caption preview image"}
+          </Button>
+          {lastCaption && (
+            <div className="p-2 bg-indigo-50 border border-indigo-100 rounded text-xs text-indigo-900">
+              <p className="font-medium">{lastCaption}</p>
+              {captionTags.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {captionTags.map((tag) => (
+                    <span key={tag} className="px-1.5 py-0.5 bg-white border border-indigo-200 rounded">
+                      #{tag}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          <div className="space-y-2">
+            <Input
+              value={tagDraft}
+              onChange={(e) => setTagDraft(e.target.value)}
+              placeholder="comma-separated tags (city, neon, skyline)"
+            />
+            <Button onClick={expandTagsIntoPrompt} disabled={visionBusy || !tagDraft.trim()} size="sm">
+              <Sparkles className="w-4 h-4 mr-1" />
+              Expand tags
+            </Button>
+            {tagExpansion && (
+              <p className="text-xs text-slate-600 bg-slate-50 border border-slate-200 p-2 rounded">{tagExpansion}</p>
+            )}
+          </div>
+        </div>
 
         <div className="border-t pt-4">
           <div className="flex items-center justify-between gap-2 mb-3">
