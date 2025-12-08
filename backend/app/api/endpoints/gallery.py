@@ -19,6 +19,8 @@ class GalleryItem(BaseModel):
     image: ImageRead
     job_params: Dict[str, Any]
     prompt: Optional[str] = None
+    negative_prompt: Optional[str] = None
+    prompt_history: List[Dict[str, Any]] = Field(default_factory=list)
     workflow_template_id: Optional[int] = None
     created_at: datetime
     caption: Optional[str] = None
@@ -83,7 +85,7 @@ def read_gallery(
             )
 
         results = session.exec(stmt).all()
-        
+
         items = []
         for img, job, prompt in results:
             params = job.input_params if job and job.input_params else {}
@@ -94,7 +96,27 @@ def read_gallery(
                     params = {}
 
             prompt_text = params.get("prompt")
-            
+            negative_prompt = params.get("negative_prompt")
+
+            # Normalize prompt history from metadata when available
+            metadata = img.metadata if isinstance(img.metadata, dict) else {}
+            if isinstance(img.metadata, str):
+                try:
+                    metadata = json.loads(img.metadata)
+                except Exception:
+                    metadata = {}
+
+            history = []
+            if isinstance(metadata, dict):
+                raw_history = metadata.get("prompt_history", [])
+                if isinstance(raw_history, list):
+                    history = [entry for entry in raw_history if isinstance(entry, dict)]
+
+                active_prompt = metadata.get("active_prompt")
+                if isinstance(active_prompt, dict):
+                    prompt_text = active_prompt.get("positive_text", prompt_text)
+                    negative_prompt = active_prompt.get("negative_text", negative_prompt)
+
             raw_tags = prompt.tags if prompt else []
             if isinstance(raw_tags, str):
                 try:
@@ -110,6 +132,8 @@ def read_gallery(
                 image=img,
                 job_params=params,
                 prompt=prompt_text,
+                negative_prompt=negative_prompt,
+                prompt_history=history,
                 workflow_template_id=job.workflow_template_id if job else None,
                 created_at=img.created_at,
                 caption=caption,
