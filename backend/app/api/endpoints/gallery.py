@@ -16,6 +16,7 @@ class GalleryItem(BaseModel):
     image: ImageRead
     job_params: Dict[str, Any]
     prompt: Optional[str] = None
+    workflow_template_id: Optional[int] = None
     created_at: datetime
 
 @router.get("/", response_model=List[GalleryItem])
@@ -45,6 +46,7 @@ def read_gallery(
                 image=img,
                 job_params=params,
                 prompt=prompt_text,
+                workflow_template_id=job.workflow_template_id if job else None,
                 created_at=img.created_at
             )
             items.append(item)

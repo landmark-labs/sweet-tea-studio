@@ -107,6 +107,9 @@ export default function PromptLibrary() {
                                 </span>
                             </div>
                             <p className="text-sm text-slate-500 truncate">{prompt.description || "No description"}</p>
+                            {prompt.positive_text && (
+                                <p className="text-xs text-slate-600 mt-1 line-clamp-1">{prompt.positive_text}</p>
+                            )}
                             {/* Mini Params */}
                             <div className="flex gap-4 mt-2 text-xs text-slate-400">
                                 {prompt.parameters.steps && <span>Steps: {prompt.parameters.steps}</span>}

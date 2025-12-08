@@ -15,9 +15,10 @@ class PromptWithImages(PromptRead):
 
 @router.get("/", response_model=List[PromptWithImages])
 def read_prompts(
-    skip: int = 0, 
+    skip: int = 0,
     limit: int = 100,
-    search: Optional[str] = None
+    search: Optional[str] = None,
+    workflow_id: Optional[int] = None
 ):
     with Session(db_engine) as session:
         query = select(Prompt)
@@ -26,10 +27,13 @@ def read_prompts(
             # simple case-insensitive like Search
             # SQLite default is case-insensitive for ASCII, but proper way:
             query = query.where(
-                (col(Prompt.name).ilike(s)) | 
-                (col(Prompt.positive_text).ilike(s)) | 
+                (col(Prompt.name).ilike(s)) |
+                (col(Prompt.positive_text).ilike(s)) |
                 (col(Prompt.negative_text).ilike(s))
             )
+
+        if workflow_id:
+            query = query.where(Prompt.workflow_id == workflow_id)
         
         query = query.order_by(Prompt.updated_at.desc()).offset(skip).limit(limit)
         prompts = session.exec(query).all()
@@ -63,6 +67,14 @@ def create_prompt(prompt: PromptCreate):
         session.commit()
         session.refresh(new_prompt)
         return new_prompt
+
+@router.get("/{prompt_id}", response_model=PromptRead)
+def read_prompt(prompt_id: int):
+    with Session(db_engine) as session:
+        prompt = session.get(Prompt, prompt_id)
+        if not prompt:
+            raise HTTPException(status_code=404, detail="Prompt not found")
+        return prompt
 
 @router.delete("/{prompt_id}")
 def delete_prompt(prompt_id: int):

@@ -103,10 +103,20 @@ export const api = {
         await fetch(`${API_BASE}/gallery/${imageId}`, { method: "DELETE" });
     },
 
-    getPrompts: async (search?: string): Promise<Prompt[]> => {
-        const query = search ? `?search=${encodeURIComponent(search)}` : "";
+    getPrompts: async (search?: string, workflowId?: number): Promise<Prompt[]> => {
+        const params = new URLSearchParams();
+        if (search) params.set("search", search);
+        if (workflowId) params.set("workflow_id", workflowId.toString());
+
+        const query = params.toString() ? `?${params.toString()}` : "";
         const res = await fetch(`${API_BASE}/library/${query}`);
         if (!res.ok) throw new Error("Failed to fetch prompts");
+        return res.json();
+    },
+
+    getPrompt: async (promptId: number): Promise<Prompt> => {
+        const res = await fetch(`${API_BASE}/library/${promptId}`);
+        if (!res.ok) throw new Error("Failed to fetch prompt");
         return res.json();
     },
 
@@ -165,6 +175,7 @@ export interface GalleryItem {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     job_params: any;
     prompt?: string;
+    workflow_template_id?: number;
     created_at: string;
 }
 
@@ -176,6 +187,10 @@ export interface Prompt {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     parameters: any;
     preview_image_path?: string;
+    positive_text?: string;
+    negative_text?: string;
+    created_at?: string;
+    updated_at?: string;
     related_images?: string[];
 }
 
