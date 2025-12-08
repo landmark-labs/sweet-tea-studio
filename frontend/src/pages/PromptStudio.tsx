@@ -197,7 +197,7 @@ export default function PromptStudio() {
       await api.savePrompt({
         workflow_id: parseInt(selectedWorkflowId),
         name,
-        description: "Saved from Prompt Studio",
+        description: "Saved from Sweet Tea Studio",
         parameters: formData,
         positive_text: formData.prompt,
         negative_text: formData.negative_prompt,

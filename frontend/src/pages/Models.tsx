@@ -74,7 +74,7 @@ const seededModels: InstalledModel[] = [
     size: "6.1 GB",
     location: "ComfyUI/models/checkpoints/juggernautXL.safetensors",
     version: "1.2",
-    notes: "Primary XL base used by Prompt Studio",
+    notes: "Primary XL base used by Sweet Tea Studio",
   },
   {
     id: "mdl-2",
