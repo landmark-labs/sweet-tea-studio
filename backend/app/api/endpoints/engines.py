@@ -1,16 +1,25 @@
-from typing import List
+from datetime import datetime
+import time
+from typing import List, Optional
+
 from fastapi import APIRouter, HTTPException
-from app.models.engine import Engine, EngineCreate, EngineRead, EngineUpdate
-# In a real app, we'd inject a DB session here. For v0 scaffolding, we'll mock it or use a global list/simple file db later.
-# For now, let's just set up the route structure.
-
-router = APIRouter()
-
-# Mock DB for scaffolding
+from pydantic import BaseModel
 from sqlmodel import Session, select
+
 from app.db.engine import engine as db_engine
+from app.models.engine import Engine, EngineCreate, EngineRead, EngineUpdate
+from app.services.comfy_watchdog import watchdog
 
 router = APIRouter()
+
+
+class EngineHealth(BaseModel):
+    engine_id: int
+    engine_name: Optional[str]
+    healthy: bool
+    last_error: Optional[str]
+    last_checked_at: Optional[datetime]
+    next_check_in: int
 
 @router.post("/", response_model=EngineRead)
 def create_engine(engine_in: EngineCreate):
@@ -27,6 +36,34 @@ def read_engines(skip: int = 0, limit: int = 100):
         statement = select(Engine).offset(skip).limit(limit)
         results = session.exec(statement).all()
         return results
+
+@router.get("/health", response_model=List[EngineHealth])
+def read_engine_health():
+    with Session(db_engine) as session:
+        engines = session.exec(select(Engine).where(Engine.is_active == True)).all()
+
+    results: List[EngineHealth] = []
+    for engine in engines:
+        state = watchdog.state.get(engine.id)
+        if not state:
+            state = watchdog._check_engine(engine)
+
+        last_checked_at = (
+            datetime.fromtimestamp(state.last_checked_wall) if state.last_checked_wall else None
+        )
+        results.append(
+            EngineHealth(
+                engine_id=engine.id,
+                engine_name=engine.name,
+                healthy=state.healthy,
+                last_error=state.last_error,
+                last_checked_at=last_checked_at,
+                next_check_in=max(int(state.next_check - time.monotonic()), 0),
+            )
+        )
+
+    return results
+
 
 @router.get("/{engine_id}", response_model=EngineRead)
 def read_engine(engine_id: int):

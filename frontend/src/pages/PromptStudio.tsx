@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from "react";
-import { api, Engine, WorkflowTemplate, FileItem, GalleryItem, PromptLibraryItem, PromptSuggestion } from "@/lib/api";
+import { api, Engine, WorkflowTemplate, FileItem, GalleryItem, PromptLibraryItem, PromptSuggestion, EngineHealth } from "@/lib/api";
 import { DynamicForm } from "@/components/DynamicForm";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 export default function PromptStudio() {
   const [engines, setEngines] = useState<Engine[]>([]);
   const [workflows, setWorkflows] = useState<WorkflowTemplate[]>([]);
+  const [engineHealth, setEngineHealth] = useState<EngineHealth[]>([]);
 
   const [selectedEngineId, setSelectedEngineId] = useState<string>(
     localStorage.getItem("ds_selected_engine") || ""
@@ -76,8 +77,11 @@ export default function PromptStudio() {
   const [installOpen, setInstallOpen] = useState(false);
   const [installStatus, setInstallStatus] = useState<InstallStatus | null>(null);
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const healthIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const selectedWorkflow = workflows.find((w) => String(w.id) === selectedWorkflowId);
+  const selectedEngineHealth = engineHealth.find((h) => String(h.engine_id) === selectedEngineId);
+  const engineOffline = Boolean(selectedEngineHealth && !selectedEngineHealth.healthy);
 
   // Persist selections
   useEffect(() => {
@@ -312,10 +316,22 @@ export default function PromptStudio() {
         setIsLoading(false);
       }
     };
+    const pollHealth = async () => {
+      try {
+        const status = await api.getEngineHealth();
+        setEngineHealth(status);
+      } catch (err) {
+        console.warn("Failed to poll ComfyUI health", err);
+      }
+    };
+
     loadData();
+    pollHealth();
+    healthIntervalRef.current = setInterval(pollHealth, 5000);
 
     return () => {
       if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+      if (healthIntervalRef.current) clearInterval(healthIntervalRef.current);
     };
   }, []);
 
@@ -356,6 +372,11 @@ export default function PromptStudio() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleGenerate = async (data: any) => {
     if (!selectedEngineId || !selectedWorkflowId) return;
+
+    if (engineOffline) {
+      setError(selectedEngineHealth?.last_error || "ComfyUI is unreachable. Waiting for reconnection...");
+      return;
+    }
 
     setIsSubmitting(true);
     setError(null);
@@ -539,6 +560,20 @@ export default function PromptStudio() {
           </div>
         </div>
 
+        {engineOffline && (
+          <Alert variant="destructive" className="bg-red-50">
+            <AlertTitle>ComfyUI connection lost</AlertTitle>
+            <AlertDescription>
+              {selectedEngineHealth?.last_error || "We could not reach the configured ComfyUI host."}
+              {selectedEngineHealth?.next_check_in !== undefined && (
+                <div className="text-xs mt-2 text-red-800">
+                  Next automatic retry in {selectedEngineHealth.next_check_in} seconds.
+                </div>
+              )}
+            </AlertDescription>
+          </Alert>
+        )}
+
         {error && (
           <Alert variant="destructive">
             <AlertTitle>Error</AlertTitle>
@@ -553,6 +588,7 @@ export default function PromptStudio() {
               onSubmit={handleGenerate}
               isLoading={isSubmitting}
               engineId={selectedEngineId}
+              submitDisabled={engineOffline}
               submitLabel="Generate"
               formData={formData}
               onChange={handleFormChange}

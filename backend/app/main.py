@@ -8,16 +8,23 @@ from app.api.endpoints.library import start_tag_cache_refresh_background
 from app.core.config import settings
 from app.core.error_handlers import register_gallery_error_handlers
 from app.core.websockets import manager
+from app.services.comfy_watchdog import watchdog
 from app.db.init_db import init_db
 
 app = FastAPI(title="Sweet Tea Studio Backend")
 register_gallery_error_handlers(app)
 
 @app.on_event("startup")
-def on_startup():
+async def on_startup():
     init_db()
     start_tag_cache_refresh_background()
     manager.loop = asyncio.get_running_loop()
+    await watchdog.start()
+
+
+@app.on_event("shutdown")
+async def on_shutdown():
+    await watchdog.stop()
 
 # CORS
 # Set all CORS enabled origins

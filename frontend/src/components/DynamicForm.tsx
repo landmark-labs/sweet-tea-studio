@@ -46,6 +46,7 @@ interface DynamicFormProps {
     onFieldFocus?: (key: string) => void;
     onFieldBlur?: (key: string, relatedTarget: Element | null) => void;
     activeField?: string;
+    submitDisabled?: boolean;
 }
 
 export function DynamicForm({
@@ -59,7 +60,8 @@ export function DynamicForm({
     onChange: externalOnChange,
     onFieldFocus,
     onFieldBlur,
-    activeField
+    activeField,
+    submitDisabled
 }: DynamicFormProps) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const [internalData, setInternalData] = useState<any>({});
@@ -431,7 +433,7 @@ export function DynamicForm({
                     ))}
             </Accordion>
 
-            <Button type="submit" disabled={isLoading} className="w-full bg-slate-900 hover:bg-slate-800 text-white shadow-lg transition-all hover:scale-[1.02]">
+            <Button type="submit" disabled={isLoading || submitDisabled} className="w-full bg-slate-900 hover:bg-slate-800 text-white shadow-lg transition-all hover:scale-[1.02]">
                 {isLoading ? "Generating..." : submitLabel}
             </Button>
         </form>
