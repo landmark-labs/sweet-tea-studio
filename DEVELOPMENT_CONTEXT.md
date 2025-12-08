@@ -1,13 +1,13 @@
 # Helper Context & Development Status
 
 **Last Updated**: 2025-12-07
-**Project**: DiffusionStudio
+**Project**: Sweet Tea Studio
 **Current Phase**: Phase 1 - Frontend Implementation (Early Stage)
 
 ##  Core Mental Model
 We are building a **State-Managed Wrapper** around ComfyUI.
 *   **ComfyUI** is treated as a dumb calculation engine. We do not store state in ComfyUI.
-*   **DiffusionStudio** stores all state (Jobs, Projects, History, Galleries).
+*   **Sweet Tea Studio** stores all state (Jobs, Projects, History, Galleries).
 *   **Workflows**: We maintain `WorkflowTemplates` which map nice UI inputs to raw Comfy node graphs.
 *   **Design Philosophy**: The core user experience is **Generation -> Upscale -> Final Upscale**. The user chooses parameters and how many upscale steps to engage in. Advanced customization is secondary.
 
@@ -21,7 +21,7 @@ We are building a **State-Managed Wrapper** around ComfyUI.
     *    Skeleton created (React/Vite/Tailwind).
     *    Layout with Sidebar exists.
     *    Routing configured.
-    *    **Prompt Studio** is a placeholder. Logic to fetch workflows and render forms is MISSING.
+    *    **Sweet Tea Studio** is a placeholder. Logic to fetch workflows and render forms is MISSING.
     *    **API Integration** is effectively zero. No fetch calls written yet.
 
 ##  Immediate Next Steps (For the next helper)

@@ -1,13 +1,15 @@
-# Diffusion Studio
+# Sweet Tea Studio
 
 A modern, local-first interface for **ComfyUI**. 
 
-Diffusion Studio replaces the raw node graph with a user-friendly, project-based workflow management system, while keeping the full power of ComfyUI's engine under the hood.
+Sweet Tea Studio replaces the raw node graph with a user-friendly, project-based workflow management system, while keeping the full power of ComfyUI's engine under the hood.
 
 ## Features
 - 🚀 **Simply Powerful**: Run complex workflows with simple, auto-generated forms.
-- 🧩 **Extension Manager**: Auto-detect and install missing custom nodes with a single click.
-- 🖼️ **Gallery**: Built-in image history, parameter inspection, and organization.
+- 🎨 **Workflow Composition**: Merge multiple workflows (e.g., Txt2Img + Upscale) into new custom pipelines via a simple UI.
+- 🕸️ **Graph Visualization**: View the underlying node graph for any workflow with a single click.
+- 🧩 **Extension Manager**: Auto-detect and install missing custom nodes with a smart fallback system (API -> Git Clone -> Pip Install).
+- 🖼️ **Batch Generation**: Queue multiple images, auto-cleanup unkept results, and manage your gallery efficiently.
 - 🛠️ **Local First**: Runs entirely on your machine. No cloud dependencies.
 
 ## Quick Start
@@ -40,8 +42,7 @@ npm run dev
 Visit `http://localhost:5173` to start.
 
 ## Documentation
-- [Development Context & Handoff](./HANDOFF_CONTEXT.md) - **Start Here for Development**
-- [Roadmap](./docs/ROADMAP.md) - Future Plans
+- [Development Handoff (v0.4.0)](./HANDOFF.md) - **Start Here for Development** (Architecture, Context, Roadmap)
 
 ## License
 MIT

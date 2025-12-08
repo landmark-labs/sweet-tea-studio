@@ -6,7 +6,7 @@ from app.api.endpoints import engines, workflows, jobs, gallery, files, library,
 import asyncio
 from app.core.websockets import manager
 
-app = FastAPI(title="Diffusion Studio Backend")
+app = FastAPI(title="Sweet Tea Studio Backend")
 
 @app.on_event("startup")
 def on_startup():
@@ -31,7 +31,9 @@ app.include_router(gallery.router, prefix="/api/v1/gallery", tags=["gallery"])
 app.include_router(files.router, prefix="/api/v1/files", tags=["files"])
 app.include_router(library.router, prefix="/api/v1/library", tags=["library"])
 app.include_router(extensions.router, prefix="/api/v1/extensions", tags=["extensions"])
+from app.api.endpoints import vlm
+app.include_router(vlm.router, prefix="/api/v1/vlm", tags=["vlm"])
 
 @app.get("/")
 def root():
-    return {"message": "Welcome to DiffusionStudio API"}
+    return {"message": "Welcome to Sweet Tea Studio API"}

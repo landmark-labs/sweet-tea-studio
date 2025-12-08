@@ -181,9 +181,9 @@ export function DynamicForm({
                         onFocus={() => onFieldFocus?.(key)}
                         onBlur={(e) => onFieldBlur?.(key, e.relatedTarget as Element)}
                         placeholder=""
-                        rows={3}
+                        rows={6}
                         className={cn(
-                            "text-xs font-mono transition-all",
+                            "text-xs font-mono transition-all min-h-[150px]",
                             isActive && "ring-2 ring-blue-400 border-blue-400 bg-blue-50/20"
                         )}
                     />

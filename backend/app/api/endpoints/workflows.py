@@ -1,14 +1,16 @@
-from fastapi import APIRouter, HTTPException, Depends
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
+from fastapi import APIRouter, HTTPException
 from sqlmodel import Session, select
+from pydantic import BaseModel
+
 from app.db.engine import engine as db_engine
 from app.models.workflow import WorkflowTemplate, WorkflowTemplateCreate, WorkflowTemplateRead
 from app.models.engine import Engine
-from app.core.comfy_client import ComfyClient, ComfyConnectionError
+from app.core.comfy_client import ComfyClient
+from app.core.workflow_merger import WorkflowMerger
 
 router = APIRouter()
 
-# Helper to generate input schema from ComfyUI Graph
 def generate_schema_from_graph(graph: Dict[str, Any], object_info: Dict[str, Any]) -> Dict[str, Any]:
     schema = {}
     
@@ -18,6 +20,7 @@ def generate_schema_from_graph(graph: Dict[str, Any], object_info: Dict[str, Any
     
     node_counts = {}
     
+    # Sort by ID to have stable order (string IDs)
     for node_id in sorted(graph.keys(), key=lambda x: int(x) if x.isdigit() else x):
         node = graph[node_id]
         class_type = node.get("class_type")
@@ -99,7 +102,7 @@ def generate_schema_from_graph(graph: Dict[str, Any], object_info: Dict[str, Any
                 widget = "textarea" if config.get("multiline") else "text"
                 schema[field_key] = {
                     "type": "string",
-                    "title": f"{(node.get('_meta', {}).get('title') or input_name)}", # Use explicit title if available
+                    "title": f"{(node.get('_meta', {}).get('title') or input_name)}", 
                     "default": current_val if current_val is not None else "",
                     "widget": widget,
                     "x_node_id": node_id,
@@ -133,6 +136,7 @@ def generate_schema_from_graph(graph: Dict[str, Any], object_info: Dict[str, Any
 
     return schema
 
+
 @router.post("/", response_model=WorkflowTemplate)
 def create_workflow(workflow_in: WorkflowTemplateCreate):
     with Session(db_engine) as session:
@@ -146,12 +150,13 @@ def create_workflow(workflow_in: WorkflowTemplateCreate):
         client = ComfyClient(engine)
         try:
             object_info = client.get_object_info()
-        except ComfyConnectionError as e:
-            raise HTTPException(status_code=503, detail=str(e))
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Failed to validate: {str(e)}")
+            # If Comfy is down, we might want to allow creation anyway? 
+            # But we need object_info for schema generation.
+            # Let's fail for now to ensure quality.
+            raise HTTPException(status_code=503, detail=f"Failed to connect to ComfyUI for validation: {str(e)}")
 
-        # 2. Validation Missing Nodes
+        # 2. Validate Missing Nodes
         graph = workflow_in.graph_json
         missing_nodes = []
         for node_id, node in graph.items():
@@ -174,13 +179,6 @@ def create_workflow(workflow_in: WorkflowTemplateCreate):
                         "node_id": field_def["x_node_id"],
                         "field": f"inputs.{field_def.get('mock_field', key.split('.')[-1])}" # fallback logic
                     }
-                    # Also cleanup the legacy mock_field if we used it, but I removed it from generation above.
-                    # Wait, I removed mock_field from generation above effectively by replacing the block.
-                    # I need to ensure I verify the key split logic or add mock_field back if needed.
-                    # Let's add mock_field back to generation to be safe, or assume standard naming?
-                    # The Standard naming is {class}{suffix}.{input_name}. 
-                    # If I use input_name from split, it should be fine.
-                    pass
 
         # Create
         db_workflow = WorkflowTemplate.from_orm(workflow_in)
@@ -191,6 +189,7 @@ def create_workflow(workflow_in: WorkflowTemplateCreate):
         session.commit()
         session.refresh(db_workflow)
         return db_workflow
+
 
 @router.get("/", response_model=List[WorkflowTemplateRead])
 def read_workflows(skip: int = 0, limit: int = 100):
@@ -236,6 +235,7 @@ def read_workflows(skip: int = 0, limit: int = 100):
                 print(f"Batch self-heal failed: {e}")
                 
         return workflows
+
 
 @router.get("/{workflow_id}", response_model=WorkflowTemplateRead)
 def read_workflow(workflow_id: int):
@@ -300,6 +300,7 @@ def update_workflow(workflow_id: int, workflow_in: WorkflowTemplateCreate):
         session.refresh(workflow)
         return workflow
 
+
 @router.delete("/{workflow_id}")
 def delete_workflow(workflow_id: int):
     with Session(db_engine) as session:
@@ -309,3 +310,45 @@ def delete_workflow(workflow_id: int):
         session.delete(workflow)
         session.commit()
         return {"ok": True}
+
+class WorkflowComposeRequest(BaseModel):
+    source_id: int
+    target_id: int
+    name: str
+
+@router.post("/compose", response_model=WorkflowTemplate)
+def compose_workflows(req: WorkflowComposeRequest):
+    with Session(db_engine) as session:
+        w_source = session.get(WorkflowTemplate, req.source_id)
+        w_target = session.get(WorkflowTemplate, req.target_id)
+        
+        if not w_source or not w_target:
+             raise HTTPException(status_code=404, detail="One or more workflows not found.")
+             
+        # Merge
+        try:
+             merged_graph = WorkflowMerger.merge(w_source.graph_json, w_target.graph_json)
+        except Exception as e:
+             raise HTTPException(status_code=500, detail=f"Merge failed: {str(e)}")
+        
+        # Verify engine for schema gen
+        engine = session.exec(select(Engine)).first()
+        client = ComfyClient(engine) if engine else None
+        object_info = client.get_object_info() if client else {}
+        
+        # Schema
+        schema = generate_schema_from_graph(merged_graph, object_info)
+        
+        # Create Record
+        new_workflow = WorkflowTemplate(
+            name=req.name,
+            description=f"Composed from '{w_source.name}' + '{w_target.name}'",
+            graph_json=merged_graph,
+            input_schema=schema
+        )
+        
+        session.add(new_workflow)
+        session.commit()
+        session.refresh(new_workflow)
+        
+        return new_workflow

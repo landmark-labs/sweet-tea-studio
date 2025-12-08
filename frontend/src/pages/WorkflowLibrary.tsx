@@ -1,44 +1,42 @@
-import { useEffect, useState, useRef } from "react";
-import { api, WorkflowTemplate } from "@/lib/api";
+import React, { useState, useEffect, useRef } from 'react';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Label } from "@/components/ui/label";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Trash2, Upload, AlertTriangle, FileJson, Edit2, Save, X, RotateCw, CheckCircle2, XCircle } from "lucide-react";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-
-// Helper to check for missing nodes mentioned in description
-const getMissingNodes = (workflow: WorkflowTemplate) => {
-    if (workflow.description && workflow.description.includes("[Missing Nodes:")) {
-        const parts = workflow.description.split("[Missing Nodes: ");
-        if (parts.length > 1) {
-            return parts[1].replace("]", "").split(", ");
-        }
-    }
-    return [];
-};
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
+import { FileJson, AlertTriangle, GitBranch, Edit2, Trash2, Save, RotateCw, CheckCircle2, XCircle } from "lucide-react";
+import { api, WorkflowTemplate } from "@/lib/api";
+import { WorkflowGraphViewer } from "@/components/WorkflowGraphViewer";
 
 export default function WorkflowLibrary() {
     const [workflows, setWorkflows] = useState<WorkflowTemplate[]>([]);
     const [error, setError] = useState<string | null>(null);
-
-    // Import State
     const [importFile, setImportFile] = useState<File | null>(null);
     const [importName, setImportName] = useState("");
     const [isImporting, setIsImporting] = useState(false);
     const [isDialogOpen, setIsDialogOpen] = useState(false);
 
-    // Editing State
+    // Edit State
     const [editingWorkflow, setEditingWorkflow] = useState<WorkflowTemplate | null>(null);
     const [schemaEdits, setSchemaEdits] = useState<any>(null);
 
     // Install State
     const [installOpen, setInstallOpen] = useState(false);
-    const [installJobId, setInstallJobId] = useState<string | null>(null);
     const [installStatus, setInstallStatus] = useState<any>(null);
+    // eslint-disable-line @typescript-eslint/no-unused-vars
     const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+    // Graph Viewer State
+    const [viewGraphOpen, setViewGraphOpen] = useState(false);
+    const [selectedWorkflowForGraph, setSelectedWorkflowForGraph] = useState<WorkflowTemplate | null>(null);
+
+    // Composition State
+    const [composeOpen, setComposeOpen] = useState(false);
+    const [composeSource, setComposeSource] = useState<string>("");
+    const [composeTarget, setComposeTarget] = useState<string>("");
+    const [composeName, setComposeName] = useState("");
 
     useEffect(() => {
         loadWorkflows();
@@ -52,6 +50,16 @@ export default function WorkflowLibrary() {
         } catch (err) {
             setError("Failed to load workflows");
         }
+    };
+
+    const getMissingNodes = (workflow: WorkflowTemplate): string[] => {
+        if (workflow.description && workflow.description.includes("[Missing Nodes:")) {
+            const parts = workflow.description.split("[Missing Nodes: ");
+            if (parts.length > 1) {
+                return parts[1].replace("]", "").split(", ");
+            }
+        }
+        return [];
     };
 
     // --- Import Logic ---
@@ -114,6 +122,36 @@ export default function WorkflowLibrary() {
         }
     };
 
+    // --- Compose Logic ---
+    const handleCompose = async () => {
+        if (!composeSource || !composeTarget || !composeName) return;
+        try {
+            const res = await fetch("/api/v1/workflows/compose", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    source_id: parseInt(composeSource),
+                    target_id: parseInt(composeTarget),
+                    name: composeName
+                })
+            });
+
+            if (!res.ok) {
+                const body = await res.json();
+                throw new Error(body.detail || "Composition failed");
+            }
+
+            setComposeOpen(false);
+            setComposeName("");
+            setComposeSource("");
+            setComposeTarget("");
+            loadWorkflows();
+            alert("Workflow created successfully!");
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "Composition failed");
+        }
+    };
+
     // --- Edit Logic ---
     const handleEdit = (w: WorkflowTemplate) => {
         setEditingWorkflow(w);
@@ -142,7 +180,7 @@ export default function WorkflowLibrary() {
         setInstallStatus({ status: "pending", progress_text: "Initializing..." });
         try {
             const res = await api.installMissingNodes(missing);
-            setInstallJobId(res.job_id);
+
             startPolling(res.job_id);
         } catch (err) {
             setInstallStatus({ status: "failed", error: `Start failed: ${(err as Error).message}`, progress_text: "" });
@@ -159,7 +197,6 @@ export default function WorkflowLibrary() {
                     stopPolling();
                 }
             } catch (err) {
-                // Keep polling on error? Or stop?
                 console.error("Poll error", err);
             }
         }, 1000);
@@ -179,9 +216,13 @@ export default function WorkflowLibrary() {
         setInstallOpen(false);
     };
 
+    // --- Graph Viewer Logic ---
+    const handleViewGraph = (w: WorkflowTemplate) => {
+        setSelectedWorkflowForGraph(w);
+        setViewGraphOpen(true);
+    };
 
     if (editingWorkflow) {
-        // ... (Keep existing edit UI logic)
         return (
             <div className="container mx-auto p-4 h-[calc(100vh-4rem)] flex flex-col">
                 <div className="flex justify-between items-center mb-6">
@@ -191,7 +232,6 @@ export default function WorkflowLibrary() {
                         <Button onClick={handleSaveSchema}><Save className="w-4 h-4 mr-2" /> Save Changes</Button>
                     </div>
                 </div>
-                {/* Simplified Edit UI for brevity in this replacement, assuming it was working */}
                 <Card className="flex-1 overflow-auto">
                     <CardHeader><CardTitle>Exposed Parameters</CardTitle></CardHeader>
                     <CardContent>
@@ -241,38 +281,90 @@ export default function WorkflowLibrary() {
     }
 
     return (
-        <div className="container mx-auto p-4 max-w-5xl">
+        <div className="container mx-auto p-4">
             <div className="flex justify-between items-center mb-6">
-                <h1 className="text-2xl font-bold">Workflow Library</h1>
+                <h1 className="text-3xl font-bold">Workflow Library</h1>
+                <div className="flex gap-2">
+                    <Dialog open={composeOpen} onOpenChange={setComposeOpen}>
+                        <DialogTrigger asChild>
+                            <Button variant="outline">Compose</Button>
+                        </DialogTrigger>
+                        <DialogContent>
+                            <DialogHeader>
+                                <DialogTitle>Compose Workflows</DialogTitle>
+                                <DialogDescription>Merge two workflows by piping the output of one into the other.</DialogDescription>
+                            </DialogHeader>
+                            <div className="grid gap-4 py-4">
+                                <div className="grid grid-cols-4 items-center gap-4">
+                                    <Label htmlFor="source" className="text-right">Source (Image)</Label>
+                                    <select
+                                        id="source"
+                                        className="col-span-3 flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                        value={composeSource}
+                                        onChange={(e) => setComposeSource(e.target.value)}
+                                    >
+                                        <option value="">Select source workflow...</option>
+                                        {workflows.map(w => (
+                                            <option key={w.id} value={w.id}>{w.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="grid grid-cols-4 items-center gap-4">
+                                    <Label htmlFor="target" className="text-right">Target (LoadImage)</Label>
+                                    <select
+                                        id="target"
+                                        className="col-span-3 flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                        value={composeTarget}
+                                        onChange={(e) => setComposeTarget(e.target.value)}
+                                    >
+                                        <option value="">Select target workflow...</option>
+                                        {workflows.map(w => (
+                                            <option key={w.id} value={w.id}>{w.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="grid grid-cols-4 items-center gap-4">
+                                    <Label htmlFor="compose-name" className="text-right">New Name</Label>
+                                    <Input id="compose-name" value={composeName} onChange={(e) => setComposeName(e.target.value)} className="col-span-3" />
+                                </div>
+                            </div>
+                            <DialogFooter>
+                                <Button onClick={handleCompose} disabled={!composeSource || !composeTarget || !composeName}>
+                                    Create Composition
+                                </Button>
+                            </DialogFooter>
+                        </DialogContent>
+                    </Dialog>
 
-                <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                    <DialogTrigger asChild>
-                        <Button><Upload className="w-4 h-4 mr-2" /> Import Workflow</Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                        <DialogHeader>
-                            <DialogTitle>Import from ComfyUI</DialogTitle>
-                            <DialogDescription>
-                                Upload a workflow exported as <b>API Format (JSON)</b>.
-                            </DialogDescription>
-                        </DialogHeader>
-                        <div className="grid gap-4 py-4">
-                            <div className="grid grid-cols-4 items-center gap-4">
-                                <Label htmlFor="name" className="text-right">Name</Label>
-                                <Input id="name" value={importName} onChange={(e) => setImportName(e.target.value)} className="col-span-3" />
+                    <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                        <DialogTrigger asChild>
+                            <Button>Import Workflow</Button>
+                        </DialogTrigger>
+                        <DialogContent>
+                            <DialogHeader>
+                                <DialogTitle>Import from ComfyUI</DialogTitle>
+                                <DialogDescription>
+                                    Upload a workflow exported as <b>API Format (JSON)</b>.
+                                </DialogDescription>
+                            </DialogHeader>
+                            <div className="grid gap-4 py-4">
+                                <div className="grid grid-cols-4 items-center gap-4">
+                                    <Label htmlFor="name" className="text-right">Name</Label>
+                                    <Input id="name" value={importName} onChange={(e) => setImportName(e.target.value)} className="col-span-3" />
+                                </div>
+                                <div className="grid grid-cols-4 items-center gap-4">
+                                    <Label htmlFor="file" className="text-right">File</Label>
+                                    <Input id="file" type="file" accept=".json" onChange={handleFileChange} className="col-span-3" />
+                                </div>
                             </div>
-                            <div className="grid grid-cols-4 items-center gap-4">
-                                <Label htmlFor="file" className="text-right">File</Label>
-                                <Input id="file" type="file" accept=".json" onChange={handleFileChange} className="col-span-3" />
-                            </div>
-                        </div>
-                        <DialogFooter>
-                            <Button disabled={!importFile || isImporting} onClick={handleImport}>
-                                {isImporting ? "Importing..." : "Import"}
-                            </Button>
-                        </DialogFooter>
-                    </DialogContent>
-                </Dialog>
+                            <DialogFooter>
+                                <Button disabled={!importFile || isImporting} onClick={handleImport}>
+                                    {isImporting ? "Importing..." : "Import"}
+                                </Button>
+                            </DialogFooter>
+                        </DialogContent>
+                    </Dialog>
+                </div>
             </div>
 
             {error && (
@@ -303,23 +395,13 @@ export default function WorkflowLibrary() {
                                             <div className="flex items-center">
                                                 <AlertTriangle className="w-3 h-3 mr-1" /> Missing Nodes
                                             </div>
-                                            <Button
-                                                size="sm"
-                                                variant="outline"
-                                                className="h-6 text-[10px] bg-white border-amber-300 hover:bg-amber-100 text-amber-800"
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    startInstall(missing);
-                                                }}
-                                            >
-                                                Install
+                                            <Button variant="ghost" size="sm" className="text-amber-700 hover:bg-amber-100" onClick={() => startInstall(missing)}>
+                                                Install All
                                             </Button>
                                         </div>
-                                        <div className="text-slate-600 flex flex-wrap gap-1">
-                                            {missing.map((m, i) => (
-                                                <span key={i} className="bg-white px-1 rounded border">{m}</span>
-                                            ))}
-                                        </div>
+                                        <ul className="list-disc list-inside text-amber-800 space-y-0.5">
+                                            {missing.map((node, i) => <li key={i}>{node}</li>)}
+                                        </ul>
                                     </div>
                                 )}
                                 <div className="mt-4 flex gap-2 text-xs text-slate-500">
@@ -328,6 +410,9 @@ export default function WorkflowLibrary() {
                                 </div>
                             </CardContent>
                             <CardFooter className="flex justify-end gap-2 text-slate-400">
+                                <Button variant="ghost" size="sm" onClick={() => handleViewGraph(w)}>
+                                    <GitBranch className="w-4 h-4 mr-1" /> View Graph
+                                </Button>
                                 <Button variant="ghost" size="sm" onClick={() => handleEdit(w)}>
                                     <Edit2 className="w-4 h-4 mr-1" /> Edit
                                 </Button>
@@ -339,6 +424,23 @@ export default function WorkflowLibrary() {
                     );
                 })}
             </div>
+
+            {/* Graph Viewer Dialog */}
+            <Dialog open={viewGraphOpen} onOpenChange={setViewGraphOpen}>
+                <DialogContent className="max-w-4xl h-[80vh] flex flex-col">
+                    <DialogHeader>
+                        <DialogTitle>Workflow Graph: {selectedWorkflowForGraph?.name}</DialogTitle>
+                        <DialogDescription>
+                            Visual topology of the workflow
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="flex-1 min-h-0 bg-slate-50 border rounded-md">
+                        {selectedWorkflowForGraph && (
+                            <WorkflowGraphViewer graph={selectedWorkflowForGraph.graph_json} />
+                        )}
+                    </div>
+                </DialogContent>
+            </Dialog>
 
             {/* Install Dialog */}
             <Dialog open={installOpen} onOpenChange={(open) => {

@@ -1,5 +1,9 @@
 {
-  "name": "frontend",
+  "name": "sweet-tea-studio-frontend",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/landmark-labs/sweet-tea-studio.git"
+  },
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -25,6 +29,7 @@
     "react-dom": "^19.2.0",
     "react-resizable-panels": "^3.0.6",
     "react-router-dom": "^7.10.1",
+    "reactflow": "^11.11.4",
     "tailwind-merge": "^3.4.0"
   },
   "devDependencies": {

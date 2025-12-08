@@ -1,14 +1,14 @@
-# Diffusion Studio - Development Context & Handoff
+# Sweet Tea Studio - Development Context & Handoff
 
 **Last Updated:** 2025-12-08
-**Project:** Diffusion Studio
+**Project:** Sweet Tea Studio
 **Phase:** Feature Complete (Refinement & Extensions)
 
 ## 1. Project Overview
-Diffusion Studio is a local-first web interface for managing and executing Stable Diffusion workflows using **ComfyUI** as the backend execution engine. It provides a user-friendly layer (projects, galleries, workflow templates) on top of the raw node graph.
+Sweet Tea Studio is a local-first web interface for managing and executing Stable Diffusion workflows using **ComfyUI** as the backend execution engine. It provides a user-friendly layer (projects, galleries, workflow templates) on top of the raw node graph.
 
 ### Core Philosophy
-*   **State-Managed Wrapper**: ComfyUI is a stateless calculation engine. Diffusion Studio holds all persistent state (Projects, Jobs, History).
+*   **State-Managed Wrapper**: ComfyUI is a stateless calculation engine. Sweet Tea Studio holds all persistent state (Projects, Jobs, History).
 *   **Workflow Templates**: We abstract complex node graphs into simplified `WorkflowTemplates` with `input_schema`s that generate dynamic UI forms.
 *   **No "Remote" dependency**: The system is designed to run entirely on the user's localhost.
 
@@ -26,35 +26,39 @@ Diffusion Studio is a local-first web interface for managing and executing Stabl
 ---
 
 ## 3. Key Systems & Recent Changes
+(See `docs/ROADMAP.md` for full status)
 
-### A. Extensions & Node Installation (CRITICAL)
-**Status:** COMPLETE (Robust Fallback Implemented)
+### A. Extensions & Node Installation (Robust)
 **Files:** `backend/app/api/endpoints/extensions.py`, `backend/app/core/manager_client.py`
+We integrated the **ComfyUI Manager API** with a "Nuclear Fallback":
+1.  Try Standard Manager API (`/manager/queue/install`).
+2.  **Fallback:** Direct `git clone` + `pip install -r requirements.txt` (using backend's venv).
+3.  **Self-Healing:** Workflows with `[Missing Nodes: ...]` tags are lazy-revalidated and cleaned.
 
-We integrated the **ComfyUI Manager API** to allow installing custom nodes directly from the UI.
-*   **The Problem:** The Manager API is strict and sometimes reports success while failing to write files due to environment issues.
-*   **The Fix ("Nuclear Option"):** 
-    *   We first try the standard Manager API (`/manager/queue/install`).
-    *   **Fallback:** If the API succeeds but the directory is missing, the backend infers the `custom_nodes` path and executes a **direct `git clone`**.
-    *   **Dependency Handling:** If `requirements.txt` is found in the cloned repo, the backend automatically runs `pip install -r requirements.txt` using its own python executable.
+### B. Workflow Composition (NEW)
+**Files:** `backend/app/api/endpoints/workflows.py`, `backend/app/core/workflow_merger.py`
+Allows merging two workflows (Source + Target) into a single pipeline.
+*   **Logic:** `WorkflowMerger.merge()`:
+    1.  **Re-ID:** Offsets Target node IDs to prevent collisions.
+    2.  **Bridge:** Identifies Source's image output and Target's `LoadImage` nodes.
+    3.  **Stitch:** Replaces Target's `LoadImage` with a direct link to Source's output.
+*   **Result:** A new `WorkflowTemplate` is created with a unified graph and schema.
 
-### B. Self-Healing Workflow Validation
-**Status:** COMPLETE
-**Files:** `backend/app/api/endpoints/workflows.py`
+### C. Workflow Visualization (NEW)
+**Files:** `frontend/src/components/WorkflowGraphViewer.tsx`
+*   **Dual Format Support:** Handles both "UI Format" (with positions) and "API Format" (execution graph).
+*   **Auto-Layout:** Implements a topological stratification algorithm to layout API-format graphs automatically.
 
-Workflows store a static `description` that may contain a `[Missing Nodes: ...]` warning.
-*   **The Problem:** This warning persisted even after installing the nodes because it was baked into the string.
-*   **The Fix:**
-    *   `read_workflow` and `read_workflows` endpoints now perform a **Lazy Re-validation**.
-    *   If a workflow has the "Missing Nodes" tag, the backend checks the current ComfyUI `object_info`.
-    *   If the nodes are present, the tag is **stripped from the database** and the UI updates immediately.
+### D. Batch Processing & Cleanup
+**Files:** `frontend/src/components/ImageViewer.tsx`, `backend/app/api/endpoints/jobs.py`
+*   **Job Flow:** Jobs now return a *list* of images.
+*   **Auto-Cleanup:** Frontend toggle sends a signal to delete "unkept" images from previous batches to save disk space.
+*   **Persistent Selection:** Users can "Keep" specific images, which flags them in the DB to be preserved.
 
-### C. Image Serving & Gallery
-**Status:** STABLE
+### E. Image Serving & Gallery
 **Files:** `backend/app/api/endpoints/gallery.py`
-
-*   Images are stored as absolute paths in the DB.
-*   The backend provides a proxy endpoint `/api/v1/gallery/image/path?path=...` to serve these files safely to the browser.
+*   Images are served via proxy: `/api/v1/gallery/image/path?path=...`.
+*   Includes `RunningGallery` context for session history.
 
 ---
 

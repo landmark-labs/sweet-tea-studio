@@ -39,6 +39,7 @@ class ComfyClient:
             try:
                 self.ws = websocket.WebSocket()
                 self.ws.connect(ws_url, timeout=5)
+                self.ws.settimeout(None)
                 return
             except (ConnectionRefusedError, socket.timeout, Exception) as e:
                 if attempt == max_retries - 1:

@@ -1,4 +1,4 @@
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from datetime import datetime
 from sqlmodel import Field, SQLModel, JSON
 
@@ -11,6 +11,8 @@ class PromptBase(SQLModel):
     negative_text: Optional[str] = None
     parameters: Dict[str, Any] = Field(default={}, sa_type=JSON)
     preview_image_path: Optional[str] = None
+    tags: Optional[List[str]] = Field(default=None, sa_type=JSON)
+    tag_prompt: Optional[str] = None
 
 class Prompt(PromptBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)

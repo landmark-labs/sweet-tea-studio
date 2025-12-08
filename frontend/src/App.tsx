@@ -5,11 +5,17 @@ import Gallery from "./pages/Gallery";
 import PromptLibrary from "./pages/PromptLibrary";
 import WorkflowLibrary from "./pages/WorkflowLibrary";
 
+import { ErrorBoundary } from "./components/ErrorBoundary";
+
 function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route element={<Layout />}>
+        <Route element={
+          <ErrorBoundary>
+            <Layout />
+          </ErrorBoundary>
+        }>
           <Route path="/" element={<PromptStudio />} />
           <Route path="/gallery" element={<Gallery />} />
           <Route path="/library" element={<PromptLibrary />} />

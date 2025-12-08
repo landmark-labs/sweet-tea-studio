@@ -29,6 +29,28 @@ export interface Job {
     error?: string;
 }
 
+export interface CaptionResponse {
+    caption: string;
+    ranked_tags?: string[];
+    model?: string;
+    backend?: string;
+    image_id?: number;
+}
+
+export interface TagPromptResponse {
+    prompt: string;
+    ordered_tags: string[];
+    prompt_id?: number;
+}
+
+export interface PromptSuggestion {
+    value: string;
+    type: "tag" | "prompt";
+    frequency: number;
+    source?: string;
+    snippet?: string;
+}
+
 export const api = {
     getEngines: async (): Promise<Engine[]> => {
         const res = await fetch(`${API_BASE}/engines/`);
@@ -93,8 +115,11 @@ export const api = {
         return res.json();
     },
 
-    getGallery: async (): Promise<GalleryItem[]> => {
-        const res = await fetch(`${API_BASE}/gallery/`);
+    getGallery: async (search?: string): Promise<GalleryItem[]> => {
+        const params = new URLSearchParams();
+        if (search) params.set("search", search);
+        const query = params.toString() ? `?${params.toString()}` : "";
+        const res = await fetch(`${API_BASE}/gallery/${query}`);
         if (!res.ok) throw new Error("Failed to fetch gallery");
         return res.json();
     },
@@ -103,15 +128,32 @@ export const api = {
         await fetch(`${API_BASE}/gallery/${imageId}`, { method: "DELETE" });
     },
 
-    getPrompts: async (search?: string): Promise<Prompt[]> => {
-        const query = search ? `?search=${encodeURIComponent(search)}` : "";
+    getPrompts: async (search?: string, workflowId?: number): Promise<Prompt[]> => {
+        const params = new URLSearchParams();
+        if (search) params.set("search", search);
+        if (workflowId) params.set("workflow_id", workflowId.toString());
+
+        const query = params.toString() ? `?${params.toString()}` : "";
         const res = await fetch(`${API_BASE}/library/${query}`);
         if (!res.ok) throw new Error("Failed to fetch prompts");
         return res.json();
     },
 
+    getPrompt: async (promptId: number): Promise<Prompt> => {
+        const res = await fetch(`${API_BASE}/library/${promptId}`);
+        if (!res.ok) throw new Error("Failed to fetch prompt");
+        return res.json();
+    },
+
     deletePrompt: async (promptId: number): Promise<void> => {
         await fetch(`${API_BASE}/library/${promptId}`, { method: "DELETE" });
+    },
+
+    getPromptSuggestions: async (query: string): Promise<PromptSuggestion[]> => {
+        const params = new URLSearchParams({ query });
+        const res = await fetch(`${API_BASE}/library/suggest?${params.toString()}`);
+        if (!res.ok) throw new Error("Failed to fetch suggestions");
+        return res.json();
     },
 
     savePrompt: async (prompt: Partial<Prompt>): Promise<Prompt> => {
@@ -149,6 +191,62 @@ export const api = {
         } catch (e) {
             // Ignore connection error as reboot kills server
         }
+    },
+
+    captionImage: async (file: File | Blob, imageId?: number): Promise<CaptionResponse> => {
+        const formData = new FormData();
+        formData.append("image", file);
+        if (imageId) formData.append("image_id", String(imageId));
+
+        const res = await fetch(`${API_BASE}/vlm/caption`, {
+            method: "POST",
+            body: formData,
+        });
+        if (!res.ok) {
+            const errorData = await res.json().catch(() => ({}));
+            throw new Error(errorData.detail || "Failed to caption image");
+        }
+        return res.json();
+    },
+
+    tagsToPrompt: async (tags: string[], promptId?: number): Promise<TagPromptResponse> => {
+        const res = await fetch(`${API_BASE}/vlm/tags`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ tags, prompt_id: promptId }),
+        });
+        if (!res.ok) {
+            const errorData = await res.json().catch(() => ({}));
+            throw new Error(errorData.detail || "Failed to expand tags");
+        }
+        return res.json();
+    },
+
+    vlmHealth: async () => {
+        const res = await fetch(`${API_BASE}/vlm/health`);
+        if (!res.ok) throw new Error("VLM health check failed");
+        return res.json();
+    },
+
+    // --- Kept Logic Preserved ---
+    keepImages: async (imageIds: number[], keep: boolean) => {
+        const res = await fetch(`${API_BASE}/gallery/keep`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ image_ids: imageIds, keep }),
+        });
+        if (!res.ok) throw new Error("Failed to update keep status");
+        return res.json();
+    },
+
+    cleanupImages: async (jobId?: number) => {
+        const res = await fetch(`${API_BASE}/gallery/cleanup`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ job_id: jobId }),
+        });
+        if (!res.ok) throw new Error("Failed to cleanup images");
+        return res.json();
     }
 };
 
@@ -158,6 +256,9 @@ export interface Image {
     path: string;
     filename: string;
     created_at: string;
+    caption?: string;
+    tags?: string[];
+    is_kept?: boolean;
 }
 
 export interface GalleryItem {
@@ -165,7 +266,11 @@ export interface GalleryItem {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     job_params: any;
     prompt?: string;
+    workflow_template_id?: number;
     created_at: string;
+    caption?: string;
+    prompt_tags?: string[];
+    prompt_name?: string;
 }
 
 export interface Prompt {
@@ -176,7 +281,13 @@ export interface Prompt {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     parameters: any;
     preview_image_path?: string;
+    positive_text?: string;
+    negative_text?: string;
+    tag_prompt?: string;
+    created_at?: string;
+    updated_at?: string;
     related_images?: string[];
+    tags?: string[];
 }
 
 export interface FileItem {

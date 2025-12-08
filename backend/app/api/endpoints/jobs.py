@@ -95,9 +95,7 @@ def process_job(job_id: int):
             job.completed_at = datetime.utcnow()
             session.add(job)
             
-            manager.broadcast_sync({"type": "completed", "images": images}, str(job_id))
-            
-            saved_image_paths = []
+            saved_images = []
             for img_data in images:
                 full_path = f"{engine.output_dir}\\{img_data['subfolder']}\\{img_data['filename']}" if img_data.get('subfolder') else f"{engine.output_dir}\\{img_data['filename']}"
                 
@@ -105,16 +103,37 @@ def process_job(job_id: int):
                     job_id=job_id,
                     path=full_path,
                     filename=img_data['filename'],
-                    format="png"
+                    format="png",
+                    is_kept=False
                 )
                 session.add(new_image)
-                saved_image_paths.append(full_path)
+                saved_images.append(new_image)
             
             session.commit() # Commit images and job completion
+            
+            # Refresh images to get IDs
+            for img in saved_images:
+                session.refresh(img)
+                
+            # Broadcast saved images (converted to dict)
+            # We use jsonable_encoder or manual list
+            images_payload = [
+                {
+                    "id": img.id,
+                    "job_id": img.job_id,
+                    "path": img.path,
+                    "filename": img.filename,
+                    "created_at": img.created_at.isoformat(),
+                    "is_kept": img.is_kept
+                } 
+                for img in saved_images
+            ]
+            
+            manager.broadcast_sync({"type": "completed", "images": images_payload}, str(job_id))
             print(f"Job {job_id} finished with {len(images)} images.")
             
             # Auto-Save Prompt
-            if saved_image_paths:
+            if saved_images:
                 pos = working_params.get("prompt", "")
                 neg = working_params.get("negative_prompt", "")
                 content_str = f"{pos}|{neg}".encode('utf-8')
@@ -139,7 +158,7 @@ def process_job(job_id: int):
                         negative_text=neg,
                         content_hash=content_hash,
                         parameters=working_params,
-                        preview_image_path=saved_image_paths[0],
+                        preview_image_path=saved_images[0].path,
                         created_at=datetime.utcnow(),
                         updated_at=datetime.utcnow()
                     )
