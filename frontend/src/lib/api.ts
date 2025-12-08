@@ -7,6 +7,15 @@ export interface Engine {
     is_active: boolean;
 }
 
+export interface EngineHealth {
+    engine_id: number;
+    engine_name?: string;
+    healthy: boolean;
+    last_error?: string;
+    last_checked_at?: string;
+    next_check_in: number;
+}
+
 export interface WorkflowTemplate {
     id: number;
     name: string;
@@ -112,6 +121,12 @@ export const api = {
     getEngines: async (): Promise<Engine[]> => {
         const res = await fetch(`${API_BASE}/engines/`);
         if (!res.ok) throw new Error("Failed to fetch engines");
+        return res.json();
+    },
+
+    getEngineHealth: async (): Promise<EngineHealth[]> => {
+        const res = await fetch(`${API_BASE}/engines/health`);
+        if (!res.ok) throw new Error("Failed to fetch engine health");
         return res.json();
     },
 

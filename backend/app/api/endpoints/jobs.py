@@ -4,6 +4,7 @@ from app.models.job import Job, JobCreate, JobRead
 from app.models.workflow import WorkflowTemplate
 from app.models.engine import Engine
 from app.core.comfy_client import ComfyClient, ComfyConnectionError, ComfyResponseError
+from app.services.comfy_watchdog import watchdog
 from datetime import datetime
 from app.core.websockets import manager
 import copy
@@ -242,6 +243,11 @@ def create_job(job_in: JobCreate, background_tasks: BackgroundTasks):
         engine = session.get(Engine, job_in.engine_id)
         if not engine:
             raise HTTPException(status_code=404, detail="Engine not found")
+
+        try:
+            watchdog.ensure_engine_ready(engine)
+        except ComfyConnectionError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
 
         # Validate Workflow (DB)
         workflow = session.get(WorkflowTemplate, job_in.workflow_template_id)
