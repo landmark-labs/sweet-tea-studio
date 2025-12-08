@@ -12,33 +12,36 @@
 
 ## Phase 2: User Experience & Reliability (COMPLETE)
 - [x] **Node Installation Manager**:
-    - Manage custom node dependencies directly from UI.
     - [x] Backend Fallback (Git Clone + pip install).
     - [x] Real-time Installation Logs.
-- [x] **Self-Healing Validation**:
-    - Auto-clear "Missing Nodes" warnings upon resolution.
+    - [x] Self-Healing Validation (Auto-clear missing warnings).
 - [x] **Batch Processing**:
     - [x] Generate batches of images.
-    - [x] Auto-cleanup unkept images to save disk space.
-    - [x] Group delete functionality.
-- [ ] **Job Cancellation**:
-    - Deep integration to interrupt ComfyUI generation.
+    - [x] Auto-cleanup unkept images.
+- [x] **Backend Stability**:
+    - [x] WebSocket Race Condition Fix.
+    - [x] Thread-safe Broadcasting.
+    - [x] Robust Job Cancellation.
 
-## Phase 3: Advanced Features (IN PROGRESS)
+## Phase 3: Advanced Features (COMPLETE)
 - [x] **Workflow Visualizer**:
-    - [x] Read-only graph view of the current workflow (UI & API formats).
-    - [x] Auto-layout for API graphs.
+    - [x] Read-only graph view (UI & API formats).
+    - [x] Auto-layout implementation.
 - [x] **Workflow Composition**:
     - [x] Merge two workflows (Source -> Target).
-    - [x] Intelligent node re-mapping and bridging.
-- [ ] **Advanced Graph Editor**:
-    - Full node editing capabilities within Sweet Tea Studio.
-- [ ] **Folder/Collection Management**:
-    - Organize Gallery images into folders/tags.
-- [ ] **Folder/Collection Management**:
-    - Organize Gallery images into folders/tags.
+- [x] **Vision Integration (VLM)**:
+    - [x] Local Image Captioning service.
+    - [x] Tag extraction and prompt expansion.
+    - [x] Graceful failure handling (Offline mode).
+- [x] **Node Bypass System**:
+    - [x] "Bypass" toggle support in Configurator.
+    - [x] Backend injection of ComfyUI `mode: 4`.
 
-## Phase 4: Distribution
+## Phase 4: Refinement & Distribution (NEXT)
+- [ ] **Advanced Graph Editor**:
+    - In-app node editing capabilities.
+- [ ] **Collection Management**:
+    - Organize Gallery images into folders/tags.
 - [ ] **Packaging**:
     - Electron wrapper for Frontend.
     - PyInstaller for Backend.

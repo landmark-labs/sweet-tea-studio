@@ -52,10 +52,22 @@ export default function PromptStudio() {
 
   // Vision assistance
   const [visionBusy, setVisionBusy] = useState(false);
+  const [vlmEnabled, setVlmEnabled] = useState(false);
+  const [vlmError, setVlmError] = useState<string | null>(null);
   const [lastCaption, setLastCaption] = useState("");
   const [captionTags, setCaptionTags] = useState<string[]>([]);
   const [tagDraft, setTagDraft] = useState("");
   const [tagExpansion, setTagExpansion] = useState("");
+
+  useEffect(() => {
+    api.vlmHealth().then(status => {
+      setVlmEnabled(status.loaded || false);
+      if (status.error) setVlmError(String(status.error));
+    }).catch(() => {
+      setVlmEnabled(false);
+      setVlmError("Service unreachable");
+    });
+  }, []);
 
   // Add a refresh key for gallery
   const [galleryRefresh, setGalleryRefresh] = useState(0);
@@ -569,15 +581,23 @@ export default function PromptStudio() {
         )}
 
         <div className="border-t pt-4 space-y-3">
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-indigo-600" />
-            <h3 className="text-sm font-semibold text-slate-800">Vision Assist</h3>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-indigo-600" />
+              <h3 className="text-sm font-semibold text-slate-800">Vision Assist</h3>
+            </div>
+            {vlmError && !vlmEnabled && (
+              <span className="text-[10px] text-red-500 bg-red-50 px-1.5 py-0.5 rounded border border-red-100" title={vlmError}>
+                Offline
+              </span>
+            )}
           </div>
           <Button
             onClick={runCaptionOnPreview}
-            disabled={visionBusy || !previewPath}
+            disabled={visionBusy || !previewPath || !vlmEnabled}
             variant="secondary"
             size="sm"
+            title={!vlmEnabled ? "VLM Model not loaded. Run backend/download_models.py" : "Generate caption from image"}
           >
             {visionBusy ? "Captioning..." : "Caption preview image"}
           </Button>
@@ -600,8 +620,14 @@ export default function PromptStudio() {
               value={tagDraft}
               onChange={(e) => setTagDraft(e.target.value)}
               placeholder="comma-separated tags (city, neon, skyline)"
+              disabled={!vlmEnabled}
             />
-            <Button onClick={expandTagsIntoPrompt} disabled={visionBusy || !tagDraft.trim()} size="sm">
+            <Button
+              onClick={expandTagsIntoPrompt}
+              disabled={visionBusy || !tagDraft.trim() || !vlmEnabled}
+              size="sm"
+              title={!vlmEnabled ? "VLM Model not loaded" : "Convert tags to prompt"}
+            >
               <Sparkles className="w-4 h-4 mr-1" />
               Expand tags
             </Button>

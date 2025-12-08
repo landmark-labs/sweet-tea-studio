@@ -66,9 +66,22 @@ def process_job(job_id: int):
             
             # Handle random seed (-1 or "-1") for ANY parameter named like "seed"
             # This handles "seed", "seed (KSampler)", "noise_seed", etc.
+            bypass_nodes = []
             for key in list(working_params.keys()):
                  if "seed" in key.lower() and str(working_params[key]) == "-1":
                      working_params[key] = random.randint(1, 1125899906842624)
+                 
+                 # Handle Bypassing
+                 if key.startswith("__bypass_") and working_params[key] is True:
+                     node_id = key.replace("__bypass_", "")
+                     bypass_nodes.append(node_id)
+                     # We remove it so it doesn't try to map to anything (though apply_params_to_graph handles missing keys fine)
+                     del working_params[key]
+
+            # Apply Bypass Mode (4 = Bypass in ComfyUI)
+            for node_id in bypass_nodes:
+                if node_id in final_graph:
+                    final_graph[node_id]["mode"] = 4
 
             if workflow.node_mapping:
                 apply_params_to_graph(final_graph, workflow.node_mapping, working_params)

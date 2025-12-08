@@ -62,17 +62,28 @@ class VLMService:
 
         logger.info("Loading VLM model %s with %s quantization", self.config.model_id, self.config.quantization)
         try:
+            # Try loading locally first to avoid blocking downloads on API threads
             self._model = AutoModelForCausalLM.from_pretrained(
                 self.config.model_id,
                 device_map=device_map,
                 torch_dtype=getattr(torch, self.config.dtype, torch.bfloat16),
                 quantization_config=quant_config,
                 trust_remote_code=True,
+                local_files_only=True,
             )
-            self._processor = AutoProcessor.from_pretrained(self.config.model_id, trust_remote_code=True)
+            self._processor = AutoProcessor.from_pretrained(
+                self.config.model_id, 
+                trust_remote_code=True,
+                local_files_only=True
+            )
             self._status["loaded"] = True
             self._status["model_id"] = self.config.model_id
             self._status.pop("error", None)
+        except OSError:
+            # Model not found locally
+            logger.warning("VLM model not found locally. Please run download_models.py.")
+            self._status["error"] = "Model not found. Run download_models.py"
+            self._model = None
         except Exception as exc:  # pragma: no cover - runtime failure
             logger.error("Failed to load VLM: %s", exc)
             self._status["error"] = str(exc)

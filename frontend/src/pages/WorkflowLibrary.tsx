@@ -9,6 +9,7 @@ import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { FileJson, AlertTriangle, GitBranch, Edit2, Trash2, Save, RotateCw, CheckCircle2, XCircle } from "lucide-react";
 import { api, WorkflowTemplate } from "@/lib/api";
 import { WorkflowGraphViewer } from "@/components/WorkflowGraphViewer";
+import { cn } from "@/lib/utils";
 
 export default function WorkflowLibrary() {
     const [workflows, setWorkflows] = useState<WorkflowTemplate[]>([]);
@@ -228,6 +229,63 @@ export default function WorkflowLibrary() {
                 <div className="flex justify-between items-center mb-6">
                     <h1 className="text-2xl font-bold">Edit Workflow: {editingWorkflow.name}</h1>
                     <div className="flex gap-2">
+                        <Dialog>
+                            <DialogTrigger asChild>
+                                <Button variant="secondary" size="sm">
+                                    <AlertTriangle className="w-4 h-4 mr-2" />
+                                    Add Bypass
+                                </Button>
+                            </DialogTrigger>
+                            <DialogContent>
+                                <DialogHeader>
+                                    <DialogTitle>Add Node Bypass Toggle</DialogTitle>
+                                    <DialogDescription>
+                                        Select a node to allow bypassing (disabling) in the configurator.
+                                    </DialogDescription>
+                                </DialogHeader>
+                                <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+                                    {Object.entries(editingWorkflow.graph_json)
+                                        .map(([id, node]: [string, any]) => {
+                                            const bypassKey = `__bypass_${id}`;
+                                            const hasBypass = !!schemaEdits[bypassKey];
+
+                                            return (
+                                                <div key={id} className={cn("flex justify-between items-center p-2 border rounded hover:bg-slate-50 transition-colors", hasBypass && "bg-blue-50 border-blue-200")}>
+                                                    <div>
+                                                        <div className="font-bold text-sm flex items-center gap-2">
+                                                            {node._meta?.title || node.title || `Node ${id}`}
+                                                            {hasBypass && <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-mono">BYPASSABLE</span>}
+                                                        </div>
+                                                        <div className="text-xs text-slate-500">{node.class_type}</div>
+                                                    </div>
+                                                    <Button
+                                                        size="sm"
+                                                        variant={hasBypass ? "destructive" : "outline"}
+                                                        onClick={() => {
+                                                            const s = { ...schemaEdits };
+                                                            if (hasBypass) {
+                                                                delete s[bypassKey];
+                                                            } else {
+                                                                s[bypassKey] = {
+                                                                    title: `Bypass ${node._meta?.title || node.title || id}`,
+                                                                    widget: "toggle",
+                                                                    x_node_id: id,
+                                                                    type: "boolean",
+                                                                    default: false
+                                                                };
+                                                            }
+                                                            setSchemaEdits(s);
+                                                        }}
+                                                    >
+                                                        {hasBypass ? "Remove" : "Enable"}
+                                                    </Button>
+                                                </div>
+                                            );
+                                        })
+                                    }
+                                </div>
+                            </DialogContent>
+                        </Dialog>
                         <Button variant="outline" onClick={() => setEditingWorkflow(null)}>Cancel</Button>
                         <Button onClick={handleSaveSchema}><Save className="w-4 h-4 mr-2" /> Save Changes</Button>
                     </div>

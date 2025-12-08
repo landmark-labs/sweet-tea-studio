@@ -6,6 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ImageUpload } from "@/components/ImageUpload";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 
 interface DynamicFormProps {
@@ -71,7 +72,7 @@ export function DynamicForm({
         }
     }, [schema, persistenceKey, isControlled]);
 
-    const handleChange = (key: string, value: string | number) => {
+    const handleChange = (key: string, value: string | number | boolean) => {
         const next = { ...formData, [key]: value };
 
         if (persistenceKey) {
@@ -187,6 +188,24 @@ export function DynamicForm({
                             isActive && "ring-2 ring-blue-400 border-blue-400 bg-blue-50/20"
                         )}
                     />
+                </div>
+            );
+        }
+
+        if (field.widget === "toggle") {
+            return (
+                <div key={key} className="flex items-center justify-between py-2">
+                    <Label htmlFor={key} className={cn("text-xs text-slate-500", isActive && "text-blue-600 font-semibold")}>
+                        {field.title || key}
+                    </Label>
+                    <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-slate-400 uppercase">{formData[key] ? "Bypassed" : "Active"}</span>
+                        <Switch
+                            checked={!!formData[key]}
+                            onCheckedChange={(c) => handleChange(key, c)}
+                            className={cn(formData[key] ? "bg-amber-500" : "bg-slate-200")}
+                        />
+                    </div>
                 </div>
             );
         }

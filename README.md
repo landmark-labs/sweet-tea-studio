@@ -6,9 +6,11 @@ Sweet Tea Studio replaces the raw node graph with a user-friendly, project-based
 
 ## Features
 - 🚀 **Simply Powerful**: Run complex workflows with simple, auto-generated forms.
-- 🎨 **Workflow Composition**: Merge multiple workflows (e.g., Txt2Img + Upscale) into new custom pipelines via a simple UI.
+- 👁️ **Vision Assist (VLM)**: Local image captioning and tag-based prompt expansion.
+- 🔀 **Node Bypass**: Selectively disable specific nodes (like ControlNets) directly from the form.
+- 🎨 **Workflow Composition**: Merge multiple workflows (e.g., Txt2Img + Upscale) into new custom pipelines.
 - 🕸️ **Graph Visualization**: View the underlying node graph for any workflow with a single click.
-- 🧩 **Extension Manager**: Auto-detect and install missing custom nodes with a smart fallback system (API -> Git Clone -> Pip Install).
+- 🧩 **Extension Manager**: Auto-detect and install missing custom nodes with a smart fallback system.
 - 🖼️ **Batch Generation**: Queue multiple images, auto-cleanup unkept results, and manage your gallery efficiently.
 - 🛠️ **Local First**: Runs entirely on your machine. No cloud dependencies.
 
@@ -42,7 +44,8 @@ npm run dev
 Visit `http://localhost:5173` to start.
 
 ## Documentation
-- [Development Handoff (v0.4.0)](./HANDOFF.md) - **Start Here for Development** (Architecture, Context, Roadmap)
+- [Development Handoff (v0.5.0)](./HANDOFF_CONTEXT.md) - **Start Here for Development** (Architecture, Context, Roadmap)
+- [Roadmap](./docs/ROADMAP.md) - Detailed Feature Status
 
 ## License
 MIT

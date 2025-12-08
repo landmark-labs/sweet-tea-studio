@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { api, Prompt, PromptSuggestion } from "@/lib/api";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Trash2, Search, LayoutTemplate, Sparkles, Copy } from "lucide-react";
+import { Trash2, Search, LayoutTemplate, Sparkles, Copy, Loader2, Wand2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -14,9 +14,18 @@ export default function PromptLibrary() {
     const [expandedPrompt, setExpandedPrompt] = useState<string>("");
     const [expanding, setExpanding] = useState(false);
     const [suggestions, setSuggestions] = useState<PromptSuggestion[]>([]);
+    const [vlmEnabled, setVlmEnabled] = useState(false);
+    const [vlmError, setVlmError] = useState<string | null>(null);
 
     useEffect(() => {
         loadPrompts();
+        api.vlmHealth().then(status => {
+            setVlmEnabled(status.loaded || false);
+            if (status.error) setVlmError(String(status.error));
+        }).catch(() => {
+            setVlmEnabled(false);
+            setVlmError("Service unreachable");
+        });
     }, []);
 
     const loadPrompts = async (query?: string) => {
@@ -127,12 +136,35 @@ export default function PromptLibrary() {
                         value={tagInput}
                         onChange={(e) => setTagInput(e.target.value)}
                         placeholder="e.g. cyberpunk, rainy night, neon lights"
+                        disabled={!vlmEnabled}
                     />
-                    <Button onClick={handleExpandTags} disabled={expanding}>
-                        <Sparkles className="w-4 h-4 mr-1" />
-                        {expanding ? "Expanding..." : "Expand"}
+                    <Button
+                        onClick={handleExpandTags}
+                        disabled={expanding || !vlmEnabled}
+                        variant={vlmEnabled ? "default" : "secondary"}
+                        title={!vlmEnabled ? "VLM Model not loaded. Run backend/download_models.py" : "Generate Prompt"}
+                    >
+                        {expanding ? (
+                            <>
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                Dreaming...
+                            </>
+                        ) : !vlmEnabled ? (
+                            "VLM Offline"
+                        ) : (
+                            <>
+                                <Wand2 className="w-4 h-4 mr-2" />
+                                Expand
+                            </>
+                        )}
                     </Button>
                 </div>
+                {vlmError && !vlmEnabled && (
+                    <div className="mt-4 p-3 bg-red-50 border border-red-100 rounded text-xs text-red-600">
+                        <p className="font-semibold mb-1">VLM Backend Offline</p>
+                        <p>The vision/language models are not loaded. Please run the download script in the backend folder to enable this feature.</p>
+                    </div>
+                )}
                 {expandedPrompt && (
                     <div className="mt-3 p-3 bg-indigo-50 border border-indigo-100 rounded flex items-start justify-between gap-2">
                         <p className="text-sm text-indigo-900 flex-1">{expandedPrompt}</p>
