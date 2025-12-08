@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+
+# Node
+node_modules/
+dist/
+.DS_Store
+
+# Database
+*.db
+backend/database.db
+
+# IDE
+.vscode/
+.idea/
+
+# Local artifacts
+debug_images.py
+verify_db.py
