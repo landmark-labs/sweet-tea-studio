@@ -41,13 +41,17 @@ export default function Gallery() {
         const name = prompt("Enter a name for this prompt preset:");
         if (!name) return;
 
+        const workflowId = item.workflow_template_id || 1;
+
         try {
             await api.savePrompt({
-                workflow_id: 1, // TODO: Store workflow_id in Job metadata? Assuming 1 for now or derive from job
+                workflow_id: workflowId,
                 name: name,
                 description: `Saved from Gallery Image #${item.image.id}`,
                 parameters: item.job_params,
-                preview_image_path: item.image.path
+                preview_image_path: item.image.path,
+                positive_text: item.job_params?.prompt,
+                negative_text: item.job_params?.negative_prompt,
             });
             alert("Prompt saved to library!");
         } catch (err) {
