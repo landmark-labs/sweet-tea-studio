@@ -72,7 +72,7 @@ SelectTrigger.displayName = "SelectTrigger"
 const SelectValue = React.forwardRef<
     HTMLSpanElement,
     React.HTMLAttributes<HTMLSpanElement> & { placeholder?: string }
->(({ className, placeholder, ...props }, ref) => {
+>(({ className, placeholder, children, ...props }, ref) => {
     const context = React.useContext(SelectContext)
     if (!context) throw new Error("SelectValue must be used within Select")
 
@@ -81,7 +81,8 @@ const SelectValue = React.forwardRef<
         if (placeholder) context.setPlaceholder(placeholder)
     }, [placeholder, context])
 
-    const display = context.label || placeholder || context.placeholder
+    // Priority: Children (Explicit) > Context Label (Selected from Item) > Placeholder
+    const display = children || context.label || placeholder || context.placeholder
 
     return (
         <span
@@ -128,15 +129,18 @@ const SelectItem = React.forwardRef<
 
     const isSelected = context.value === value
 
-    // If selected, update the label in parent context
+    // If selected, update the label in parent context (for initial load if open)
     React.useEffect(() => {
         if (isSelected) {
             context.setLabel(children)
         }
     }, [isSelected, children, context])
 
-    const handleSelect = () => {
+    const handleSelect = (e: React.MouseEvent | React.PointerEvent) => {
+        // Prevent default to avoid focus issues
+        e.preventDefault()
         context.onValueChange(value)
+        context.setLabel(children)
         context.setOpen(false)
     }
 

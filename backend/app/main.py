@@ -1,18 +1,16 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.api import api_router
 from app.core.config import settings
 from app.db.init_db import init_db
+from app.api.endpoints import engines, workflows, jobs, gallery, files, library, extensions
 
-app = FastAPI(
-    title=settings.PROJECT_NAME,
-    openapi_url=f"{settings.API_V1_STR}/openapi.json"
-)
+app = FastAPI(title="Diffusion Studio Backend")
 
 @app.on_event("startup")
 def on_startup():
     init_db()
 
+# CORS
 # Set all CORS enabled origins
 if settings.BACKEND_CORS_ORIGINS:
     app.add_middleware(
@@ -23,7 +21,13 @@ if settings.BACKEND_CORS_ORIGINS:
         allow_headers=["*"],
     )
 
-app.include_router(api_router, prefix=settings.API_V1_STR)
+app.include_router(engines.router, prefix="/api/v1/engines", tags=["engines"])
+app.include_router(workflows.router, prefix="/api/v1/workflows", tags=["workflows"])
+app.include_router(jobs.router, prefix="/api/v1/jobs", tags=["jobs"])
+app.include_router(gallery.router, prefix="/api/v1/gallery", tags=["gallery"])
+app.include_router(files.router, prefix="/api/v1/files", tags=["files"])
+app.include_router(library.router, prefix="/api/v1/library", tags=["library"])
+app.include_router(extensions.router, prefix="/api/v1/extensions", tags=["extensions"])
 
 @app.get("/")
 def root():

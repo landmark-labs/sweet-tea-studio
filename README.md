@@ -1,36 +1,47 @@
 # Diffusion Studio
-**Local-First Stable Diffusion Interface**
 
-Diffusion Studio is a modern web interface for managing and executing Stable Diffusion workflows powered by ComfyUI.
+A modern, local-first interface for **ComfyUI**. 
+
+Diffusion Studio replaces the raw node graph with a user-friendly, project-based workflow management system, while keeping the full power of ComfyUI's engine under the hood.
 
 ## Features
-- **Visual Prompt Studio**: Configure params, select checkpoints (engines), and execute workflows.
-- **Workflow Agnostic**: Backend dynamically loads inputs based on ComfyUI workflow JSON.
-- **Gallery**: View, delete, and save generated images.
-- **Prompt Library**: Save your favorite prompts and settings.
-- **File Explorer**: Browse local input directories.
-- **Real-time Progress**: WebSocket integration for generation status.
+- 🚀 **Simply Powerful**: Run complex workflows with simple, auto-generated forms.
+- 🧩 **Extension Manager**: Auto-detect and install missing custom nodes with a single click.
+- 🖼️ **Gallery**: Built-in image history, parameter inspection, and organization.
+- 🛠️ **Local First**: Runs entirely on your machine. No cloud dependencies.
 
-## Getting Started
+## Quick Start
 
 ### Prerequisites
+- **ComfyUI** installed and running on default port `8188`.
 - Python 3.10+
 - Node.js 18+
-- ComfyUI Installation (Local)
 
-### Backend Setup
-1. Navigate to `/backend`.
-2. Create virtual environment: `python -m venv venv`.
-3. Activate: `.\venv\Scripts\activate`.
-4. Install dependencies: `pip install -r requirements.txt`.
-5. Run server: `python -m uvicorn app.main:app --reload`.
-   - The server runs on `http://127.0.0.1:8000`.
+### Backend
+```bash
+cd backend
+python -m venv venv
+# Windows
+.\venv\Scripts\activate
+# Linux/Mac
+source venv/bin/activate
 
-### Frontend Setup
-1. Navigate to `/frontend`.
-2. Install dependencies: `npm install`.
-3. Run dev server: `npm run dev`.
-4. Open `http://localhost:5173`.
+pip install -r requirements.txt
+python -m uvicorn app.main:app --reload
+```
 
-## Architecture
-See `handoff.md` for detailed architecture and development context.
+### Frontend
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Visit `http://localhost:5173` to start.
+
+## Documentation
+- [Development Context & Handoff](./HANDOFF_CONTEXT.md) - **Start Here for Development**
+- [Roadmap](./docs/ROADMAP.md) - Future Plans
+
+## License
+MIT

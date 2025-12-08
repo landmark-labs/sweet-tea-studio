@@ -57,7 +57,10 @@ export const api = {
                 input_params: params,
             }),
         });
-        if (!res.ok) throw new Error("Failed to create job");
+        if (!res.ok) {
+            const errorData = await res.json().catch(() => ({}));
+            throw new Error(errorData.detail || "Failed to create job");
+        }
         return res.json();
     },
 
@@ -119,6 +122,33 @@ export const api = {
         });
         if (!res.ok) throw new Error("Failed to save prompt");
         return res.json();
+    },
+
+    installMissingNodes: async (missingNodes: string[]) => {
+        const res = await fetch(`${API_BASE}/extensions/install_missing`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ missing_nodes: missingNodes }),
+        });
+        if (!res.ok) {
+            const errorData = await res.json().catch(() => ({}));
+            throw new Error(errorData.detail || "Failed to install missing nodes");
+        }
+        return res.json();
+    },
+
+    getInstallStatus: async (jobId: string) => {
+        const res = await fetch(`${API_BASE}/extensions/install_status/${jobId}`);
+        if (!res.ok) throw new Error("Failed to get status");
+        return res.json();
+    },
+
+    rebootComfyUI: async () => {
+        try {
+            await fetch(`${API_BASE}/extensions/reboot`, { method: "POST" });
+        } catch (e) {
+            // Ignore connection error as reboot kills server
+        }
     }
 };
 

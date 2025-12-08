@@ -1,5 +1,5 @@
 import { Outlet, NavLink } from "react-router-dom";
-import { LayoutGrid, PlusCircle, Settings, Library, Image as ImageIcon } from "lucide-react";
+import { LayoutGrid, PlusCircle, Settings, Library, Image as ImageIcon, Workflow } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export default function Layout() {
@@ -25,6 +25,10 @@ export default function Layout() {
           <NavLink to="/library" className={({ isActive }) => cn("flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors", isActive ? "bg-blue-50 text-blue-700" : "text-slate-700 hover:bg-slate-100")}>
             <Library size={18} />
             Prompt Library
+          </NavLink>
+          <NavLink to="/workflows" className={({ isActive }) => cn("flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors", isActive ? "bg-blue-50 text-blue-700" : "text-slate-700 hover:bg-slate-100")}>
+            <Workflow size={18} />
+            Workflows
           </NavLink>
           <NavLink to="/engines" className={({ isActive }) => cn("flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors", isActive ? "bg-blue-50 text-blue-700" : "text-slate-700 hover:bg-slate-100")}>
             <LayoutGrid size={18} />

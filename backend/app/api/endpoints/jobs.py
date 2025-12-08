@@ -3,7 +3,7 @@ from typing import List
 from app.models.job import Job, JobCreate, JobRead
 from app.models.workflow import WorkflowTemplate
 from app.models.engine import Engine
-from app.core.comfy_client import ComfyClient
+from app.core.comfy_client import ComfyClient, ComfyConnectionError, ComfyResponseError
 from datetime import datetime
 from app.core.websockets import manager
 import copy
@@ -42,10 +42,8 @@ def process_job(job_id: int):
         # Ideally we stored engine_id. 
         engine = session.get(Engine, job.engine_id)
         
-        # Workflow is tricky if we don't store it in DB yet (it's in fake_workflows_db).
-        # We still use fake_workflows_db for templates since they are static config files effectively.
-        from app.api.endpoints.workflows import fake_workflows_db
-        workflow = next((w for w in fake_workflows_db if w.id == job.workflow_template_id), None)
+        # Workflow - fetch from DB
+        workflow = session.get(WorkflowTemplate, job.workflow_template_id)
         
         if not engine or not workflow:
             job.status = "failed"
@@ -150,6 +148,14 @@ def process_job(job_id: int):
                     session.add(job)
                     session.commit()
             
+        except ComfyConnectionError as e:
+            job.status = "failed"
+            job.error = str(e)
+            session.add(job)
+            session.commit()
+            asyncio.run(manager.broadcast({"type": "error", "message": str(e)}, str(job_id)))
+            print(f"Job {job_id} connection failed: {e}")
+
         except Exception as e:
             job.status = "failed"
             job.error = str(e)
@@ -160,16 +166,14 @@ def process_job(job_id: int):
 
 @router.post("/", response_model=JobRead)
 def create_job(job_in: JobCreate, background_tasks: BackgroundTasks):
-    from app.api.endpoints.workflows import fake_workflows_db # mocked for now
-
     with Session(db_engine) as session:
         # Validate Engine (DB)
         engine = session.get(Engine, job_in.engine_id)
         if not engine:
             raise HTTPException(status_code=404, detail="Engine not found")
 
-        # Validate Workflow (Mock)
-        workflow = next((w for w in fake_workflows_db if w.id == job_in.workflow_template_id), None)
+        # Validate Workflow (DB)
+        workflow = session.get(WorkflowTemplate, job_in.workflow_template_id)
         if not workflow:
             raise HTTPException(status_code=404, detail="Workflow template not found")
         

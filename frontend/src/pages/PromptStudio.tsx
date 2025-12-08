@@ -1,15 +1,16 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { api, Engine, WorkflowTemplate, FileItem, GalleryItem } from "@/lib/api";
 import { DynamicForm } from "@/components/DynamicForm";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
-import { Loader2, Server, Workflow } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { RunningGallery } from "@/components/RunningGallery";
 import { FileExplorer } from "@/components/FileExplorer";
 import { ImageViewer } from "@/components/ImageViewer";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { InstallStatusDialog, InstallStatus } from "@/components/InstallStatusDialog";
 
 export default function PromptStudio() {
   const [engines, setEngines] = useState<Engine[]>([]);
@@ -36,6 +37,11 @@ export default function PromptStudio() {
 
   // Add a refresh key for gallery
   const [galleryRefresh, setGalleryRefresh] = useState(0);
+
+  // Install State
+  const [installOpen, setInstallOpen] = useState(false);
+  const [installStatus, setInstallStatus] = useState<InstallStatus | null>(null);
+  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Persist selections
   useEffect(() => {
@@ -114,7 +120,45 @@ export default function PromptStudio() {
       }
     };
     loadData();
+
+    return () => {
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    };
   }, []);
+
+  // --- Install Logic ---
+  const startInstall = async (missing: string[]) => {
+    setInstallOpen(true);
+    setInstallStatus({ status: "pending", progress_text: "Initializing..." });
+    try {
+      const res = await api.installMissingNodes(missing);
+      startPolling(res.job_id);
+    } catch (err) {
+      setInstallStatus({ status: "failed", error: `Start failed: ${(err as Error).message}`, progress_text: "" });
+    }
+  };
+
+  const startPolling = (jobId: string) => {
+    if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    pollIntervalRef.current = setInterval(async () => {
+      try {
+        const status = await api.getInstallStatus(jobId);
+        setInstallStatus(status);
+        if (status.status === "completed" || status.status === "failed") {
+          if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+        }
+      } catch (err) {
+        console.error("Poll error", err);
+      }
+    }, 1000);
+  };
+
+  const handleReboot = async () => {
+    if (!confirm("Reboot ComfyUI now? This will disconnect the interface momentarily.")) return;
+    await api.rebootComfyUI();
+    alert("Reboot triggered. Please wait a few moments for ComfyUI to restart.");
+    setInstallOpen(false);
+  };
 
   const handleGenerate = async (formData: any) => {
     if (!selectedEngineId || !selectedWorkflowId) return;
@@ -152,19 +196,63 @@ export default function PromptStudio() {
     });
   };
 
-  // We need to pass selection handler to RunningGallery too?
-  // Currently RunningGallery has recursive selection or just internal state.
-  // Ideally RunningGallery exposes `onSelect` prop. 
-  // But wait, the `RunningGallery` component I built handles its own selection state in a lightbox.
-  // I should modify `RunningGallery` to accept `onSelect` or just use the FileExplorer for main selection.
-  // Actually, the user asked for: "selected image... preview... generation info underneath".
-  // So Gallery clicks should probably update the CENTER preview.
-
   const selectedWorkflow = workflows.find((w) => String(w.id) === selectedWorkflowId);
 
   const handleGallerySelect = (item: GalleryItem) => {
     setPreviewPath(item.image.path);
-    setPreviewMetadata(item);
+    setPreviewMetadata({
+      prompt: item.prompt,
+      created_at: item.created_at,
+      job_params: item.job_params
+    });
+  };
+
+  const handleWorkflowSelect = async (workflowId: string, fromImagePath?: string) => {
+    // If switching workflow with an image intent
+    if (fromImagePath) {
+      setIsLoading(true); // Short loading state
+      try {
+        // 1. Copy image to Input directory so ComfyUI can use it
+        // We reuse the gallery endpoint to get the blob
+        const url = `/api/v1/gallery/image/path?path=${encodeURIComponent(fromImagePath)}`;
+        const res = await fetch(url);
+        const blob = await res.blob();
+        const filename = fromImagePath.split(/[\\/]/).pop() || "transfer.png";
+        const file = new File([blob], filename, { type: blob.type });
+
+        const uploaded = await api.uploadFile(file, selectedEngineId ? parseInt(selectedEngineId) : undefined);
+
+        // 2. Inject into target workflow's persistence
+        const targetSchema = workflows.find(w => String(w.id) === workflowId)?.input_schema;
+        if (targetSchema) {
+          // Find the image field
+          const imageFieldKey = Object.keys(targetSchema).find(key => {
+            const f = targetSchema[key];
+            return f.widget === "upload" || f.widget === "image_upload" || (f.title && f.title.includes("LoadImage"));
+          });
+
+          if (imageFieldKey) {
+            const key = `workflow_form_${workflowId}`;
+            let stored = {};
+            try {
+              stored = JSON.parse(localStorage.getItem(key) || "{}");
+            } catch (e) { /* ignore */ }
+
+            localStorage.setItem(key, JSON.stringify({
+              ...stored,
+              [imageFieldKey]: uploaded.filename
+            }));
+          }
+        }
+      } catch (e) {
+        console.error("Failed to transfer image to workflow", e);
+        setError("Failed to transfer image to workflow");
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    setSelectedWorkflowId(workflowId);
   };
 
   if (isLoading) {
@@ -193,7 +281,9 @@ export default function PromptStudio() {
               <label className="text-xs font-semibold text-slate-500 uppercase">Engine</label>
               <Select value={selectedEngineId} onValueChange={setSelectedEngineId}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select Engine" />
+                  <SelectValue placeholder="Select Engine">
+                    {engines.find(e => String(e.id) === selectedEngineId)?.name}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {engines.map((e) => (
@@ -207,7 +297,9 @@ export default function PromptStudio() {
               <label className="text-xs font-semibold text-slate-500 uppercase">Workflow</label>
               <Select value={selectedWorkflowId} onValueChange={setSelectedWorkflowId}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select Workflow" />
+                  <SelectValue placeholder="Select Workflow">
+                    {workflows.find(w => String(w.id) === selectedWorkflowId)?.name}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {workflows.map((w) => (
@@ -216,6 +308,34 @@ export default function PromptStudio() {
                 </SelectContent>
               </Select>
             </div>
+
+            {selectedWorkflow?.description?.includes("[Missing Nodes:") && (
+              <Alert className="border-amber-500 bg-amber-50">
+                <AlertTitle className="text-amber-800">Missing Nodes Detected</AlertTitle>
+                <AlertDescription className="text-amber-700 text-xs">
+                  This workflow requires custom nodes that are not installed.
+                  <br />
+                  <span className="font-mono mt-1 block mb-2">
+                    {selectedWorkflow.description.match(/\[Missing Nodes: (.*?)\]/)?.[1]}
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="default"
+                    className="w-full bg-amber-600 hover:bg-amber-700 text-white"
+                    onClick={async () => {
+                      const match = selectedWorkflow.description.match(/\[Missing Nodes: (.*?)\]/);
+                      if (match) {
+                        const nodes = match[1].split(",").map(s => s.trim());
+                        startInstall(nodes);
+                      }
+                    }}
+                  >
+                    Install Missing Nodes
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            )}
+
           </div>
         </div>
 
@@ -234,9 +354,19 @@ export default function PromptStudio() {
               isLoading={isSubmitting}
               persistenceKey={`workflow_form_${selectedWorkflow.id}`}
               engineId={selectedEngineId}
+              submitLabel="Generate"
             />
           ) : (
-            <div className="text-center py-8 text-slate-400 text-sm">Select workflow</div>
+            <div className="text-center py-8 text-slate-400 text-sm">
+              {workflows.length === 0 ? (
+                <div>
+                  <p className="mb-2">No workflows found.</p>
+                  <a href="/workflows">
+                    <Button variant="outline" size="sm">Import Workflow</Button>
+                  </a>
+                </div>
+              ) : "Select workflow"}
+            </div>
           )}
         </div>
 
@@ -257,13 +387,30 @@ export default function PromptStudio() {
 
       {/* 3. Center Preview */}
       <div className="flex-1 overflow-hidden relative bg-slate-50">
-        <ImageViewer imagePath={previewPath} metadata={previewMetadata} />
+        <ErrorBoundary>
+          <ImageViewer
+            imagePath={previewPath}
+            metadata={previewMetadata}
+            workflows={workflows}
+            onSelectWorkflow={handleWorkflowSelect}
+          />
+        </ErrorBoundary>
       </div>
 
       {/* 4. Running Gallery (Right Sidebar) */}
       <div className="w-[120px] flex-none bg-white border-l hidden lg:block">
         <RunningGallery onRefresh={galleryRefresh} onSelect={handleGallerySelect} />
       </div>
+
+      <InstallStatusDialog
+        open={installOpen}
+        onOpenChange={(open) => {
+          setInstallOpen(open);
+          if (!open && pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+        }}
+        status={installStatus}
+        onReboot={handleReboot}
+      />
     </div>
   );
 }

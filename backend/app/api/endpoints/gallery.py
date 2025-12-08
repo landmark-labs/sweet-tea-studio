@@ -7,6 +7,7 @@ from sqlmodel import Session, select
 from app.db.database import get_session
 from app.models.image import Image, ImageRead
 from app.models.job import Job
+from app.models.engine import Engine
 from pydantic import BaseModel
 
 router = APIRouter()
@@ -63,12 +64,33 @@ def delete_image(image_id: int, session: Session = Depends(get_session)):
     return {"status": "deleted"}
 
 @router.get("/image/path")
-def serve_image_by_path(path: str):
-    # print(f"Serving path: {path}")
-    if not os.path.exists(path):
-         print(f"Serve Path: Missing {path}")
-         raise HTTPException(status_code=404, detail=f"File not found: {path}")
-    return FileResponse(path, media_type="image/png")
+def serve_image_by_path(path: str, session: Session = Depends(get_session)):
+    # 1. Try absolute/direct path
+    if os.path.exists(path):
+        return FileResponse(path, media_type="image/png")
+    
+    # 2. Try looking in Engine directories (Input/Output)
+    # We fetch the first active engine or "Local ComfyUI"
+    engine = session.exec(select(Engine).where(Engine.name == "Local ComfyUI")).first()
+    if not engine:
+        # Fallback to any engine
+        engine = session.exec(select(Engine)).first()
+        
+    if engine:
+        # Check Input Dir
+        if engine.input_dir:
+            input_path = os.path.join(engine.input_dir, path)
+            if os.path.exists(input_path):
+                 return FileResponse(input_path, media_type="image/png")
+        
+        # Check Output Dir
+        if engine.output_dir:
+            output_path = os.path.join(engine.output_dir, path)
+            if os.path.exists(output_path):
+                 return FileResponse(output_path, media_type="image/png")
+
+    print(f"Serve Path: Missing {path}")
+    raise HTTPException(status_code=404, detail=f"File not found: {path}")
 
 @router.get("/image/{image_id}")
 def serve_image(image_id: int, session: Session = Depends(get_session)):

@@ -1,18 +1,51 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Upload, X, Check, Loader2 } from "lucide-react";
+import { Upload, X, Loader2, Grid } from "lucide-react";
 import { api } from "@/lib/api";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { cn } from "@/lib/utils";
 
 interface ImageUploadProps {
     value?: string;
     onChange: (value: string) => void;
     engineId?: string;
+    options?: string[]; // List of available files from ComfyUI
 }
 
-export function ImageUpload({ value, onChange, engineId }: ImageUploadProps) {
+export function ImageUpload({ value, onChange, engineId, options = [] }: ImageUploadProps) {
     const [isUploading, setIsUploading] = useState(false);
     const [preview, setPreview] = useState<string | null>(null);
     const [isDragging, setIsDragging] = useState(false);
+    const [isBrowseOpen, setIsBrowseOpen] = useState(false);
+    const [recent, setRecent] = useState<string[]>([]);
+    const [galleryImages, setGalleryImages] = useState<string[]>([]);
+
+    useEffect(() => {
+        // Load recent form local storage
+        try {
+            const history = JSON.parse(localStorage.getItem("ds_recent_images") || "[]");
+            setRecent(history); // Initially load whatever is there
+        } catch (e) { console.error(e); }
+    }, []);
+
+    useEffect(() => {
+        if (isBrowseOpen) {
+            // Load gallery images for the "Output" tab
+            api.getGallery().then(items => {
+                // Sort by created_at desc (newest first)
+                const sorted = items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+                setGalleryImages(sorted.slice(0, 25).map(i => i.image.path));
+            }).catch(console.error);
+        }
+    }, [isBrowseOpen]);
+
+    const addToRecent = (filename: string) => {
+        // Ensure unique and limit to 5
+        const newRecent = [filename, ...recent.filter(r => r !== filename)].slice(0, 5);
+        setRecent(newRecent);
+        localStorage.setItem("ds_recent_images", JSON.stringify(newRecent));
+    };
 
     const processFile = async (file: File) => {
         // Create local preview
@@ -24,7 +57,7 @@ export function ImageUpload({ value, onChange, engineId }: ImageUploadProps) {
             const id = engineId ? parseInt(engineId) : undefined;
             const result = await api.uploadFile(file, id);
             onChange(result.filename);
-            console.log("Uploaded:", result);
+            addToRecent(result.filename);
         } catch (error) {
             console.error("Upload failed", error);
             setPreview(null);
@@ -56,14 +89,13 @@ export function ImageUpload({ value, onChange, engineId }: ImageUploadProps) {
         if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
             await processFile(e.dataTransfer.files[0]);
         } else {
-            // Try to handle URL drop (from gallery)
+            // Try to handle URL drop
             const url = e.dataTransfer.getData("text/plain");
             if (url) {
                 setIsUploading(true);
                 try {
                     const response = await fetch(url);
                     const blob = await response.blob();
-                    // Guess filename
                     const filename = url.split('/').pop() || "dropped_image.png";
                     const file = new File([blob], filename, { type: blob.type });
                     await processFile(file);
@@ -75,33 +107,70 @@ export function ImageUpload({ value, onChange, engineId }: ImageUploadProps) {
         }
     };
 
+    const selectOption = (filename: string) => {
+        onChange(filename);
+        addToRecent(filename);
+        setIsBrowseOpen(false);
+        setPreview(null); // Clear local preview forcing usage of filename
+    };
+
     const clear = () => {
         setPreview(null);
         onChange("");
     };
 
+    const selectGalleryImage = async (path: string) => {
+        // "Upload" it by fetching blob and re-uploading to input dir
+        setIsUploading(true);
+        try {
+            const url = `/api/v1/gallery/image/path?path=${encodeURIComponent(path)}`;
+            const res = await fetch(url);
+            const blob = await res.blob();
+            const filename = path.split(/[\\/]/).pop() || "gallery_image.png";
+            const file = new File([blob], filename, { type: blob.type });
+            await processFile(file);
+            setIsBrowseOpen(false);
+        } catch (e) {
+            console.error("Failed to copy gallery image", e);
+        } finally {
+            setIsUploading(false);
+        }
+    };
+
+    // Filter "valid" recents (that actually exist in current options if options provided)
+    // If options are empty (no connection), we show all recent.
+    // ALSO: strictly slice to 5 here to ensure display is correct even if storage was weird
+    const displayRecent = (options.length > 0
+        ? recent.filter(r => options.includes(r))
+        : recent).slice(0, 5);
+
     return (
-        <div className="space-y-2">
+        <div className="space-y-3">
             {!preview && !value ? (
                 <div
-                    className={`flex items-center gap-2 border-2 border-dashed rounded-lg p-2 transition-colors ${isDragging ? "border-primary bg-primary/10" : "border-slate-200"}`}
+                    className={cn(
+                        "flex flex-col items-center justify-center border-2 border-dashed rounded-lg p-6 transition-colors gap-4",
+                        isDragging ? "border-blue-500 bg-blue-50" : "border-slate-200 hover:bg-slate-50"
+                    )}
                     onDragOver={handleDragOver}
                     onDragLeave={handleDragLeave}
                     onDrop={handleDrop}
                 >
+                    <div className="flex flex-col items-center gap-2 text-center">
+                        {isUploading ? <Loader2 className="h-8 w-8 animate-spin text-blue-500" /> : <Upload className="h-8 w-8 text-slate-300" />}
+                        <div className="text-sm text-slate-600">
+                            {isUploading ? "Uploading..." : "Click to upload or drag & drop"}
+                        </div>
+                    </div>
+
                     <Button
                         type="button"
-                        variant="ghost"
+                        variant="outline"
+                        size="sm"
                         onClick={() => document.getElementById("file-upload")?.click()}
                         disabled={isUploading}
-                        className="w-full h-24"
                     >
-                        <div className="flex flex-col items-center gap-2">
-                            {isUploading ? <Loader2 className="animate-spin" /> : <Upload className="h-6 w-6 text-slate-400" />}
-                            <span className="text-sm text-slate-500">
-                                {isUploading ? "Uploading..." : "Click or Drag Image Here"}
-                            </span>
-                        </div>
+                        Select File
                     </Button>
                     <input
                         id="file-upload"
@@ -110,33 +179,145 @@ export function ImageUpload({ value, onChange, engineId }: ImageUploadProps) {
                         accept="image/*"
                         onChange={handleFileChange}
                     />
+
+                    {/* Recent & Browse */}
+                    {displayRecent.length > 0 && (
+                        <div className="w-full pt-4 border-t flex flex-col gap-2">
+                            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Recent</span>
+                            <div className="flex flex-wrap gap-2">
+                                {displayRecent.map(r => (
+                                    <button
+                                        key={r}
+                                        type="button"
+                                        onClick={() => selectOption(r)}
+                                        className="text-xs bg-white border px-2 py-1 rounded shadow-sm hover:border-blue-400 truncate max-w-[120px]"
+                                        title={r}
+                                    >
+                                        {r}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="w-full pt-2">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="w-full"
+                            onClick={() => setIsBrowseOpen(true)}
+                        >
+                            <Grid className="w-3 h-3 mr-2" /> Browse Library
+                        </Button>
+                    </div>
                 </div>
             ) : (
-                <div className="relative w-full h-48 bg-slate-100 rounded-lg overflow-hidden border">
-                    <img
-                        src={preview || ""}
-                        alt="Uploaded input"
-                        className="w-full h-full object-contain"
-                    />
-                    <div className="absolute top-2 right-2 flex gap-1">
-                        <div className="bg-green-500 text-white p-1 rounded-full shadow">
-                            <Check className="w-3 h-3" />
+                <div
+                    className={cn(
+                        "relative w-full h-48 bg-slate-100 rounded-lg overflow-hidden border group transition-colors",
+                        isDragging ? "border-blue-500 ring-2 ring-blue-500 ring-opacity-50" : ""
+                    )}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                >
+                    {/* Overlay for drop indication */}
+                    {isDragging && (
+                        <div className="absolute inset-0 bg-blue-500/20 z-10 flex items-center justify-center">
+                            <div className="bg-white/90 p-2 rounded-full shadow-lg">
+                                <Upload className="h-6 w-6 text-blue-600" />
+                            </div>
                         </div>
+                    )}
+
+                    {/* If we have a preview (local blob) use it, otherwise use API path */}
+                    <img
+                        src={preview || `/api/v1/gallery/image/path?path=${encodeURIComponent(value || "")}`}
+                        alt="Input"
+                        className="w-full h-full object-contain"
+                        onError={(e) => {
+                            // Fallback if image load fails
+                            (e.target as HTMLImageElement).src = "";
+                        }}
+                    />
+                    <div className="absolute top-2 right-2 flex gap-1 opacity-100 z-20">
                         <button
                             type="button"
                             onClick={clear}
-                            className="bg-red-500 text-white p-1 rounded-full shadow hover:bg-red-600"
+                            className="bg-white/90 text-red-500 p-1.5 rounded-full shadow hover:bg-red-50 transition-colors"
                         >
-                            <X className="w-3 h-3" />
+                            <X className="w-4 h-4" />
                         </button>
                     </div>
-                    {value && (
-                        <div className="absolute bottom-0 w-full bg-black/50 text-white text-xs p-1 truncate text-center">
-                            {value}
-                        </div>
-                    )}
+                    <div className="absolute bottom-0 w-full bg-black/60 text-white text-xs p-2 truncate text-center backdrop-blur-sm z-20">
+                        {value}
+                    </div>
                 </div>
             )}
+
+            {/* Browse Dialog */}
+            <Dialog open={isBrowseOpen} onOpenChange={setIsBrowseOpen}>
+                <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col">
+                    <DialogHeader>
+                        <DialogTitle>Browse Images</DialogTitle>
+                    </DialogHeader>
+
+                    <div className="flex-1 min-h-[400px] flex flex-col gap-4">
+                        <ScrollArea className="flex-1 bg-slate-50 p-4 rounded-md border text-sm">
+                            {(options.length > 0) && (
+                                <div className="mb-6">
+                                    <h4 className="font-semibold mb-2 text-slate-500 uppercase text-xs">Input Directory (Last 25)</h4>
+                                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-4">
+                                        {options.slice(0, 25).map(opt => (
+                                            <button
+                                                key={opt}
+                                                type="button"
+                                                onClick={() => selectOption(opt)}
+                                                className="aspect-square relative group bg-white border rounded-md overflow-hidden hover:ring-2 hover:ring-blue-500 focus:outline-none"
+                                            >
+                                                <img
+                                                    loading="lazy"
+                                                    src={`/api/v1/gallery/image/path?path=${encodeURIComponent(opt)}`}
+                                                    alt={opt}
+                                                    className="w-full h-full object-cover"
+                                                />
+                                                <div className="absolute inset-x-0 bottom-0 bg-black/70 text-white text-[10px] p-1 truncate opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    {opt}
+                                                </div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            <div>
+                                <h4 className="font-semibold mb-2 text-slate-500 uppercase text-xs">Gallery (Output)</h4>
+                                <div className="grid grid-cols-3 sm:grid-cols-4 gap-4">
+                                    {galleryImages.map((path, i) => (
+                                        <button
+                                            key={i}
+                                            type="button"
+                                            onClick={() => selectGalleryImage(path)}
+                                            className="aspect-square relative group bg-white border rounded-md overflow-hidden hover:ring-2 hover:ring-green-500 focus:outline-none"
+                                        >
+                                            <img
+                                                loading="lazy"
+                                                src={`/api/v1/gallery/image/path?path=${encodeURIComponent(path)}`}
+                                                alt="Gallery"
+                                                className="w-full h-full object-cover"
+                                            />
+                                            <div className="absolute inset-x-0 bottom-0 bg-black/70 text-white text-[10px] p-1 truncate opacity-0 group-hover:opacity-100 transition-opacity">
+                                                {path.split(/[\\/]/).pop()}
+                                            </div>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        </ScrollArea>
+                    </div>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

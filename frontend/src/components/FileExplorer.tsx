@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { api, FileItem } from "@/lib/api";
-import { Folder, FolderOpen, FileImage, File as FileIcon, ChevronRight, ChevronDown } from "lucide-react";
+import { Folder, FolderOpen, FileImage, File as FileIcon, ChevronRight, ChevronDown, Home, ArrowRight } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
 interface FileExplorerProps {
@@ -56,6 +58,14 @@ const FileNode = ({
                     level > 0 && "ml-4"
                 )}
                 onClick={handleToggle}
+                draggable={!!isImage}
+                onDragStart={(e) => {
+                    if (isImage) {
+                        const url = `/api/v1/gallery/image/path?path=${encodeURIComponent(item.path)}`;
+                        e.dataTransfer.setData("text/plain", url);
+                        e.dataTransfer.effectAllowed = "copy";
+                    }
+                }}
             >
                 {item.type === "directory" && (
                     <span className="text-slate-400">
@@ -100,24 +110,56 @@ const FileNode = ({
 
 export function FileExplorer({ engineId, onFileSelect }: FileExplorerProps) {
     const [roots, setRoots] = useState<FileItem[]>([]);
+    const [customPath, setCustomPath] = useState("");
+    const [currentPath, setCurrentPath] = useState(""); // "" means default view (Inputs/Outputs)
 
     useEffect(() => {
         const loadRoots = async () => {
             try {
                 const id = engineId ? parseInt(engineId) : undefined;
-                const data = await api.getFileTree(id, "");
+                // If currentPath is empty, it loads the default roots (Inputs/Outputs).
+                // If set to a path, it loads contents of that path.
+                const data = await api.getFileTree(id, currentPath);
                 setRoots(data);
             } catch (e) {
                 console.error("Failed to load roots", e);
+                // Fallback to default if custom path fails
+                if (currentPath) setCurrentPath("");
             }
         };
         loadRoots();
-    }, [engineId]);
+    }, [engineId, currentPath]);
+
+    const handleNavigate = (e: React.FormEvent) => {
+        e.preventDefault();
+        setCurrentPath(customPath);
+    };
+
+    const goHome = () => {
+        setCustomPath("");
+        setCurrentPath("");
+    };
 
     return (
         <div className="h-full flex flex-col border-r bg-slate-50/50">
-            <div className="p-2 border-b text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                Explorer
+            <div className="p-2 border-b space-y-2">
+                <div className="flex items-center justify-between text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                    <span>Explorer</span>
+                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={goHome} title="Reset to Defaults">
+                        <Home className="w-3 h-3" />
+                    </Button>
+                </div>
+                <form onSubmit={handleNavigate} className="flex gap-1">
+                    <Input
+                        value={customPath}
+                        onChange={(e) => setCustomPath(e.target.value)}
+                        placeholder="Path..."
+                        className="h-6 text-xs px-2"
+                    />
+                    <Button type="submit" variant="outline" size="icon" className="h-6 w-6">
+                        <ArrowRight className="w-3 h-3" />
+                    </Button>
+                </form>
             </div>
             <ScrollArea className="flex-1">
                 <div className="p-2">
@@ -130,6 +172,9 @@ export function FileExplorer({ engineId, onFileSelect }: FileExplorerProps) {
                             onSelect={onFileSelect}
                         />
                     ))}
+                    {roots.length === 0 && (
+                        <div className="text-xs text-slate-400 p-2 text-center">No files found</div>
+                    )}
                 </div>
             </ScrollArea>
         </div>

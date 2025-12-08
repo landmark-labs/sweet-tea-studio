@@ -3,6 +3,7 @@ import Layout from "./components/Layout";
 import PromptStudio from "./pages/PromptStudio";
 import Gallery from "./pages/Gallery";
 import PromptLibrary from "./pages/PromptLibrary";
+import WorkflowLibrary from "./pages/WorkflowLibrary";
 
 function App() {
   return (
@@ -12,6 +13,7 @@ function App() {
           <Route path="/" element={<PromptStudio />} />
           <Route path="/gallery" element={<Gallery />} />
           <Route path="/library" element={<PromptLibrary />} />
+          <Route path="/workflows" element={<WorkflowLibrary />} />
           <Route path="/engines" element={<div>Engines</div>} />
         </Route>
       </Routes>
