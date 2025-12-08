@@ -4,6 +4,7 @@ import PromptStudio from "./pages/PromptStudio";
 import Gallery from "./pages/Gallery";
 import PromptLibrary from "./pages/PromptLibrary";
 import WorkflowLibrary from "./pages/WorkflowLibrary";
+import Models from "./pages/Models";
 
 import { ErrorBoundary } from "./components/ErrorBoundary";
 
@@ -20,7 +21,7 @@ function App() {
           <Route path="/gallery" element={<Gallery />} />
           <Route path="/library" element={<PromptLibrary />} />
           <Route path="/workflows" element={<WorkflowLibrary />} />
-          <Route path="/engines" element={<div>Engines</div>} />
+          <Route path="/models" element={<Models />} />
         </Route>
       </Routes>
     </BrowserRouter>
