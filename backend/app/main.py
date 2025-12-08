@@ -1,13 +1,17 @@
+import asyncio
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.core.config import settings
-from app.db.init_db import init_db
-from app.api.endpoints import engines, workflows, jobs, gallery, files, library, extensions, collections
+
+from app.api.endpoints import collections, engines, extensions, files, gallery, jobs, library, workflows
 from app.api.endpoints.library import start_tag_cache_refresh_background
-import asyncio
+from app.core.config import settings
+from app.core.error_handlers import register_gallery_error_handlers
 from app.core.websockets import manager
+from app.db.init_db import init_db
 
 app = FastAPI(title="Sweet Tea Studio Backend")
+register_gallery_error_handlers(app)
 
 @app.on_event("startup")
 def on_startup():
