@@ -1,9 +1,13 @@
 import React from "react";
 import { Download, ExternalLink, X, Check, Trash2, ArrowLeft, ArrowRight, RotateCcw } from "lucide-react";
 import { Button } from "./ui/button";
-import { api, Image as ApiImage } from "@/lib/api";
+import { api, Image as ApiImage, Collection } from "@/lib/api";
+import { cn } from "@/lib/utils";
 import { Switch } from "./ui/switch";
 import { Label } from "./ui/label";
+import { FolderPlus, FolderCheck } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 
 interface ImageViewerProps {
     images: ApiImage[];
@@ -32,6 +36,13 @@ export function ImageViewer({
     const [selectedIndex, setSelectedIndex] = React.useState<number>(0);
     const [contextMenu, setContextMenu] = React.useState<{ x: number, y: number } | null>(null);
     const containerRef = React.useRef<HTMLDivElement>(null);
+    const [collections, setCollections] = React.useState<Collection[]>([]);
+    const [isCollectionOpen, setIsCollectionOpen] = React.useState(false);
+
+    // Fetch collections on mount
+    React.useEffect(() => {
+        api.getCollections().then(setCollections).catch(console.error);
+    }, []);
 
     // Local state backoff if no prop provided
     const [localAutoCleanup, setLocalAutoCleanup] = React.useState(true);
@@ -165,6 +176,31 @@ export function ImageViewer({
             document.body.removeChild(a);
         } catch (e) {
             console.error("Download failed", e);
+        }
+    };
+
+    const handleToggleCollection = async (collectionId: number) => {
+        if (!currentImage || !currentImage.id) return;
+        const isInCollection = currentImage.collection_id === collectionId;
+
+        try {
+            if (isInCollection) {
+                await api.removeImagesFromCollection([currentImage.id]);
+                // Update local state
+                if (onImageUpdate) onImageUpdate({ ...currentImage, collection_id: undefined });
+                else currentImage.collection_id = undefined;
+            } else {
+                await api.addImagesToCollection(collectionId, [currentImage.id]);
+                // Update local state
+                if (onImageUpdate) onImageUpdate({ ...currentImage, collection_id: collectionId });
+                else currentImage.collection_id = collectionId;
+            }
+            // Close popover
+            setIsCollectionOpen(false);
+            // Force re-render
+            setSelectedIndex(prev => prev);
+        } catch (e) {
+            console.error("Failed to update collection", e);
         }
     };
 
@@ -375,6 +411,43 @@ export function ImageViewer({
                                     Auto-discard unkept
                                 </Label>
                             </div>
+
+                            {/* Collection Selector */}
+                            <Popover open={isCollectionOpen} onOpenChange={setIsCollectionOpen}>
+                                <PopoverTrigger asChild>
+                                    <Button variant="outline" size="sm" className="w-[180px] justify-start text-xs truncate">
+                                        {currentImage?.collection_id ? (
+                                            <><FolderCheck className="h-4 w-4 mr-2 text-blue-500" /> {collections.find(c => c.id === currentImage.collection_id)?.name || "In Collection"}</>
+                                        ) : (
+                                            <><FolderPlus className="h-4 w-4 mr-2" /> Add to Collection</>
+                                        )}
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="p-0 w-[200px]" align="end">
+                                    <Command>
+                                        <CommandInput placeholder="Search collections..." />
+                                        <CommandList>
+                                            <CommandEmpty>No collections found.</CommandEmpty>
+                                            <CommandGroup>
+                                                {collections.map((col) => (
+                                                    <CommandItem
+                                                        key={col.id}
+                                                        value={col.name}
+                                                        onSelect={() => handleToggleCollection(col.id)}
+                                                    >
+                                                        <div className={cn("mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary",
+                                                            currentImage?.collection_id === col.id ? "bg-primary text-primary-foreground" : "opacity-50 [&_svg]:invisible"
+                                                        )}>
+                                                            <Check className={cn("h-4 w-4")} />
+                                                        </div>
+                                                        {col.name}
+                                                    </CommandItem>
+                                                ))}
+                                            </CommandGroup>
+                                        </CommandList>
+                                    </Command>
+                                </PopoverContent>
+                            </Popover>
 
                         </div>
                     </div>

@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Upload, X, Loader2, Grid } from "lucide-react";
+import { Upload, X, Loader2, Grid, PenTool } from "lucide-react";
 import { api } from "@/lib/api";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
+import { InpaintEditor } from "@/components/InpaintEditor";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 
 interface ImageUploadProps {
     value?: string;
@@ -20,6 +22,9 @@ export function ImageUpload({ value, onChange, engineId, options = [] }: ImageUp
     const [isBrowseOpen, setIsBrowseOpen] = useState(false);
     const [recent, setRecent] = useState<string[]>([]);
     const [galleryImages, setGalleryImages] = useState<string[]>([]);
+
+    // Mask Editor State
+    const [isMaskEditorOpen, setIsMaskEditorOpen] = useState(false);
 
     useEffect(() => {
         // Load recent form local storage
@@ -137,12 +142,27 @@ export function ImageUpload({ value, onChange, engineId, options = [] }: ImageUp
         }
     };
 
+    const handleMaskSave = async (maskFile: File) => {
+        try {
+            const id = engineId ? parseInt(engineId) : undefined;
+            const result = await api.uploadFile(maskFile, id);
+
+            addToRecent(result.filename);
+            alert(`Mask saved: ${result.filename}`);
+        } catch (e) {
+            console.error("Mask upload failed", e);
+            alert("Failed to upload mask");
+        }
+    };
+
     // Filter "valid" recents (that actually exist in current options if options provided)
     // If options are empty (no connection), we show all recent.
-    // ALSO: strictly slice to 5 here to ensure display is correct even if storage was weird
     const displayRecent = (options.length > 0
         ? recent.filter(r => options.includes(r))
         : recent).slice(0, 5);
+
+    // Calculate current image URL for editor
+    const currentImageUrl = preview || (value ? `/api/v1/gallery/image/path?path=${encodeURIComponent(value)}` : "");
 
     return (
         <div className="space-y-3">
@@ -186,15 +206,27 @@ export function ImageUpload({ value, onChange, engineId, options = [] }: ImageUp
                             <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Recent</span>
                             <div className="flex flex-wrap gap-2">
                                 {displayRecent.map(r => (
-                                    <button
-                                        key={r}
-                                        type="button"
-                                        onClick={() => selectOption(r)}
-                                        className="text-xs bg-white border px-2 py-1 rounded shadow-sm hover:border-blue-400 truncate max-w-[120px]"
-                                        title={r}
-                                    >
-                                        {r}
-                                    </button>
+                                    <HoverCard key={r}>
+                                        <HoverCardTrigger asChild>
+                                            <button
+                                                type="button"
+                                                onClick={() => selectOption(r)}
+                                                className="text-xs bg-white border px-2 py-1 rounded shadow-sm hover:border-blue-400 truncate max-w-[120px]"
+                                            >
+                                                {r}
+                                            </button>
+                                        </HoverCardTrigger>
+                                        <HoverCardContent className="w-48 p-0 overflow-hidden rounded-md border shadow-lg">
+                                            <img
+                                                src={`/api/v1/gallery/image/path?path=${encodeURIComponent(r)}`}
+                                                alt={r}
+                                                className="w-full h-auto object-contain bg-slate-950"
+                                            />
+                                            <div className="p-2 bg-white text-[10px] text-center truncate">
+                                                {r}
+                                            </div>
+                                        </HoverCardContent>
+                                    </HoverCard>
                                 ))}
                             </div>
                         </div>
@@ -233,7 +265,7 @@ export function ImageUpload({ value, onChange, engineId, options = [] }: ImageUp
 
                     {/* If we have a preview (local blob) use it, otherwise use API path */}
                     <img
-                        src={preview || `/api/v1/gallery/image/path?path=${encodeURIComponent(value || "")}`}
+                        src={currentImageUrl}
                         alt="Input"
                         className="w-full h-full object-contain"
                         onError={(e) => {
@@ -241,7 +273,19 @@ export function ImageUpload({ value, onChange, engineId, options = [] }: ImageUp
                             (e.target as HTMLImageElement).src = "";
                         }}
                     />
-                    <div className="absolute top-2 right-2 flex gap-1 opacity-100 z-20">
+
+                    {/* Actions Overlay */}
+                    <div className="absolute top-2 right-2 flex gap-1 z-20">
+                        {/* Mask Editor Trigger */}
+                        <button
+                            type="button"
+                            onClick={() => setIsMaskEditorOpen(true)}
+                            className="bg-white/90 text-slate-700 p-1.5 rounded-full shadow hover:bg-blue-50 hover:text-blue-600 transition-colors"
+                            title="Draw Mask (In-Painting)"
+                        >
+                            <PenTool className="w-4 h-4" />
+                        </button>
+
                         <button
                             type="button"
                             onClick={clear}
@@ -250,6 +294,7 @@ export function ImageUpload({ value, onChange, engineId, options = [] }: ImageUp
                             <X className="w-4 h-4" />
                         </button>
                     </div>
+
                     <div className="absolute bottom-0 w-full bg-black/60 text-white text-xs p-2 truncate text-center backdrop-blur-sm z-20">
                         {value}
                     </div>
@@ -318,6 +363,14 @@ export function ImageUpload({ value, onChange, engineId, options = [] }: ImageUp
                     </div>
                 </DialogContent>
             </Dialog>
+
+            {/* Mask Editor */}
+            <InpaintEditor
+                open={isMaskEditorOpen}
+                onOpenChange={setIsMaskEditorOpen}
+                imageUrl={currentImageUrl}
+                onSave={handleMaskSave}
+            />
         </div>
     );
 }

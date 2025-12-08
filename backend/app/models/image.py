@@ -10,6 +10,7 @@ class ImageBase(SQLModel):
     thumbnail_path: Optional[str] = None
     is_kept: bool = Field(default=False)
     caption: Optional[str] = None
+    collection_id: Optional[int] = Field(default=None, index=True)
 
 
 class Image(ImageBase, table=True):

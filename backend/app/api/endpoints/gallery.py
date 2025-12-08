@@ -25,6 +25,7 @@ class GalleryItem(BaseModel):
     prompt_tags: List[str] = Field(default_factory=list)
     prompt_name: Optional[str] = None
     engine_id: Optional[int] = None
+    collection_id: Optional[int] = None
 
 @router.get("/", response_model=List[GalleryItem])
 def read_gallery(
@@ -32,6 +33,7 @@ def read_gallery(
     limit: int = Query(50, ge=1, le=100),
     search: Optional[str] = Query(None, description="Search by prompt text, tags, or caption"),
     kept_only: bool = Query(False),
+    collection_id: Optional[int] = Query(None),
     session: Session = Depends(get_session)
 ):
     try:
@@ -47,6 +49,9 @@ def read_gallery(
 
         if kept_only:
             stmt = stmt.where(Image.is_kept == True)
+
+        if collection_id is not None:
+             stmt = stmt.where(Image.collection_id == collection_id)
 
         if search:
             like = f"%{search.lower()}%"
@@ -115,7 +120,8 @@ def read_gallery(
                 caption=caption,
                 prompt_tags=prompt_tags,
                 prompt_name=prompt.name if prompt else None,
-                engine_id=job.engine_id if job else None
+                engine_id=job.engine_id if job else None,
+                collection_id=img.collection_id
             )
             items.append(item)
             

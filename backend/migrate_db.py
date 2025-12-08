@@ -56,6 +56,35 @@ def migrate():
             cursor.execute("ALTER TABLE prompt ADD COLUMN tag_prompt TEXT DEFAULT NULL")
             conn.commit()
             print("Migration successful: Added tag_prompt column.")
+
+        # Check for Collection table migration
+        # Since we use SQLModel/SQLAlchemy, creating a new table from scratch usually requires
+        # calling SQLModel.metadata.create_all(engine) or running a dedicated script.
+        # But for this simple migration script, we can create it manually if it doesn't exist.
+        
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='collection'")
+        if not cursor.fetchone():
+            print("Creating collection table...")
+            # We mirror the SQLModel definition: id, name, description, created_at
+            cursor.execute('''
+                CREATE TABLE collection (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name VARCHAR NOT NULL,
+                    description VARCHAR,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            # Add unique index on name
+            cursor.execute("CREATE UNIQUE INDEX ix_collection_name ON collection (name)")
+            conn.commit()
+            print("Migration successful: Created collection table.")
+
+        if "collection_id" not in columns:
+            print("Adding collection_id column to image table...")
+            cursor.execute("ALTER TABLE image ADD COLUMN collection_id INTEGER DEFAULT NULL")
+            conn.commit()
+            print("Migration successful: Added collection_id column.")
+            
             
     except Exception as e:
         print(f"Error during migration: {e}")

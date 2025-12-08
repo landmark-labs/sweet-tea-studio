@@ -51,6 +51,19 @@ export interface PromptSuggestion {
     snippet?: string;
 }
 
+export interface Collection {
+    id: number;
+    name: string;
+    description?: string;
+    created_at: string;
+    item_count?: number;
+}
+
+export interface CollectionCreate {
+    name: string;
+    description?: string;
+}
+
 export const api = {
     getEngines: async (): Promise<Engine[]> => {
         const res = await fetch(`${API_BASE}/engines/`);
@@ -115,9 +128,10 @@ export const api = {
         return res.json();
     },
 
-    getGallery: async (search?: string): Promise<GalleryItem[]> => {
+    getGallery: async (search?: string, collectionId?: number | null): Promise<GalleryItem[]> => {
         const params = new URLSearchParams();
         if (search) params.set("search", search);
+        if (collectionId !== undefined && collectionId !== null) params.set("collection_id", String(collectionId));
         const query = params.toString() ? `?${params.toString()}` : "";
         const res = await fetch(`${API_BASE}/gallery/${query}`);
         if (!res.ok) throw new Error("Failed to fetch gallery");
@@ -247,6 +261,53 @@ export const api = {
         });
         if (!res.ok) throw new Error("Failed to cleanup images");
         return res.json();
+    },
+
+    // --- Collections ---
+    getCollections: async (): Promise<Collection[]> => {
+        const res = await fetch(`${API_BASE}/collections/`);
+        if (!res.ok) throw new Error("Failed to fetch collections");
+        return res.json();
+    },
+
+    createCollection: async (data: CollectionCreate): Promise<Collection> => {
+        const res = await fetch(`${API_BASE}/collections/`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(data),
+        });
+        if (!res.ok) {
+            const errorData = await res.json().catch(() => ({}));
+            throw new Error(errorData.detail || "Failed to create collection");
+        }
+        return res.json();
+    },
+
+    deleteCollection: async (id: number, keepImages: boolean = true) => {
+        const res = await fetch(`${API_BASE}/collections/${id}?keep_images=${keepImages}`, {
+            method: "DELETE",
+        });
+        if (!res.ok) throw new Error("Failed to delete collection");
+    },
+
+    addImagesToCollection: async (collectionId: number, imageIds: number[]) => {
+        const res = await fetch(`${API_BASE}/collections/${collectionId}/add`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(imageIds),
+        });
+        if (!res.ok) throw new Error("Failed to add images to collection");
+        return res.json();
+    },
+
+    removeImagesFromCollection: async (imageIds: number[]) => {
+        const res = await fetch(`${API_BASE}/collections/remove`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(imageIds),
+        });
+        if (!res.ok) throw new Error("Failed to remove images from collection");
+        return res.json();
     }
 };
 
@@ -259,6 +320,7 @@ export interface Image {
     caption?: string;
     tags?: string[];
     is_kept?: boolean;
+    collection_id?: number;
 }
 
 export interface GalleryItem {
@@ -271,6 +333,7 @@ export interface GalleryItem {
     caption?: string;
     prompt_tags?: string[];
     prompt_name?: string;
+    collection_id?: number;
 }
 
 export interface Prompt {

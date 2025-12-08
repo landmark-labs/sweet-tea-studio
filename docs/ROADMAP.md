@@ -37,11 +37,16 @@
     - [x] "Bypass" toggle support in Configurator.
     - [x] Backend injection of ComfyUI `mode: 4`.
 
-## Phase 4: Refinement & Distribution (NEXT)
+## Phase 4: Refinement & Distribution (IN PROGRESS)
+- [x] **Collection Management**:
+    - [x] Organize Gallery images into folders (Collections).
+    - [x] Filter and Sidebar integration.
+- [x] **In-Painting / Mask Editor**:
+    - [x] Integrated Mask Drawing Tool.
+    - [x] Brush, Eraser, Undo/Redo.
+    - [x] Hover Card Previews for Recent files.
 - [ ] **Advanced Graph Editor**:
     - In-app node editing capabilities.
-- [ ] **Collection Management**:
-    - Organize Gallery images into folders/tags.
 - [ ] **Packaging**:
     - Electron wrapper for Frontend.
     - PyInstaller for Backend.
