@@ -222,7 +222,7 @@ def delete_image(image_id: int, session: Session = Depends(get_session)):
     session.commit()
     return {"status": "deleted"}
 
-# --- Specific Features from Diffusion Studio Repo (Preserved) ---
+# --- Specific Features from Sweet Tea Studio Repo (Preserved) ---
 
 class KeepRequest(BaseModel):
     image_ids: List[int]
