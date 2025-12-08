@@ -97,10 +97,14 @@ def read_gallery(
             like = f"%{search.lower()}%"
             # SQLite specific extraction or generic text search
             # We assume Job.input_params is JSON. 
+            # Depending on DB (SQLite vs Postgres), json access differs. 
+            # In SQLite with SQLModel, JSON is text or strict JSON type.
             # We will try a robust text-based search for simplicity if JSON functions fail or just generic ILIKE on known columns.
             
             # Using the fork's logic map:
             # prompt_field = func.lower(func.coalesce(func.json_extract(Job.input_params, '$.prompt'), ""))
+            # For robustness across different SQLite versions/drivers in python, we might stick to what we know works or generic text.
+            # But let's try to stick to the fork's logic since it seemed to rely on `json_extract`.
             
             try:
                 # Use SQLModel functions if imported, or sqlalchemy.func
@@ -111,7 +115,7 @@ def read_gallery(
                 negative_field = func.lower(func.coalesce(func.json_extract(Job.input_params, '$.negative_prompt'), ""))
                 tag_field = func.lower(func.coalesce(func.json_extract(Prompt.tags, '$'), ""))
             except Exception:
-                # Fallback
+                # Fallback if json_extract not available (though it should be in modern sqlite)
                 prompt_field = func.lower(func.coalesce(Job.input_params, ""))
                 negative_field = func.lower(func.coalesce(Job.input_params, ""))
                 tag_field = func.lower(func.coalesce(Prompt.tags, ""))

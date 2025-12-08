@@ -95,6 +95,19 @@ export interface PromptLibraryItem {
     prompt_name?: string;
 }
 
+export interface Collection {
+    id: number;
+    name: string;
+    description?: string;
+    created_at: string;
+    item_count?: number;
+}
+
+export interface CollectionCreate {
+    name: string;
+    description?: string;
+}
+
 export const api = {
     getEngines: async (): Promise<Engine[]> => {
         const res = await fetch(`${API_BASE}/engines/`);

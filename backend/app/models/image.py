@@ -1,6 +1,7 @@
 from typing import Optional, Dict, Any
 from datetime import datetime
-from sqlmodel import Field, SQLModel, JSON
+from sqlmodel import Field, SQLModel
+from sqlalchemy import JSON, Column
 
 class ImageBase(SQLModel):
     job_id: int = Field(index=True)
@@ -11,7 +12,7 @@ class ImageBase(SQLModel):
     is_kept: bool = Field(default=False)
     caption: Optional[str] = None
     collection_id: Optional[int] = Field(default=None, index=True)
-    extra_metadata: Optional[Dict[str, Any]] = Field(default=None, sa_type=JSON)
+    extra_metadata: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
 
 
 class Image(ImageBase, table=True):
