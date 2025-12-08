@@ -94,16 +94,49 @@ def process_job(job_id: int):
             job.status = "completed"
             job.completed_at = datetime.utcnow()
             session.add(job)
-            
+
             saved_images = []
             for img_data in images:
                 full_path = f"{engine.output_dir}\\{img_data['subfolder']}\\{img_data['filename']}" if img_data.get('subfolder') else f"{engine.output_dir}\\{img_data['filename']}"
-                
+
+                # Build prompt history metadata so the latest prompt is always surfaced while retaining provenance
+                # Normalize any prior history that may have come through the workflow
+                incoming_metadata = working_params.get("metadata", {})
+                if isinstance(incoming_metadata, str):
+                    try:
+                        import json
+                        incoming_metadata = json.loads(incoming_metadata)
+                    except Exception:
+                        incoming_metadata = {}
+
+                raw_history = incoming_metadata.get("prompt_history", [])
+                prompt_history = raw_history if isinstance(raw_history, list) else []
+
+                latest_prompt = {
+                    "stage": 0,
+                    "positive_text": working_params.get("prompt"),
+                    "negative_text": working_params.get("negative_prompt"),
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "source": "workflow",
+                }
+
+                stacked_history = [latest_prompt]
+                for idx, entry in enumerate(prompt_history):
+                    if isinstance(entry, dict):
+                        stacked = entry.copy()
+                        stacked.setdefault("stage", idx + 1)
+                        stacked_history.append(stacked)
+
+                image_metadata = incoming_metadata.copy()
+                image_metadata["active_prompt"] = latest_prompt
+                image_metadata["prompt_history"] = stacked_history
+
                 new_image = Image(
                     job_id=job_id,
                     path=full_path,
                     filename=img_data['filename'],
                     format="png",
+                    metadata=image_metadata,
                     is_kept=False
                 )
                 session.add(new_image)

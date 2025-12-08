@@ -56,6 +56,29 @@ export interface TagSuggestion {
     source: string;
     frequency: number;
     description?: string;
+export interface PromptStage {
+    stage: number;
+    positive_text?: string;
+    negative_text?: string;
+    source?: string;
+    timestamp?: string;
+}
+
+export interface PromptLibraryItem {
+    image_id: number;
+    job_id?: number;
+    workflow_template_id?: number;
+    created_at: string;
+    preview_path: string;
+    active_positive?: string;
+    active_negative?: string;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    job_params: any;
+    prompt_history: PromptStage[];
+    tags: string[];
+    caption?: string;
+    prompt_id?: number;
+    prompt_name?: string;
 }
 
 export const api = {
@@ -135,7 +158,7 @@ export const api = {
         await fetch(`${API_BASE}/gallery/${imageId}`, { method: "DELETE" });
     },
 
-    getPrompts: async (search?: string, workflowId?: number): Promise<Prompt[]> => {
+    getPrompts: async (search?: string, workflowId?: number): Promise<PromptLibraryItem[]> => {
         const params = new URLSearchParams();
         if (search) params.set("search", search);
         if (workflowId) params.set("workflow_id", workflowId.toString());
@@ -280,6 +303,8 @@ export interface GalleryItem {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     job_params: any;
     prompt?: string;
+    negative_prompt?: string;
+    prompt_history?: Record<string, unknown>[];
     workflow_template_id?: number;
     created_at: string;
     caption?: string;

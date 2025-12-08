@@ -2,6 +2,8 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Literal, Optional
 
 import httpx
+from datetime import datetime
+from difflib import SequenceMatcher
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from sqlmodel import Session, col, select
@@ -39,6 +41,77 @@ class TagSuggestion(BaseModel):
 TAG_CACHE_MAX_AGE = timedelta(hours=24)
 TAG_CACHE_MAX_TAGS = 5000
 TAG_CACHE_PAGE_SIZE = 200
+class PromptStage(BaseModel):
+    stage: int
+    positive_text: Optional[str] = None
+    negative_text: Optional[str] = None
+    source: Optional[str] = None
+    timestamp: Optional[str] = None
+
+
+class LibraryPrompt(BaseModel):
+    image_id: int
+    job_id: Optional[int] = None
+    workflow_template_id: Optional[int] = None
+    created_at: datetime
+    preview_path: str
+    active_positive: Optional[str] = None
+    active_negative: Optional[str] = None
+    job_params: Dict[str, Any] = Field(default_factory=dict)
+    prompt_history: List[PromptStage] = Field(default_factory=list)
+    tags: List[str] = Field(default_factory=list)
+    caption: Optional[str] = None
+    prompt_id: Optional[int] = None
+    prompt_name: Optional[str] = None
+
+
+def _build_search_block(
+    active_positive: Optional[str],
+    active_negative: Optional[str],
+    caption: Optional[str],
+    tags: List[str],
+    prompt_history: List[PromptStage],
+) -> str:
+    return " ".join(
+        filter(
+            None,
+            [
+                active_positive or "",
+                active_negative or "",
+                caption or "",
+                " ".join(tags),
+                " ".join(
+                    (
+                        (stage.positive_text or "") + " " + (stage.negative_text or "")
+                        for stage in prompt_history
+                    )
+                ),
+            ],
+        )
+    ).lower()
+
+
+def _score_search_match(search: str, text_block: str) -> float:
+    """Return a fuzzy score between the search term and the text block.
+
+    The score blends token coverage and SequenceMatcher similarity so that
+    partial matches (e.g. "surf dog" vs "dog on a surfboard") are surfaced even
+    when they are not exact substrings.
+    """
+
+    search_lower = (search or "").strip().lower()
+    if not search_lower:
+        return 0.0
+
+    text_lower = text_block.lower()
+    tokens = [t for t in search_lower.replace(",", " ").split() if t]
+    token_hits = sum(1 for t in tokens if t in text_lower)
+    coverage = token_hits / len(tokens) if tokens else 0
+    similarity = SequenceMatcher(None, search_lower, text_lower).ratio()
+
+    # Reward direct substring matches while keeping fuzzy similarity relevant.
+    substring_bonus = 0.25 if search_lower in text_lower else 0
+    return (0.6 * coverage) + (0.4 * similarity) + substring_bonus
 
 
 def upsert_tags(session: Session, tags: List[str], source: str = "custom") -> None:
@@ -62,7 +135,7 @@ def upsert_tags(session: Session, tags: List[str], source: str = "custom") -> No
     session.commit()
 
 
-@router.get("/", response_model=List[PromptWithImages])
+@router.get("/", response_model=List[LibraryPrompt])
 def read_prompts(
     skip: int = 0,
     limit: int = 100,
@@ -70,77 +143,104 @@ def read_prompts(
     workflow_id: Optional[int] = None
 ):
     with Session(db_engine) as session:
-        query = select(Prompt)
-        if search:
-            s = f"%{search.lower()}%"
-            # simple case-insensitive like Search
-            query = query.where(
-                (col(Prompt.name).ilike(s)) |
-                (col(Prompt.positive_text).ilike(s)) |
-                (col(Prompt.negative_text).ilike(s))
-            )
+        query = (
+            select(Image, Job, Prompt)
+            .join(Job, Image.job_id == Job.id, isouter=True)
+            .join(Prompt, Job.prompt_id == Prompt.id, isouter=True)
+            .order_by(Image.created_at.desc())
+        )
 
         if workflow_id:
-            query = query.where(Prompt.workflow_id == workflow_id)
-        
-        query = query.order_by(Prompt.updated_at.desc()).offset(skip).limit(limit)
-        prompts = session.exec(query).all()
+            query = query.where(Job.workflow_template_id == workflow_id)
 
-        if search:
-            search_lower = search.lower()
+        rows = session.exec(query.offset(skip).limit(limit * 5)).all()
 
-            def matches(p: Prompt) -> bool:
-                text_block = " ".join([
-                    p.name or "",
-                    p.description or "",
-                    p.positive_text or "",
-                    p.negative_text or "",
-                ]).lower()
-
-                # Handle tags if they are strings (SQLite)
-                ptags = p.tags or []
-                if isinstance(ptags, str):
-                    try:
-                       ptags = json.loads(ptags)
-                    except:
-                       ptags = []
-
-                tag_match = any(search_lower in (t or "").lower() for t in ptags)
-                return search_lower in text_block or tag_match
-
-            prompts = [p for p in prompts if matches(p)]
-
-        results: List[PromptWithImages] = []
-        for p in prompts:
-            # Handle tags defensive loading
-            if isinstance(p.tags, str):
+        scored_results: List[tuple[float, LibraryPrompt]] = []
+        for image, job, prompt in rows:
+            raw_params = job.input_params if job and job.input_params else {}
+            if isinstance(raw_params, str):
                 try:
-                    p.tags = json.loads(p.tags)
-                except:
-                    p.tags = []
+                    raw_params = json.loads(raw_params)
+                except Exception:
+                    raw_params = {}
 
-            # Find related images via Jobs (N+1 but acceptable for small limit)
-            job_stmt = select(Job.id).where(Job.prompt_id == p.id)
-            job_ids = session.exec(job_stmt).all()
+            metadata = image.metadata if isinstance(image.metadata, dict) else {}
+            if isinstance(image.metadata, str):
+                try:
+                    metadata = json.loads(image.metadata)
+                except Exception:
+                    metadata = {}
 
-            related: List[str] = []
-            if job_ids:
-                img_stmt = (
-                    select(Image.path)
-                    .where(col(Image.job_id).in_(job_ids))
-                    .order_by(Image.id.desc())
-                    .limit(4)
-                )
-                related = session.exec(img_stmt).all()
+            raw_history = metadata.get("prompt_history", []) if isinstance(metadata, dict) else []
+            prompt_history: List[PromptStage] = []
+            for entry in raw_history:
+                if isinstance(entry, dict):
+                    prompt_history.append(PromptStage(**{**entry, "stage": entry.get("stage", len(prompt_history))}))
 
-            results.append(
-                PromptWithImages(
-                    **p.dict(),
-                    related_images=related,
+            active_prompt = metadata.get("active_prompt") if isinstance(metadata, dict) else None
+            active_positive = None
+            active_negative = None
+            if isinstance(active_prompt, dict):
+                active_positive = active_prompt.get("positive_text")
+                active_negative = active_prompt.get("negative_text")
+
+            # Fallbacks for older records
+            if not active_positive:
+                active_positive = (prompt_history[0].positive_text if prompt_history else None) or raw_params.get("prompt")
+            if not active_negative:
+                active_negative = (prompt_history[0].negative_text if prompt_history else None) or raw_params.get("negative_prompt")
+
+            tags = []
+            if prompt and prompt.tags:
+                if isinstance(prompt.tags, str):
+                    try:
+                        tags = json.loads(prompt.tags)
+                    except Exception:
+                        tags = []
+                else:
+                    tags = prompt.tags or []
+
+            caption = image.caption
+            preview_path = image.thumbnail_path or image.path
+
+            text_block = _build_search_block(
+                active_positive=active_positive,
+                active_negative=active_negative,
+                caption=caption,
+                tags=tags,
+                prompt_history=prompt_history,
+            )
+
+            if search:
+                score = _score_search_match(search, text_block)
+                if score < 0.35:
+                    continue
+            else:
+                score = 1.0
+
+            scored_results.append(
+                (
+                    score,
+                    LibraryPrompt(
+                        image_id=image.id,
+                        job_id=job.id if job else None,
+                        workflow_template_id=job.workflow_template_id if job else None,
+                        created_at=image.created_at,
+                        preview_path=preview_path,
+                        active_positive=active_positive,
+                        active_negative=active_negative,
+                        job_params=raw_params,
+                        prompt_history=prompt_history,
+                        tags=tags,
+                        caption=caption,
+                        prompt_id=prompt.id if prompt else None,
+                        prompt_name=prompt.name if prompt else None,
+                    ),
                 )
             )
 
-        return results
+        scored_results.sort(key=lambda r: (r[0], r[1].created_at), reverse=True)
+        return [result for _, result in scored_results[:limit]]
 
 
 @router.post("/", response_model=PromptRead)
