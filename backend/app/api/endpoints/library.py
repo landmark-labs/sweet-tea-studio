@@ -346,7 +346,12 @@ def bulk_upsert_tag_suggestions(session: Session, tags: List[TagSuggestion], sou
     if not names:
         return 0
 
-    existing = session.exec(select(Tag).where(col(Tag.name).in_(names))).all()
+    existing: List[Tag] = []
+    chunk_size = 900  # stay well under SQLite's default 999 variable limit
+    for start in range(0, len(names), chunk_size):
+        chunk_names = names[start : start + chunk_size]
+        existing.extend(session.exec(select(Tag).where(col(Tag.name).in_(chunk_names))).all())
+
     existing_map = {t.name: t for t in existing}
 
     updated = 0
