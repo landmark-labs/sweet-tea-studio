@@ -3,21 +3,23 @@ import { api, GalleryItem } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Save, Trash2, Calendar, Terminal } from "lucide-react";
+import { Save, Trash2, Calendar, Search } from "lucide-react";
+import { Input } from "@/components/ui/input";
 
 export default function Gallery() {
     const [items, setItems] = useState<GalleryItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [search, setSearch] = useState("");
 
     useEffect(() => {
         loadGallery();
     }, []);
 
-    const loadGallery = async () => {
+    const loadGallery = async (query?: string) => {
         try {
             setIsLoading(true);
-            const data = await api.getGallery();
+            const data = await api.getGallery(query);
             setItems(data);
         } catch (err) {
             console.error(err);
@@ -25,6 +27,11 @@ export default function Gallery() {
         } finally {
             setIsLoading(false);
         }
+    };
+
+    const handleSearch = (e: React.FormEvent) => {
+        e.preventDefault();
+        loadGallery(search);
     };
 
     const handleDelete = async (id: number) => {
@@ -42,6 +49,10 @@ export default function Gallery() {
         if (!name) return;
 
         const workflowId = item.workflow_template_id || 1;
+        const tags = (item.prompt || "")
+            .split(",")
+            .map((t) => t.trim())
+            .filter(Boolean);
 
         try {
             await api.savePrompt({
@@ -52,6 +63,7 @@ export default function Gallery() {
                 preview_image_path: item.image.path,
                 positive_text: item.job_params?.prompt,
                 negative_text: item.job_params?.negative_prompt,
+                tags,
             });
             alert("Prompt saved to library!");
         } catch (err) {
@@ -63,7 +75,22 @@ export default function Gallery() {
 
     return (
         <div className="p-8 max-w-7xl mx-auto">
-            <h1 className="text-3xl font-bold tracking-tight text-slate-900 mb-8">Generated Gallery</h1>
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
+                <h1 className="text-3xl font-bold tracking-tight text-slate-900">Generated Gallery</h1>
+
+                <form onSubmit={handleSearch} className="w-full md:max-w-lg">
+                    <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+                        <Input
+                            type="search"
+                            placeholder="Search prompts, tags, captions..."
+                            className="pl-9"
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                        />
+                    </div>
+                </form>
+            </div>
 
             {error && (
                 <Alert variant="destructive" className="mb-6">
@@ -132,11 +159,34 @@ export default function Gallery() {
                                     <Calendar className="w-3 h-3" />
                                     <span>{new Date(item.created_at).toLocaleString()}</span>
                                 </div>
+
+                                {item.prompt_name && (
+                                    <p className="text-[11px] uppercase tracking-wide text-slate-500">{item.prompt_name}</p>
+                                )}
+
                                 {item.prompt && (
-                                    <p className="line-clamp-2 italic text-slate-600">
+                                    <p className="line-clamp-2 italic text-slate-700">
                                         "{item.prompt}"
                                     </p>
                                 )}
+
+                                {item.caption && (
+                                    <p className="text-slate-600 line-clamp-2">{item.caption}</p>
+                                )}
+
+                                {item.prompt_tags && item.prompt_tags.length > 0 && (
+                                    <div className="flex flex-wrap gap-1 mt-1">
+                                        {item.prompt_tags.slice(0, 6).map((tag) => (
+                                            <span
+                                                key={tag}
+                                                className="px-1.5 py-0.5 bg-indigo-50 text-indigo-600 border border-indigo-100 rounded"
+                                            >
+                                                #{tag}
+                                            </span>
+                                        ))}
+                                    </div>
+                                )}
+
                                 <div className="flex flex-wrap gap-1 mt-2">
                                     {Object.entries(item.job_params).slice(0, 4).map(([k, v]) => (
                                         <span key={k} className="px-1.5 py-0.5 bg-slate-100 rounded text-slate-500 border border-slate-200">

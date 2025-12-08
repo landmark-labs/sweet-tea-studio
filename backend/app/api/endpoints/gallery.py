@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException, Query, Depends
 from typing import List, Dict, Any, Optional
+from sqlalchemy import func, or_
 from datetime import datetime
 from fastapi.responses import FileResponse
 import os
@@ -7,8 +8,9 @@ from sqlmodel import Session, select
 from app.db.database import get_session
 from app.models.image import Image, ImageRead
 from app.models.job import Job
+from app.models.prompt import Prompt
 from app.models.engine import Engine
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 router = APIRouter()
 
@@ -18,36 +20,62 @@ class GalleryItem(BaseModel):
     prompt: Optional[str] = None
     workflow_template_id: Optional[int] = None
     created_at: datetime
+    caption: Optional[str] = None
+    prompt_tags: List[str] = Field(default_factory=list)
+    prompt_name: Optional[str] = None
 
 @router.get("/", response_model=List[GalleryItem])
 def read_gallery(
-    skip: int = Query(0, ge=0), 
+    skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
+    search: Optional[str] = Query(None, description="Search by prompt text, tags, or caption"),
     session: Session = Depends(get_session)
 ):
     try:
         # Join Image and Job
         # Note: SQLModel SELECT returns tuples if multiple models joined
         stmt = (
-            select(Image, Job)
+            select(Image, Job, Prompt)
             .join(Job, Image.job_id == Job.id, isouter=True)
+            .join(Prompt, Job.prompt_id == Prompt.id, isouter=True)
             .order_by(Image.created_at.desc())
             .offset(skip)
             .limit(limit)
         )
+
+        if search:
+            like = f"%{search.lower()}%"
+            prompt_field = func.lower(func.coalesce(func.json_extract(Job.input_params, '$.prompt'), ""))
+            negative_field = func.lower(func.coalesce(func.json_extract(Job.input_params, '$.negative_prompt'), ""))
+            tag_field = func.lower(func.coalesce(func.json_extract(Prompt.tags, '$'), ""))
+            stmt = stmt.where(
+                or_(
+                    prompt_field.like(like),
+                    negative_field.like(like),
+                    func.lower(func.coalesce(Prompt.positive_text, "")).like(like),
+                    func.lower(func.coalesce(Prompt.negative_text, "")).like(like),
+                    func.lower(func.coalesce(Image.caption, "")).like(like),
+                    tag_field.like(like),
+                )
+            )
         results = session.exec(stmt).all()
         
         items = []
-        for img, job in results:
+        for img, job, prompt in results:
             params = job.input_params if job and job.input_params else {}
             prompt_text = params.get("prompt")
-            
+            prompt_tags = prompt.tags if prompt else []
+            caption = img.caption
+
             item = GalleryItem(
                 image=img,
                 job_params=params,
                 prompt=prompt_text,
                 workflow_template_id=job.workflow_template_id if job else None,
-                created_at=img.created_at
+                created_at=img.created_at,
+                caption=caption,
+                prompt_tags=prompt_tags,
+                prompt_name=prompt.name if prompt else None,
             )
             items.append(item)
             
