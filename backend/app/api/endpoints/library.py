@@ -55,10 +55,19 @@ def read_prompts(
 ):
     with Session(db_engine) as session:
         query = select(Prompt)
+        if search:
+            s = f"%{search.lower()}%"
+            # simple case-insensitive like Search
+            # SQLite default is case-insensitive for ASCII, but proper way:
+            query = query.where(
+                (col(Prompt.name).ilike(s)) |
+                (col(Prompt.positive_text).ilike(s)) |
+                (col(Prompt.negative_text).ilike(s))
+            )
 
         if workflow_id:
             query = query.where(Prompt.workflow_id == workflow_id)
-
+        
         query = query.order_by(Prompt.updated_at.desc()).offset(skip).limit(limit)
         prompts = session.exec(query).all()
 
@@ -118,7 +127,6 @@ def create_prompt(prompt: PromptCreate):
         upsert_tags(session, inferred_tags, source="prompt")
         return new_prompt
 
-
 @router.get("/{prompt_id}", response_model=PromptRead)
 def read_prompt(prompt_id: int):
     with Session(db_engine) as session:
@@ -126,7 +134,6 @@ def read_prompt(prompt_id: int):
         if not prompt:
             raise HTTPException(status_code=404, detail="Prompt not found")
         return prompt
-
 
 @router.delete("/{prompt_id}")
 def delete_prompt(prompt_id: int):
