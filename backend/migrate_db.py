@@ -84,6 +84,12 @@ def migrate():
             cursor.execute("ALTER TABLE image ADD COLUMN collection_id INTEGER DEFAULT NULL")
             conn.commit()
             print("Migration successful: Added collection_id column.")
+        
+        if "extra_metadata" not in columns:
+            print("Adding extra_metadata column to image table...")
+            cursor.execute("ALTER TABLE image ADD COLUMN extra_metadata JSON DEFAULT NULL")
+            conn.commit()
+            print("Migration successful: Added extra_metadata column.")
             
             
     except Exception as e:

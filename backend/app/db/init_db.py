@@ -6,6 +6,7 @@ from app.models.workflow import WorkflowTemplate
 from app.models.job import Job
 from app.models.image import Image
 from app.models.prompt import Prompt
+from app.models.tag import TagSyncState
 
 def init_db():
     SQLModel.metadata.create_all(engine)

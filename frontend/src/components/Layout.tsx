@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Outlet, NavLink } from "react-router-dom";
-import { LayoutGrid, PlusCircle, Settings, Library, Image as ImageIcon, Workflow, ChevronLeft, ChevronRight } from "lucide-react";
+import { PlusCircle, Settings, Library, Image as ImageIcon, Workflow, ChevronLeft, ChevronRight, HardDrive } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
@@ -44,9 +44,9 @@ export default function Layout() {
             <Workflow size={20} />
             {!collapsed && <span>Workflows</span>}
           </NavLink>
-          <NavLink to="/engines" className={({ isActive }) => cn("flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors", isActive ? "bg-blue-50 text-blue-700" : "text-slate-700 hover:bg-slate-100", collapsed && "justify-center px-2")}>
-            <LayoutGrid size={20} />
-            {!collapsed && <span>Engines</span>}
+            <NavLink to="/models" className={({ isActive }) => cn("flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors", isActive ? "bg-blue-50 text-blue-700" : "text-slate-700 hover:bg-slate-100", collapsed && "justify-center px-2") }>
+            <HardDrive size={20} />
+            {!collapsed && <span>Models</span>}
           </NavLink>
         </nav>
         <div className="p-2 border-t border-slate-100">

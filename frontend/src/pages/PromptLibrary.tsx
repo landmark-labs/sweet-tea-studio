@@ -1,12 +1,12 @@
-import React, { useEffect, useState } from "react";
-import { api, Prompt, PromptSuggestion } from "@/lib/api";
+import React, { useEffect, useMemo, useState } from "react";
+import { api, PromptLibraryItem, PromptSuggestion } from "@/lib/api";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Trash2, Search, LayoutTemplate, Sparkles, Copy, Loader2, Wand2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 export default function PromptLibrary() {
-    const [prompts, setPrompts] = useState<Prompt[]>([]);
+    const [prompts, setPrompts] = useState<PromptLibraryItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState("");
@@ -84,15 +84,32 @@ export default function PromptLibrary() {
         if (!confirm("Are you sure you want to delete this prompt?")) return;
         try {
             await api.deletePrompt(id);
-            setPrompts(prev => prev.filter(p => p.id !== id));
+            setPrompts(prev => prev.filter(p => p.prompt_id !== id));
         } catch (e) {
             alert("Failed to delete prompt");
         }
     };
 
-    if (isLoading) return <div className="p-8">Loading library...</div>;
+    const filteredPrompts = useMemo(() => {
+        if (!searchQuery) return prompts;
+        const needle = searchQuery.toLowerCase();
+        return prompts.filter((p) => {
+            const haystack = [
+                p.active_positive || "",
+                p.active_negative || "",
+                p.caption || "",
+                p.prompt_history.map((stage) => `${stage.positive_text || ""} ${stage.negative_text || ""}`).join(" "),
+                p.tags.join(" "),
+                p.prompt_name || "",
+            ]
+                .join(" ")
+                .toLowerCase();
 
-    const filteredPrompts = prompts;
+            return haystack.includes(needle);
+        });
+    }, [prompts, searchQuery]);
+
+    if (isLoading) return <div className="p-8">Loading library...</div>;
 
     return (
         <div className="p-8 max-w-7xl mx-auto">
@@ -183,20 +200,14 @@ export default function PromptLibrary() {
             <div className="space-y-4">
                 {filteredPrompts.map((prompt) => (
                     <div
-                        key={prompt.id}
+                        key={prompt.image_id}
                         className="flex items-center gap-4 p-4 bg-white rounded-lg border border-slate-200 shadow-sm hover:shadow-md transition-all group"
                     >
                         {/* Thumbnail */}
                         <div className="w-16 h-16 flex-none bg-slate-100 rounded overflow-hidden relative">
-                            {prompt.related_images && prompt.related_images.length > 0 ? (
+                            {prompt.preview_path ? (
                                 <img
-                                    src={`/api/v1/gallery/image/path?path=${encodeURIComponent(prompt.related_images[0])}`}
-                                    className="w-full h-full object-cover"
-                                    alt="Prompt thumbnail"
-                                />
-                            ) : prompt.preview_image_path ? (
-                                <img
-                                    src={`/api/v1/gallery/image/path?path=${encodeURIComponent(prompt.preview_image_path)}`}
+                                    src={`/api/v1/gallery/image/path?path=${encodeURIComponent(prompt.preview_path)}`}
                                     className="w-full h-full object-cover"
                                     alt="Prompt preview"
                                 />
@@ -210,14 +221,16 @@ export default function PromptLibrary() {
                         {/* Content */}
                         <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1">
-                                <h3 className="font-semibold text-slate-900 truncate">{prompt.name}</h3>
+                                <h3 className="font-semibold text-slate-900 truncate">{prompt.prompt_name || `Image #${prompt.image_id}`}</h3>
                                 <span className="px-2 py-0.5 rounded-full bg-slate-100 text-xs text-slate-600 font-medium">
-                                    Workflow #{prompt.workflow_id}
+                                    Workflow #{prompt.workflow_template_id || "?"}
                                 </span>
                             </div>
-                            <p className="text-sm text-slate-500 truncate">{prompt.description || "No description"}</p>
-                            {prompt.positive_text && (
-                                <p className="text-xs text-slate-600 mt-1 line-clamp-1">{prompt.positive_text}</p>
+                            {prompt.active_positive && (
+                                <p className="text-xs text-slate-600 mt-1 line-clamp-2">{prompt.active_positive}</p>
+                            )}
+                            {prompt.active_negative && (
+                                <p className="text-[11px] text-rose-500 mt-1 line-clamp-1">Negative: {prompt.active_negative}</p>
                             )}
                             {prompt.tags && prompt.tags.length > 0 && (
                                 <div className="flex flex-wrap gap-1 mt-2">
@@ -231,12 +244,16 @@ export default function PromptLibrary() {
                                     ))}
                                 </div>
                             )}
-                            {/* Mini Params */}
-                            <div className="flex gap-4 mt-2 text-xs text-slate-400">
-                                {prompt.parameters.steps && <span>Steps: {prompt.parameters.steps}</span>}
-                                {prompt.parameters.cfg && <span>CFG: {prompt.parameters.cfg}</span>}
-                                {prompt.parameters.sampler_name && <span>{prompt.parameters.sampler_name}</span>}
-                            </div>
+                            {prompt.prompt_history.length > 1 && (
+                                <div className="mt-2 space-y-1">
+                                    <p className="text-[11px] text-slate-500">Prompt history:</p>
+                                    {prompt.prompt_history.slice(0, 3).map((stage) => (
+                                        <p key={`${prompt.image_id}-${stage.stage}`} className="text-[11px] text-slate-600 line-clamp-1">
+                                            #{stage.stage} {stage.positive_text}
+                                        </p>
+                                    ))}
+                                </div>
+                            )}
                         </div>
 
                         {/* Actions */}
@@ -244,8 +261,9 @@ export default function PromptLibrary() {
                             <Button
                                 variant="ghost"
                                 size="icon"
-                                onClick={() => handleDelete(prompt.id)}
+                                onClick={() => prompt.prompt_id && handleDelete(prompt.prompt_id)}
                                 className="text-red-500 hover:text-red-600 hover:bg-red-50"
+                                disabled={!prompt.prompt_id}
                             >
                                 <Trash2 className="w-4 h-4" />
                             </Button>

@@ -24,3 +24,10 @@ class TagRead(TagBase):
     id: int
     created_at: datetime
     updated_at: datetime
+
+
+class TagSyncState(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    source: str = Field(index=True, unique=True)
+    last_synced_at: datetime = Field(default_factory=datetime.utcnow)
+    tag_count: int = Field(default=0)

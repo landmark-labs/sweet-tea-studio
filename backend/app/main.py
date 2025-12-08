@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.db.init_db import init_db
 from app.api.endpoints import engines, workflows, jobs, gallery, files, library, extensions, collections
+from app.api.endpoints.library import start_tag_cache_refresh_background
 import asyncio
 from app.core.websockets import manager
 
@@ -11,6 +12,7 @@ app = FastAPI(title="Sweet Tea Studio Backend")
 @app.on_event("startup")
 def on_startup():
     init_db()
+    start_tag_cache_refresh_background()
     manager.loop = asyncio.get_running_loop()
 
 # CORS

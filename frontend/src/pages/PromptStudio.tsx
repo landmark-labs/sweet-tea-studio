@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from "react";
-import { api, Engine, WorkflowTemplate, FileItem, GalleryItem, Prompt, PromptSuggestion } from "@/lib/api";
+import { api, Engine, WorkflowTemplate, FileItem, GalleryItem, PromptLibraryItem, PromptSuggestion } from "@/lib/api";
 import { DynamicForm } from "@/components/DynamicForm";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -44,7 +44,7 @@ export default function PromptStudio() {
   const [focusedField, setFocusedField] = useState<string>("");
 
   // Prompt Library State
-  const [prompts, setPrompts] = useState<Prompt[]>([]);
+  const [prompts, setPrompts] = useState<PromptLibraryItem[]>([]);
   const [promptSearch, setPromptSearch] = useState("");
   const [promptLoading, setPromptLoading] = useState(false);
   const [promptError, setPromptError] = useState<string | null>(null);
@@ -161,16 +161,16 @@ export default function PromptStudio() {
       .catch((err) => console.error(err));
   };
 
-  const applyPrompt = (prompt: Prompt) => {
-    const params = prompt.parameters || {};
+  const applyPrompt = (prompt: PromptLibraryItem) => {
+    const params = prompt.job_params || {};
     handleFormChange(params);
     setFocusedField("");
 
-    if (prompt.preview_image_path) {
-      setPreviewPath(prompt.preview_image_path);
+    if (prompt.preview_path) {
+      setPreviewPath(prompt.preview_path);
       setPreviewMetadata({
-        prompt: prompt.positive_text || prompt.description,
-        created_at: prompt.updated_at || prompt.created_at,
+        prompt: prompt.active_positive,
+        created_at: prompt.created_at,
       });
     }
   };
@@ -688,13 +688,12 @@ export default function PromptStudio() {
               </div>
             ) : (
               prompts.map((p) => (
-                <div key={p.id} className="p-3 border border-slate-200 rounded-lg bg-slate-50">
+                <div key={`${p.image_id}-${p.prompt_id || "noprompt"}`} className="p-3 border border-slate-200 rounded-lg bg-slate-50">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <p className="font-medium text-sm text-slate-900 truncate">{p.name}</p>
-                      <p className="text-xs text-slate-500 truncate">{p.description || "No description"}</p>
-                      {p.positive_text && (
-                        <p className="text-[11px] text-slate-600 line-clamp-1 mt-1">{p.positive_text}</p>
+                      <p className="font-medium text-sm text-slate-900 truncate">{p.prompt_name || `Image #${p.image_id}`}</p>
+                      {p.active_positive && (
+                        <p className="text-[11px] text-slate-600 line-clamp-2 mt-1">{p.active_positive}</p>
                       )}
                     </div>
                     <Button size="sm" variant="ghost" className="text-blue-600 hover:text-blue-700" onClick={() => applyPrompt(p)}>
@@ -711,17 +710,17 @@ export default function PromptStudio() {
                         ))}
                       </>
                     )}
-                    {p.parameters?.steps && (
-                      <span className="px-2 py-0.5 bg-white border border-slate-200 rounded">Steps: {p.parameters.steps}</span>
+                    {p.job_params?.steps && (
+                      <span className="px-2 py-0.5 bg-white border border-slate-200 rounded">Steps: {p.job_params.steps}</span>
                     )}
-                    {p.parameters?.cfg && (
-                      <span className="px-2 py-0.5 bg-white border border-slate-200 rounded">CFG: {p.parameters.cfg}</span>
+                    {p.job_params?.cfg && (
+                      <span className="px-2 py-0.5 bg-white border border-slate-200 rounded">CFG: {p.job_params.cfg}</span>
                     )}
-                    {p.parameters?.sampler_name && (
-                      <span className="px-2 py-0.5 bg-white border border-slate-200 rounded">{p.parameters.sampler_name}</span>
+                    {p.job_params?.sampler_name && (
+                      <span className="px-2 py-0.5 bg-white border border-slate-200 rounded">{p.job_params.sampler_name}</span>
                     )}
-                    {p.updated_at && (
-                      <span className="px-2 py-0.5 bg-white border border-slate-200 rounded">{new Date(p.updated_at).toLocaleDateString()}</span>
+                    {p.created_at && (
+                      <span className="px-2 py-0.5 bg-white border border-slate-200 rounded">{new Date(p.created_at).toLocaleDateString()}</span>
                     )}
                   </div>
                 </div>

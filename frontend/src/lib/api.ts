@@ -64,6 +64,37 @@ export interface CollectionCreate {
     description?: string;
 }
 
+export interface TagSuggestion {
+    name: string;
+    source: string;
+    frequency: number;
+    description?: string;
+}
+export interface PromptStage {
+    stage: number;
+    positive_text?: string;
+    negative_text?: string;
+    source?: string;
+    timestamp?: string;
+}
+
+export interface PromptLibraryItem {
+    image_id: number;
+    job_id?: number;
+    workflow_template_id?: number;
+    created_at: string;
+    preview_path: string;
+    active_positive?: string;
+    active_negative?: string;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    job_params: any;
+    prompt_history: PromptStage[];
+    tags: string[];
+    caption?: string;
+    prompt_id?: number;
+    prompt_name?: string;
+}
+
 export const api = {
     getEngines: async (): Promise<Engine[]> => {
         const res = await fetch(`${API_BASE}/engines/`);
@@ -142,7 +173,7 @@ export const api = {
         await fetch(`${API_BASE}/gallery/${imageId}`, { method: "DELETE" });
     },
 
-    getPrompts: async (search?: string, workflowId?: number): Promise<Prompt[]> => {
+    getPrompts: async (search?: string, workflowId?: number): Promise<PromptLibraryItem[]> => {
         const params = new URLSearchParams();
         if (search) params.set("search", search);
         if (workflowId) params.set("workflow_id", workflowId.toString());
@@ -167,6 +198,13 @@ export const api = {
         const params = new URLSearchParams({ query });
         const res = await fetch(`${API_BASE}/library/suggest?${params.toString()}`);
         if (!res.ok) throw new Error("Failed to fetch suggestions");
+        return res.json();
+    },
+
+    getTagSuggestions: async (query: string, limit = 25): Promise<TagSuggestion[]> => {
+        const params = new URLSearchParams({ query, limit: String(limit) });
+        const res = await fetch(`${API_BASE}/library/tags/suggest?${params.toString()}`);
+        if (!res.ok) throw new Error("Failed to fetch tag suggestions");
         return res.json();
     },
 
@@ -328,6 +366,8 @@ export interface GalleryItem {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     job_params: any;
     prompt?: string;
+    negative_prompt?: string;
+    prompt_history?: Record<string, unknown>[];
     workflow_template_id?: number;
     created_at: string;
     caption?: string;
