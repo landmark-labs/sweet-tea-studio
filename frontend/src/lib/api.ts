@@ -51,6 +51,11 @@ export interface PromptSuggestion {
     snippet?: string;
 }
 
+export interface TagSuggestion {
+    name: string;
+    source: string;
+    frequency: number;
+    description?: string;
 export interface PromptStage {
     stage: number;
     positive_text?: string;
@@ -178,6 +183,13 @@ export const api = {
         const params = new URLSearchParams({ query });
         const res = await fetch(`${API_BASE}/library/suggest?${params.toString()}`);
         if (!res.ok) throw new Error("Failed to fetch suggestions");
+        return res.json();
+    },
+
+    getTagSuggestions: async (query: string, limit = 25): Promise<TagSuggestion[]> => {
+        const params = new URLSearchParams({ query, limit: String(limit) });
+        const res = await fetch(`${API_BASE}/library/tags/suggest?${params.toString()}`);
+        if (!res.ok) throw new Error("Failed to fetch tag suggestions");
         return res.json();
     },
 

@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ImageUpload } from "@/components/ImageUpload";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { cn } from "@/lib/utils";
+import { PromptAutocompleteTextarea } from "@/components/PromptAutocompleteTextarea";
 
 interface DynamicFormProps {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -155,6 +156,7 @@ export function DynamicForm({
         const field = schema[key];
         const isImageUpload = field.widget === "upload" || field.widget === "image_upload" || (field.title && field.title.includes("LoadImage"));
         const isActive = key === activeField;
+        const isPromptField = groups.prompts.includes(key);
 
         if (isImageUpload) {
             return (
@@ -174,19 +176,30 @@ export function DynamicForm({
             return (
                 <div key={key} className="space-y-2">
                     <Label htmlFor={key} className={cn(isActive && "text-blue-600 font-semibold")}>{field.title || key}</Label>
-                    <Textarea
-                        id={key}
-                        value={formData[key] || ""}
-                        onChange={(e) => handleChange(key, e.target.value)}
-                        onFocus={() => onFieldFocus?.(key)}
-                        onBlur={(e) => onFieldBlur?.(key, e.relatedTarget as Element)}
-                        placeholder=""
-                        rows={6}
-                        className={cn(
-                            "text-xs font-mono transition-all min-h-[150px]",
-                            isActive && "ring-2 ring-blue-400 border-blue-400 bg-blue-50/20"
-                        )}
-                    />
+                    {isPromptField ? (
+                        <PromptAutocompleteTextarea
+                            value={formData[key] || ""}
+                            onValueChange={(val) => handleChange(key, val)}
+                            onFocus={() => onFieldFocus?.(key)}
+                            onBlur={(e) => onFieldBlur?.(key, e.relatedTarget as Element)}
+                            placeholder=""
+                            isActive={isActive}
+                        />
+                    ) : (
+                        <Textarea
+                            id={key}
+                            value={formData[key] || ""}
+                            onChange={(e) => handleChange(key, e.target.value)}
+                            onFocus={() => onFieldFocus?.(key)}
+                            onBlur={(e) => onFieldBlur?.(key, e.relatedTarget as Element)}
+                            placeholder=""
+                            rows={6}
+                            className={cn(
+                                "text-xs font-mono transition-all min-h-[150px]",
+                                isActive && "ring-2 ring-blue-400 border-blue-400 bg-blue-50/20"
+                            )}
+                        />
+                    )}
                 </div>
             );
         }

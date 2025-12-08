@@ -1,16 +1,20 @@
+from datetime import datetime, timedelta
+from typing import Any, Dict, List, Literal, Optional
+
+import httpx
 from datetime import datetime
 from difflib import SequenceMatcher
 from fastapi import APIRouter, HTTPException
-from typing import List, Optional, Dict, Any, Literal
 from pydantic import BaseModel, Field
-from sqlmodel import Session, select, col
+from sqlmodel import Session, col, select
 
 from app.models.prompt import Prompt, PromptCreate, PromptRead
-from app.models.tag import Tag, TagCreate
+from app.models.tag import Tag, TagCreate, TagSyncState
 from app.db.engine import engine as db_engine
 from app.models.image import Image
 from app.models.job import Job
 import json
+from threading import Thread
 
 router = APIRouter()
 
@@ -27,6 +31,16 @@ class PromptWithImages(PromptRead):
     related_images: List[str] = Field(default_factory=list)
 
 
+class TagSuggestion(BaseModel):
+    name: str
+    source: str = "library"
+    frequency: int = 0
+    description: Optional[str] = None
+
+
+TAG_CACHE_MAX_AGE = timedelta(hours=24)
+TAG_CACHE_MAX_TAGS = 5000
+TAG_CACHE_PAGE_SIZE = 200
 class PromptStage(BaseModel):
     stage: int
     positive_text: Optional[str] = None
@@ -322,6 +336,265 @@ def suggest(query: str, limit: int = 15):
 
         suggestions.sort(key=lambda s: (0 if s.type == "tag" else 1, -s.frequency, s.value))
         return suggestions[:limit]
+
+
+def bulk_upsert_tag_suggestions(session: Session, tags: List[TagSuggestion], source: str) -> int:
+    if not tags:
+        return 0
+
+    names = [t.name for t in tags if t.name]
+    if not names:
+        return 0
+
+    existing = session.exec(select(Tag).where(col(Tag.name).in_(names))).all()
+    existing_map = {t.name: t for t in existing}
+
+    updated = 0
+    created = 0
+    for tag in tags:
+        if tag.name in existing_map:
+            current = existing_map[tag.name]
+            current.frequency = max(current.frequency or 0, tag.frequency)
+            current.description = current.description or tag.description
+            current.updated_at = datetime.utcnow()
+            current.source = current.source or source
+            updated += 1
+            continue
+
+        session.add(
+            Tag(
+                name=tag.name,
+                source=source,
+                frequency=tag.frequency,
+                description=tag.description,
+            )
+        )
+        created += 1
+
+    session.commit()
+    return created + updated
+
+
+def fetch_danbooru_tags(query: str, limit: int = 10) -> List[TagSuggestion]:
+    try:
+        with httpx.Client(timeout=5.0, headers={"User-Agent": "sweet-tea-studio/0.1"}) as client:
+            res = client.get(
+                "https://danbooru.donmai.us/tags.json",
+                params={
+                    "search[name_matches]": f"{query}*",
+                    "search[order]": "count",
+                    "limit": limit,
+                },
+            )
+            res.raise_for_status()
+            data = res.json()
+            return [
+                TagSuggestion(
+                    name=tag.get("name", ""),
+                    source="danbooru",
+                    frequency=int(tag.get("post_count", 0) or 0),
+                    description=tag.get("category_name"),
+                )
+                for tag in data
+                if tag.get("name")
+            ]
+    except Exception:
+        return []
+
+
+def fetch_all_danbooru_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int = TAG_CACHE_PAGE_SIZE) -> List[TagSuggestion]:
+    collected: List[TagSuggestion] = []
+    page = 1
+
+    with httpx.Client(timeout=10.0, headers={"User-Agent": "sweet-tea-studio/0.1 (preload)"}) as client:
+        while len(collected) < max_tags:
+            try:
+                res = client.get(
+                    "https://danbooru.donmai.us/tags.json",
+                    params={
+                        "search[order]": "count",
+                        "limit": page_size,
+                        "page": page,
+                    },
+                )
+                res.raise_for_status()
+                data = res.json()
+            except Exception:
+                break
+
+            if not data:
+                break
+
+            collected.extend(
+                [
+                    TagSuggestion(
+                        name=tag.get("name", ""),
+                        source="danbooru",
+                        frequency=int(tag.get("post_count", 0) or 0),
+                        description=tag.get("category_name"),
+                    )
+                    for tag in data
+                    if tag.get("name")
+                ]
+            )
+
+            if len(data) < page_size:
+                break
+            page += 1
+
+    return collected[:max_tags]
+
+
+def fetch_e621_tags(query: str, limit: int = 10) -> List[TagSuggestion]:
+    try:
+        with httpx.Client(
+            timeout=5.0,
+            headers={"User-Agent": "sweet-tea-studio/0.1 (autocomplete)"},
+        ) as client:
+            res = client.get(
+                "https://e621.net/tags.json",
+                params={
+                    "search[name_matches]": f"{query}*",
+                    "search[order]": "count",
+                    "limit": limit,
+                },
+            )
+            res.raise_for_status()
+            data = res.json()
+            return [
+                TagSuggestion(
+                    name=tag.get("name", ""),
+                    source="e621",
+                    frequency=int(tag.get("post_count", 0) or 0),
+                    description=tag.get("category"),
+                )
+                for tag in data
+                if tag.get("name")
+            ]
+    except Exception:
+        return []
+
+
+def fetch_all_e621_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int = TAG_CACHE_PAGE_SIZE) -> List[TagSuggestion]:
+    collected: List[TagSuggestion] = []
+    page = 1
+
+    with httpx.Client(
+        timeout=10.0,
+        headers={"User-Agent": "sweet-tea-studio/0.1 (preload)"},
+    ) as client:
+        while len(collected) < max_tags:
+            try:
+                res = client.get(
+                    "https://e621.net/tags.json",
+                    params={
+                        "search[order]": "count",
+                        "limit": page_size,
+                        "page": page,
+                    },
+                )
+                res.raise_for_status()
+                data = res.json()
+            except Exception:
+                break
+
+            if not data:
+                break
+
+            collected.extend(
+                [
+                    TagSuggestion(
+                        name=tag.get("name", ""),
+                        source="e621",
+                        frequency=int(tag.get("post_count", 0) or 0),
+                        description=tag.get("category"),
+                    )
+                    for tag in data
+                    if tag.get("name")
+                ]
+            )
+
+            if len(data) < page_size:
+                break
+            page += 1
+
+    return collected[:max_tags]
+
+
+def refresh_remote_tag_cache_if_stale():
+    sources = {
+        "danbooru": fetch_all_danbooru_tags,
+        "e621": fetch_all_e621_tags,
+    }
+
+    with Session(db_engine) as session:
+        for source, fetcher in sources.items():
+            state = session.exec(
+                select(TagSyncState).where(TagSyncState.source == source)
+            ).first()
+
+            is_stale = True
+            if state:
+                is_stale = datetime.utcnow() - state.last_synced_at > TAG_CACHE_MAX_AGE
+
+            if not is_stale:
+                continue
+
+            remote_tags = fetcher()
+            bulk_upsert_tag_suggestions(session, remote_tags, source)
+
+            if state:
+                state.last_synced_at = datetime.utcnow()
+                state.tag_count = len(remote_tags)
+            else:
+                session.add(
+                    TagSyncState(
+                        source=source,
+                        last_synced_at=datetime.utcnow(),
+                        tag_count=len(remote_tags),
+                    )
+                )
+
+            session.commit()
+
+
+def start_tag_cache_refresh_background():
+    Thread(target=refresh_remote_tag_cache_if_stale, daemon=True).start()
+
+
+@router.get("/tags/suggest", response_model=List[TagSuggestion])
+def suggest_tags(query: str, limit: int = 20):
+    query_like = f"%{query.lower()}%"
+
+    merged: Dict[str, TagSuggestion] = {}
+
+    with Session(db_engine) as session:
+        tag_stmt = (
+            select(Tag)
+            .where(col(Tag.name).ilike(query_like))
+            .order_by(Tag.frequency.desc())
+            .limit(limit * 2)
+        )
+        tags = session.exec(tag_stmt).all()
+        for tag in tags:
+            merged[tag.name.lower()] = TagSuggestion(
+                name=tag.name,
+                source=tag.source or "library",
+                frequency=tag.frequency or 0,
+                description=tag.description,
+            )
+
+    priority = {"library": 0, "prompt": 0, "custom": 0, "danbooru": 1, "e621": 2}
+    sorted_tags = sorted(
+        merged.values(),
+        key=lambda t: (
+            priority.get(t.source, 3),
+            -t.frequency,
+            t.name,
+        ),
+    )
+
+    return sorted_tags[:limit]
 
 
 class TagImportRequest(BaseModel):
