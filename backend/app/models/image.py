@@ -8,6 +8,7 @@ class ImageBase(SQLModel):
     filename: str
     format: str = "png"
     thumbnail_path: Optional[str] = None
+    caption: Optional[str] = None
 
 class Image(ImageBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)

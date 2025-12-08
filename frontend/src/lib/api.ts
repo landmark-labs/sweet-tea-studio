@@ -93,8 +93,11 @@ export const api = {
         return res.json();
     },
 
-    getGallery: async (): Promise<GalleryItem[]> => {
-        const res = await fetch(`${API_BASE}/gallery/`);
+    getGallery: async (search?: string): Promise<GalleryItem[]> => {
+        const params = new URLSearchParams();
+        if (search) params.set("search", search);
+        const query = params.toString() ? `?${params.toString()}` : "";
+        const res = await fetch(`${API_BASE}/gallery/${query}`);
         if (!res.ok) throw new Error("Failed to fetch gallery");
         return res.json();
     },
@@ -103,15 +106,32 @@ export const api = {
         await fetch(`${API_BASE}/gallery/${imageId}`, { method: "DELETE" });
     },
 
-    getPrompts: async (search?: string): Promise<Prompt[]> => {
-        const query = search ? `?search=${encodeURIComponent(search)}` : "";
+    getPrompts: async (search?: string, workflowId?: number): Promise<Prompt[]> => {
+        const params = new URLSearchParams();
+        if (search) params.set("search", search);
+        if (workflowId) params.set("workflow_id", workflowId.toString());
+
+        const query = params.toString() ? `?${params.toString()}` : "";
         const res = await fetch(`${API_BASE}/library/${query}`);
         if (!res.ok) throw new Error("Failed to fetch prompts");
         return res.json();
     },
 
+    getPrompt: async (promptId: number): Promise<Prompt> => {
+        const res = await fetch(`${API_BASE}/library/${promptId}`);
+        if (!res.ok) throw new Error("Failed to fetch prompt");
+        return res.json();
+    },
+
     deletePrompt: async (promptId: number): Promise<void> => {
         await fetch(`${API_BASE}/library/${promptId}`, { method: "DELETE" });
+    },
+
+    getPromptSuggestions: async (query: string): Promise<PromptSuggestion[]> => {
+        const params = new URLSearchParams({ query });
+        const res = await fetch(`${API_BASE}/library/suggest?${params.toString()}`);
+        if (!res.ok) throw new Error("Failed to fetch suggestions");
+        return res.json();
     },
 
     savePrompt: async (prompt: Partial<Prompt>): Promise<Prompt> => {
@@ -158,6 +178,7 @@ export interface Image {
     path: string;
     filename: string;
     created_at: string;
+    caption?: string;
 }
 
 export interface GalleryItem {
@@ -165,7 +186,11 @@ export interface GalleryItem {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     job_params: any;
     prompt?: string;
+    workflow_template_id?: number;
     created_at: string;
+    caption?: string;
+    prompt_tags?: string[];
+    prompt_name?: string;
 }
 
 export interface Prompt {
@@ -176,7 +201,20 @@ export interface Prompt {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     parameters: any;
     preview_image_path?: string;
+    positive_text?: string;
+    negative_text?: string;
+    created_at?: string;
+    updated_at?: string;
     related_images?: string[];
+    tags?: string[];
+}
+
+export interface PromptSuggestion {
+    value: string;
+    type: "tag" | "prompt";
+    frequency: number;
+    source?: string;
+    snippet?: string;
 }
 
 export interface FileItem {
