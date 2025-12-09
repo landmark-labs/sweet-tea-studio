@@ -5,6 +5,8 @@ from typing import Dict, Any, Tuple
 logger = logging.getLogger(__name__)
 
 class WorkflowMerger:
+    """Utility for stitching two ComfyUI workflow graphs together safely."""
+
     @staticmethod
     def merge(graph_a: Dict[str, Any], graph_b: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -23,17 +25,21 @@ class WorkflowMerger:
            - Connect Source Output -> Target Input directly.
            - Remove Target's LoadImage node.
         """
-        
+
         # 1. ID Re-Mapping
         merged_graph = {}
-        
+
         # Helper to get max ID
         def get_max_id(g):
             if not g: return 0
+            # Some graphs include non-numeric keys for metadata; filter them out to
+            # avoid ValueErrors while computing the highest node id.
             ids = [int(k) for k in g.keys() if str(k).isdigit()] # Filters out potentially weird keys
             return max(ids) if ids else 0
 
         max_a = get_max_id(graph_a)
+        # Offset target ids beyond the source id range so links cannot collide even
+        # if the graphs were previously part of the same pipeline.
         offset = max_a + 100  # Safety buffer
         
         # Copy Source Nodes
@@ -60,13 +66,9 @@ class WorkflowMerger:
                     if old_link_node_id in target_map:
                         val[0] = target_map[old_link_node_id]
                     else:
-                        # Linked to something not processed yet? 
-                        # Or external? usually internal.
-                        # If simple sequential processing, it should be fine.
-                        # But loop above doesn't guarantee order.
-                        # Post-process links might be safer, but let's just use int math since offset is constant.
-                        # Wait, if I map as I go, I need everything mapped.
-                        # Actually simpler: just apply offset to ALL link references in Target.
+                        # The link might point to a node we have not visited yet; apply
+                        # the same offset math to preserve connectivity without
+                        # waiting for a second pass.
                         val[0] = str(int(old_link_node_id) + offset)
                         
             merged_graph[new_id] = new_node

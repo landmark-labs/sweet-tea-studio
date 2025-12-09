@@ -1,3 +1,5 @@
+"""HTTP + WebSocket client wrapper for interacting with ComfyUI."""
+
 import json
 import uuid
 import urllib.request
@@ -18,18 +20,26 @@ class ComfyResponseError(Exception):
     pass
 
 class ComfyClient:
+    """Handles synchronous HTTP calls and streaming WebSocket updates to ComfyUI."""
+
     def __init__(self, engine: Engine):
+        # Store engine so URL construction always targets the configured instance.
         self.engine = engine
+        # ComfyUI pairs WebSocket streams to a client id; generate once per client.
         self.client_id = str(uuid.uuid4())
+        # WebSocket handle; lazily connected when a streaming call is made.
         self.ws = None
+        # Network jitter is common; keep backoff tuning as attributes for reuse.
         self._default_backoff = 1
         self._max_backoff = 30
 
     def _get_url(self, path: str) -> str:
         base = self.engine.base_url.rstrip("/")
         if not base.startswith("http"):
-             # Handle cases where user might have entered ws:// for base_url or just ip
-             pass 
+            # Handle cases where the user provided a bare host or ws:// scheme. We
+            # intentionally avoid mutation to prevent accidental double schemes and
+            # let the upstream urllib error message remain accurate for debugging.
+            pass
         return f"{base}{path}"
 
     def connect(self, *, max_attempts: int = 5):
@@ -101,7 +111,7 @@ class ComfyClient:
             error_body = e.read().decode('utf-8')
             raise ComfyResponseError(f"ComfyUI Error {e.code}: {error_body}") from e
         except urllib.error.URLError as e:
-             raise ComfyConnectionError(f"Could not connect to ComfyUI at {self.engine.base_url}. Is it running?") from e
+            raise ComfyConnectionError(f"Could not connect to ComfyUI at {self.engine.base_url}. Is it running?") from e
 
     def interrupt(self):
         """Interrupt the current execution."""
@@ -109,9 +119,9 @@ class ComfyClient:
             req = urllib.request.Request(self._get_url("/interrupt"), data=b"", method="POST")
             urllib.request.urlopen(req, timeout=5)
         except urllib.error.URLError:
-             # If we can't connect to interrupt, it's probably already dead or down.
-             # We log it but don't crash, as this is often called during cleanup
-             print(f"Warning: Could not connect to interrupt ComfyUI at {self.engine.base_url}")
+            # If we can't connect to interrupt, it's probably already dead or down.
+            # We log it but don't crash, as this is often called during cleanup
+            print(f"Warning: Could not connect to interrupt ComfyUI at {self.engine.base_url}")
         except Exception as e:
             print(f"Failed to interrupt: {e}")
 
@@ -129,7 +139,7 @@ class ComfyClient:
             with urllib.request.urlopen(self._get_url(f"/history/{prompt_id}"), timeout=10) as response:
                 return json.loads(response.read())
         except urllib.error.URLError as e:
-             raise ComfyConnectionError(f"Could not retrieve history from {self.engine.base_url}") from e
+            raise ComfyConnectionError(f"Could not retrieve history from {self.engine.base_url}") from e
 
     def get_images(self, prompt_id: str, progress_callback=None) -> List[Dict[str, Any]]:
         """
@@ -148,11 +158,15 @@ class ComfyClient:
                     out = self.ws.recv()
                     backoff = self._default_backoff
                 except websocket.WebSocketTimeoutException:
+                    # A timeout is normal while waiting for new frames; if the ping
+                    # also fails we proactively reconnect to avoid missing events.
                     if not self._ping():
                         self._reconnect_with_backoff(backoff)
                         backoff = min(backoff * 2, self._max_backoff)
                     continue
                 except (websocket.WebSocketException, ConnectionResetError, socket.error):
+                    # Hard disconnect; re-establish the connection and back off so we
+                    # do not hammer a recovering ComfyUI instance.
                     self._reconnect_with_backoff(backoff)
                     backoff = min(backoff * 2, self._max_backoff)
                     continue
@@ -172,11 +186,11 @@ class ComfyClient:
                 else:
                     continue
         except (websocket.WebSocketException, ConnectionResetError) as e:
-             raise ComfyConnectionError(f"WebSocket connection lost during execution.") from e
+            raise ComfyConnectionError(f"WebSocket connection lost during execution.") from e
 
         history = self.get_history(prompt_id)[prompt_id]
         output_images = []
-        
+
         for node_id in history['outputs']:
             node_output = history['outputs'][node_id]
             if 'images' in node_output:
@@ -184,5 +198,5 @@ class ComfyClient:
                     # Construct full URL or path
                     image['url'] = self._get_url(f"/view?filename={image['filename']}&subfolder={image['subfolder']}&type={image['type']}")
                     output_images.append(image)
-        
+
         return output_images

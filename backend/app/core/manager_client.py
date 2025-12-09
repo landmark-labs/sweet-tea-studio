@@ -1,3 +1,5 @@
+"""Thin HTTP wrapper for interacting with the ComfyUI Manager endpoints."""
+
 import urllib.request
 import urllib.error
 import json
@@ -6,16 +8,23 @@ from app.models.engine import Engine
 from app.core.comfy_client import ComfyConnectionError
 
 class ComfyManagerClient:
+    """Client for ComfyUI's Manager API used for extension management."""
+
     def __init__(self, engine: Engine):
+        # Persist the engine configuration so every request uses the correct base URL.
         self.engine = engine
 
     def _get_url(self, path: str) -> str:
         base = self.engine.base_url.rstrip("/")
         if not base.startswith("http"):
-             pass 
+            # Manager endpoints expect an HTTP(S) base; if the engine is missing a
+            # scheme (e.g., "localhost:8188"), trust the caller to provide a valid
+            # address and simply append the path to avoid mangling it here.
+            pass
         return f"{base}{path}"
 
     def _request(self, path: str, method: str = "GET", data: Optional[Dict] = None) -> Any:
+        """Execute a Manager request, handling JSON payloads and common failures."""
         url = self._get_url(path)
         try:
             body = json.dumps(data).encode('utf-8') if data else None
@@ -30,9 +39,11 @@ class ComfyManagerClient:
                     return content.decode('utf-8')
         except urllib.error.HTTPError as e:
             # ComfyUI Manager often returns 400/403 for actionable errors
-             raise Exception(f"Manager Error {e.code}: {e.read().decode('utf-8')}") from e
+            raise Exception(f"Manager Error {e.code}: {e.read().decode('utf-8')}") from e
         except urllib.error.URLError as e:
-             raise ComfyConnectionError(f"Could not connect to ComfyUI at {self.engine.base_url}") from e
+            # Surface network-level failures distinctly so callers can prompt the
+            # user to start ComfyUI or adjust the connection details.
+            raise ComfyConnectionError(f"Could not connect to ComfyUI at {self.engine.base_url}") from e
 
 
     def get_mappings(self, mode: Optional[str] = None) -> List[Any]:
