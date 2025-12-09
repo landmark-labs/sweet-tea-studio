@@ -14,6 +14,7 @@ import { InstallStatusDialog, InstallStatus } from "@/components/InstallStatusDi
 import { PromptConstructor } from "@/components/PromptConstructor";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { Input } from "@/components/ui/input";
+import { useUndoRedo } from "@/lib/undoRedo";
 import { GenerationFeed, GenerationFeedItem } from "@/components/GenerationFeed";
 import { PromptLibraryQuickPanel } from "@/components/PromptLibraryQuickPanel";
 
@@ -119,11 +120,20 @@ export default function PromptStudio() {
   }, [selectedWorkflowId, workflows]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const handleFormChange = (newData: any) => {
-    setFormData(newData);
+  const { registerStateChange } = useUndoRedo();
+
+  const persistForm = (data: any) => {
+    setFormData(data);
     if (selectedWorkflowId) {
-      localStorage.setItem(`workflow_form_${selectedWorkflowId}`, JSON.stringify(newData));
+      localStorage.setItem(`workflow_form_${selectedWorkflowId}`, JSON.stringify(data));
     }
+  };
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handleFormChange = (newData: any) => {
+    const previous = formData;
+    persistForm(newData);
+    registerStateChange("Form updated", previous, newData, persistForm);
   };
 
   const handlePromptUpdate = (field: string, value: string) => {

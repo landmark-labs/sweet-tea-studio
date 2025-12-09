@@ -9,6 +9,7 @@ import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ArrowDownCircle, ExternalLink, FolderOpen, Info, Link2, Rocket, Sparkles, Trash2 } from "lucide-react";
+import { useUndoRedo } from "@/lib/undoRedo";
 
 const comfyModelFolders = [
   {
@@ -144,6 +145,20 @@ export default function Models() {
   const [selectedCategory, setSelectedCategory] = useState<ModelCategory>("Checkpoint");
   const [search, setSearch] = useState("");
   const [targetFolder, setTargetFolder] = useState("checkpoints");
+  const { registerStateChange } = useUndoRedo();
+
+  const applyQueue = (next: DownloadJob[]) => setDownloadQueue(next);
+  const updateQueue = (
+    label: string,
+    builder: (prev: DownloadJob[]) => DownloadJob[],
+    guardable = false
+  ) => {
+    setDownloadQueue((prev) => {
+      const next = builder(prev);
+      registerStateChange(label, prev, next, applyQueue, guardable);
+      return next;
+    });
+  };
 
   const filteredModels = useMemo(() => {
     const term = search.toLowerCase();
@@ -176,13 +191,13 @@ export default function Models() {
       eta: "pending",
     }));
 
-    setDownloadQueue((prev) => [...newJobs, ...prev]);
+    updateQueue("Queued downloads", (prev) => [...newJobs, ...prev]);
     if (source === "Hugging Face") setHfLinks("");
     if (source === "Civitai") setCivitaiLinks("");
   };
 
   const markComplete = (id: string) => {
-    setDownloadQueue((prev) =>
+    updateQueue("Marked download complete", (prev) =>
       prev.map((job) =>
         job.id === id
           ? {
@@ -197,7 +212,12 @@ export default function Models() {
   };
 
   const removeJob = (id: string) => {
-    setDownloadQueue((prev) => prev.filter((job) => job.id !== id));
+    if (!confirm("Remove this download from the queue? You can undo immediately if needed.")) return;
+    updateQueue(
+      "Removed download job",
+      (prev) => prev.filter((job) => job.id !== id),
+      true
+    );
   };
 
   return (

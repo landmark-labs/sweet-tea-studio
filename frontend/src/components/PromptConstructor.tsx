@@ -11,6 +11,7 @@ import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/h
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "@/components/ui/context-menu";
 import { Plus, X, Type, Trash2, CornerDownLeft, Eraser, Check, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useUndoRedo } from "@/lib/undoRedo";
 
 // --- Types ---
 
@@ -163,14 +164,24 @@ export function PromptConstructor({ schema, onUpdate, currentValues, targetField
     const [availableFields, setAvailableFields] = useState<string[]>([]);
 
     // 2. State
+    const { registerStateChange } = useUndoRedo();
+
     const [fieldItems, setFieldItems] = useState<Record<string, PromptItem[]>>({});
     const items = fieldItems[targetField] || [];
 
-    const setItems = (newItems: PromptItem[] | ((prev: PromptItem[]) => PromptItem[])) => {
+    const applyItems = (target: string, value: PromptItem[]) => {
+        setFieldItems(prev => ({ ...prev, [target]: value }));
+    };
+
+    const setItems = (newItems: PromptItem[] | ((prev: PromptItem[]) => PromptItem[]), label = "Prompt items updated", record = true) => {
         if (!targetField) return;
         setFieldItems(prev => {
-            const resolve = typeof newItems === 'function' ? newItems(prev[targetField] || []) : newItems;
-            return { ...prev, [targetField]: resolve };
+            const previousItems = prev[targetField] || [];
+            const resolved = typeof newItems === 'function' ? newItems(previousItems) : newItems;
+            if (record) {
+                registerStateChange(label, previousItems, resolved, (val) => applyItems(targetField, val));
+            }
+            return { ...prev, [targetField]: resolved };
         });
     };
 
@@ -322,9 +333,9 @@ export function PromptConstructor({ schema, onUpdate, currentValues, targetField
 
         if (isDifferent) {
             if (mergedItems.length === 0 && currentVal === "") {
-                if (items.length > 0) setItems([]);
+                if (items.length > 0) setItems([], "Prompt cleared", false);
             } else {
-                setItems(mergedItems);
+                setItems(mergedItems, "Prompt reconstructed", false);
             }
         }
 
