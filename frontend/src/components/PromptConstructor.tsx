@@ -4,7 +4,7 @@ import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, r
 import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
@@ -89,67 +89,100 @@ function SortableItem({ item, index, textIndex, onRemove, onUpdateContent }: { i
                         onChange={(e) => onUpdateContent(item.id, e.target.value)}
                         onBlur={handleBlur}
                         onKeyDown={handleKeyDown}
-                        className="min-h-[64px] h-auto w-full text-xs font-mono border-dashed bg-white shadow-lg ring-2 ring-blue-500 transition-colors resize-y py-2 px-3 rounded-xl"
+                        className="min-h-[32px] h-auto w-full text-[11px] font-mono border-dashed bg-white shadow-lg ring-2 ring-blue-500 transition-colors resize-y py-1 px-2 rounded-md"
                         placeholder="text..."
                     />
                 </div>
             );
         }
 
-        // Text Rendered as Block (Pill)
         return (
-            <div
-                ref={setNodeRef}
-                style={style}
-                className={cn(
-                    "flex items-center gap-2 px-3 py-2 rounded-xl border shadow-sm cursor-grab active:cursor-grabbing select-none group relative text-xs font-semibold w-full min-h-[64px] transition-all hover:-translate-y-0.5 hover:shadow-md",
-                    "bg-slate-50 border-slate-300 text-slate-700 hover:border-slate-400",
-                    isDragging && "ring-2 ring-blue-200 shadow-lg"
-                )}
-                {...attributes}
-                {...listeners}
-                onDoubleClick={() => setIsEditing(true)}
-            >
-                <span className="truncate">{textIndex ? `Text ${textIndex}` : "Text"}</span>
+            <HoverCard openDelay={200}>
+                <HoverCardTrigger asChild>
+                    <div
+                        ref={setNodeRef}
+                        style={style}
+                        className={cn(
+                            "flex items-center gap-2 px-2 py-1 rounded-md border shadow-sm cursor-grab active:cursor-grabbing select-none group relative text-[11px] font-medium w-full min-h-[32px] transition-all hover:-translate-y-0.5 hover:shadow-md",
+                            "bg-slate-50 border-slate-300 text-slate-700 hover:border-slate-400",
+                            isDragging && "ring-2 ring-blue-200 shadow-lg"
+                        )}
+                        {...attributes}
+                        {...listeners}
+                        onDoubleClick={() => setIsEditing(true)}
+                    >
+                        <span className="truncate">{textIndex ? `Text ${textIndex}` : "Text"}</span>
 
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-5 w-5 ml-1 -mr-1 rounded-full text-black/20 hover:text-red-600 hover:bg-black/5"
-                    onPointerDown={(e) => e.stopPropagation()}
-                    onClick={(e) => onRemove(item.id, e)}
-                >
-                    <X size={12} />
-                </Button>
-            </div>
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-4 w-4 ml-1 -mr-1 rounded-full text-black/20 hover:text-red-600 hover:bg-black/5"
+                            onPointerDown={(e) => e.stopPropagation()}
+                            onClick={(e) => onRemove(item.id, e)}
+                        >
+                            <X size={10} />
+                        </Button>
+                    </div>
+                </HoverCardTrigger>
+                <HoverCardContent className="w-80 shadow-xl border-slate-200" side="left" align="start">
+                    <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                            <p className="text-xs font-semibold text-slate-700">Text Segment {textIndex}</p>
+                            <span className="text-[10px] font-mono text-slate-400">{item.content.length} chars</span>
+                        </div>
+                        <ScrollArea className="h-32 rounded-lg border border-slate-100 bg-slate-50">
+                            <p className="p-3 text-[11px] leading-relaxed font-mono whitespace-pre-wrap text-slate-700">
+                                {item.content}
+                            </p>
+                        </ScrollArea>
+                    </div>
+                </HoverCardContent>
+            </HoverCard>
         );
     }
 
     // Snippet Block
     return (
-        <div
-            ref={setNodeRef}
-            style={style}
-            className={cn(
-                "flex items-center gap-2 px-3 py-2 rounded-xl border shadow-sm cursor-grab active:cursor-grabbing select-none group relative text-xs font-semibold w-full min-h-[64px] transition-all hover:-translate-y-0.5 hover:shadow-md",
-                item.color || "bg-slate-100 border-slate-200",
-                isDragging && "ring-2 ring-blue-200 shadow-lg"
-            )}
-            {...attributes}
-            {...listeners}
-        >
-            <span className="truncate">{item.label || item.content.slice(0, 15)}</span>
+        <HoverCard openDelay={200}>
+            <HoverCardTrigger asChild>
+                <div
+                    ref={setNodeRef}
+                    style={style}
+                    className={cn(
+                        "flex items-center gap-2 px-2 py-1 rounded-md border shadow-sm cursor-grab active:cursor-grabbing select-none group relative text-[11px] font-medium w-full min-h-[32px] transition-all hover:-translate-y-0.5 hover:shadow-md",
+                        item.color || "bg-slate-100 border-slate-200",
+                        isDragging && "ring-2 ring-blue-200 shadow-lg"
+                    )}
+                    {...attributes}
+                    {...listeners}
+                >
+                    <span className="truncate">{item.label || item.content.slice(0, 15)}</span>
 
-            <Button
-                variant="ghost"
-                size="icon"
-                className="h-5 w-5 ml-1 -mr-1 rounded-full text-black/20 hover:text-red-600 hover:bg-black/5"
-                onPointerDown={(e) => e.stopPropagation()}
-                onClick={(e) => onRemove(item.id, e)}
-            >
-                <X size={12} />
-            </Button>
-        </div>
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-4 w-4 ml-1 -mr-1 rounded-full text-black/20 hover:text-red-600 hover:bg-black/5"
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onClick={(e) => onRemove(item.id, e)}
+                    >
+                        <X size={10} />
+                    </Button>
+                </div>
+            </HoverCardTrigger>
+            <HoverCardContent className="w-80 shadow-xl border-slate-200" side="left" align="start">
+                <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                        <p className="text-xs font-semibold text-slate-700">{item.label || "Snippet"}</p>
+                        <span className="text-[10px] font-mono text-slate-400">{item.content.length} chars</span>
+                    </div>
+                    <ScrollArea className="h-32 rounded-lg border border-slate-100 bg-slate-50">
+                        <p className="p-3 text-[11px] leading-relaxed font-mono whitespace-pre-wrap text-slate-700">
+                            {item.content}
+                        </p>
+                    </ScrollArea>
+                </div>
+            </HoverCardContent>
+        </HoverCard>
     );
 }
 
@@ -290,13 +323,37 @@ export function PromptConstructor({ schema, onUpdate, currentValues, targetField
         // Safety cast
         const safeVal = String(currentVal);
 
-        selectedMatches.forEach(m => {
+        selectedMatches.forEach((m, idx) => {
             if (m.start > cursor) {
-                newItems.push({
-                    id: `text-${cursor}`, // Stable ID based on position
-                    type: 'text',
-                    content: safeVal.substring(cursor, m.start)
-                });
+                let gap = safeVal.substring(cursor, m.start);
+
+                // Smart logic: Strip the implicit ", " separators from the gap
+                // consistently so we don't spawn "Text" items for them.
+
+                // If this is NOT the first item, strip leading separator
+                if (newItems.length > 0 && gap.startsWith(", ")) {
+                    gap = gap.substring(2);
+                }
+
+                // If this is NOT the last item (which we don't know yet, but we know we are before `m`), 
+                // strip trailing separator. 
+                // Actually, the join puts separator AFTER the previous item. 
+                // So if we have `Prev, Gap, Next`, the string is `Prev` + `, ` + `Gap` + `, ` + `Next`.
+                // The gap captured is `, Gap, `.
+
+                // Leading strip handles the first comma. 
+                // Trailing strip handles the second comma.
+                if (gap.endsWith(", ")) {
+                    gap = gap.substring(0, gap.length - 2);
+                }
+
+                if (gap.length > 0) {
+                    newItems.push({
+                        id: `text-${cursor}`, // Stable ID based on position
+                        type: 'text',
+                        content: gap
+                    });
+                }
             }
             newItems.push({
                 ...m.snippet,
@@ -307,11 +364,19 @@ export function PromptConstructor({ schema, onUpdate, currentValues, targetField
         });
 
         if (cursor < safeVal.length) {
-            newItems.push({
-                id: `text-${cursor}`,
-                type: 'text',
-                content: safeVal.substring(cursor)
-            });
+            let tail = safeVal.substring(cursor);
+            // Handle tail: If previous item exists, strip leading separator
+            if (newItems.length > 0 && tail.startsWith(", ")) {
+                tail = tail.substring(2);
+            }
+
+            if (tail.length > 0) {
+                newItems.push({
+                    id: `text-${cursor}`,
+                    type: 'text',
+                    content: tail
+                });
+            }
         }
 
         // Merge adjacent
@@ -347,7 +412,8 @@ export function PromptConstructor({ schema, onUpdate, currentValues, targetField
         if (!isTargetValid) return;
 
         // Only update parent if local change differs from parent value
-        const compiled = items.map(i => i.content).join("");
+        // Use implicit ", " separator for cleaner linking
+        const compiled = items.map(i => i.content).join(", ");
         const currentVal = valuesRef.current[targetField] || "";
 
         if (compiled !== currentVal) {
@@ -537,10 +603,12 @@ export function PromptConstructor({ schema, onUpdate, currentValues, targetField
 
             {/* 3. Library (Horizontal Scroll)
                 Grid layout keeps snippet chips aligned for tessellation and consistent sizing. */}
-            <div className="bg-white px-2 py-2 border-b shadow-sm shrink-0">
+            <div className="bg-white px-3 py-2 border-b shadow-sm shrink-0">
+                <div className="mb-2">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase block">Snippets (Double-click to Add, long-press to Edit)</span>
+                </div>
                 <ScrollArea className="h-32 w-full">
-                    <div className="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-3 items-start min-h-[50px] p-1">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase w-full block mb-1">Snippets (Double-click to Add, long-press to Edit)</span>
+                    <div className="grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-2 items-start min-h-[40px] p-1">
                         {library.map(snippet => (
                             <ContextMenu key={snippet.id}>
                                 <HoverCard openDelay={120} closeDelay={80}>
@@ -548,7 +616,7 @@ export function PromptConstructor({ schema, onUpdate, currentValues, targetField
                                         <HoverCardTrigger asChild>
                                             <div
                                                 className={cn(
-                                                    "flex items-center gap-2 px-3 py-2 rounded-xl border shadow-sm cursor-pointer select-none group relative text-xs font-semibold min-h-[56px] transition-all hover:-translate-y-0.5 hover:shadow-md",
+                                                    "flex items-center gap-2 px-2 py-1.5 rounded-md border shadow-sm cursor-pointer select-none group relative text-[11px] font-medium min-h-[32px] transition-all hover:-translate-y-0.5 hover:shadow-md",
                                                     snippet.color,
                                                     editingSnippetId === snippet.id ? "ring-2 ring-amber-400 ring-offset-1" : "",
                                                 )}
@@ -570,21 +638,21 @@ export function PromptConstructor({ schema, onUpdate, currentValues, targetField
                                                 <Button
                                                     variant="ghost"
                                                     size="icon"
-                                                    className="h-5 w-5 -mr-0.5 ml-1 rounded-full opacity-0 hover:opacity-100 group-hover:opacity-100 bg-white/30 hover:bg-white/60"
+                                                    className="h-4 w-4 -mr-0.5 ml-1 rounded-full opacity-0 hover:opacity-100 group-hover:opacity-100 bg-white/30 hover:bg-white/60"
                                                     onClick={(e) => editSnippet(snippet, e)}
                                                     title="Edit Snippet"
                                                 >
-                                                    <Pencil size={12} className="text-slate-700" />
+                                                    <Pencil size={10} className="text-slate-700" />
                                                 </Button>
 
                                                 <Button
                                                     variant="ghost"
                                                     size="icon"
-                                                    className="h-5 w-5 -mr-1 rounded-full opacity-0 hover:opacity-100 group-hover:opacity-100 bg-white/20 hover:bg-red-100/80"
+                                                    className="h-4 w-4 -mr-1 rounded-full opacity-0 hover:opacity-100 group-hover:opacity-100 bg-white/20 hover:bg-red-100/80"
                                                     onClick={(e) => deleteFromLibrary(snippet.id, e)}
                                                     title="Delete Snippet"
                                                 >
-                                                    <Trash2 size={12} className="text-slate-700 hover:text-red-600" />
+                                                    <Trash2 size={10} className="text-slate-700 hover:text-red-600" />
                                                 </Button>
                                             </div>
                                         </HoverCardTrigger>
@@ -636,7 +704,7 @@ export function PromptConstructor({ schema, onUpdate, currentValues, targetField
                             strategy={rectSortingStrategy}
                         >
                             {/* Canvas grid mirrors library spacing so blocks tessellate cleanly when rearranged. */}
-                            <div className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] auto-rows-[minmax(80px,auto)] items-start gap-3 min-h-[150px] p-4 rounded-xl border-2 border-dashed border-slate-300 bg-white/80 transition-colors hover:bg-white/100 relative group/canvas">
+                            <div className="grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] auto-rows-[minmax(32px,auto)] items-start gap-2 min-h-[100px] p-2 rounded-xl border-2 border-dashed border-slate-300 bg-white/80 transition-colors hover:bg-white/100 relative group/canvas">
 
                                 {/* Floating Controls */}
                                 {targetField && (
@@ -681,10 +749,10 @@ export function PromptConstructor({ schema, onUpdate, currentValues, targetField
                                 })}
                                 <Button
                                     variant="ghost"
-                                    className="h-10 border border-dashed text-slate-500 hover:text-slate-700 hover:bg-white text-xs gap-2 ml-2 justify-start"
+                                    className="h-8 border border-dashed text-slate-500 hover:text-slate-700 hover:bg-white text-[10px] gap-1 ml-1 justify-start"
                                     onClick={addTextSpacer}
                                 >
-                                    <Type size={12} /> Add Text
+                                    <Type size={10} /> Add Text
                                 </Button>
                             </div>
                         </SortableContext>

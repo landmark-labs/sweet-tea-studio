@@ -1,91 +1,80 @@
-import React, { useEffect, useState } from "react";
-import { api, GalleryItem } from "@/lib/api";
+import React, { useState } from "react";
+import { GalleryItem } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { RefreshCw, Trash2, Check, CheckCircle2, RotateCcw } from "lucide-react";
 import { Button } from "./ui/button";
 
 interface RunningGalleryProps {
-    onRefresh?: number;
-    onSelect?: (item: GalleryItem) => void;
+    images: GalleryItem[];
+    selectedIds: Set<number>;
+    onRefresh?: () => void;
+    onSelectionChange?: (ids: Set<number>) => void;
     onLoadParams?: (item: GalleryItem) => void;
+    onDelete?: (ids: Set<number>) => void;
+    onPreview?: (item: GalleryItem) => void;
 }
 
-export function RunningGallery({ onRefresh, onSelect, onLoadParams }: RunningGalleryProps) {
-    const [images, setImages] = useState<GalleryItem[]>([]);
-    const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+export function RunningGallery({
+    images,
+    selectedIds,
+    onRefresh,
+    onSelectionChange,
+    onLoadParams,
+    onDelete,
+    onPreview
+}: RunningGalleryProps) {
     const [contextMenu, setContextMenu] = useState<{ x: number, y: number, item: GalleryItem } | null>(null);
 
-    const loadGallery = async () => {
-        try {
-            // Include kept_only=false to show everything, but maybe we want to filter? 
-            // Current behavior shows all recent.
-            const allImages = await api.getGallery();
-            setImages(allImages.slice(0, 50));
-        } catch (e) {
-            console.error("Failed to load running gallery", e);
-        }
-    };
-
-    useEffect(() => {
-        loadGallery();
-        // Close context menu on global click
+    // Context menu close
+    React.useEffect(() => {
         const closeMenu = () => setContextMenu(null);
         window.addEventListener("click", closeMenu);
         return () => window.removeEventListener("click", closeMenu);
-    }, [onRefresh]);
+    }, []);
 
     const handleCardClick = (e: React.MouseEvent, item: GalleryItem) => {
+        // Handle selection modifiers
         if (e.ctrlKey || e.metaKey || e.shiftKey) {
             e.stopPropagation();
+            if (!onSelectionChange) return;
+
             const newSelected = new Set(selectedIds);
             if (newSelected.has(item.image.id)) {
                 newSelected.delete(item.image.id);
             } else {
                 newSelected.add(item.image.id);
             }
-            setSelectedIds(newSelected);
+            onSelectionChange(newSelected);
         } else {
-            if (selectedIds.size > 0) {
-                setSelectedIds(new Set());
+            // Normal click usually means "Preview this"
+            // But we also want to clear selection if we had one?
+            // User expectation: Click = Preview.
+            // If selection active, Click off = Clear selection?
+
+            if (selectedIds.size > 0 && onSelectionChange) {
+                onSelectionChange(new Set());
             }
-            onSelect?.(item);
+            if (onPreview) onPreview(item);
         }
     };
 
     const handleContextMenu = (e: React.MouseEvent, item: GalleryItem) => {
         e.preventDefault();
-        const menuWidth = 160; // w-40 = 10rem = 160px
-        const menuHeight = 100; // Approximate max height
-
+        const menuWidth = 160;
+        const menuHeight = 100;
         let x = e.clientX;
         let y = e.clientY;
 
-        // Prevent Right Overflow
-        if (x + menuWidth > window.innerWidth) {
-            x = window.innerWidth - menuWidth - 8;
-        }
-
-        // Prevent Bottom Overflow
-        if (y + menuHeight > window.innerHeight) {
-            y = window.innerHeight - menuHeight - 8;
-        }
+        if (x + menuWidth > window.innerWidth) x = window.innerWidth - menuWidth - 8;
+        if (y + menuHeight > window.innerHeight) y = window.innerHeight - menuHeight - 8;
 
         setContextMenu({ x, y, item });
     };
 
-    const handleDeleteSelected = async () => {
+    const handleDeleteSelected = () => {
+        if (!onDelete || selectedIds.size === 0) return;
         if (!confirm(`Delete ${selectedIds.size} images?`)) return;
-
-        try {
-            await Promise.all(
-                Array.from(selectedIds).map(id => api.deleteImage(id))
-            );
-            setSelectedIds(new Set());
-            loadGallery();
-        } catch (e) {
-            alert("Failed to delete some images");
-            loadGallery();
-        }
+        onDelete(selectedIds);
     };
 
     return (
@@ -100,13 +89,13 @@ export function RunningGallery({ onRefresh, onSelect, onLoadParams }: RunningGal
                             <Trash2 className="w-3 h-3" />
                         </Button>
                     )}
-                    <button onClick={void loadGallery} className="text-slate-500 hover:text-slate-800">
+                    <button onClick={onRefresh} className="text-slate-500 hover:text-slate-800" title="Refresh Gallery">
                         <RefreshCw className="w-4 h-4" />
                     </button>
                 </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            <div className="flex-1 overflow-y-auto p-2 flex flex-col gap-2">
                 {images.map((item) => {
                     const isSelected = selectedIds.has(item.image.id);
                     return (
@@ -149,6 +138,7 @@ export function RunningGallery({ onRefresh, onSelect, onLoadParams }: RunningGal
                 <div
                     className="fixed z-50 bg-white border border-slate-200 rounded shadow-xl py-1 w-40 text-sm"
                     style={{ top: contextMenu.y, left: contextMenu.x }}
+                    onClick={(e) => e.stopPropagation()}
                 >
                     <div
                         className="px-3 py-2 hover:bg-slate-100 cursor-pointer flex items-center gap-2"

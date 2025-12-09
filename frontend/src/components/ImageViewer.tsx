@@ -21,6 +21,7 @@ interface ImageViewerProps {
     onImageUpdate?: (image: ApiImage) => void;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     onRegenerate?: (item: any) => void;
+    onDelete?: (imageId: number) => void;
 }
 
 export function ImageViewer({
@@ -31,7 +32,8 @@ export function ImageViewer({
     autoCleanup = true,
     onAutoCleanupChange,
     onImageUpdate,
-    onRegenerate
+    onRegenerate,
+    onDelete
 }: ImageViewerProps) {
     const [selectedIndex, setSelectedIndex] = React.useState<number>(0);
     const [contextMenu, setContextMenu] = React.useState<{ x: number, y: number } | null>(null);
@@ -101,6 +103,29 @@ export function ImageViewer({
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
     }, [currentImage, images]);
+    // Auto-Discard Logic
+    // We track the ID of the image we were just looking at.
+    const lastImageIdRef = React.useRef<number | null>(currentImage?.id || null);
+
+    React.useEffect(() => {
+        const lastId = lastImageIdRef.current;
+        const currentId = currentImage?.id;
+
+        // If we switched to a DIFFERENT image (or no image), process the OLD one
+        if (lastId && lastId !== currentId && effectiveAutoCleanup) {
+            // Find the old image object in our list if possible, or we need to know its keep status.
+            // Since 'images' props might have changed (new generation added), the old image object might be shifted.
+            const oldImage = images.find(img => img.id === lastId);
+
+            if (oldImage && !oldImage.is_kept) {
+                console.log("Auto-discarding image:", lastId);
+                onDelete?.(lastId);
+            }
+        }
+
+        // Update ref to current
+        lastImageIdRef.current = currentId || null;
+    }, [currentImage?.id, effectiveAutoCleanup, images, onDelete]);
 
     // Close menu on global click
     React.useEffect(() => {
@@ -367,79 +392,41 @@ export function ImageViewer({
                     </div>
                 )}
 
-                <div className="p-6 border-t bg-white h-64 overflow-y-auto">
-                    <div className="flex items-start justify-between mb-4">
-                        <div>
-                            <h2 className="text-xl font-bold text-slate-900 truncate max-w-md">
-                                {currentImage?.filename}
-                            </h2>
-                            <p className="text-sm text-slate-500">
-                                {(() => {
-                                    try {
-                                        return currentImage?.created_at ? new Date(currentImage.created_at).toLocaleString() : "External File";
-                                    } catch (e) {
-                                        return "Unknown Date";
-                                    }
-                                })()}
-                            </p>
-                        </div>
-                        <div className="flex flex-col items-end gap-2">
-                            <div className="flex gap-2">
-                                <Button
-                                    variant={currentImage?.is_kept ? "default" : "outline"}
-                                    size="sm"
-                                    onClick={(e) => toggleKeep(e)}
-                                    className={currentImage?.is_kept ? "bg-green-600 hover:bg-green-700" : ""}
-                                >
-                                    {currentImage?.is_kept ? <Check className="w-4 h-4 mr-2" /> : <Check className="w-4 h-4 mr-2 opacity-50" />}
-                                    {currentImage?.is_kept ? "Kept" : "Keep"}
-                                </Button>
-                                <Button variant="outline" size="sm" onClick={handleDownload}>
-                                    <Download className="w-4 h-4 mr-2" /> Download
-                                </Button>
-                            </div>
-
-                            {/* Auto Cleanup Toggle */}
-                            <div className="flex items-center gap-2 px-2 py-1 bg-slate-50 rounded border border-slate-100">
-                                <Switch
-                                    id="auto-cleanup"
-                                    checked={effectiveAutoCleanup}
-                                    onCheckedChange={handleAutoCleanupChange}
-                                    className="scale-75"
-                                />
-                                <Label htmlFor="auto-cleanup" className="text-xs text-slate-600 cursor-pointer">
-                                    Auto-discard unkept
-                                </Label>
-                            </div>
-
-                            {/* Collection Selector */}
+                {/* Bottom Panel: Toolbar + Metadata - Takes ~35% of container height */}
+                <div className="border-t bg-white flex flex-col" style={{ height: '35%', minHeight: '200px' }}>
+                    {/* Toolbar Row */}
+                    <div className="px-4 py-2 border-b bg-slate-50 flex flex-wrap items-center justify-between gap-2 flex-shrink-0">
+                        {/* Left: Actions */}
+                        <div className="flex items-center gap-2">
+                            {imgWorkflows.length > 0 && (
+                                <div className="relative group/wf">
+                                    <Button variant="outline" size="sm" className="h-7 text-xs gap-1 border-blue-200 hover:bg-blue-50 text-blue-700">
+                                        Use in Workflow ▶
+                                    </Button>
+                                    <div className="absolute left-0 top-full mt-1 hidden group-hover/wf:block bg-white border border-slate-200 rounded-md shadow-lg py-1 w-48 max-h-64 overflow-y-auto z-50">
+                                        {imgWorkflows.map(w => (
+                                            <div key={w.id} className="px-3 py-2 hover:bg-slate-100 cursor-pointer truncate text-xs" onClick={() => onSelectWorkflow?.(String(w.id), imagePath || undefined)}>
+                                                {w.name}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                             <Popover open={isCollectionOpen} onOpenChange={setIsCollectionOpen}>
                                 <PopoverTrigger asChild>
-                                    <Button variant="outline" size="sm" className="w-[180px] justify-start text-xs truncate">
-                                        {currentImage?.collection_id ? (
-                                            <><FolderCheck className="h-4 w-4 mr-2 text-blue-500" /> {collections.find(c => c.id === currentImage.collection_id)?.name || "In Collection"}</>
-                                        ) : (
-                                            <><FolderPlus className="h-4 w-4 mr-2" /> Add to Collection</>
-                                        )}
+                                    <Button variant="outline" size="sm" className="h-7 text-xs truncate border-slate-200">
+                                        {currentImage?.collection_id ? (<><FolderCheck className="h-3 w-3 mr-1 text-blue-500" />{collections.find(c => c.id === currentImage.collection_id)?.name || "Collection"}</>) : (<><FolderPlus className="h-3 w-3 mr-1" />Add to Collection</>)}
                                     </Button>
                                 </PopoverTrigger>
-                                <PopoverContent className="p-0 w-[200px]" align="end">
+                                <PopoverContent className="p-0 w-[200px]" align="start">
                                     <Command>
-                                        <CommandInput placeholder="Search collections..." />
+                                        <CommandInput placeholder="Search..." className="h-8 text-xs" />
                                         <CommandList>
-                                            <CommandEmpty>No collections found.</CommandEmpty>
+                                            <CommandEmpty>No collections.</CommandEmpty>
                                             <CommandGroup>
                                                 {collections.map((col) => (
-                                                    <CommandItem
-                                                        key={col.id}
-                                                        value={col.name}
-                                                        onSelect={() => handleToggleCollection(col.id)}
-                                                    >
-                                                        <div className={cn("mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary",
-                                                            currentImage?.collection_id === col.id ? "bg-primary text-primary-foreground" : "opacity-50 [&_svg]:invisible"
-                                                        )}>
-                                                            <Check className={cn("h-4 w-4")} />
-                                                        </div>
+                                                    <CommandItem key={col.id} value={col.name} onSelect={() => handleToggleCollection(col.id)} className="text-xs">
+                                                        <div className={cn("mr-2 flex h-3 w-3 items-center justify-center rounded-sm border", currentImage?.collection_id === col.id ? "bg-primary text-primary-foreground" : "opacity-50")}><Check className="h-3 w-3" /></div>
                                                         {col.name}
                                                     </CommandItem>
                                                 ))}
@@ -448,75 +435,87 @@ export function ImageViewer({
                                     </Command>
                                 </PopoverContent>
                             </Popover>
-
+                        </div>
+                        {/* Right: Keep/Download/Auto */}
+                        <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1.5 px-2 py-0.5 bg-white rounded border h-7">
+                                <Switch id="auto-cleanup" checked={effectiveAutoCleanup} onCheckedChange={handleAutoCleanupChange} className="scale-75" />
+                                <Label htmlFor="auto-cleanup" className="text-[10px] text-slate-500 cursor-pointer uppercase font-semibold">Auto-Discard</Label>
+                            </div>
+                            <Button variant={currentImage?.is_kept ? "default" : "outline"} size="sm" onClick={(e) => toggleKeep(e)} className={cn("h-7 text-xs", currentImage?.is_kept ? "bg-green-600 hover:bg-green-700 text-white" : "")}>
+                                <Check className="w-3 h-3 mr-1" />{currentImage?.is_kept ? "Kept" : "Keep"}
+                            </Button>
+                            <Button variant="outline" size="sm" onClick={handleDownload} className="h-7 text-xs">
+                                <Download className="w-3 h-3 mr-1" />Download
+                            </Button>
                         </div>
                     </div>
 
-                    {metadata && (
-                        <div className="grid grid-cols-2 gap-x-8 gap-y-4 text-sm">
-                            {metadata.prompt && (
-                                <div className="col-span-2">
-                                    <span className="font-semibold text-slate-700 block mb-1">Prompt</span>
-                                    <p className="text-slate-600 bg-slate-50 p-2 rounded border">{String(metadata.prompt)}</p>
-                                </div>
-                            )}
-                            {metadata.job_params && typeof metadata.job_params === 'object' && (
-                                <>
-                                    {Object.entries(metadata.job_params as Record<string, unknown>).map(([k, v]) => (
-                                        <div key={k}>
-                                            <span className="font-semibold text-slate-700 capitalize">{k.replace(/_/g, ' ')}:</span>
-                                            <span className="ml-2 text-slate-600">{String(v)}</span>
-                                        </div>
-                                    ))}
-                                </>
-                            )}
+                    {/* Metadata Section - Scrollable */}
+                    <div className="flex-1 overflow-y-auto px-4 py-3">
+                        {/* Header */}
+                        <div className="flex items-baseline justify-between mb-3">
+                            <h3 className="text-sm font-semibold text-slate-800 truncate">{currentImage?.filename}</h3>
+                            <span className="text-[10px] text-slate-400 font-mono ml-2 flex-shrink-0">{currentImage?.created_at ? new Date(currentImage.created_at).toLocaleString() : ""}</span>
                         </div>
-                    )}
+
+                        {metadata && (
+                            <div className="space-y-3">
+                                {/* Positive Prompt */}
+                                {(metadata.prompt || (metadata.job_params as Record<string, unknown>)?.positive || (metadata.job_params as Record<string, unknown>)?.positive_prompt) && (
+                                    <div>
+                                        <span className="font-medium text-slate-500 text-[10px] uppercase block mb-1">Positive Prompt</span>
+                                        <p className="text-slate-700 bg-slate-50 p-2 rounded border text-[11px] font-mono max-h-16 overflow-y-auto whitespace-pre-wrap leading-relaxed">
+                                            {String(metadata.prompt || (metadata.job_params as Record<string, unknown>)?.positive || (metadata.job_params as Record<string, unknown>)?.positive_prompt || '')}
+                                        </p>
+                                    </div>
+                                )}
+
+                                {/* Negative Prompt */}
+                                {((metadata.job_params as Record<string, unknown>)?.negative || (metadata.job_params as Record<string, unknown>)?.negative_prompt) && (
+                                    <div>
+                                        <span className="font-medium text-slate-500 text-[10px] uppercase block mb-1">Negative Prompt</span>
+                                        <p className="text-slate-700 bg-slate-50 p-2 rounded border text-[11px] font-mono max-h-16 overflow-y-auto whitespace-pre-wrap leading-relaxed">
+                                            {String((metadata.job_params as Record<string, unknown>)?.negative || (metadata.job_params as Record<string, unknown>)?.negative_prompt || '')}
+                                        </p>
+                                    </div>
+                                )}
+
+                                {/* Other Params Grid */}
+                                {metadata.job_params && typeof metadata.job_params === 'object' && (
+                                    <div className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-x-4 gap-y-2 pt-2 border-t border-slate-100">
+                                        {Object.entries(metadata.job_params as Record<string, unknown>)
+                                            .filter(([k]) =>
+                                                !['positive', 'positive_prompt', 'prompt', 'negative', 'negative_prompt'].includes(k) &&
+                                                !k.toLowerCase().includes('cliptextencode')
+                                            )
+                                            .map(([k, v]) => (
+                                                <div key={k} className="min-w-0">
+                                                    <span className="font-medium text-slate-500 capitalize text-[9px] uppercase tracking-wide block truncate">{k.replace(/_/g, ' ')}</span>
+                                                    <span className="text-slate-800 font-mono text-xs block truncate" title={String(v)}>{String(v)}</span>
+                                                </div>
+                                            ))
+                                        }
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
                 </div>
+
+                {/* Lightbox Overlay */}
+                {lightboxOpen && (
+                    <div className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center" onWheel={handleWheel} onContextMenu={handleContextMenu}>
+                        <div className="absolute top-4 right-4 z-[101] flex gap-2">
+                            <div className="bg-white/10 text-white px-3 py-1 rounded backdrop-blur-md text-xs font-mono">{Math.round(scale * 100)}%</div>
+                            <button onClick={() => setLightboxOpen(false)} className="text-white hover:text-red-400"><X className="w-8 h-8" /></button>
+                        </div>
+                        <div className="w-full h-full flex items-center justify-center" onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp} style={{ cursor: scale > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default' }}>
+                            <img src={imageUrl} alt="Full Screen" style={{ transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`, transition: isDragging ? 'none' : 'transform 0.1s ease-out', maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} draggable={false} />
+                        </div>
+                    </div>
+                )}
             </div>
-
-            {/* Lightbox Overlay */}
-            {lightboxOpen && (
-                <div
-                    className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center overflow-hidden"
-                    onWheel={handleWheel}
-                    onContextMenu={handleContextMenu}
-                >
-                    <div className="absolute top-4 right-4 z-[101] flex gap-2">
-                        <div className="bg-white/10 text-white px-3 py-1 rounded backdrop-blur-md text-xs font-mono">
-                            {Math.round(scale * 100)}%
-                        </div>
-                        <button
-                            onClick={() => setLightboxOpen(false)}
-                            className="text-white hover:text-red-400 transition-colors"
-                        >
-                            <X className="w-8 h-8" />
-                        </button>
-                    </div>
-
-                    <div
-                        className="w-full h-full flex items-center justify-center"
-                        onMouseDown={handleMouseDown}
-                        onMouseMove={handleMouseMove}
-                        onMouseUp={handleMouseUp}
-                        onMouseLeave={handleMouseUp}
-                        style={{ cursor: scale > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default' }}
-                    >
-                        <img
-                            src={imageUrl}
-                            alt="Full Screen"
-                            style={{
-                                transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
-                                transition: isDragging ? 'none' : 'transform 0.1s ease-out',
-                                maxWidth: '100%',
-                                maxHeight: '100%',
-                                objectFit: 'contain'
-                            }}
-                            draggable={false}
-                        />
-                    </div>
-                </div>
-            )}
         </>
     );
 }

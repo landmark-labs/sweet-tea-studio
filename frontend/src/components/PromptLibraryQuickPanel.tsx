@@ -31,7 +31,7 @@ export function PromptLibraryQuickPanel({
   if (!open) return null;
 
   return (
-    <div className="absolute top-4 right-4 z-30 w-96 pointer-events-auto">
+    <div className="w-96 pointer-events-auto">
       <Card className="shadow-xl border-slate-200 bg-white/95 backdrop-blur">
         <div className="flex items-center justify-between px-4 py-2 border-b border-slate-200">
           <div className="font-semibold text-slate-800 text-sm">Prompt Library</div>

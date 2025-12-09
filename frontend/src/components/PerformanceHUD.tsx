@@ -50,7 +50,7 @@ export function PerformanceHUD({ className, refreshMs = 3000 }: PerformanceHUDPr
       <Card className="shadow-xl border-slate-200 bg-white/95 backdrop-blur">
         <div className="flex items-center justify-between px-4 py-2 border-b border-slate-200">
           <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
-            <Gauge className="w-4 h-4 text-blue-600" />
+            <Gauge className={cn("w-4 h-4 text-blue-600", loading && "animate-pulse")} />
             Performance HUD
           </div>
           <div className="flex items-center gap-2">
@@ -132,7 +132,7 @@ export function PerformanceHUD({ className, refreshMs = 3000 }: PerformanceHUDPr
               <div className="text-[11px] text-slate-500">rolling average</div>
             </div>
 
-            {loading && <div className="text-xs text-slate-400">Refreshing metrics…</div>}
+
           </div>
         )}
       </Card>

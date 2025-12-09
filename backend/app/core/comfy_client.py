@@ -182,6 +182,32 @@ class ComfyClient:
                             break # Execution is done
 
                 elif isinstance(out, bytes):
+                    # ComfyUI Binary Message Format:
+                    # 4 bytes: Event Type (0=Non-Binary, 1=Preview Image, 2=Latent Preview)
+                    # 4 bytes: Image Type (1=JPEG, 2=PNG)
+                    # Remaining: Image Data
+                    
+                    if len(out) > 8:
+                        import struct
+                        import base64
+                        
+                        event_type = struct.unpack('>I', out[0:4])[0] # Big-Endian Unsigned Int
+                        
+                        if event_type == 1: # PREVIEW_IMAGE
+                            image_type = struct.unpack('>I', out[4:8])[0]
+                            image_data = out[8:]
+                            
+                            # Convert to base64 for easy transport over existing text-based websocket
+                            b64_img = base64.b64encode(image_data).decode('utf-8')
+                            
+                            if progress_callback:
+                                prefix = "data:image/jpeg;base64," if image_type == 1 else "data:image/png;base64,"
+                                progress_callback({
+                                    "type": "preview",
+                                    "data": {
+                                        "blob": f"{prefix}{b64_img}"
+                                    }
+                                })
                     continue
                 else:
                     continue

@@ -26,7 +26,7 @@ export default function Layout() {
           collapsed ? "w-16" : "w-72"
         )}
       >
-        <div className={cn("p-4 border-b border-border/70 flex items-center", collapsed ? "justify-center" : "justify-between")}> 
+        <div className={cn("p-4 border-b border-border/70 flex items-center", collapsed ? "justify-center" : "justify-between")}>
           {!collapsed && (
             <div>
               <div className="flex items-baseline gap-2">
@@ -76,15 +76,15 @@ export default function Layout() {
       </aside>
       {/* Main Content */}
       <main className="flex-1 overflow-auto bg-gradient-to-b from-surface/50 to-background">
-        <div className="mx-auto max-w-7xl p-6 space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="w-full h-full flex flex-col">
+          <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4 flex-none border-b border-border/50 bg-surface/50">
             <div>
               <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Sweet Tea Studio</p>
-              <h2 className="text-2xl font-semibold">Unified creation desk</h2>
+              <h2 className="text-lg font-semibold">Unified creation desk</h2>
             </div>
             <UndoRedoBar />
           </div>
-          <div className="glass-card p-4">
+          <div className="flex-1 overflow-hidden relative">
             <Outlet />
           </div>
         </div>
