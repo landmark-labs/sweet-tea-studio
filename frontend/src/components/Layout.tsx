@@ -12,6 +12,7 @@ const navItems = [
   { to: "/workflows", label: "Workflows", icon: Workflow },
   { to: "/models", label: "Models", icon: HardDrive },
 ];
+import { PerformanceHUD } from "@/components/PerformanceHUD";
 
 export default function Layout() {
   const [collapsed, setCollapsed] = useState(false);
@@ -88,6 +89,7 @@ export default function Layout() {
           </div>
         </div>
       </main>
+      <PerformanceHUD />
     </div>
   );
 }

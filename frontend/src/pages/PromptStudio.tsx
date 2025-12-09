@@ -15,6 +15,8 @@ import { PromptConstructor } from "@/components/PromptConstructor";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { Input } from "@/components/ui/input";
 import { useUndoRedo } from "@/lib/undoRedo";
+import { GenerationFeed, GenerationFeedItem } from "@/components/GenerationFeed";
+import { PromptLibraryQuickPanel } from "@/components/PromptLibraryQuickPanel";
 
 export default function PromptStudio() {
   const [engines, setEngines] = useState<Engine[]>([]);
@@ -73,6 +75,9 @@ export default function PromptStudio() {
 
   // Add a refresh key for gallery
   const [galleryRefresh, setGalleryRefresh] = useState(0);
+
+  const [generationFeed, setGenerationFeed] = useState<GenerationFeedItem[]>([]);
+  const [promptPanelOpen, setPromptPanelOpen] = useState(true);
 
   // Install State
   const [installOpen, setInstallOpen] = useState(false);
@@ -157,9 +162,11 @@ export default function PromptStudio() {
     }
   }, [selectedWorkflowId]);
 
+  const submitPromptSearch = () => loadPromptLibrary(promptSearch);
+
   const handlePromptSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    loadPromptLibrary(promptSearch);
+    submitPromptSearch();
   };
 
   const handlePromptSearchChange = (value: string) => {
@@ -173,6 +180,25 @@ export default function PromptStudio() {
       .getPromptSuggestions(value)
       .then(setPromptHints)
       .catch((err) => console.error(err));
+  };
+
+  const trackFeedStart = (jobId: number) => {
+    setGenerationFeed((prev) => [
+      {
+        jobId,
+        status: "queued",
+        progress: 0,
+        previewPath: null,
+        startedAt: new Date().toISOString(),
+      },
+      ...prev.filter((item) => item.jobId !== jobId),
+    ].slice(0, 8));
+  };
+
+  const updateFeed = (jobId: number, updates: Partial<GenerationFeedItem>) => {
+    setGenerationFeed((prev) =>
+      prev.map((item) => (item.jobId === jobId ? { ...item, ...updates } : item))
+    );
   };
 
   const applyPrompt = (prompt: PromptLibraryItem) => {
@@ -279,15 +305,28 @@ export default function PromptStudio() {
 
       if (data.type === "status") {
         setJobStatus(data.status);
+        updateFeed(lastJobId, { status: data.status });
       } else if (data.type === "progress") {
         const { value, max } = data.data;
         setProgress((value / max) * 100);
+        updateFeed(lastJobId, { progress: (value / max) * 100, status: "processing" });
       } else if (data.type === "executing") {
         setJobStatus("processing");
+        updateFeed(lastJobId, { status: "processing" });
       } else if (data.type === "completed") {
         setJobStatus("completed");
         setProgress(100);
         setJobImages(data.images);
+
+        if (data.images && data.images.length > 0) {
+          updateFeed(lastJobId, {
+            status: "completed",
+            progress: 100,
+            previewPath: data.images[0].path,
+          });
+        } else {
+          updateFeed(lastJobId, { status: "completed", progress: 100 });
+        }
 
         if (data.images && data.images.length > 0) {
           setPreviewPath(data.images[0].path);
@@ -300,6 +339,7 @@ export default function PromptStudio() {
       } else if (data.type === "error") {
         setJobStatus("failed");
         setError(data.message);
+        updateFeed(lastJobId, { status: "failed" });
       }
     };
 
@@ -397,6 +437,7 @@ export default function PromptStudio() {
         data
       );
       setLastJobId(job.id);
+      trackFeedStart(job.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create job");
     } finally {
@@ -476,7 +517,7 @@ export default function PromptStudio() {
   }
 
   return (
-    <div className="h-[calc(100vh-4rem)] bg-slate-100 flex overflow-hidden">
+    <div className="h-[calc(100vh-4rem)] bg-slate-100 flex overflow-hidden relative">
 
       {/* 1. Left Column (Split: Explorer / Constructor) */}
       <div className="w-[480px] flex-none bg-white border-r hidden xl:block overflow-hidden">
@@ -509,7 +550,12 @@ export default function PromptStudio() {
       {/* 2. Configuration (Left) */}
       <div className="w-[340px] flex-none bg-white border-r overflow-y-auto p-4 flex flex-col gap-4">
         <div>
-          <h2 className="text-lg font-bold mb-4">Configuration</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-bold">Configuration</h2>
+            <Button variant="outline" size="sm" onClick={() => setPromptPanelOpen(!promptPanelOpen)}>
+              {promptPanelOpen ? "Hide" : "Show"} library
+            </Button>
+          </div>
           <div className="space-y-4">
             <div className="space-y-2">
               <label className="text-xs font-semibold text-slate-500 uppercase">Engine</label>
@@ -798,6 +844,29 @@ export default function PromptStudio() {
       <div className="w-72 flex-none bg-white border-l hidden lg:block">
         <RunningGallery onRefresh={galleryRefresh} onSelect={handleGallerySelect} />
       </div>
+
+      <GenerationFeed
+        items={generationFeed}
+        onSelectPreview={(path) => {
+          setPreviewPath(path);
+          setPreviewMetadata({ created_at: new Date().toISOString() });
+        }}
+      />
+
+      <PromptLibraryQuickPanel
+        open={promptPanelOpen}
+        prompts={prompts}
+        searchValue={promptSearch}
+        loading={promptLoading}
+        error={promptError}
+        onSearchChange={handlePromptSearchChange}
+        onSearchSubmit={submitPromptSearch}
+        onClose={() => setPromptPanelOpen(false)}
+        onApply={(p) => {
+          applyPrompt(p);
+          setPromptPanelOpen(false);
+        }}
+      />
 
       <InstallStatusDialog
         open={installOpen}
