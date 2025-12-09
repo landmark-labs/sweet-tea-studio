@@ -3,6 +3,7 @@ import { Outlet, NavLink } from "react-router-dom";
 import { PlusCircle, Settings, Library, Image as ImageIcon, Workflow, ChevronLeft, ChevronRight, HardDrive } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { PerformanceHUD } from "@/components/PerformanceHUD";
 
 export default function Layout() {
   const [collapsed, setCollapsed] = useState(false);
@@ -60,6 +61,7 @@ export default function Layout() {
       <main className="flex-1 overflow-auto bg-slate-50">
         <Outlet />
       </main>
+      <PerformanceHUD />
     </div>
   );
 }
