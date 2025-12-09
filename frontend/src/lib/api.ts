@@ -73,6 +73,27 @@ export interface CollectionCreate {
     description?: string;
 }
 
+export interface SystemGpuMetrics {
+    index: number;
+    name: string;
+    memory_total_mb: number;
+    memory_used_mb: number;
+    utilization_percent: number;
+    temperature_c?: number | null;
+    pcie_generation?: number;
+    pcie_width?: number;
+    bandwidth_gb_s?: number | null;
+}
+
+export interface SystemMetrics {
+    timestamp?: number;
+    cpu: { percent: number; count: number };
+    memory: { total: number; available: number; used: number; percent: number };
+    temperatures?: { cpu?: number | null };
+    disk: { read_bytes: number; write_bytes: number; bandwidth_mb_s?: number | null };
+    gpus: SystemGpuMetrics[];
+}
+
 export interface TagSuggestion {
     name: string;
     source: string;
@@ -373,6 +394,12 @@ export const api = {
             body: JSON.stringify(imageIds),
         });
         if (!res.ok) throw new Error("Failed to remove images from collection");
+        return res.json();
+    },
+
+    getSystemMetrics: async (): Promise<SystemMetrics> => {
+        const res = await fetch(`${API_BASE}/monitoring/metrics`);
+        if (!res.ok) throw new Error("Failed to read monitoring metrics");
         return res.json();
     }
 };
