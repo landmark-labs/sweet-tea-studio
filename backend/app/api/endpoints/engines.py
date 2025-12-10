@@ -120,13 +120,13 @@ async def launch_comfyui():
 
 
 @router.post("/comfyui/stop")
-def stop_comfyui():
+async def stop_comfyui():
     """
     Stop the managed ComfyUI process.
-    
+
     Only stops ComfyUI if it was started by Sweet Tea Studio.
     """
-    result = comfy_launcher.stop()
+    result = await comfy_launcher.stop()
     return result
 
 
@@ -134,14 +134,18 @@ def stop_comfyui():
 def get_comfyui_status():
     """
     Get current ComfyUI process status.
-    
+
     Returns whether ComfyUI is running and if it can be launched.
     """
-    config = comfy_launcher.get_config()
+    status = comfy_launcher.get_status()
     return {
-        "is_running": comfy_launcher.is_running(),
-        "can_launch": config.is_available,
-        "path": config.path,
-        "detection_method": config.detection_method,
+        "is_running": status.get("running", False),
+        "can_launch": status.get("available", False),
+        "path": status.get("path"),
+        "detection_method": status.get("detection_method"),
+        "pid": status.get("pid"),
+        "cooldown_remaining": status.get("cooldown_remaining"),
+        "last_error": status.get("last_error"),
+        "last_action_at": status.get("last_action_at"),
     }
 
