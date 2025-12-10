@@ -35,11 +35,11 @@ export default function Layout() {
             <div>
               <div className="flex items-baseline gap-2">
                 <h1 className="text-xl font-semibold bg-gradient-to-r from-primary via-secondary to-accent bg-clip-text text-transparent whitespace-nowrap">
-                  Sweet Tea
+                  sweet tea
                 </h1>
-                <span className="rounded-full bg-primary/10 text-primary px-2 py-0.5 text-xs font-medium">Studio</span>
+                <span className="rounded-full bg-primary/10 text-primary px-2 py-0.5 text-xs font-medium">studio</span>
               </div>
-              <p className="text-xs text-muted-foreground whitespace-nowrap">Cohesive creative workspace</p>
+              <p className="text-xs text-muted-foreground whitespace-nowrap">cohesive creative workspace</p>
             </div>
           )}
           <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full" onClick={() => setCollapsed(!collapsed)}>
@@ -83,8 +83,8 @@ export default function Layout() {
         <div className="w-full h-full flex flex-col">
           <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4 flex-none border-b border-border/50 bg-surface/50">
             <div>
-              <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Sweet Tea Studio</p>
-              <h2 className="text-lg font-semibold">Unified creation desk</h2>
+              <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">sweet tea studio</p>
+              <h2 className="text-lg font-semibold capitalize">unified creation desk</h2>
             </div>
             <UndoRedoBar />
           </div>

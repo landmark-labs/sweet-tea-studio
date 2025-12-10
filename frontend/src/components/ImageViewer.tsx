@@ -370,7 +370,7 @@ export function ImageViewer({
                         {imgWorkflows.length > 0 && (
                             <div className="relative group">
                                 <div className="px-3 py-2 hover:bg-slate-100 cursor-pointer flex items-center justify-between">
-                                    <span className="flex items-center gap-2">Use in Workflow</span>
+                                    <span className="flex items-center gap-2">use in pipe</span>
                                     <span className="text-xs">▶</span>
                                 </div>
                                 <div className="absolute left-full top-0 ml-1 hidden group-hover:block bg-white border border-slate-200 rounded-md shadow-lg py-1 w-48 max-h-64 overflow-y-auto">
@@ -401,7 +401,7 @@ export function ImageViewer({
                             {imgWorkflows.length > 0 && (
                                 <div className="relative group/wf">
                                     <Button variant="outline" size="sm" className="h-7 text-xs gap-1 border-blue-200 hover:bg-blue-50 text-blue-700">
-                                        Use in Workflow ▶
+                                        use in pipe ▶
                                     </Button>
                                     <div className="absolute left-0 top-full mt-1 hidden group-hover/wf:block bg-white border border-slate-200 rounded-md shadow-lg py-1 w-48 max-h-64 overflow-y-auto z-50">
                                         {imgWorkflows.map(w => (

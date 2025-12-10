@@ -34,6 +34,7 @@ install_jobs: Dict[str, InstallJob] = {}
 
 class InstallMissingRequest(BaseModel):
     missing_nodes: List[str]
+    allow_manual_clone: bool = False
 
 @router.post("/install_missing")
 def install_missing_nodes(request: InstallMissingRequest, background_tasks: BackgroundTasks):
@@ -50,7 +51,7 @@ def install_missing_nodes(request: InstallMissingRequest, background_tasks: Back
     )
     install_jobs[job_id] = job
     
-    background_tasks.add_task(process_install_job, job_id, request.missing_nodes)
+    background_tasks.add_task(process_install_job, job_id, request.missing_nodes, request.allow_manual_clone)
     
     return {"job_id": job_id}
 
@@ -77,7 +78,7 @@ def reboot_comfyui():
             # Reboot often kills the connection, so an error might be expected success
             return {"status": "reboot_triggered", "detail": str(e)}
 
-def process_install_job(job_id: str, missing_nodes: List[str]):
+def process_install_job(job_id: str, missing_nodes: List[str], allow_manual_clone: bool):
     job = install_jobs.get(job_id)
     if not job:
         return
@@ -234,7 +235,7 @@ def process_install_job(job_id: str, missing_nodes: List[str]):
                     # --- VERIFICATION & FALLBACK ---
                     # ComfyUI Manager sometimes returns success (200 OK) but fails to install (e.g. conflict, unknown auth).
                     # We check if the destination folder exists.
-                    
+
                     # Infer custom_nodes path from input_dir
                     # input_dir is usually .../ComfyUI/input
                     input_path = None
@@ -242,12 +243,12 @@ def process_install_job(job_id: str, missing_nodes: List[str]):
                         import pathlib
                         import os
                         import subprocess
-                        
+
                         if engine.input_dir:
                             input_path = pathlib.Path(engine.input_dir)
                             if input_path.name == "input":
                                 custom_nodes_path = input_path.parent / "custom_nodes"
-                                
+
                                 # Derive folder name from URL
                                 # Pack has 'files' which is [url] OR 'reference' OR 'url'
                                 repo_url = None
@@ -255,22 +256,26 @@ def process_install_job(job_id: str, missing_nodes: List[str]):
                                     repo_url = pack['files'][0]
                                 elif pack.get('url'):
                                     repo_url = pack.get('url')
-                                
+
                                 if repo_url and custom_nodes_path.exists():
                                     folder_name = repo_url.rstrip("/").split("/")[-1]
                                     if folder_name.endswith(".git"):
                                         folder_name = folder_name[:-4]
-                                        
+
                                     target_dir = custom_nodes_path / folder_name
-                                    
-                                    # If not exists after manager install, force clone
+
+                                    # If not exists after manager install, allow optional manual clone
                                     if not target_dir.exists():
+                                        if not allow_manual_clone:
+                                            job.failed.append(f"{title}: manager did not install and manual clone was not approved")
+                                            continue
+
                                         print(f"Manager failed to install {folder_name}. Attempting manual git clone...")
                                         job.progress_text = f"Manager silent fail. Manual cloning {folder_name}..."
-                                        
+
                                         try:
                                             subprocess.run(["git", "clone", repo_url], cwd=str(custom_nodes_path), check=True)
-                                            
+
                                             # Check for requirements.txt
                                             req_file = target_dir / "requirements.txt"
                                             if req_file.exists():
@@ -280,20 +285,14 @@ def process_install_job(job_id: str, missing_nodes: List[str]):
                                                 import sys
                                                 subprocess.run([sys.executable, "-m", "pip", "install", "-r", str(req_file)], check=True)
 
-                                            job.installed.append(f"{title} (Manual Clone)")
+                                            job.installed.append(f"{title} (manual clone)")
                                             continue # Success
                                         except Exception as git_err:
                                             print(f"Manual clone failed: {git_err}")
-                                            # If manual failed, propagate original success? Or fail?
-                                            # We'll fail it.
                                             raise Exception(f"Manager and Manual Clone failed: {git_err}")
 
                     except Exception as fallback_err:
                         print(f"Fallback verification failed: {fallback_err}")
-                        # Don't fail the whole job if just verification logic crashed, 
-                        # but if we raised "Manager and Manual Clone failed", it will bubble up?
-                        # Wait, if we raised above, it goes to this except.
-                        # We want it to bubble to the main loop except.
                         raise fallback_err
 
                     job.installed.append(title)

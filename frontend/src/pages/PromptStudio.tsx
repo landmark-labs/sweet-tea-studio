@@ -106,6 +106,7 @@ export default function PromptStudio() {
   // Install State
   const [installOpen, setInstallOpen] = useState(false);
   const [installStatus, setInstallStatus] = useState<InstallStatus | null>(null);
+  const [allowManualClone, setAllowManualClone] = useState(false);
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const healthIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -358,7 +359,7 @@ export default function PromptStudio() {
     setInstallOpen(true);
     setInstallStatus({ status: "pending", progress_text: "Initializing..." });
     try {
-      const res = await api.installMissingNodes(missing);
+      const res = await api.installMissingNodes(missing, allowManualClone);
       startPolling(res.job_id);
     } catch (err) {
       setInstallStatus({ status: "failed", error: `Start failed: ${(err as Error).message}`, progress_text: "" });
@@ -510,7 +511,7 @@ export default function PromptStudio() {
                 onFinish={() => setFocusedField("")} // Explicitly clear focus on "Finish"
               />
             ) : (
-              <div className="p-4 text-xs text-slate-400">Select a workflow to use Prompt Constructor</div>
+              <div className="p-4 text-xs text-slate-400">select a pipe to use prompt constructor</div>
             )}
           </Panel>
         </PanelGroup>
@@ -557,10 +558,10 @@ export default function PromptStudio() {
               </Select>
             </div>
             <div className="space-y-2">
-              <label className="text-xs font-semibold text-slate-500 uppercase">Workflow</label>
+              <label className="text-xs font-semibold text-slate-500 uppercase">pipe</label>
               <Select value={selectedWorkflowId} onValueChange={setSelectedWorkflowId}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select Workflow">
+                  <SelectValue placeholder="select pipe">
                     {workflows.find(w => String(w.id) === selectedWorkflowId)?.name}
                   </SelectValue>
                 </SelectTrigger>
@@ -574,9 +575,9 @@ export default function PromptStudio() {
             {
               selectedWorkflow?.description?.includes("[Missing Nodes:") && (
                 <Alert className="border-amber-500 bg-amber-50">
-                  <AlertTitle className="text-amber-800">Missing Nodes Detected</AlertTitle>
+                  <AlertTitle className="text-amber-800">missing nodes detected</AlertTitle>
                   <AlertDescription className="text-amber-700 text-xs">
-                    This workflow requires custom nodes that are not installed.
+                    this pipe requires custom nodes that are not installed.
                     <br />
                     <span className="font-mono mt-1 block mb-2">
                       {selectedWorkflow.description.match(/\[Missing Nodes: (.*?)\]/)?.[1]}
@@ -593,7 +594,7 @@ export default function PromptStudio() {
                         }
                       }}
                     >
-                      Install Missing Nodes
+                      install missing nodes
                     </Button>
                   </AlertDescription>
                 </Alert>
@@ -642,7 +643,7 @@ export default function PromptStudio() {
             />
           ) : (
             <div className="text-center py-8 text-slate-400 text-sm">
-              {workflows.length === 0 ? "No workflows found." : "Select workflow"}
+              {workflows.length === 0 ? "no pipes found." : "select pipe"}
             </div>
           )}
         </div>
@@ -737,6 +738,8 @@ export default function PromptStudio() {
         }}
         status={installStatus}
         onReboot={handleReboot}
+        allowManualClone={allowManualClone}
+        onAllowManualCloneChange={setAllowManualClone}
       />
 
     </div>

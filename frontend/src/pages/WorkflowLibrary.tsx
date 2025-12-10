@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
+import { Switch } from "@/components/ui/switch";
 import { FileJson, AlertTriangle, GitBranch, Edit2, Trash2, Save, RotateCw, CheckCircle2, XCircle } from "lucide-react";
 import { api, WorkflowTemplate } from "@/lib/api";
 import { WorkflowGraphViewer } from "@/components/WorkflowGraphViewer";
@@ -27,6 +28,7 @@ export default function WorkflowLibrary() {
     // Install State
     const [installOpen, setInstallOpen] = useState(false);
     const [installStatus, setInstallStatus] = useState<any>(null);
+    const [allowManualClone, setAllowManualClone] = useState(false);
     // eslint-disable-line @typescript-eslint/no-unused-vars
     const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -87,7 +89,7 @@ export default function WorkflowLibrary() {
 
             const payload = {
                 name: importName,
-                description: "Imported Workflow",
+                description: "imported pipe",
                 graph_json: graph,
                 input_schema: {}
             };
@@ -148,7 +150,7 @@ export default function WorkflowLibrary() {
             setComposeSource("");
             setComposeTarget("");
             loadWorkflows();
-            alert("Workflow created successfully!");
+            alert("pipe created successfully!");
         } catch (err) {
             setError(err instanceof Error ? err.message : "Composition failed");
         }
@@ -181,7 +183,7 @@ export default function WorkflowLibrary() {
         setInstallOpen(true);
         setInstallStatus({ status: "pending", progress_text: "Initializing..." });
         try {
-            const res = await api.installMissingNodes(missing);
+            const res = await api.installMissingNodes(missing, allowManualClone);
 
             startPolling(res.job_id);
         } catch (err) {
@@ -355,35 +357,35 @@ export default function WorkflowLibrary() {
                             </DialogHeader>
                             <div className="grid gap-4 py-4">
                                 <div className="grid grid-cols-4 items-center gap-4">
-                                    <Label htmlFor="source" className="text-right">Source (Image)</Label>
+                                    <Label htmlFor="source" className="text-right">source pipe (image)</Label>
                                     <select
                                         id="source"
                                         className="col-span-3 flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                                         value={composeSource}
                                         onChange={(e) => setComposeSource(e.target.value)}
                                     >
-                                        <option value="">Select source workflow...</option>
+                                        <option value="">select source pipe...</option>
                                         {workflows.map(w => (
                                             <option key={w.id} value={w.id}>{w.name}</option>
                                         ))}
                                     </select>
                                 </div>
                                 <div className="grid grid-cols-4 items-center gap-4">
-                                    <Label htmlFor="target" className="text-right">Target (LoadImage)</Label>
+                                    <Label htmlFor="target" className="text-right">target pipe (loadimage)</Label>
                                     <select
                                         id="target"
                                         className="col-span-3 flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                                         value={composeTarget}
                                         onChange={(e) => setComposeTarget(e.target.value)}
                                     >
-                                        <option value="">Select target workflow...</option>
+                                        <option value="">select target pipe...</option>
                                         {workflows.map(w => (
                                             <option key={w.id} value={w.id}>{w.name}</option>
                                         ))}
                                     </select>
                                 </div>
                                 <div className="grid grid-cols-4 items-center gap-4">
-                                    <Label htmlFor="compose-name" className="text-right">New Name</Label>
+                                    <Label htmlFor="compose-name" className="text-right">new pipe name</Label>
                                     <Input id="compose-name" value={composeName} onChange={(e) => setComposeName(e.target.value)} className="col-span-3" />
                                 </div>
                             </div>
@@ -401,18 +403,18 @@ export default function WorkflowLibrary() {
                         </DialogTrigger>
                         <DialogContent>
                             <DialogHeader>
-                                <DialogTitle>import from comfyui</DialogTitle>
+                                <DialogTitle>import pipe from comfyui</DialogTitle>
                                 <DialogDescription>
-                                    Upload a workflow exported as <b>API Format (JSON)</b>.
+                                    Upload a pipe exported as <b>API Format (JSON)</b>.
                                 </DialogDescription>
                             </DialogHeader>
                             <div className="grid gap-4 py-4">
                                 <div className="grid grid-cols-4 items-center gap-4">
-                                    <Label htmlFor="name" className="text-right">Name</Label>
+                                    <Label htmlFor="name" className="text-right">pipe name</Label>
                                     <Input id="name" value={importName} onChange={(e) => setImportName(e.target.value)} className="col-span-3" />
                                 </div>
                                 <div className="grid grid-cols-4 items-center gap-4">
-                                    <Label htmlFor="file" className="text-right">File</Label>
+                                    <Label htmlFor="file" className="text-right">file</Label>
                                     <Input id="file" type="file" accept=".json" onChange={handleFileChange} className="col-span-3" />
                                 </div>
                             </div>
@@ -452,10 +454,10 @@ export default function WorkflowLibrary() {
                                     <div className="bg-amber-50 rounded-md p-3 border border-amber-200 text-xs">
                                         <div className="flex items-center justify-between text-amber-600 font-semibold mb-1">
                                             <div className="flex items-center">
-                                                <AlertTriangle className="w-3 h-3 mr-1" /> Missing Nodes
+                                                <AlertTriangle className="w-3 h-3 mr-1" /> missing nodes
                                             </div>
                                             <Button variant="ghost" size="sm" className="text-amber-700 hover:bg-amber-100" onClick={() => startInstall(missing)}>
-                                                Install All
+                                                install all
                                             </Button>
                                         </div>
                                         <ul className="list-disc list-inside text-amber-800 space-y-0.5">
@@ -464,8 +466,8 @@ export default function WorkflowLibrary() {
                                     </div>
                                 )}
                                 <div className="mt-4 flex gap-2 text-xs text-slate-500">
-                                    <span className="bg-slate-100 px-2 py-1 rounded">{Object.keys(w.graph_json).length} Nodes</span>
-                                    <span className="bg-slate-100 px-2 py-1 rounded">{Object.keys(w.input_schema).length} Params</span>
+                                    <span className="bg-slate-100 px-2 py-1 rounded">{Object.keys(w.graph_json).length} nodes</span>
+                                    <span className="bg-slate-100 px-2 py-1 rounded">{Object.keys(w.input_schema).length} params</span>
                                 </div>
                             </CardContent>
                             <CardFooter className="flex justify-end gap-2 text-slate-400">
@@ -488,9 +490,9 @@ export default function WorkflowLibrary() {
             <Dialog open={viewGraphOpen} onOpenChange={setViewGraphOpen}>
                 <DialogContent className="max-w-4xl h-[80vh] flex flex-col">
                     <DialogHeader>
-                        <DialogTitle>Workflow Graph: {selectedWorkflowForGraph?.name}</DialogTitle>
+                        <DialogTitle>pipe graph: {selectedWorkflowForGraph?.name}</DialogTitle>
                         <DialogDescription>
-                            Visual topology of the workflow
+                            visual topology of the pipe
                         </DialogDescription>
                     </DialogHeader>
                     <div className="flex-1 min-h-0 bg-slate-50 border rounded-md">
@@ -516,7 +518,15 @@ export default function WorkflowLibrary() {
                         </DialogDescription>
                     </DialogHeader>
 
-                    <div className="py-4">
+                    <div className="py-4 space-y-4">
+                        <div className="flex items-center justify-between rounded-md border p-3 bg-slate-50">
+                            <div>
+                                <div className="text-sm font-semibold">allow manual git clone fallback</div>
+                                <p className="text-xs text-slate-600">if comfyui manager fails, opt into raw git clone/install to continue.</p>
+                            </div>
+                            <Switch checked={allowManualClone} onCheckedChange={setAllowManualClone} />
+                        </div>
+
                         {!installStatus ? (
                             <div className="text-center text-slate-500">Starting...</div>
                         ) : (

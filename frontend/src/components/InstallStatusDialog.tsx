@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { CheckCircle2, RotateCw, XCircle } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 
 export interface InstallStatus {
     status: "pending" | "running" | "completed" | "failed";
@@ -23,6 +24,8 @@ interface InstallStatusDialogProps {
     onOpenChange: (open: boolean) => void;
     status: InstallStatus | null;
     onReboot: () => void;
+    allowManualClone?: boolean;
+    onAllowManualCloneChange?: (value: boolean) => void;
 }
 
 export function InstallStatusDialog({
@@ -30,6 +33,8 @@ export function InstallStatusDialog({
     onOpenChange,
     status,
     onReboot,
+    allowManualClone,
+    onAllowManualCloneChange,
 }: InstallStatusDialogProps) {
     // Prevent closing if running
     const handleOpenChange = (newOpen: boolean) => {
@@ -47,7 +52,20 @@ export function InstallStatusDialog({
                     </DialogDescription>
                 </DialogHeader>
 
-                <div className="py-4">
+                <div className="py-4 space-y-4">
+                    {onAllowManualCloneChange && (
+                        <div className="flex items-center justify-between rounded-md border p-3 bg-slate-50">
+                            <div>
+                                <div className="text-sm font-semibold">allow manual git clone fallback</div>
+                                <p className="text-xs text-slate-600">opt into raw git clone when comfyui manager reports success but files are missing.</p>
+                            </div>
+                            <Switch
+                                checked={!!allowManualClone}
+                                onCheckedChange={onAllowManualCloneChange}
+                            />
+                        </div>
+                    )}
+
                     {!status ? (
                         <div className="text-center text-slate-500">Starting...</div>
                     ) : (
