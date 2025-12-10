@@ -77,7 +77,13 @@ def test_record_run_uses_relative_paths_and_embeds_provenance(tmp_path: Path, ex
         assert output_row.perceptual_hash == "hash123"
 
     info = Image.open(image_path).info
-    comment = info.get("comment") or info.get("sweet_tea_provenance") or b""
+    comment = (
+        info.get("comment")
+        or info.get("Comment")
+        or info.get("Description")
+        or info.get("sweet_tea_provenance")
+        or b""
+    )
     assert comment
 
     provenance_text = comment.decode("utf-8") if isinstance(comment, bytes) else comment
