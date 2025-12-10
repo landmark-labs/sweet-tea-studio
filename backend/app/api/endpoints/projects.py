@@ -10,6 +10,7 @@ import re
 
 from app.db.engine import engine
 from app.models.project import Project, ProjectCreate, ProjectRead
+from app.models.job import Job
 from app.core.config import settings
 
 
@@ -188,4 +189,43 @@ def convert_runs_to_project(
         "project_id": project_id,
         "project_name": project.name,
         "project_slug": project.slug
+    }
+
+
+@router.post("/{project_id}/adopt-jobs")
+def adopt_jobs_into_project(
+    project_id: int,
+    job_ids: List[int],
+    session: Session = Depends(get_session)
+):
+    """
+    Attach existing jobs (and their gallery images) to a project.
+
+    This is primarily used to convert draft/unassigned generations into
+    a real project after the fact by simply updating the job's project_id.
+    """
+    project = session.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    if not job_ids:
+        return {"updated": 0, "project_id": project_id}
+
+    jobs = session.exec(select(Job).where(Job.id.in_(job_ids))).all()
+
+    updated = 0
+    for job in jobs:
+        # Only retarget unassigned jobs to avoid clobbering existing project data
+        if job.project_id is None:
+            job.project_id = project_id
+            session.add(job)
+            updated += 1
+
+    session.commit()
+
+    return {
+        "updated": updated,
+        "project_id": project_id,
+        "project_name": project.name,
+        "project_slug": project.slug,
     }

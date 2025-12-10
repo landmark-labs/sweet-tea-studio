@@ -60,19 +60,6 @@ export interface PromptSuggestion {
     snippet?: string;
 }
 
-export interface Collection {
-    id: number;
-    name: string;
-    description?: string;
-    created_at: string;
-    item_count?: number;
-}
-
-export interface CollectionCreate {
-    name: string;
-    description?: string;
-}
-
 export interface SystemGpuMetrics {
     index: number;
     name: string;
@@ -125,6 +112,7 @@ export interface PromptLibraryItem {
     prompt_name?: string;
 }
 
+// --- Collections (legacy grouping, still supported for compatibility) ---
 export interface Collection {
     id: number;
     name: string;
@@ -191,6 +179,7 @@ export const api = {
     createJob: async (
         engineId: number,
         workflowId: number,
+        projectId: number | null,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         params: any
     ): Promise<Job> => {
@@ -200,6 +189,7 @@ export const api = {
             body: JSON.stringify({
                 engine_id: engineId,
                 workflow_template_id: workflowId,
+                project_id: projectId,
                 input_params: params,
             }),
         });
@@ -239,10 +229,17 @@ export const api = {
         return res.json();
     },
 
-    getGallery: async (search?: string, collectionId?: number | null): Promise<GalleryItem[]> => {
+    getGallery: async (
+        search?: string,
+        collectionId?: number | null,
+        projectId?: number | null,
+        unassignedOnly?: boolean,
+    ): Promise<GalleryItem[]> => {
         const params = new URLSearchParams();
         if (search) params.set("search", search);
         if (collectionId !== undefined && collectionId !== null) params.set("collection_id", String(collectionId));
+        if (projectId !== undefined && projectId !== null) params.set("project_id", String(projectId));
+        if (unassignedOnly) params.set("unassigned_only", "true");
         const query = params.toString() ? `?${params.toString()}` : "";
         const res = await fetch(`${API_BASE}/gallery/${query}`);
         if (!res.ok) throw new Error("Failed to fetch gallery");
@@ -508,6 +505,21 @@ export const api = {
         return res.json();
     },
 
+    adoptJobsIntoProject: async (projectId: number, jobIds: number[]): Promise<{ updated: number }> => {
+        const res = await fetch(`${API_BASE}/projects/${projectId}/adopt-jobs`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(jobIds),
+        });
+
+        if (!res.ok) {
+            const errorData = await res.json().catch(() => ({}));
+            throw new Error(errorData.detail || "Failed to attach jobs to project");
+        }
+
+        return res.json();
+    },
+
     // --- Status ---
     getStatusSummary: async (): Promise<StatusSummary> => {
         const res = await fetch(`${API_BASE}/status/summary`);
@@ -541,6 +553,7 @@ export interface GalleryItem {
     prompt_tags?: string[];
     prompt_name?: string;
     collection_id?: number;
+    project_id?: number | null;
 }
 
 export interface Prompt {
