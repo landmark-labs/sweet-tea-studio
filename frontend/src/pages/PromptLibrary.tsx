@@ -224,18 +224,34 @@ export default function PromptLibrary() {
                         </div>
 
                         {/* Content */}
-                        <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1">
-                                <h3 className="font-semibold text-slate-900 truncate">{prompt.prompt_name || `Image #${prompt.image_id}`}</h3>
-                                <span className="px-2 py-0.5 rounded-full bg-slate-100 text-xs text-slate-600 font-medium">
-                                    pipe #{prompt.workflow_template_id || "?"}
+                        <div className="flex-1 min-w-0 space-y-2">
+                            <div className="flex flex-wrap items-center gap-2 text-sm text-slate-800">
+                                <span className="font-semibold truncate">
+                                    {prompt.job_params?.project_name || prompt.prompt_name || `Image #${prompt.image_id}`}
                                 </span>
+                                <span className="text-[11px] text-slate-500">#{prompt.image_id}</span>
+                                {prompt.workflow_template_id && (
+                                    <span className="px-2 py-0.5 rounded-full bg-slate-100 text-[11px] text-slate-600 font-medium">
+                                        Pipe {prompt.workflow_template_id}
+                                    </span>
+                                )}
                             </div>
-                            {prompt.active_positive && (
-                                <p className="text-xs text-slate-600 mt-1 line-clamp-2">{prompt.active_positive}</p>
-                            )}
-                            {prompt.active_negative && (
-                                <p className="text-[11px] text-rose-500 mt-1 line-clamp-1">Negative: {prompt.active_negative}</p>
+
+                            {(prompt.active_positive || prompt.active_negative) && (
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                    {prompt.active_positive && (
+                                        <div className="min-w-0">
+                                            <p className="text-[11px] uppercase tracking-wide text-green-600 font-semibold mb-1">Positive</p>
+                                            <p className="text-xs text-slate-700 leading-relaxed line-clamp-3">{prompt.active_positive}</p>
+                                        </div>
+                                    )}
+                                    {prompt.active_negative && (
+                                        <div className="min-w-0">
+                                            <p className="text-[11px] uppercase tracking-wide text-rose-500 font-semibold mb-1">Negative</p>
+                                            <p className="text-xs text-rose-600 leading-relaxed line-clamp-3">{prompt.active_negative}</p>
+                                        </div>
+                                    )}
+                                </div>
                             )}
                             {prompt.tags && prompt.tags.length > 0 && (
                                 <div className="flex flex-wrap gap-1 mt-2">
