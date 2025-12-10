@@ -1,3 +1,5 @@
+import os
+import shutil
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from typing import List
 from app.models.job import Job, JobCreate, JobRead
@@ -109,9 +111,30 @@ def process_job(job_id: int):
             job.completed_at = datetime.utcnow()
             session.add(job)
 
+            target_output_dir = job.output_dir or engine.output_dir
             saved_images = []
             for img_data in images:
-                full_path = f"{engine.output_dir}\\{img_data['subfolder']}\\{img_data['filename']}" if img_data.get('subfolder') else f"{engine.output_dir}\\{img_data['filename']}"
+                base_dir = engine.output_dir
+                if not base_dir:
+                    raise ComfyResponseError("Engine output directory is not configured.")
+                subfolder = img_data.get('subfolder')
+                filename = img_data['filename']
+
+                # Original path from Comfy
+                full_path = os.path.join(base_dir, subfolder, filename) if subfolder else os.path.join(base_dir, filename)
+
+                # If a custom target directory is set, move the file there
+                if target_output_dir and target_output_dir != base_dir:
+                    dest_dir = os.path.join(target_output_dir, subfolder) if subfolder else target_output_dir
+                    os.makedirs(dest_dir, exist_ok=True)
+                    dest_path = os.path.join(dest_dir, filename)
+                    try:
+                        shutil.copy2(full_path, dest_path)
+                        full_path = dest_path
+                    except FileNotFoundError:
+                        print(f"Generated file missing on disk: {full_path}")
+                    except OSError as e:
+                        print(f"Failed to move generated file to target directory: {e}")
 
                 # Build prompt history metadata so the latest prompt is always surfaced while retaining provenance
                 # Normalize any prior history that may have come through the workflow

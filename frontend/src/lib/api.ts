@@ -35,6 +35,7 @@ export interface Job {
     input_params: any;
     created_at: string;
     comfy_prompt_id?: string;
+    output_dir?: string | null;
     error?: string;
 }
 
@@ -181,7 +182,8 @@ export const api = {
         workflowId: number,
         projectId: number | null,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        params: any
+        params: any,
+        targetOutputDir?: string | null,
     ): Promise<Job> => {
         const res = await fetch(`${API_BASE}/jobs/`, {
             method: "POST",
@@ -191,6 +193,7 @@ export const api = {
                 workflow_template_id: workflowId,
                 project_id: projectId,
                 input_params: params,
+                output_dir: targetOutputDir,
             }),
         });
         if (!res.ok) {
