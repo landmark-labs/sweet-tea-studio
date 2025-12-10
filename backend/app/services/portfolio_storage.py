@@ -95,6 +95,7 @@ def _embed_provenance(image_path: Path, payload: Dict[str, Any]) -> None:
                 if isinstance(value, str):
                     png_info.add_text(key, value)
             png_info.add_text("sweet_tea_provenance", provenance_json)
+            png_info.add_text("comment", provenance_json)
             img.save(image_path, pnginfo=png_info)
         elif fmt in {"JPEG", "JPG"}:
             if img.mode in {"RGBA", "P"}:
