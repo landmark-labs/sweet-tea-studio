@@ -9,7 +9,7 @@ api_router.include_router(gallery.router, prefix="/gallery", tags=["gallery"])
 api_router.include_router(library.router, prefix="/library", tags=["library"])
 api_router.include_router(files.router, prefix="/files", tags=["files"])
 api_router.include_router(vlm.router, prefix="/vlm", tags=["vlm"])
-api_router.include_router(projects.router, tags=["projects"])
+api_router.include_router(projects.router, prefix="/projects", tags=["projects"])
 api_router.include_router(status.router, tags=["status"])
 api_router.include_router(models.router, tags=["models"])
 

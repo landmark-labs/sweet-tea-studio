@@ -3,18 +3,20 @@ Projects API endpoints.
 Manages project creation, listing, and run organization.
 """
 from fastapi import APIRouter, HTTPException, Depends
-from sqlmodel import Session, select
+from sqlmodel import Session, select, SQLModel
 from typing import List, Optional
 from datetime import datetime
 import re
 
+from sqlalchemy import func
 from app.db.engine import engine
 from app.models.project import Project, ProjectCreate, ProjectRead
 from app.models.job import Job
+from app.models.image import Image
 from app.core.config import settings
 
 
-router = APIRouter(prefix="/projects", tags=["projects"])
+router = APIRouter()
 
 
 def get_session():
@@ -35,23 +37,63 @@ def slugify(text: str) -> str:
     return text or "untitled"
 
 
-@router.get("/", response_model=List[ProjectRead])
+@router.get("", response_model=List[ProjectRead])
 def list_projects(
     include_archived: bool = False,
     session: Session = Depends(get_session)
 ):
     """
-    List all projects.
+    List all projects with basic stats (image count, last activity).
     
     By default, excludes archived projects. Set include_archived=true to see all.
     The 'drafts' project is always included as the default project.
     """
+    # 1. Fetch Projects
     query = select(Project)
     if not include_archived:
         query = query.where(Project.archived_at == None)
     
     projects = session.exec(query.order_by(Project.created_at.desc())).all()
-    return projects
+    
+    # 2. Fetch Stats
+    # We'll do this in Python for simplicity/compat for now, 
+    # though SQL group_by would be more performant for huge datasets.
+    # Given the likely scale, this is acceptable and cleaner to read.
+    
+    # Count images per project (via Job)
+    # Project -> Job -> Image
+    # Or just count jobs? Creating a job is activity.
+    # User asked for "number of images".
+    
+    # Let's get image counts grouped by project_id
+    # SELECT job.project_id, COUNT(image.id) FROM image JOIN job ON image.job_id = job.id GROUP BY job.project_id
+    
+    stats_query = (
+        select(Job.project_id, func.count(Image.id), func.max(Job.created_at))
+        .join(Image, Job.id == Image.job_id)
+        .group_by(Job.project_id)
+    )
+    results = session.exec(stats_query).all()
+    
+    stats_map = {row[0]: {"count": row[1], "last": row[2]} for row in results if row[0] is not None}
+    
+    # 3. Merge
+    project_reads = []
+    for p in projects:
+        s = stats_map.get(p.id, {"count": 0, "last": None})
+        
+        # Fallback to project updated_at if no job activity
+        last_activity = s["last"] or p.updated_at
+        
+        project_reads.append(
+            ProjectRead(
+                **p.dict(),
+                image_count=s["count"],
+                last_activity=last_activity
+            )
+        )
+        
+    return project_reads
 
 
 @router.get("/{project_id}", response_model=ProjectRead)
@@ -60,16 +102,33 @@ def get_project(project_id: int, session: Session = Depends(get_session)):
     project = session.get(Project, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    return project
+        
+    # Stats
+    count = session.exec(
+        select(func.count(Image.id))
+        .join(Job, Image.job_id == Job.id)
+        .where(Job.project_id == project_id)
+    ).one()
+    
+    last = session.exec(
+        select(func.max(Job.created_at))
+        .where(Job.project_id == project_id)
+    ).one()
+    
+    return ProjectRead(
+        **project.dict(),
+        image_count=count or 0,
+        last_activity=last or project.updated_at
+    )
 
 
-@router.post("/", response_model=ProjectRead)
+@router.post("", response_model=ProjectRead)
 def create_project(data: ProjectCreate, session: Session = Depends(get_session)):
     """
     Create a new project.
     
     If slug is not provided, it will be auto-generated from the name.
-    Project directories are automatically created on disk.
+    Project directories are automatically created on disk using default folders.
     """
     # Generate slug if not provided
     slug = data.slug if data.slug else slugify(data.name)
@@ -82,10 +141,17 @@ def create_project(data: ProjectCreate, session: Session = Depends(get_session))
             detail=f"Project with slug '{slug}' already exists"
         )
     
+    # Default config with folders
+    default_folders = ["inputs", "output", "masks"]
+    config = {
+        "folders": default_folders
+    }
+    
     # Create project record
     project = Project(
         name=data.name,
         slug=slug,
+        config_json=config,
         created_at=datetime.utcnow(),
         updated_at=datetime.utcnow()
     )
@@ -94,9 +160,61 @@ def create_project(data: ProjectCreate, session: Session = Depends(get_session))
     session.refresh(project)
     
     # Create project directories on disk
-    settings.ensure_project_dirs(slug)
+    settings.ensure_project_dirs(slug, subfolders=default_folders)
     
-    return project
+    return ProjectRead(**project.dict(), image_count=0, last_activity=project.updated_at)
+
+
+class FolderCreate(SQLModel):
+    folder_name: str
+
+
+@router.post("/{project_id}/folders", response_model=ProjectRead)
+def add_project_folder(
+    project_id: int,
+    data: FolderCreate,
+    session: Session = Depends(get_session)
+):
+    """Add a new output folder to the project."""
+    project = session.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+        
+    folder_name = slugify(data.folder_name)
+    if not folder_name:
+        raise HTTPException(status_code=400, detail="Invalid folder name")
+        
+    config = project.config_json or {"folders": ["inputs", "output", "masks"]}
+    folders = config.get("folders", [])
+    
+    if folder_name in folders:
+        raise HTTPException(status_code=400, detail="Folder already exists")
+        
+    folders.append(folder_name)
+    config["folders"] = folders
+    project.config_json = config
+    project.updated_at = datetime.utcnow()
+    
+    session.add(project)
+    session.commit()
+    session.refresh(project)
+    
+    # Create directory
+    settings.ensure_project_dirs(project.slug, subfolders=[folder_name])
+    
+    # Return with empty stats as we just modified it (or could refetch stats)
+    # Refetching stats logic reused to keep consistency
+    count = session.exec(
+        select(func.count(Image.id))
+        .join(Job, Image.job_id == Job.id)
+        .where(Job.project_id == project_id)
+    ).one()
+    
+    return ProjectRead(
+        **project.dict(), 
+        image_count=count or 0, 
+        last_activity=project.updated_at
+    )
 
 
 @router.patch("/{project_id}", response_model=ProjectRead)

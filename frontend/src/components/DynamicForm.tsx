@@ -48,6 +48,7 @@ interface DynamicFormProps {
     onFieldBlur?: (key: string, relatedTarget: Element | null) => void;
     activeField?: string;
     submitDisabled?: boolean;
+    onReset?: () => void;
 }
 
 export function DynamicForm({
@@ -62,7 +63,8 @@ export function DynamicForm({
     onFieldFocus,
     onFieldBlur,
     activeField,
-    submitDisabled
+    submitDisabled,
+    onReset
 }: DynamicFormProps) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const [internalData, setInternalData] = useState<any>({});
@@ -210,7 +212,8 @@ export function DynamicForm({
             const fallbackGroupTitle = field.x_title || field.title || "Configuration";
             const match = field.title?.match(/\((.+)\)$/);
             const heuristicTitle = match ? match[1] : fallbackGroupTitle;
-            const nodeId = match ? heuristicTitle : fallbackNodeId;
+            // Always prefer the clean x_node_id for grouping stability if available
+            const nodeId = field.x_node_id ? String(field.x_node_id) : (match ? heuristicTitle : fallbackNodeId);
 
             return {
                 key,
@@ -248,6 +251,9 @@ export function DynamicForm({
                     keys: [],
                     order: placement.order ?? 999
                 };
+            } else if (nodes[placement.groupId].title.startsWith("Bypass") && !placement.groupTitle.startsWith("Bypass")) {
+                // Upgrade title if we found a better one (e.g. preventing "Bypass..." from being the group title)
+                nodes[placement.groupId].title = placement.groupTitle;
             }
             nodes[placement.groupId].keys.push(key);
         });
@@ -257,89 +263,112 @@ export function DynamicForm({
         return { inputs, prompts: prompts.map((prompt) => prompt.key), loras, nodes, placements };
     }, [schema]);
 
-    const primaryKeys = useMemo(() => {
+    const { topLevelFields, nodeFieldsGroup } = useMemo(() => {
+        const top = [] as string[];
+        if (!schema) return { topLevelFields: [], nodeFieldsGroup: [] };
+
+        // Define STRICT core fields that should stay at the top
+        const coreKeywords = ["resolution", "width", "height", "checkpoint", "denoise", "refiner"];
+
+        // Helper to check if a field is "core"
+        const isCore = (key: string) => {
+            const lower = key.toLowerCase();
+            const title = (schema[key]?.title || "").toLowerCase();
+            return coreKeywords.some(kw => lower.includes(kw) || title.includes(kw));
+        };
+
+        const allKeys = Object.keys(schema);
+        const core = allKeys.filter((key) => !groups.inputs.includes(key));
+
+        core.forEach(key => {
+            if (isCore(key)) {
+                top.push(key);
+            }
+        });
+
+        return { topLevelFields: top, nodeFieldsGroup: [] };
+    }, [groups.inputs, schema]);
+
+    // Redefine primaryKeys to ONLY include the strict core ones, so others fall into node groups
+    const strictCoreKeys = useMemo(() => {
         if (!schema) return new Set<string>();
         const keywords = [
-            "positive",
-            "negative",
-            "prompt",
-            "resolution",
-            "width",
-            "height",
-            "scale",
-            "upscale",
-            "model",
-            "checkpoint",
-            "refiner",
-            "vae",
-            "sampler",
-            "scheduler",
-            "seed",
-            "cfg",
-            "denoise",
+            "resolution", "width", "height", "checkpoint", "refiner", "denoise"
         ];
-
+        // We do NOT include seed, steps, cfg, sampler, scheduler here, so they appear in node groups
         const matches = Object.keys(schema).filter((key) => {
             const field = schema[key];
             const title = String(field.title || key).toLowerCase();
             return keywords.some((kw) => title.includes(kw));
         });
-        return new Set(matches);
-    }, [schema]);
 
-    const [settingsOpen, setSettingsOpen] = useState(false);
+        // Add the first 2 prompts to core keys so they appear at the top
+        const corePrompts = groups.prompts.slice(0, 2);
 
-    const settingsFields = useMemo(() => {
-        const promptExtras = groups.prompts.filter((key) => !primaryKeys.has(key));
-        const loraExtras = groups.loras.filter((key) => !primaryKeys.has(key));
+        return new Set([...matches, ...corePrompts]);
+    }, [schema, groups.prompts]);
+
+    // Group core keys by node ID for proper visual organization
+    const strictCoreGroups = useMemo(() => {
+        if (!schema) return [] as { id: string; title: string; keys: string[]; order: number }[];
+
+        const groupMap: Record<string, { title: string; keys: string[]; order: number }> = {};
+
+        Array.from(strictCoreKeys).forEach((key) => {
+            const field = schema[key];
+            const placement = groups.placements[key];
+            const nodeId = placement?.groupId || field?.x_node_id || "general";
+            const nodeTitle = placement?.groupTitle || field?.x_title || "General";
+            const order = placement?.order ?? 999;
+
+            if (!groupMap[nodeId]) {
+                groupMap[nodeId] = { title: nodeTitle, keys: [], order };
+            } else if (groupMap[nodeId].title.startsWith("Bypass") && !nodeTitle.startsWith("Bypass")) {
+                // Upgrade title
+                groupMap[nodeId].title = nodeTitle;
+            }
+            groupMap[nodeId].keys.push(key);
+        });
+
+        return Object.entries(groupMap)
+            .map(([id, group]) => ({ id, ...group }))
+            .sort((a, b) => a.order - b.order);
+    }, [schema, strictCoreKeys, groups.placements]);
+
+    // Re-calculate settingsFields using strictCoreKeys
+    const strictSettingsFields = useMemo(() => {
+        const promptExtras = groups.prompts.filter((key) => !strictCoreKeys.has(key));
+        const loraExtras = groups.loras.filter((key) => !strictCoreKeys.has(key));
         const nodeEntries = Object.entries(groups.nodes).map(([id, group]) => ({
             id,
             title: group.title,
             order: group.order,
-            keys: group.keys.filter((key) => !primaryKeys.has(key)),
+            keys: group.keys.filter((key) => !strictCoreKeys.has(key)),
         })).filter((group) => group.keys.length > 0);
         return { promptExtras, loraExtras, nodeEntries };
-    }, [groups.loras, groups.nodes, groups.prompts, primaryKeys]);
+    }, [groups.loras, groups.nodes, groups.prompts, strictCoreKeys]);
 
-    const isSettingsCustomized = useMemo(() => {
+    // Check customization based on strict fields
+    const isStrictSettingsCustomized = useMemo(() => {
         const fieldsToCheck = [
-            ...settingsFields.promptExtras,
-            ...settingsFields.loraExtras,
-            ...settingsFields.nodeEntries.flatMap((g) => g.keys),
+            ...strictSettingsFields.promptExtras,
+            ...strictSettingsFields.loraExtras,
+            ...strictSettingsFields.nodeEntries.flatMap((g) => g.keys),
         ];
 
         return fieldsToCheck.some((key) => {
             if (!(key in formData)) return false;
             return formData[key] !== defaults[key];
         });
-    }, [defaults, formData, settingsFields.loraExtras, settingsFields.nodeEntries, settingsFields.promptExtras]);
+    }, [defaults, formData, strictSettingsFields]);
 
-    useEffect(() => {
-        if (!schema) return;
 
-        const ambiguous = Object.values(groups.placements).filter(
-            (placement) =>
-                placement.source === "heuristic" &&
-                (placement.groupId === "default" || placement.reason === "fallback_configuration")
-        );
+    const [settingsOpen, setSettingsOpen] = useState(false);
 
-        if (!ambiguous.length) return;
-
-        sendTelemetryEvent("dynamic_form.grouping_signal", {
-            engineId,
-            persistenceKey,
-            fields: ambiguous.map((placement) => ({
-                key: placement.key,
-                groupId: placement.groupId,
-                groupTitle: placement.groupTitle,
-                reason: placement.reason,
-                widget: schema[placement.key]?.widget,
-                title: schema[placement.key]?.title,
-                nodeId: schema[placement.key]?.x_node_id,
-                classType: schema[placement.key]?.x_class_type
-            }))
-        });
-    }, [engineId, groups.placements, persistenceKey, schema]);
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        onSubmit(formData);
+    };
 
     const renderField = (key: string) => {
         const field = schema[key];
@@ -448,18 +477,6 @@ export function DynamicForm({
         );
     };
 
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        onSubmit(formData);
-    };
-
-    const primaryFieldList = useMemo(
-        () => Array.from(primaryKeys).filter((key) => schema && schema[key]),
-        [primaryKeys, schema]
-    );
-
-    const primaryCore = primaryFieldList.filter((key) => !groups.inputs.includes(key));
-
     if (!schema) return null;
 
     return (
@@ -474,17 +491,78 @@ export function DynamicForm({
                 </div>
             )}
 
-            {/* 2. Core controls */}
-            {primaryCore.length > 0 && (
+            {strictCoreGroups.length > 0 && (
                 <div className="space-y-4 p-4 bg-white rounded-lg border border-slate-200">
-                    <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider">core pipe controls</h3>
+                    <div className="flex items-center justify-between">
+                        <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider">core pipe controls</h3>
+                        {onReset && (
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={onReset}
+                                className="h-6 text-[10px] text-slate-400 hover:text-slate-600 px-2"
+                            >
+                                reset to defaults
+                            </Button>
+                        )}
+                    </div>
                     <div className="space-y-4">
-                        {primaryCore.map(renderField)}
+                        {strictCoreGroups.map((group) => {
+                            // Detect bypass field
+                            let bypassKey = group.keys.find(k => {
+                                const f = schema[k];
+                                return f.widget === "toggle" && (
+                                    (f.title && f.title.toLowerCase().startsWith("bypass")) ||
+                                    k.toLowerCase().includes("bypass")
+                                );
+                            });
+
+                            const hasBypass = !!bypassKey;
+                            const isBypassed = hasBypass && formData[bypassKey!];
+                            const fieldsToRender = group.keys.filter(k => k !== bypassKey);
+
+                            return (
+                                <div key={group.id} className="space-y-2">
+                                    {/* Always show header if multiple groups OR if we have a bypass toggle */}
+                                    {(strictCoreGroups.length > 1 || hasBypass) && (
+                                        <div className="flex items-center justify-between border-b border-slate-100 pb-1">
+                                            <h4 className="text-[11px] font-semibold uppercase text-slate-400 tracking-wide">
+                                                {group.title}
+                                            </h4>
+                                            {hasBypass && (
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-[9px] text-slate-300 uppercase  tracking-wider">
+                                                        {isBypassed ? "bypassed" : "active"}
+                                                    </span>
+                                                    <Switch
+                                                        checked={!!formData[bypassKey!]}
+                                                        onCheckedChange={(c) => handleChange(bypassKey!, c)}
+                                                        className={cn(
+                                                            "h-3.5 w-6 data-[state=checked]:bg-amber-500 data-[state=unchecked]:bg-slate-200"
+                                                        )}
+                                                    />
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                    <div className="space-y-3">
+                                        {!isBypassed ? (
+                                            fieldsToRender.map(renderField)
+                                        ) : (
+                                            <div className="text-[10px] text-slate-400 italic px-1 opacity-60">
+                                                Node bypassed. Parameters hidden.
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        })}
                     </div>
                 </div>
             )}
 
-            {/* 3. Settings */}
+            {/* 3. Settings - Renamed to EXPANDED CONTROLS */}
             <Accordion
                 type="single"
                 collapsible
@@ -494,50 +572,103 @@ export function DynamicForm({
             >
                 <AccordionItem value="settings" className="border rounded-lg px-2 bg-white">
                     <AccordionTrigger className="text-xs font-semibold uppercase text-slate-500 hover:no-underline py-2">
-                        {isSettingsCustomized ? labels.config.settingsCustomized : labels.config.settingsDefault}
+                        {isStrictSettingsCustomized ? "EXPANDED CONTROLS (CUSTOMIZED)" : "EXPANDED CONTROLS"}
                     </AccordionTrigger>
                     <AccordionContent className="space-y-4 pt-0 pb-4">
-                        {settingsFields.promptExtras.length > 0 && (
+
+                        {strictSettingsFields.promptExtras.length > 0 && (
                             <div className="space-y-2">
                                 <h4 className="text-[11px] font-semibold uppercase text-slate-500">additional prompts</h4>
                                 <div className="space-y-4">
-                                    {settingsFields.promptExtras.map(renderField)}
+                                    {strictSettingsFields.promptExtras.map(renderField)}
                                 </div>
                             </div>
                         )}
 
-                        {settingsFields.loraExtras.length > 0 && (
+                        {strictSettingsFields.loraExtras.length > 0 && (
                             <div className="space-y-2">
                                 <h4 className="text-[11px] font-semibold uppercase text-slate-500">loras</h4>
                                 <div className="space-y-4">
-                                    {settingsFields.loraExtras.map(renderField)}
+                                    {strictSettingsFields.loraExtras.map(renderField)}
                                 </div>
                             </div>
                         )}
 
-                        {settingsFields.nodeEntries.length > 0 && (
+                        {strictSettingsFields.nodeEntries.length > 0 && (
                             <Accordion type="multiple" className="w-full space-y-2">
-                                {settingsFields.nodeEntries
+                                {strictSettingsFields.nodeEntries
                                     .sort((a, b) => a.order - b.order)
-                                    .map((group) => (
-                                        <AccordionItem key={group.id} value={group.id} className="border rounded-lg px-2 bg-white">
-                                            <AccordionTrigger className="text-xs font-semibold uppercase text-slate-500 hover:no-underline py-2">
-                                                {group.title}
-                                            </AccordionTrigger>
-                                            <AccordionContent className="space-y-4 pt-0 pb-4">
-                                                {group.keys.map(renderField)}
-                                            </AccordionContent>
-                                        </AccordionItem>
-                                    ))}
+                                    .map((group) => {
+                                        // Detect bypass field
+                                        let bypassKey = group.keys.find(k => {
+                                            const f = schema[k];
+                                            return f.widget === "toggle" && (
+                                                (f.title && f.title.toLowerCase().startsWith("bypass")) ||
+                                                k.toLowerCase().includes("bypass")
+                                            );
+                                        });
+
+                                        // Fallback to strict ID check
+                                        if (!bypassKey) {
+                                            const strictKey = `__bypass_${group.id}`;
+                                            if (schema && strictKey in schema) bypassKey = strictKey;
+                                        }
+
+                                        const hasBypass = !!bypassKey;
+                                        const isBypassed = hasBypass && formData[bypassKey!];
+
+                                        // Filter out bypass key from rendered fields
+                                        const fieldsToRender = group.keys.filter(k => k !== bypassKey);
+
+                                        return (
+                                            <AccordionItem
+                                                key={group.id}
+                                                value={group.id}
+                                                className={cn(
+                                                    "border rounded-lg px-2 bg-white transition-opacity",
+                                                    isBypassed && "opacity-60"
+                                                )}
+                                            >
+                                                <AccordionTrigger className="text-xs font-semibold uppercase text-slate-500 hover:no-underline py-2 [&>svg]:ml-auto">
+                                                    <div className="flex items-center gap-3">
+                                                        <span>{group.title}</span>
+                                                        {hasBypass && (
+                                                            <div
+                                                                className="flex items-center gap-2"
+                                                                onClick={(e) => e.stopPropagation()}
+                                                            >
+                                                                <span className="text-[9px] text-slate-300 uppercase tracking-wider">
+                                                                    {isBypassed ? "bypassed" : "active"}
+                                                                </span>
+                                                                <Switch
+                                                                    checked={!!formData[bypassKey!]}
+                                                                    onCheckedChange={(c) => handleChange(bypassKey!, c)}
+                                                                    className={cn(
+                                                                        "h-3.5 w-6 data-[state=checked]:bg-amber-500 data-[state=unchecked]:bg-slate-200"
+                                                                    )}
+                                                                />
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </AccordionTrigger>
+                                                <AccordionContent className="space-y-4 pt-0 pb-4">
+                                                    {!isBypassed ? (
+                                                        fieldsToRender.map(renderField)
+                                                    ) : (
+                                                        <div className="text-[10px] text-slate-400 italic px-1">
+                                                            Node bypassed. Parameters hidden.
+                                                        </div>
+                                                    )}
+                                                </AccordionContent>
+                                            </AccordionItem>
+                                        );
+                                    })}
                             </Accordion>
                         )}
+
                     </AccordionContent>
                 </AccordionItem>
             </Accordion>
-
-            <Button type="submit" disabled={isLoading || submitDisabled} className="w-full bg-slate-900 hover:bg-slate-800 text-white shadow-lg transition-all hover:scale-[1.02]">
-                {isLoading ? "Generating..." : submitLabel}
-            </Button>
         </form>
     );
 }

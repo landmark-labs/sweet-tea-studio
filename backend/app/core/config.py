@@ -84,13 +84,18 @@ class Settings(BaseSettings):
         """Get the directory for a specific project."""
         return self.projects_dir / project_slug
 
-    def ensure_project_dirs(self, project_slug: str) -> Path:
+    def ensure_project_dirs(self, project_slug: str, subfolders: Optional[List[str]] = None) -> Path:
         """Create project directories and return the project path."""
         project_dir = self.get_project_dir(project_slug)
         project_dir.mkdir(exist_ok=True)
         (project_dir / "inputs").mkdir(exist_ok=True)
-        (project_dir / "outputs").mkdir(exist_ok=True)
-        (project_dir / "masks").mkdir(exist_ok=True)
+        
+        # Default folders if none provided
+        folders_to_create = subfolders if subfolders is not None else ["outputs", "masks"]
+        
+        for folder in folders_to_create:
+            (project_dir / folder).mkdir(exist_ok=True)
+            
         return project_dir
 
 

@@ -3,12 +3,14 @@ import shutil
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from typing import List
 from app.models.job import Job, JobCreate, JobRead
+from app.models.project import Project
 from app.models.workflow import WorkflowTemplate
 from app.models.engine import Engine
 from app.core.comfy_client import ComfyClient, ComfyConnectionError, ComfyResponseError
 from app.services.comfy_watchdog import watchdog
 from datetime import datetime
 from app.core.websockets import manager
+from app.core.config import settings
 import copy
 import asyncio
 import random
@@ -52,6 +54,7 @@ def process_job(job_id: int):
             job.status = "failed"
             job.error = "Engine or Workflow not found during execution"
             session.commit()
+            manager.broadcast_sync({"type": "error", "message": job.error}, str(job_id))
             return
 
         try:
@@ -111,7 +114,24 @@ def process_job(job_id: int):
             job.completed_at = datetime.utcnow()
             session.add(job)
 
-            target_output_dir = job.output_dir or engine.output_dir
+            job.completed_at = datetime.utcnow()
+            session.add(job)
+
+            # Determine Target Directory
+            target_output_dir = None
+            if job.output_dir:
+                # If explicit output dir set, check if it needs project resolution
+                if job.project_id and not os.path.isabs(job.output_dir):
+                    project = session.get(Project, job.project_id)
+                    if project:
+                        project_dir = settings.get_project_dir(project.slug)
+                        target_output_dir = str(project_dir / job.output_dir)
+                else:
+                    target_output_dir = job.output_dir
+            
+            # Fallback to engine output if no target set
+            if not target_output_dir:
+                target_output_dir = engine.output_dir
             saved_images = []
             for img_data in images:
                 base_dir = engine.output_dir
@@ -286,9 +306,55 @@ def create_job(job_in: JobCreate, background_tasks: BackgroundTasks):
         
         return job
 
+
+
 @router.websocket("/{job_id}/ws")
 async def websocket_endpoint(websocket: WebSocket, job_id: str):
     await manager.connect(websocket, job_id)
+    
+    # Send initial status
+    try:
+        with Session(db_engine) as session:
+            # Check if job exists and send current status
+            job = session.get(Job, int(job_id))
+            if job:
+                # If finished/failed already, send that
+                if job.status in ["completed", "failed", "cancelled"]:
+                    if job.status == "completed":
+                        # We might want to send the images too if we missed them
+                        # But typically 'completed' type message has images.
+                        # For simplicity, just send status and let frontend refresh gallery via on_connect logic or simple polling if needed. 
+                        # But wait, frontend feeds relies on "completed" message to show preview.
+                        # If we missed it, we missed the preview path.
+                        
+                        # Re-fetch images
+                        images = session.exec(select(Image).where(Image.job_id == int(job_id))).all()
+                        images_payload = [
+                            {
+                                "id": img.id,
+                                "job_id": img.job_id,
+                                "path": img.path,
+                                "filename": img.filename,
+                                "created_at": img.created_at.isoformat(),
+                                "is_kept": img.is_kept
+                            } 
+                            for img in images
+                        ]
+                        await websocket.send_json({"type": "completed", "images": images_payload})
+                    
+                    elif job.status == "failed":
+                        await websocket.send_json({"type": "error", "message": job.error or "Job failed"})
+                    
+                    elif job.status == "cancelled":
+                        await websocket.send_json({"type": "status", "status": "cancelled"})
+
+                # If running
+                elif job.status == "running":
+                    await websocket.send_json({"type": "executing", "status": "processing"})
+                    
+    except Exception as e:
+        print(f"Error sending initial WS status: {e}")
+
     try:
         while True:
             await websocket.receive_text()

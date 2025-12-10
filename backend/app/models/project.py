@@ -30,3 +30,5 @@ class ProjectRead(ProjectBase):
     created_at: datetime
     updated_at: datetime
     archived_at: Optional[datetime]
+    image_count: int = 0
+    last_activity: Optional[datetime] = None

@@ -178,7 +178,230 @@ export default function WorkflowLibrary() {
         }
     };
 
-    // --- Install Logic ---
+    // Helper: Sort nodes by execution order (simple upstream-first BFS/Topological approximation)
+    const getSortedNodeIds = (graph: any) => {
+        const ids = Object.keys(graph);
+        // This is a naive sort: usually ID order in ComfyUI is creation order, roughly execution order. 
+        // A true topological sort requires parsing links, which is heavy here. 
+        // We will stick to numeric sort of IDs for stability, as Comfy executes roughly in ID order or link order.
+        return ids.sort((a, b) => parseInt(a) - parseInt(b));
+    };
+
+    if (editingWorkflow) {
+        const sortedNodeIds = getSortedNodeIds(editingWorkflow.graph_json);
+
+        // Group parameters (Exposed vs Hidden) per Node
+        // Exposed: keys in schemaEdits where x_node_id matches
+        // Hidden: widgets in graph_json NOT in schemaEdits
+
+        const nodesRenderData = sortedNodeIds.map(nodeId => {
+            const node = editingWorkflow.graph_json[nodeId];
+            if (!node) return null;
+
+            // 1. Get all params associated with this node from the schema
+            const allParams = Object.entries(schemaEdits).filter(([_, val]: [string, any]) => String(val.x_node_id) === String(nodeId));
+
+            // 2. Split into Active and Hidden
+            // We treat "Hidden" as having the __hidden flag.
+            const active = allParams.filter(([_, val]: [string, any]) => !val.__hidden);
+            const hidden = allParams.filter(([_, val]: [string, any]) => val.__hidden);
+
+            return {
+                id: nodeId,
+                title: node._meta?.title || node.title || `Node ${nodeId}`,
+                type: node.class_type,
+                active,
+                hidden
+            };
+        }).filter(n => n && (n.active.length > 0 || n.hidden.length > 0));
+
+        return (
+            <div className="container mx-auto p-4 h-[calc(100vh-4rem)] flex flex-col">
+                <div className="flex justify-between items-center mb-6">
+                    <h1 className="text-2xl font-bold">edit pipe: {editingWorkflow.name}</h1>
+                    <div className="flex gap-2">
+                        {/* We reuse the Bypass dialog as a generic "Add stuff" entry point for now */}
+                        <Dialog>
+                            <DialogTrigger asChild>
+                                <Button variant="secondary" size="sm">
+                                    <AlertTriangle className="w-4 h-4 mr-2" />
+                                    manage bypasses
+                                </Button>
+                            </DialogTrigger>
+                            <DialogContent>
+                                <DialogHeader>
+                                    <DialogTitle>add node bypass toggle</DialogTitle>
+                                    <DialogDescription>
+                                        Select a node to allow bypassing.
+                                    </DialogDescription>
+                                </DialogHeader>
+                                <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+                                    {Object.entries(editingWorkflow.graph_json)
+                                        .map(([id, node]: [string, any]) => {
+                                            const bypassKey = `__bypass_${id}`;
+                                            const hasBypass = !!schemaEdits[bypassKey];
+
+                                            return (
+                                                <div key={id} className={cn("flex justify-between items-center p-2 border rounded hover:bg-slate-50 transition-colors", hasBypass && "bg-blue-50 border-blue-200")}>
+                                                    <div>
+                                                        <div className="font-bold text-sm flex items-center gap-2">
+                                                            {node._meta?.title || node.title || `Node ${id}`}
+                                                            {hasBypass && <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-mono">BYPASSABLE</span>}
+                                                        </div>
+                                                        <div className="text-xs text-slate-500">{node.class_type}</div>
+                                                    </div>
+                                                    <Button
+                                                        size="sm"
+                                                        variant={hasBypass ? "destructive" : "outline"}
+                                                        onClick={() => {
+                                                            const s = { ...schemaEdits };
+                                                            if (hasBypass) {
+                                                                delete s[bypassKey];
+                                                            } else {
+                                                                s[bypassKey] = {
+                                                                    title: `Bypass ${node._meta?.title || node.title || id}`,
+                                                                    widget: "toggle",
+                                                                    x_node_id: id,
+                                                                    type: "boolean",
+                                                                    default: false
+                                                                };
+                                                            }
+                                                            setSchemaEdits(s);
+                                                        }}
+                                                    >
+                                                        {hasBypass ? "Remove" : "Enable"}
+                                                    </Button>
+                                                </div>
+                                            );
+                                        })
+                                    }
+                                </div>
+                            </DialogContent>
+                        </Dialog>
+                        <Button variant="outline" onClick={() => setEditingWorkflow(null)}>Cancel</Button>
+                        <Button onClick={handleSaveSchema}><Save className="w-4 h-4 mr-2" /> Save Changes</Button>
+                    </div>
+                </div>
+                <Card className="flex-1 overflow-auto bg-slate-50/50">
+                    <CardHeader><CardTitle>Pipe Parameters</CardTitle></CardHeader>
+                    <CardContent className="space-y-6">
+                        {nodesRenderData.length === 0 && <div className="text-center text-slate-400 py-8">No parameters exposed.</div>}
+
+                        {nodesRenderData.map(node => (
+                            <div key={node!.id} className="bg-white border rounded-lg overflow-hidden shadow-sm">
+                                <div className="px-4 py-2 bg-slate-100 border-b flex justify-between items-center">
+                                    <div className="font-semibold text-sm text-slate-700 flex items-center gap-2">
+                                        <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-xs font-mono text-slate-500">{node!.id}</div>
+                                        {node!.title}
+                                    </div>
+                                    <span className="text-[10px] font-mono text-slate-400">{node!.type}</span>
+                                </div>
+
+                                {/* Active Parameters */}
+                                {node!.active.length > 0 && (
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow className="border-b-0 hover:bg-transparent">
+                                                <TableHead className="h-8 text-xs w-[30%]">Label</TableHead>
+                                                <TableHead className="h-8 text-xs w-[20%]">Field ID</TableHead>
+                                                <TableHead className="h-8 text-xs w-[15%]">Type</TableHead>
+                                                <TableHead className="h-8 text-xs w-[25%]">Default Value</TableHead>
+                                                <TableHead className="h-8 text-xs text-right w-[10%]">Action</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {node!.active.map(([key, field]: [string, any]) => (
+                                                <TableRow key={key} className="hover:bg-slate-50/50">
+                                                    <TableCell className="py-2">
+                                                        <Input
+                                                            className="h-7 text-xs"
+                                                            value={field.title || ""}
+                                                            onChange={(e) => {
+                                                                const s = { ...schemaEdits };
+                                                                s[key].title = e.target.value;
+                                                                setSchemaEdits(s);
+                                                            }}
+                                                        />
+                                                    </TableCell>
+                                                    <TableCell className="font-mono text-[10px] text-slate-500 py-2 break-all">{key}</TableCell>
+                                                    <TableCell className="text-xs py-2">{field.type}</TableCell>
+                                                    <TableCell className="py-2">
+                                                        {field.widget === "toggle" || field.type === "boolean" ? (
+                                                            <Switch
+                                                                checked={field.default}
+                                                                onCheckedChange={(checked) => {
+                                                                    const s = { ...schemaEdits };
+                                                                    s[key].default = checked;
+                                                                    setSchemaEdits(s);
+                                                                }}
+                                                            />
+                                                        ) : (
+                                                            <Input
+                                                                className="h-7 text-xs"
+                                                                value={String(field.default ?? "")}
+                                                                onChange={(e) => {
+                                                                    const s = { ...schemaEdits };
+                                                                    // Naive type check
+                                                                    const val = (field.type === "number" || field.type === "integer" || field.type === "float")
+                                                                        ? (Number(e.target.value) || 0)
+                                                                        : e.target.value;
+                                                                    s[key].default = val;
+                                                                    setSchemaEdits(s);
+                                                                }}
+                                                            />
+                                                        )}
+                                                    </TableCell>
+                                                    <TableCell className="text-right py-2">
+                                                        <Button variant="ghost" size="sm" className="h-6 text-xs text-slate-500 hover:text-amber-600" onClick={() => {
+                                                            // Soft Hide
+                                                            const s = { ...schemaEdits };
+                                                            s[key].__hidden = true;
+                                                            setSchemaEdits(s);
+                                                        }}>
+                                                            Hide
+                                                        </Button>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                )}
+
+                                {/* Hidden Parameters (if any) */}
+                                {node!.hidden.length > 0 && (
+                                    <div className="bg-slate-50/50 border-t">
+                                        <div className="px-4 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Hidden Parameters</div>
+                                        <Table>
+                                            <TableBody>
+                                                {node!.hidden.map(([key, field]: [string, any]) => (
+                                                    <TableRow key={key} className="hover:bg-slate-100/50 opacity-60">
+                                                        <TableCell className="py-2 text-xs text-slate-500 w-[30%]">{field.title || key}</TableCell>
+                                                        <TableCell className="font-mono text-[10px] text-slate-400 py-2 w-[20%] break-all">{key}</TableCell>
+                                                        <TableCell className="text-xs py-2 text-slate-400 w-[15%]">{field.type}</TableCell>
+                                                        <TableCell className="py-2 text-xs text-slate-400 w-[25%]">{String(field.default ?? "-")}</TableCell>
+                                                        <TableCell className="text-right py-2 w-[10%]">
+                                                            <Button variant="ghost" size="sm" className="h-6 text-xs text-blue-500 hover:text-blue-700" onClick={() => {
+                                                                // Restore
+                                                                const s = { ...schemaEdits };
+                                                                delete s[key].__hidden;
+                                                                setSchemaEdits(s);
+                                                            }}>
+                                                                Restore
+                                                            </Button>
+                                                        </TableCell>
+                                                    </TableRow>
+                                                ))}
+                                            </TableBody>
+                                        </Table>
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+                    </CardContent>
+                </Card>
+            </div>
+        );
+    }
     const startInstall = async (missing: string[]) => {
         setInstallOpen(true);
         setInstallStatus({ status: "pending", progress_text: "Initializing..." });

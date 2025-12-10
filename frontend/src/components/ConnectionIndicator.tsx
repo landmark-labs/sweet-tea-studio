@@ -1,0 +1,143 @@
+/**
+ * ConnectionIndicator - Compact connection status indicator for the header
+ * Shows green/red dot, connection status, port, and allows editing
+ */
+import { useState, useEffect } from "react";
+import { api, EngineHealth } from "@/lib/api";
+import { cn } from "@/lib/utils";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Settings2 } from "lucide-react";
+
+
+interface VersionInfo {
+    comfyui_version: string | null;
+    pytorch_version: string | null;
+    cuda_version: string | null;
+    python_version: string | null;
+}
+
+export function ConnectionIndicator() {
+    const [health, setHealth] = useState<EngineHealth | null>(null);
+    const [port, setPort] = useState(() => localStorage.getItem("ds_comfyui_port") || "8188");
+    const [tempPort, setTempPort] = useState(port);
+    const [isEditing, setIsEditing] = useState(false);
+    const [versions, setVersions] = useState<VersionInfo | null>(null);
+
+    const isConnected = health?.healthy ?? false;
+
+    useEffect(() => {
+        const checkHealth = async () => {
+            try {
+                const healths = await api.getEngineHealth();
+                if (healths.length > 0) {
+                    setHealth(healths[0]);
+                }
+            } catch {
+                setHealth(null);
+            }
+        };
+
+        const fetchVersions = async () => {
+            if (!isConnected) return;
+            try {
+                const data = await api.getVersions();
+                setVersions(data);
+            } catch {
+                // Silently fail
+            }
+        };
+
+        checkHealth();
+        fetchVersions();
+        const interval = setInterval(checkHealth, 5000);
+        // Refresh versions every 30s
+        const versionInterval = setInterval(fetchVersions, 30000);
+
+        return () => {
+            clearInterval(interval);
+            clearInterval(versionInterval);
+        };
+    }, [isConnected]);
+
+    const handleSavePort = () => {
+        setPort(tempPort);
+        localStorage.setItem("ds_comfyui_port", tempPort);
+        setIsEditing(false);
+    };
+
+    return (
+        <div className="flex items-center gap-4 text-xs">
+            <div className="flex items-center gap-2">
+                {/* Status Dot & Text */}
+                <div className="flex items-center gap-1.5">
+                    <span
+                        className={cn(
+                            "w-2 h-2 rounded-full",
+                            isConnected ? "bg-green-500" : "bg-red-500",
+                            isConnected && "animate-pulse"
+                        )}
+                    />
+                    <span className={cn(
+                        "font-medium",
+                        isConnected ? "text-green-600" : "text-red-500"
+                    )}>
+                        {isConnected ? "connected" : "not connected"}
+                    </span>
+                </div>
+
+                {/* Port Indicator with Edit Popover */}
+                <Popover open={isEditing} onOpenChange={setIsEditing}>
+                    <PopoverTrigger asChild>
+                        <button
+                            className="flex items-center gap-1 px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors cursor-pointer"
+                        >
+                            <span className="text-[10px] text-slate-400">port</span>
+                            <span className="font-mono">{port}</span>
+                            <Settings2 className="w-3 h-3 text-slate-400" />
+                        </button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-56 p-3" align="start">
+                        <div className="space-y-2">
+                            <label className="text-xs font-semibold text-slate-500 uppercase">comfyui port</label>
+                            <div className="flex gap-2">
+                                <Input
+                                    type="text"
+                                    value={tempPort}
+                                    onChange={(e) => setTempPort(e.target.value)}
+                                    className="h-8 text-sm font-mono"
+                                    placeholder="8188"
+                                />
+                                <Button size="sm" className="h-8" onClick={handleSavePort}>
+                                    save
+                                </Button>
+                            </div>
+                            <p className="text-[10px] text-slate-400">
+                                default is 8188. change if using custom setup.
+                            </p>
+                        </div>
+                    </PopoverContent>
+                </Popover>
+            </div>
+
+            {/* Versions Display */}
+            {isConnected && versions && (
+                <div className="flex items-center gap-3 text-[10px] text-slate-400 border-l border-slate-200 pl-4">
+                    {versions.comfyui_version && (
+                        <div><span className="font-semibold text-slate-600">ComfyUI</span> {versions.comfyui_version}</div>
+                    )}
+                    {versions.pytorch_version && (
+                        <div><span className="font-semibold text-slate-600">PyTorch</span> {versions.pytorch_version}</div>
+                    )}
+                    {versions.cuda_version && (
+                        <div><span className="font-semibold text-slate-600">CUDA</span> {versions.cuda_version}</div>
+                    )}
+                    {versions.python_version && (
+                        <div><span className="font-semibold text-slate-600">Python</span> {versions.python_version}</div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}

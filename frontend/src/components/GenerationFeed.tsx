@@ -11,6 +11,7 @@ export interface GenerationFeedItem {
   previewPath?: string | null;
   previewBlob?: string | null;
   startedAt: string;
+  estimatedTotalSteps?: number;
 }
 
 interface GenerationFeedProps {
@@ -21,6 +22,33 @@ interface GenerationFeedProps {
 export function GenerationFeed({ items, onSelectPreview }: GenerationFeedProps) {
   const activeItem = items[0];
 
+  // Calculate metrics
+  const getMetrics = (item: GenerationFeedItem) => {
+    const elapsed = (Date.now() - new Date(item.startedAt).getTime()) / 1000;
+    const progressFraction = item.progress / 100;
+
+    // Estimate iterations based on progress (assuming ~20 steps for typical generation)
+    const estimatedTotalSteps = item.estimatedTotalSteps || 20;
+    const currentStep = Math.round(progressFraction * estimatedTotalSteps);
+
+    // it/s and s/it
+    const iterationsPerSecond = elapsed > 0 && currentStep > 0 ? currentStep / elapsed : 0;
+    const secondsPerIteration = currentStep > 0 ? elapsed / currentStep : 0;
+
+    // Estimated total duration
+    const estimatedTotalDuration = progressFraction > 0 ? elapsed / progressFraction : 0;
+    const estimatedRemaining = Math.max(0, estimatedTotalDuration - elapsed);
+
+    return {
+      elapsed: Math.round(elapsed),
+      itPerSec: iterationsPerSecond.toFixed(2),
+      secPerIt: secondsPerIteration.toFixed(2),
+      estimatedTotal: Math.round(estimatedTotalDuration),
+      remaining: Math.round(estimatedRemaining),
+      elapsedPercent: progressFraction > 0 ? Math.round((elapsed / estimatedTotalDuration) * 100) : 0
+    };
+  };
+
   return (
     <div className="w-80 pointer-events-auto">
       <Card className="shadow-lg border-slate-200 bg-white/95 backdrop-blur overflow-hidden">
@@ -29,10 +57,10 @@ export function GenerationFeed({ items, onSelectPreview }: GenerationFeedProps) 
             <div className="flex items-center justify-between px-3 py-2 border-b border-slate-200 bg-slate-50/50">
               <div className="text-xs font-semibold text-slate-700 flex items-center gap-2">
                 <span className={cn("w-2 h-2 rounded-full", activeItem.status === 'running' || activeItem.status === 'processing' ? "bg-green-500 animate-pulse" : "bg-slate-300")} />
-                Generation Status
+                generation status
               </div>
               <Badge variant="outline" className="text-[10px] text-slate-500 h-5 px-1.5 font-normal">
-                Job #{activeItem.jobId}
+                job #{activeItem.jobId}
               </Badge>
             </div>
 
@@ -42,7 +70,7 @@ export function GenerationFeed({ items, onSelectPreview }: GenerationFeedProps) 
                   <img src={activeItem.previewBlob} alt="Live Preview" className="w-full h-full object-contain" />
                   {(activeItem.status === 'running' || activeItem.status === 'processing') && (
                     <div className="absolute top-2 right-2 px-1.5 py-0.5 bg-black/50 text-white text-[10px] rounded backdrop-blur font-medium tracking-wide">
-                      LIVE
+                      live
                     </div>
                   )}
                 </div>
@@ -52,16 +80,26 @@ export function GenerationFeed({ items, onSelectPreview }: GenerationFeedProps) 
                   onClick={() => onSelectPreview?.(activeItem.previewPath || "")}
                 >
                   <div className="w-full h-full flex flex-col items-center justify-center text-xs text-slate-400 gap-1 group-hover:text-slate-600 transition-colors">
-                    <span className="font-semibold">Ready</span>
-                    <span className="text-[10px]">Click to view result</span>
+                    <span className="font-semibold">ready</span>
+                    <span className="text-[10px]">click to view result</span>
                   </div>
                 </div>
               ) : null}
 
               <div className="space-y-1">
-                <div className="flex justify-between text-[10px] text-slate-500 uppercase tracking-wider font-semibold">
-                  <span>{activeItem.status}</span>
-                  <span>{Math.round(activeItem.progress)}%</span>
+                <div className="flex justify-between text-[10px] text-slate-500 tracking-wider font-semibold">
+                  <span className="lowercase">{activeItem.status}</span>
+                  <div className="flex gap-2">
+                    {activeItem.status === "processing" && (() => {
+                      const metrics = getMetrics(activeItem);
+                      return (
+                        <span>
+                          {metrics.itPerSec} it/s | {metrics.secPerIt} s/it | {metrics.elapsed}s / ~{metrics.estimatedTotal}s ({metrics.elapsedPercent}%)
+                        </span>
+                      );
+                    })()}
+                    <span>{Math.round(activeItem.progress)}%</span>
+                  </div>
                 </div>
                 <Progress value={activeItem.progress} className="h-1.5" />
               </div>
@@ -73,7 +111,7 @@ export function GenerationFeed({ items, onSelectPreview }: GenerationFeedProps) 
                   className="h-7 w-full text-xs"
                   onClick={() => onSelectPreview?.(activeItem.previewPath || "")}
                 >
-                  View Result
+                  view result
                 </Button>
               )}
             </div>
@@ -83,8 +121,8 @@ export function GenerationFeed({ items, onSelectPreview }: GenerationFeedProps) 
             <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center mb-1">
               <div className="w-2 h-2 rounded-full bg-slate-300" />
             </div>
-            <div className="text-xs font-medium text-slate-500">Ready to Generate</div>
-            <div className="text-[10px]">Waiting for job...</div>
+            <div className="text-xs font-medium text-slate-500">ready to generate</div>
+            <div className="text-[10px]">waiting for job...</div>
           </div>
         )}
       </Card>

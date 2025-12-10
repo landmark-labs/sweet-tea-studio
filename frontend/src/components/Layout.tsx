@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Outlet, NavLink } from "react-router-dom";
 import { PlusCircle, Settings, Library, Image as ImageIcon, GitBranch, ChevronLeft, ChevronRight, HardDrive, FolderOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { UndoRedoBar } from "@/components/UndoRedoBar";
+import { ConnectionIndicator } from "@/components/ConnectionIndicator";
 import { labels } from "@/ui/labels";
 
 const navItems = [
@@ -20,6 +21,16 @@ import { ConnectionBanner } from "@/components/ConnectionBanner";
 
 export default function Layout() {
   const [collapsed, setCollapsed] = useState(false);
+
+  // Persisted Panel States
+  const [feedOpen, setFeedOpen] = useState(() => localStorage.getItem("ds_feed_open") !== "false");
+  const [libraryOpen, setLibraryOpen] = useState(() => localStorage.getItem("ds_library_open") !== "false");
+  const [perfHudOpen, setPerfHudOpen] = useState(() => localStorage.getItem("ds_perf_hud_open") === "true");
+
+  // Persist effects
+  useEffect(() => localStorage.setItem("ds_feed_open", String(feedOpen)), [feedOpen]);
+  useEffect(() => localStorage.setItem("ds_library_open", String(libraryOpen)), [libraryOpen]);
+  useEffect(() => localStorage.setItem("ds_perf_hud_open", String(perfHudOpen)), [perfHudOpen]);
 
   return (
     <div className="flex h-screen w-screen bg-gradient-to-br from-background via-surface to-muted text-foreground overflow-hidden">
@@ -39,7 +50,7 @@ export default function Layout() {
                 </h1>
                 <span className="rounded-full bg-primary/10 text-primary px-2 py-0.5 text-xs font-medium">studio</span>
               </div>
-              <p className="text-xs text-muted-foreground whitespace-nowrap">cohesive creative workspace</p>
+              <p className="text-xs text-muted-foreground whitespace-nowrap">a creative workspace</p>
             </div>
           )}
           <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full" onClick={() => setCollapsed(!collapsed)}>
@@ -81,21 +92,51 @@ export default function Layout() {
       {/* Main Content */}
       <main className="flex-1 overflow-auto bg-gradient-to-b from-surface/50 to-background">
         <div className="w-full h-full flex flex-col">
-          <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4 flex-none border-b border-border/50 bg-surface/50">
-            <div>
-              <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">sweet tea studio</p>
-              <h2 className="text-lg font-semibold capitalize">unified creation desk</h2>
+          <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-3 flex-none border-b border-border/50 bg-surface/50">
+            {/* Left: Connection Indicator */}
+            <ConnectionIndicator />
+
+            {/* Right: Toggle Buttons & UndoRedo */}
+            <div className="flex items-center gap-3">
+              {/* Toggle Buttons Group */}
+              <div className="flex items-center gap-2 mr-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className={cn("text-xs transition-colors", feedOpen ? "bg-blue-500 text-white hover:bg-blue-600 hover:text-white border-blue-600" : "text-slate-500 bg-slate-100 hover:bg-slate-200")}
+                  onClick={() => setFeedOpen(!feedOpen)}
+                >
+                  generation feed
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className={cn("text-xs transition-colors", libraryOpen ? "bg-blue-500 text-white hover:bg-blue-600 hover:text-white border-blue-600" : "text-slate-500 bg-slate-100 hover:bg-slate-200")}
+                  onClick={() => setLibraryOpen(!libraryOpen)}
+                >
+                  prompt library
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className={cn("text-xs transition-colors", perfHudOpen ? "bg-blue-500 text-white hover:bg-blue-600 hover:text-white border-blue-600" : "text-slate-500 bg-slate-100 hover:bg-slate-200")}
+                  onClick={() => setPerfHudOpen(!perfHudOpen)}
+                >
+                  performance hud
+                </Button>
+              </div>
+
+              <UndoRedoBar />
             </div>
-            <UndoRedoBar />
           </div>
           <div className="flex-1 overflow-hidden relative">
-            <Outlet />
+            <Outlet context={{ feedOpen, setFeedOpen, libraryOpen, setLibraryOpen }} />
           </div>
         </div>
       </main>
       <ConnectionBanner />
       <StatusBar />
-      <PerformanceHUD />
+      <PerformanceHUD visible={perfHudOpen} />
     </div>
   );
 }

@@ -141,6 +141,15 @@ class ComfyClient:
         except urllib.error.URLError as e:
             raise ComfyConnectionError(f"Could not retrieve history from {self.engine.base_url}") from e
 
+    def get_system_stats(self) -> Dict[str, Any]:
+        """Retrieve system stats including version info from ComfyUI."""
+        try:
+            with urllib.request.urlopen(self._get_url("/system_stats"), timeout=5) as response:
+                return json.loads(response.read())
+        except urllib.error.URLError as e:
+            raise ComfyConnectionError(f"Could not retrieve system stats from {self.engine.base_url}") from e
+
+
     def get_images(self, prompt_id: str, progress_callback=None) -> List[Dict[str, Any]]:
         """
         Wait for job completion and retrieve output images.

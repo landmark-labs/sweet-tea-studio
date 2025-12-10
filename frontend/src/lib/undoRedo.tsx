@@ -14,6 +14,7 @@ type UndoRedoContextValue = {
   redo: () => void;
   recordChange: (action: UndoRedoAction) => void;
   registerStateChange: <T>(label: string, previous: T, next: T, apply: (value: T) => void, guardable?: boolean) => void;
+  historyLabels: string[];
 };
 
 const UndoRedoContext = createContext<UndoRedoContextValue | undefined>(undefined);
@@ -88,6 +89,8 @@ export function UndoRedoProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("keydown", handler);
   }, [undo, redo]);
 
+  const historyLabels = useMemo(() => undoStack.map(a => a.label).reverse(), [undoStack]);
+
   const value = useMemo(() => ({
     canUndo: undoStack.length > 0,
     canRedo: redoStack.length > 0,
@@ -95,7 +98,8 @@ export function UndoRedoProvider({ children }: { children: ReactNode }) {
     redo,
     recordChange,
     registerStateChange,
-  }), [undoStack.length, redoStack.length, undo, redo, recordChange, registerStateChange]);
+    historyLabels,
+  }), [undoStack.length, redoStack.length, undo, redo, recordChange, registerStateChange, historyLabels]);
 
   return <UndoRedoContext.Provider value={value}>{children}</UndoRedoContext.Provider>;
 }

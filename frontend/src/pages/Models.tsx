@@ -72,11 +72,15 @@ export default function Models() {
   const [models, setModels] = useState<InstalledModel[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [downloadQueue, setDownloadQueue] = useState<DownloadJob[]>([]);
-  const [hfLinks, setHfLinks] = useState("");
-  const [civitaiLinks, setCivitaiLinks] = useState("");
+
+  // New State for Dynamic Download Rows
+  const [downloadRows, setDownloadRows] = useState<{ target: string; url: string; id: number }[]>([
+    { target: "checkpoints", url: "", id: Date.now() }
+  ]);
+
   const [selectedCategory, setSelectedCategory] = useState<ModelCategory>("Checkpoint");
   const [search, setSearch] = useState("");
-  const [targetFolder, setTargetFolder] = useState("checkpoints");
+  // Removed single targetFolder state since it's now per-row
   const { registerStateChange } = useUndoRedo();
 
   // Fetch installed models from API
@@ -115,10 +119,10 @@ export default function Models() {
         const data = await res.json();
         const mapped: DownloadJob[] = data.map((d: any) => ({
           id: d.job_id,
-          source: "Hugging Face" as DownloadSource,
+          source: "Hugging Face" as DownloadSource, // Backend doesn't always send source, but label handles it
           link: d.url || "",
-          category: selectedCategory,
-          target: targetFolder,
+          category: selectedCategory, // Note: backend doesn't return category for job status easily yet
+          target: d.target_folder || "unknown",
           status: d.status,
           progress: d.progress,
           speed: d.speed,
@@ -164,34 +168,46 @@ export default function Models() {
     });
   }, [models, search, selectedCategory]);
 
-  const addDownloads = async (links: string, source: DownloadSource) => {
-    const entries = links
-      .split("\n")
-      .map((link) => link.trim())
-      .filter(Boolean);
+  const handleAddRow = () => {
+    setDownloadRows(prev => [...prev, { target: "checkpoints", url: "", id: Date.now() }]);
+  };
 
-    if (!entries.length) return;
+  const handleRemoveRow = (id: number) => {
+    if (downloadRows.length === 1) {
+      setDownloadRows([{ target: "checkpoints", url: "", id: Date.now() }]); // Reset if last one
+      return;
+    }
+    setDownloadRows(prev => prev.filter(r => r.id !== id));
+  };
 
-    // Call API for each download
-    for (const url of entries) {
+  const handleRowChange = (id: number, field: 'target' | 'url', value: string) => {
+    setDownloadRows(prev => prev.map(r => r.id === id ? { ...r, [field]: value } : r));
+  };
+
+  const processQueue = async () => {
+    const validRows = downloadRows.filter(r => r.url.trim().length > 0);
+    if (!validRows.length) return;
+
+    for (const row of validRows) {
       try {
         await fetch("/api/v1/models/download", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            url,
-            target_folder: targetFolder.toLowerCase(),
+            url: row.url.trim(),
+            target_folder: row.target.toLowerCase(),
+            // Backend will auto-detect Civitai vs Aria2c based on URL
           }),
         });
       } catch (e) {
         console.error("Failed to queue download:", e);
+        alert(`Failed to queue: ${row.url}`);
       }
     }
 
-    // Refresh download list
+    // Clear rows and refresh
+    setDownloadRows([{ target: "checkpoints", url: "", id: Date.now() }]);
     fetchDownloads();
-    if (source === "Hugging Face") setHfLinks("");
-    if (source === "Civitai") setCivitaiLinks("");
   };
 
   const markComplete = (id: string) => {
@@ -232,18 +248,29 @@ export default function Models() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* Column 1: ComfyUI Folders */}
+        <Card className="h-full flex flex-col">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-base">ComfyUI folders</CardTitle>
-            <FolderOpen className="text-blue-500" size={18} />
+            <FolderOpen
+              className="text-blue-500 cursor-pointer hover:text-blue-600 active:scale-95 transition-all"
+              size={18}
+              onClick={() => {
+                const manual = prompt(
+                  "Manually specify the root models directory if detection failed.\n\nNote: This is a client-side override for generating download commands.",
+                  "ComfyUI/models"
+                );
+                if (manual) alert(`Path override set to: ${manual} (This is a visual confirmation only - functionality to persist this to backend is pending backend API update).`);
+              }}
+            />
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="space-y-3 flex-1 overflow-y-auto max-h-[600px]">
             {comfyModelFolders.map((folder) => (
               <div key={folder.name} className="rounded-md border border-slate-200 p-3 bg-white">
                 <div className="flex items-center justify-between text-sm font-medium text-slate-800">
                   <span>{folder.name}</span>
-                  <span className="text-xs text-slate-500">{folder.path}</span>
+                  <span className="text-xs text-slate-500 break-all">{folder.path}</span>
                 </div>
                 <p className="text-xs text-slate-500 mt-1">{folder.description}</p>
               </div>
@@ -251,31 +278,100 @@ export default function Models() {
           </CardContent>
         </Card>
 
-        <Card>
+        {/* Column 2: Add Model Downloads */}
+        <Card className="h-full flex flex-col">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Add model downloads</CardTitle>
+            <CardDescription className="text-xs">
+              Smart-detects Civitai vs Hugging Face links.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3 flex-1 overflow-y-auto max-h-[600px]">
+            <div className="space-y-2">
+              {downloadRows.map((row, index) => (
+                <div key={row.id} className="flex gap-2 items-start animate-in slide-in-from-left-2 duration-200" style={{ animationDelay: `${index * 50}ms` }}>
+                  <Select
+                    value={row.target}
+                    onValueChange={(v) => handleRowChange(row.id, 'target', v)}
+                  >
+                    <SelectTrigger className="w-[110px] flex-none">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="checkpoints">checkpoints</SelectItem>
+                      <SelectItem value="loras">loras</SelectItem>
+                      <SelectItem value="controlnet">controlnet</SelectItem>
+                      <SelectItem value="upscale">upscale</SelectItem>
+                      <SelectItem value="vlm">vlm</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    placeholder="Paste link..."
+                    className="flex-1 min-w-0"
+                    value={row.url}
+                    onChange={(e) => handleRowChange(row.id, 'url', e.target.value)}
+                  />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="flex-none text-slate-400 hover:text-red-500"
+                    onClick={() => handleRemoveRow(row.id)}
+                    disabled={downloadRows.length === 1 && !row.url}
+                  >
+                    <Trash2 size={16} />
+                  </Button>
+                </div>
+              ))}
+            </div>
+
+            <Button
+              variant="secondary"
+              className="w-full text-xs gap-1 h-8"
+              onClick={handleAddRow}
+            >
+              <div className="w-4 h-4 rounded-full bg-slate-200 flex items-center justify-center font-bold text-slate-600">+</div>
+              Add another link
+            </Button>
+
+            <div className="pt-4 border-t mt-4">
+              <Button className="w-full" onClick={processQueue} disabled={!downloadRows.some(r => r.url.trim().length > 0)}>
+                <Rocket className="w-4 h-4 mr-2" />
+                Start Downloads
+              </Button>
+            </div>
+
+            <div className="bg-slate-50 p-3 rounded text-xs text-slate-500 space-y-1">
+              <div className="flex gap-2 items-center"><Info size={14} /> <span>Auto-sorted by link type</span></div>
+              <p>Civitai links use civitaidownloader (API key supported if env var set). HF links use aria2c (multiconnection).</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Column 3: Download Queue */}
+        <Card className="h-full flex flex-col">
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Download queue</CardTitle>
-            <CardDescription>Hugging Face (aria2c) and Civitai downloads land in the proper Comfy folders.</CardDescription>
+            <CardDescription className="text-xs">Active and past jobs.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="space-y-3 flex-1 overflow-y-auto max-h-[600px]">
             {downloadQueue.map((job) => (
               <div key={job.id} className="rounded-md border border-slate-200 p-3 bg-white space-y-2">
                 <div className="flex items-center justify-between">
-                  <div className="space-y-1">
+                  <div className="space-y-1 w-full overflow-hidden">
                     <div className="flex items-center gap-2 text-sm font-medium text-slate-800">
-                      <ArrowDownCircle size={16} className="text-blue-500" />
-                      <span>{job.category}</span>
+                      <ArrowDownCircle size={16} className="text-blue-500 flex-none" />
+                      <span className="capitalize truncate">{job.target}</span>
                     </div>
-                    <p className="text-xs text-slate-500 break-all">{job.link}</p>
-                    <p className="text-xs text-slate-500">{job.source} → {job.target}</p>
+                    <p className="text-xs text-slate-500 truncate" title={job.link}>{job.link}</p>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex gap-1 flex-none">
                     {job.status !== "completed" && (
-                      <Button size="sm" variant="outline" onClick={() => markComplete(job.id)}>
-                        Mark done
+                      <Button size="sm" variant="outline" className="h-7 text-[10px]" onClick={() => markComplete(job.id)}>
+                        Reset
                       </Button>
                     )}
-                    <Button size="icon" variant="ghost" onClick={() => removeJob(job.id)}>
-                      <Trash2 size={16} />
+                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => removeJob(job.id)}>
+                      <Trash2 size={14} />
                     </Button>
                   </div>
                 </div>
@@ -289,110 +385,14 @@ export default function Models() {
               </div>
             ))}
             {!downloadQueue.length && (
-              <p className="text-sm text-slate-500">No downloads queued yet.</p>
+              <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+                <ArrowDownCircle className="w-8 h-8 opacity-20 mb-2" />
+                <p className="text-sm">Queue is empty</p>
+              </div>
             )}
           </CardContent>
         </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Quick facts</CardTitle>
-            <CardDescription>everything sweet tea expects for a single comfy instance.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3 text-sm text-slate-700">
-            <div className="flex items-start gap-2">
-              <Info size={16} className="text-blue-500 mt-0.5" />
-              <p>
-                this page replaces "engines"—assumes one sweet tea instance talking to one comfyui host.
-              </p>
-            </div>
-            <div className="flex items-start gap-2">
-              <Rocket size={16} className="text-green-600 mt-0.5" />
-              <p>
-                Use aria2c for fast multi-connection Hugging Face pulls, and civitaidownloader for versioned Civitai grabs.
-              </p>
-            </div>
-            <div className="flex items-start gap-2">
-              <ExternalLink size={16} className="text-purple-600 mt-0.5" />
-              <p>
-                drop direct links or model ids; sweet tea will place files into the right comfyui directory for you.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
       </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Add model downloads</CardTitle>
-          <CardDescription>
-            Paste one or more links. Each entry will be queued for the selected model type and target folder.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <Select value={selectedCategory} onValueChange={(value) => setSelectedCategory(value as ModelCategory)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Model type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Checkpoint">Checkpoint</SelectItem>
-                <SelectItem value="LoRA">LoRA</SelectItem>
-                <SelectItem value="ControlNet">ControlNet</SelectItem>
-                <SelectItem value="Upscaler">Upscaler</SelectItem>
-                <SelectItem value="VLM">VLM</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={targetFolder} onValueChange={setTargetFolder}>
-              <SelectTrigger>
-                <SelectValue placeholder="Target folder" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="checkpoints">checkpoints</SelectItem>
-                <SelectItem value="loras">loras</SelectItem>
-                <SelectItem value="controlnet">controlnet</SelectItem>
-                <SelectItem value="upscale">upscale</SelectItem>
-                <SelectItem value="vlm">vlm</SelectItem>
-              </SelectContent>
-            </Select>
-            <div className="flex items-center gap-2 text-xs text-slate-500">
-              <Link2 size={16} />
-              <span>Links will be pulled with aria2c (HF) or civitaidownloader (Civitai).</span>
-            </div>
-          </div>
-
-          <Tabs defaultValue="hf" className="w-full">
-            <TabsList>
-              <TabsTrigger value="hf">Hugging Face</TabsTrigger>
-              <TabsTrigger value="civitai">Civitai</TabsTrigger>
-            </TabsList>
-            <TabsContent value="hf" className="space-y-2">
-              <Textarea
-                placeholder="https://huggingface.co/stabilityai/sd_xl_base_1.0\nhttps://huggingface.co/..."
-                value={hfLinks}
-                onChange={(e) => setHfLinks(e.target.value)}
-                className="min-h-[120px]"
-              />
-              <div className="flex justify-end">
-                <Button onClick={() => addDownloads(hfLinks, "Hugging Face")}>Queue Hugging Face downloads</Button>
-              </div>
-            </TabsContent>
-            <TabsContent value="civitai" className="space-y-2">
-              <Textarea
-                placeholder="https://civitai.com/models/..."
-                value={civitaiLinks}
-                onChange={(e) => setCivitaiLinks(e.target.value)}
-                className="min-h-[120px]"
-              />
-              <div className="flex justify-end">
-                <Button variant="secondary" onClick={() => addDownloads(civitaiLinks, "Civitai")}>
-                  Queue Civitai downloads
-                </Button>
-              </div>
-            </TabsContent>
-          </Tabs>
-        </CardContent>
-      </Card>
 
       <Card>
         <CardHeader>
