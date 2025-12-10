@@ -1,10 +1,11 @@
 import { useEffect, useState, useRef } from "react";
-import { api, Engine, WorkflowTemplate, FileItem, GalleryItem, PromptLibraryItem, EngineHealth } from "@/lib/api";
+import { api, Engine, WorkflowTemplate, FileItem, GalleryItem, PromptLibraryItem, EngineHealth, Project } from "@/lib/api";
 import { DynamicForm } from "@/components/DynamicForm";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Loader2, GripHorizontal } from "lucide-react";
 import { RunningGallery } from "@/components/RunningGallery";
 import { FileExplorer } from "@/components/FileExplorer";
@@ -21,6 +22,7 @@ import { PromptLibraryQuickPanel } from "@/components/PromptLibraryQuickPanel";
 export default function PromptStudio() {
   const [engines, setEngines] = useState<Engine[]>([]);
   const [workflows, setWorkflows] = useState<WorkflowTemplate[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [engineHealth, setEngineHealth] = useState<EngineHealth[]>([]);
 
   const [selectedEngineId, setSelectedEngineId] = useState<string>(
@@ -28,6 +30,12 @@ export default function PromptStudio() {
   );
   const [selectedWorkflowId, setSelectedWorkflowId] = useState<string>(
     localStorage.getItem("ds_selected_workflow") || ""
+  );
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(
+    localStorage.getItem("ds_selected_project") || null
+  );
+  const [galleryScopeAll, setGalleryScopeAll] = useState(
+    localStorage.getItem("ds_gallery_scope") === "all"
   );
 
   const [isLoading, setIsLoading] = useState(true);
@@ -60,10 +68,23 @@ export default function PromptStudio() {
   const [galleryRefresh, setGalleryRefresh] = useState(0);
   const [galleryImages, setGalleryImages] = useState<GalleryItem[]>([]);
   const [selectedGalleryIds, setSelectedGalleryIds] = useState<Set<number>>(new Set());
+  const [unsavedJobIds, setUnsavedJobIds] = useState<number[]>(() => {
+    try {
+      const saved = localStorage.getItem("ds_unsaved_job_ids");
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      console.warn("Failed to parse unsaved job ids", e);
+    }
+    return [];
+  });
+  const [projectDraftName, setProjectDraftName] = useState("");
+  const [isCreatingProject, setIsCreatingProject] = useState(false);
 
   const loadGallery = async () => {
     try {
-      const allImages = await api.getGallery();
+      const projectFilter = galleryScopeAll || !selectedProjectId ? null : parseInt(selectedProjectId);
+      const unassignedOnly = galleryScopeAll ? false : !selectedProjectId;
+      const allImages = await api.getGallery(undefined, undefined, projectFilter, unassignedOnly);
       setGalleryImages(allImages.slice(0, 50));
     } catch (e) {
       console.error("Failed to load gallery", e);
@@ -73,7 +94,7 @@ export default function PromptStudio() {
   // Initial load and refresh
   useEffect(() => {
     loadGallery();
-  }, [galleryRefresh]);
+  }, [galleryRefresh, selectedProjectId, galleryScopeAll]);
 
   // Handle Deletion from Gallery or Auto-Discard
   const handleGalleryDelete = async (ids: Set<number> | number) => {
@@ -111,8 +132,12 @@ export default function PromptStudio() {
   const healthIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const selectedWorkflow = workflows.find((w) => String(w.id) === selectedWorkflowId);
+  const selectedProject = selectedProjectId ? projects.find((p) => String(p.id) === selectedProjectId) || null : null;
+  const draftsProject = projects.find((p) => p.slug === "drafts");
   const selectedEngineHealth = engineHealth.find((h) => String(h.engine_id) === selectedEngineId);
   const engineOffline = Boolean(selectedEngineHealth && !selectedEngineHealth.healthy);
+
+  const projectPaths = (selectedProject?.config_json || {}) as { input_dir?: string; output_dir?: string; mask_dir?: string };
 
   // Persist selections
   useEffect(() => {
@@ -122,6 +147,31 @@ export default function PromptStudio() {
   useEffect(() => {
     if (selectedWorkflowId) localStorage.setItem("ds_selected_workflow", selectedWorkflowId);
   }, [selectedWorkflowId]);
+
+  useEffect(() => {
+    if (selectedProjectId) {
+      localStorage.setItem("ds_selected_project", selectedProjectId);
+    } else {
+      localStorage.removeItem("ds_selected_project");
+    }
+  }, [selectedProjectId]);
+
+  useEffect(() => {
+    localStorage.setItem("ds_gallery_scope", galleryScopeAll ? "all" : "project");
+  }, [galleryScopeAll]);
+
+  useEffect(() => {
+    localStorage.setItem("ds_unsaved_job_ids", JSON.stringify(unsavedJobIds));
+  }, [unsavedJobIds]);
+
+  const previousProjectRef = useRef<string | null>(selectedProjectId);
+  useEffect(() => {
+    if (previousProjectRef.current && !selectedProjectId) {
+      // Starting a new draft session; clear any old unsaved records
+      setUnsavedJobIds([]);
+    }
+    previousProjectRef.current = selectedProjectId;
+  }, [selectedProjectId]);
 
   useEffect(() => {
     if (selectedWorkflow) {
@@ -193,6 +243,39 @@ export default function PromptStudio() {
 
   const handlePromptSearchChange = (value: string) => {
     setPromptSearch(value);
+  };
+
+  const adoptDraftsIntoProject = async (projectId: number, jobIds: number[] = unsavedJobIds) => {
+    if (jobIds.length === 0) return;
+    try {
+      await api.adoptJobsIntoProject(projectId, jobIds);
+      setUnsavedJobIds((prev) => prev.filter((id) => !jobIds.includes(id)));
+      setGalleryRefresh((prev) => prev + 1);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to move drafts into project");
+    }
+  };
+
+  const handleCreateProjectFromDrafts = async () => {
+    if (!projectDraftName.trim()) {
+      setError("Project name is required to capture your drafts.");
+      return;
+    }
+
+    setIsCreatingProject(true);
+    try {
+      const project = await api.createProject({ name: projectDraftName.trim() });
+      setProjects((prev) => [project, ...prev]);
+      if (unsavedJobIds.length > 0) {
+        await adoptDraftsIntoProject(project.id, unsavedJobIds);
+      }
+      setSelectedProjectId(String(project.id));
+      setProjectDraftName("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create project");
+    } finally {
+      setIsCreatingProject(false);
+    }
   };
 
   const trackFeedStart = (jobId: number) => {
@@ -320,12 +403,14 @@ export default function PromptStudio() {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [enginesData, workflowsData] = await Promise.all([
+        const [enginesData, workflowsData, projectsData] = await Promise.all([
           api.getEngines(),
           api.getWorkflows(),
+          api.getProjects(),
         ]);
         setEngines(enginesData);
         setWorkflows(workflowsData);
+        setProjects(projectsData);
 
         if (!selectedEngineId && enginesData.length > 0) setSelectedEngineId(String(enginesData[0].id));
         if (!selectedWorkflowId && workflowsData.length > 0) setSelectedWorkflowId(String(workflowsData[0].id));
@@ -403,8 +488,12 @@ export default function PromptStudio() {
       const job = await api.createJob(
         parseInt(selectedEngineId),
         parseInt(selectedWorkflowId),
+        selectedProjectId ? parseInt(selectedProjectId) : null,
         data
       );
+      if (!selectedProjectId) {
+        setUnsavedJobIds((prev) => (prev.includes(job.id) ? prev : [...prev, job.id]));
+      }
       lastSubmittedParamsRef.current = data; // Persist for preview
       setLastJobId(job.id);
       trackFeedStart(job.id);
@@ -542,6 +631,116 @@ export default function PromptStudio() {
             </div>
           </div>
           <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-slate-500 uppercase">Project</label>
+              <Select
+                value={selectedProjectId || "none"}
+                onValueChange={(value) => {
+                  if (value === "none") {
+                    setSelectedProjectId(null);
+                  } else {
+                    setSelectedProjectId(value);
+                  }
+                  setGalleryRefresh((prev) => prev + 1);
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select project">
+                    {selectedProject?.name || "No project (draft mode)"}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No project (draft mode)</SelectItem>
+                  {draftsProject && (
+                    <SelectItem value={String(draftsProject.id)}>
+                      {draftsProject.name || "Drafts"}
+                    </SelectItem>
+                  )}
+                  {projects
+                    .filter((p) => !draftsProject || p.id !== draftsProject.id)
+                    .map((p) => (
+                      <SelectItem key={p.id} value={String(p.id)}>
+                        {p.name}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+              <div className="bg-slate-50 border rounded-md p-3 text-xs space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-slate-700">Active project scope</span>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 text-[11px]"
+                    onClick={() => setGalleryScopeAll((prev) => !prev)}
+                  >
+                    {galleryScopeAll ? "View project" : "View all"}
+                  </Button>
+                </div>
+                <p className="text-slate-600">
+                  {galleryScopeAll
+                    ? "Gallery shows images from every project."
+                    : selectedProject
+                      ? `Generation and gallery are scoped to ${selectedProject.name}.`
+                      : "Generating in draft mode. Attach these to a project when you're ready."}
+                </p>
+                <div className="grid grid-cols-1 gap-1 text-slate-600">
+                  <span>Inputs: {projectPaths.input_dir || "project/input"}</span>
+                  <span>Outputs: {projectPaths.output_dir || "project/output"}</span>
+                  <span>Masks: {projectPaths.mask_dir || "project/masks"}</span>
+                </div>
+                <div className="flex items-center justify-between pt-2">
+                  {selectedProjectId && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-[11px] text-slate-700"
+                      onClick={() => setSelectedProjectId(null)}
+                    >
+                      Close project
+                    </Button>
+                  )}
+                </div>
+              </div>
+              {unsavedJobIds.length > 0 && (
+                <div className="bg-amber-50 border border-amber-200 rounded-md p-3 text-xs space-y-2">
+                  <div className="font-semibold text-amber-800">
+                    {unsavedJobIds.length} generation{unsavedJobIds.length === 1 ? "" : "s"} are in draft mode.
+                  </div>
+                  <p className="text-amber-900">
+                    Create a project to adopt these generations, or attach them to a selected project.
+                  </p>
+                  <div className="flex flex-col gap-2">
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="New project name"
+                        value={projectDraftName}
+                        onChange={(e) => setProjectDraftName(e.target.value)}
+                        className="h-8 text-xs"
+                      />
+                      <Button
+                        size="sm"
+                        className="h-8 text-xs"
+                        onClick={handleCreateProjectFromDrafts}
+                        disabled={isCreatingProject}
+                      >
+                        {isCreatingProject ? "Saving..." : "Create & attach"}
+                      </Button>
+                    </div>
+                    {selectedProjectId && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 text-xs"
+                        onClick={() => adoptDraftsIntoProject(parseInt(selectedProjectId))}
+                      >
+                        Attach drafts to {selectedProject?.name}
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
             <div className="space-y-2">
               <label className="text-xs font-semibold text-slate-500 uppercase">Engine</label>
               <Select value={selectedEngineId} onValueChange={setSelectedEngineId}>

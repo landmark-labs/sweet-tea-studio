@@ -1,12 +1,11 @@
 import { useEffect, useState } from "react";
-import { api, GalleryItem, Collection } from "@/lib/api";
+import { api, GalleryItem, Project } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Save, Trash2, Calendar, Search, Sparkles, RotateCcw, Copy, Check, FolderPlus } from "lucide-react";
+import { Save, Trash2, Calendar, Search, Sparkles, RotateCcw, Copy, Check } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useNavigate } from "react-router-dom";
-import { CollectionSidebar } from "@/components/CollectionSidebar";
 import { cn } from "@/lib/utils";
 import {
     ContextMenu,
@@ -15,21 +14,7 @@ import {
     ContextMenuSeparator,
     ContextMenuTrigger,
 } from "@/components/ui/context-menu";
-import {
-    Dialog,
-    DialogContent,
-    DialogHeader,
-    DialogTitle,
-    DialogFooter,
-} from "@/components/ui/dialog";
-import {
-    Command,
-    CommandInput,
-    CommandList,
-    CommandEmpty,
-    CommandGroup,
-    CommandItem
-} from "@/components/ui/command";
+import { ProjectSidebar } from "@/components/ProjectSidebar";
 
 export default function Gallery() {
     const [items, setItems] = useState<GalleryItem[]>([]);
@@ -37,25 +22,24 @@ export default function Gallery() {
     const [error, setError] = useState<string | null>(null);
     const [captioningId, setCaptioningId] = useState<number | null>(null);
     const [search, setSearch] = useState("");
-    const [selectedCollectionId, setSelectedCollectionId] = useState<number | null>(null);
+    const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
     const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
     const [lastSelectedId, setLastSelectedId] = useState<number | null>(null);
-
-    // Bulk Move Dialog State
-    const [isMoveDialogOpen, setIsMoveDialogOpen] = useState(false);
-    const [collections, setCollections] = useState<Collection[]>([]);
-    const [targetCollectionId, setTargetCollectionId] = useState<number | null>(null);
+    const [projects, setProjects] = useState<Project[]>([]);
 
     const navigate = useNavigate();
 
     useEffect(() => {
         loadGallery();
+        fetchProjects();
     }, []);
 
-    const loadGallery = async (query?: string, collectionId?: number | null) => {
+    const loadGallery = async (query?: string, projectId?: number | null) => {
         try {
             setIsLoading(true);
-            const data = await api.getGallery(query || search, collectionId !== undefined ? collectionId : selectedCollectionId);
+            const target = projectId !== undefined ? projectId : selectedProjectId;
+            const unassignedOnly = target === -1;
+            const data = await api.getGallery(query || search, undefined, unassignedOnly ? null : target, unassignedOnly);
             setItems(data);
         } catch (err) {
             console.error(err);
@@ -65,9 +49,18 @@ export default function Gallery() {
         }
     };
 
+    const fetchProjects = async () => {
+        try {
+            const data = await api.getProjects();
+            setProjects(data);
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
     const handleSearch = (e: React.FormEvent) => {
         e.preventDefault();
-        loadGallery(search, selectedCollectionId);
+        loadGallery(search, selectedProjectId);
     };
 
     // Selection Logic
@@ -127,46 +120,8 @@ export default function Gallery() {
         }
     };
 
-    const openMoveDialog = async () => {
-        try {
-            const cols = await api.getCollections();
-            setCollections(cols);
-            setTargetCollectionId(null);
-            setIsMoveDialogOpen(true);
-        } catch (e) {
-            console.error(e);
-        }
-    };
-
-    const handleBulkMove = async () => {
-        if (selectedIds.size === 0 || targetCollectionId === null) return;
-        try {
-            const ids = Array.from(selectedIds);
-            await api.addImagesToCollection(targetCollectionId, ids);
-            setIsMoveDialogOpen(false);
-
-            // Optimistic Update
-            setItems(prev => prev.map(item => {
-                if (selectedIds.has(item.image.id)) {
-                    return { ...item, image: { ...item.image, collection_id: targetCollectionId } };
-                }
-                return item;
-            }));
-
-            // If we are currently filtered by a DIFFERENT collection, remove them from view?
-            if (selectedCollectionId !== null && selectedCollectionId !== targetCollectionId) {
-                setItems(prev => prev.filter(i => !selectedIds.has(i.image.id)));
-            }
-
-            setSelectedIds(new Set());
-            alert("Moved successfully");
-        } catch (e) {
-            alert("Failed to move images");
-        }
-    };
-
-    const handleSelectCollection = (id: number | null) => {
-        setSelectedCollectionId(id);
+    const handleSelectProject = (id: number | null) => {
+        setSelectedProjectId(id);
         loadGallery(search, id);
     };
 
@@ -277,58 +232,24 @@ export default function Gallery() {
 
     return (
         <div className="flex h-screen overflow-hidden bg-slate-50">
-            {/* Bulk Move Dialog */}
-            <Dialog open={isMoveDialogOpen} onOpenChange={setIsMoveDialogOpen}>
-                <DialogContent className="p-0 overflow-hidden flex flex-col h-[50vh] max-h-[500px]">
-                    <DialogHeader className="px-4 py-2 border-b shrink-0">
-                        <DialogTitle>Move {selectedIds.size} items to...</DialogTitle>
-                    </DialogHeader>
-                    <Command className="flex-1 overflow-hidden">
-                        <CommandInput placeholder="Search collections..." />
-                        <CommandList className="max-h-full overflow-y-auto">
-                            <CommandEmpty>No collections found.</CommandEmpty>
-                            <CommandGroup>
-                                {collections.map((col) => (
-                                    <CommandItem
-                                        key={col.id}
-                                        value={col.name}
-                                        onSelect={() => setTargetCollectionId(col.id)}
-                                        className="cursor-pointer aria-selected:bg-slate-100 dark:aria-selected:bg-slate-800"
-                                    >
-                                        <div className="flex items-center w-full">
-                                            <FolderPlus className={cn("mr-2 h-4 w-4", targetCollectionId === col.id ? "text-blue-500" : "text-slate-500")} />
-                                            <span className={cn("flex-1", targetCollectionId === col.id && "font-medium text-blue-700")}>{col.name}</span>
-                                            {targetCollectionId === col.id && <Check className="h-4 w-4 text-blue-500 ml-2" />}
-                                        </div>
-                                    </CommandItem>
-                                ))}
-                            </CommandGroup>
-                        </CommandList>
-                    </Command>
-                    <div className="p-4 border-t bg-slate-50 flex justify-end gap-2 shrink-0">
-                        <Button variant="outline" onClick={() => setIsMoveDialogOpen(false)}>Cancel</Button>
-                        <Button disabled={targetCollectionId === null} onClick={handleBulkMove}>
-                            Move {selectedIds.size} Image{selectedIds.size !== 1 && 's'}
-                        </Button>
-                    </div>
-                </DialogContent>
-            </Dialog>
-
-            <CollectionSidebar
-                selectedCollectionId={selectedCollectionId}
-                onSelectCollection={handleSelectCollection}
+            <ProjectSidebar
+                selectedProjectId={selectedProjectId}
+                onSelectProject={handleSelectProject}
+                projects={projects}
                 className="h-full border-r bg-white"
             />
             <div className="flex-1 overflow-auto p-8 relative">
                 <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
                     <div className="flex items-center gap-4">
                         <h1 className="text-3xl font-bold tracking-tight text-slate-900">Generated Gallery</h1>
+                        <div className="text-sm text-slate-600 bg-slate-100 border border-slate-200 px-3 py-1 rounded-full">
+                            Viewing {selectedProjectId ? projects.find(p => p.id === selectedProjectId)?.name || "project" : "all projects"}
+                        </div>
                         {selectedIds.size > 0 && (
                             <div className="flex items-center gap-2 bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-sm font-medium border border-blue-100 animate-in fade-in slide-in-from-left-4">
                                 <Check className="w-4 h-4" />
                                 {selectedIds.size} Selected
                                 <div className="h-4 w-px bg-blue-200 mx-1" />
-                                <button onClick={openMoveDialog} className="hover:underline">Move</button>
                                 <button onClick={handleBulkDelete} className="hover:underline text-red-600">Delete</button>
                                 <button onClick={() => setSelectedIds(new Set())} className="hover:underline text-slate-500">Clear</button>
                             </div>
@@ -527,10 +448,6 @@ export default function Gallery() {
                                 <ContextMenuContent>
                                     <ContextMenuItem onSelect={() => handleRegenerate(item)}>Regenerate</ContextMenuItem>
                                     <ContextMenuItem onSelect={() => handleSavePrompt(item)}>Save Prompt</ContextMenuItem>
-                                    <ContextMenuItem onSelect={() => {
-                                        setSelectedIds(new Set([item.image.id]));
-                                        openMoveDialog();
-                                    }}>Move to Collection...</ContextMenuItem>
                                     <ContextMenuSeparator />
                                     <ContextMenuItem className="text-red-600" onSelect={() => handleDelete(item.image.id)}>Delete</ContextMenuItem>
                                 </ContextMenuContent>

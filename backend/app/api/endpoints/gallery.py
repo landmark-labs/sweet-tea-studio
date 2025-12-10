@@ -34,6 +34,7 @@ class GalleryItem(BaseModel):
     prompt_name: Optional[str] = None
     engine_id: Optional[int] = None
     collection_id: Optional[int] = None
+    project_id: Optional[int] = None
 
 
 def _build_search_block(
@@ -91,6 +92,8 @@ def read_gallery(
     search: Optional[str] = Query(None, description="Search by prompt text, tags, or caption"),
     kept_only: bool = Query(False),
     collection_id: Optional[int] = Query(None),
+    project_id: Optional[int] = Query(None),
+    unassigned_only: bool = Query(False, description="Return only images with no project assignment"),
     session: Session = Depends(get_session),
 ):
     fetch_limit = limit * 5 if search else limit
@@ -108,6 +111,11 @@ def read_gallery(
 
     if collection_id is not None:
         stmt = stmt.where(Image.collection_id == collection_id)
+
+    if project_id is not None:
+        stmt = stmt.where(Job.project_id == project_id)
+    elif unassigned_only:
+        stmt = stmt.where(Job.project_id == None)
 
     if search:
         like = f"%{search.lower()}%"
@@ -228,6 +236,7 @@ def read_gallery(
             prompt_name=prompt.name if prompt else None,
             engine_id=job.engine_id if job else None,
             collection_id=img.collection_id,
+            project_id=job.project_id if job else None,
         )
         scored_items.append((score, item))
 
