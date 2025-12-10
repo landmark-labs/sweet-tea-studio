@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { api, FileItem } from "@/lib/api";
 import { Folder, FolderOpen, FileImage, File as FileIcon, ChevronRight, ChevronDown, Home, ArrowRight } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -118,6 +118,11 @@ export function FileExplorer({ engineId, projectId, onFileSelect }: FileExplorer
     const [customPath, setCustomPath] = useState("");
     const [currentPath, setCurrentPath] = useState(""); // "" means default view (Inputs/Outputs)
 
+    const setPath = (nextPath: string) => {
+        setCurrentPath(nextPath);
+        setCustomPath(nextPath);
+    };
+
     useEffect(() => {
         const loadRoots = async () => {
             try {
@@ -130,7 +135,7 @@ export function FileExplorer({ engineId, projectId, onFileSelect }: FileExplorer
             } catch (e) {
                 console.error("Failed to load roots", e);
                 // Fallback to default if custom path fails
-                if (currentPath) setCurrentPath("");
+                if (currentPath) setPath("");
             }
         };
         loadRoots();
@@ -138,27 +143,28 @@ export function FileExplorer({ engineId, projectId, onFileSelect }: FileExplorer
 
     const handleNavigate = (e: React.FormEvent) => {
         e.preventDefault();
-        setCurrentPath(customPath);
+        setPath(customPath.trim());
     };
 
     const goHome = () => {
-        setCustomPath("");
-        setCurrentPath("");
+        setPath("");
     };
 
     const goUp = () => {
         if (!currentPath) return;
         // Get parent directory by splitting path and removing last segment
-        const segments = currentPath.split(/[/\\]/).filter(Boolean);
+        const segments = currentPath.replace(/[/\\]+$/, "").split(/[/\\]/).filter(Boolean);
         if (segments.length === 0) {
-            setCurrentPath("");
+            setPath("");
         } else {
             segments.pop();
             const parentPath = segments.join("/");
-            setCurrentPath(parentPath);
-            setCustomPath(parentPath);
+            setPath(parentPath);
         }
     };
+
+    const pathSegments = useMemo(() => currentPath.split(/[/\\]/).filter(Boolean), [currentPath]);
+    const isRoot = pathSegments.length === 0;
 
     return (
         <div className="h-full flex flex-col border-r bg-slate-50/50">
@@ -172,7 +178,7 @@ export function FileExplorer({ engineId, projectId, onFileSelect }: FileExplorer
                             className="h-6 w-6"
                             onClick={goUp}
                             title="Go Up"
-                            disabled={!currentPath}
+                            disabled={isRoot}
                         >
                             <ArrowRight className="w-3 h-3 rotate-180" />
                         </Button>
@@ -181,11 +187,38 @@ export function FileExplorer({ engineId, projectId, onFileSelect }: FileExplorer
                         </Button>
                     </div>
                 </div>
-                {currentPath && (
-                    <div className="text-[10px] text-slate-600 truncate px-1 py-0.5 bg-slate-100 rounded border border-slate-200" title={currentPath}>
-                        📁 {currentPath || "(root)"}
-                    </div>
-                )}
+                <div
+                    className="flex items-center gap-1 text-[10px] text-slate-600 px-1 py-0.5 bg-slate-100 rounded border border-slate-200"
+                    title={currentPath || "root"}
+                >
+                    <button
+                        type="button"
+                        className="hover:underline text-blue-600 disabled:text-slate-500 disabled:no-underline"
+                        onClick={goHome}
+                        disabled={isRoot}
+                    >
+                        root
+                    </button>
+                    {pathSegments.map((segment, idx) => {
+                        const pathUpToHere = pathSegments.slice(0, idx + 1).join("/");
+                        const isLast = idx === pathSegments.length - 1;
+                        return (
+                            <React.Fragment key={`${segment}-${idx}`}>
+                                <ChevronRight className="w-3 h-3 text-slate-400" />
+                                <button
+                                    type="button"
+                                    className={cn(
+                                        "truncate text-left",
+                                        isLast ? "font-semibold text-slate-700" : "text-blue-600 hover:underline"
+                                    )}
+                                    onClick={() => setPath(pathUpToHere)}
+                                >
+                                    {segment || "(root)"}
+                                </button>
+                            </React.Fragment>
+                        );
+                    })}
+                </div>
                 <form onSubmit={handleNavigate} className="flex gap-1">
                     <Input
                         value={customPath}
