@@ -325,6 +325,43 @@ export const api = {
         }
     },
 
+    launchComfyUI: async (): Promise<{ success: boolean; message?: string; error?: string; pid?: number }> => {
+        const res = await fetch(`${API_BASE}/engines/comfyui/launch`, { method: "POST" });
+        if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            return { success: false, error: data.detail || "Failed to launch ComfyUI" };
+        }
+        return res.json();
+    },
+
+    stopComfyUI: async (): Promise<{ success: boolean; message?: string }> => {
+        const res = await fetch(`${API_BASE}/engines/comfyui/stop`, { method: "POST" });
+        return res.json();
+    },
+
+    getComfyUIStatus: async (): Promise<{
+        is_running: boolean;
+        can_launch: boolean;
+        path?: string;
+        detection_method: string;
+    }> => {
+        const res = await fetch(`${API_BASE}/engines/comfyui/status`);
+        if (!res.ok) throw new Error("Failed to get ComfyUI status");
+        return res.json();
+    },
+
+    getComfyUIConfig: async (): Promise<{
+        path?: string;
+        python_path?: string;
+        port: number;
+        is_available: boolean;
+        detection_method: string;
+    }> => {
+        const res = await fetch(`${API_BASE}/engines/comfyui/config`);
+        if (!res.ok) throw new Error("Failed to get ComfyUI config");
+        return res.json();
+    },
+
     captionImage: async (file: File | Blob, imageId?: number): Promise<CaptionResponse> => {
         const formData = new FormData();
         formData.append("image", file);

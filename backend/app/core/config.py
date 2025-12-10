@@ -13,6 +13,16 @@ class Settings(BaseSettings):
     # Can be overridden with SWEET_TEA_ROOT_DIR environment variable
     ROOT_DIR: Path = Path.home() / ".sweet-tea"
     
+    # ComfyUI configuration
+    # Path to ComfyUI directory (auto-detected if not set)
+    COMFYUI_PATH: Optional[str] = None
+    # Additional arguments to pass to ComfyUI
+    COMFYUI_ARGS: str = ""
+    # Default ComfyUI URL
+    COMFYUI_URL: str = "http://127.0.0.1:8188"
+    # Auto-launch ComfyUI when Sweet Tea starts (requires COMFYUI_PATH)
+    COMFYUI_AUTO_LAUNCH: bool = False
+    
     # BACKEND_CORS_ORIGINS is a JSON-formatted list of origins
     # e.g: '["http://localhost", "http://localhost:4200", "http://localhost:3000"]'
     BACKEND_CORS_ORIGINS: List[AnyHttpUrl] = [

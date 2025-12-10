@@ -9,6 +9,7 @@ from datetime import datetime
 import asyncio
 
 from app.core.comfy_client import ComfyClient
+from app.services.comfy_launcher import comfy_launcher
 
 
 router = APIRouter(prefix="/status", tags=["status"])
@@ -23,7 +24,9 @@ class StatusItem(BaseModel):
 
 class EngineStatus(StatusItem):
     """Engine connection status."""
-    pass
+    is_connected: bool = False  # True when ComfyUI is reachable
+    can_launch: bool = False    # True if ComfyUI can be started
+    comfy_path: Optional[str] = None  # Detected ComfyUI path
 
 
 class QueueStatus(StatusItem):
@@ -76,6 +79,9 @@ def clear_io_errors():
 
 async def check_engine_status() -> EngineStatus:
     """Check ComfyUI engine connectivity."""
+    # Get launch config to check if we can start ComfyUI
+    launch_config = comfy_launcher.get_config()
+    
     try:
         client = ComfyClient("http://127.0.0.1:8188")
         # Try to get system stats as health check
@@ -83,20 +89,29 @@ async def check_engine_status() -> EngineStatus:
         if info:
             return EngineStatus(
                 state="ok",
-                detail="comfyui ready",
-                last_check_at=datetime.utcnow().isoformat()
+                detail="comfyui connected",
+                last_check_at=datetime.utcnow().isoformat(),
+                is_connected=True,
+                can_launch=launch_config.is_available,
+                comfy_path=launch_config.path
             )
         else:
             return EngineStatus(
                 state="warn",
                 detail="comfyui responded but no stats",
-                last_check_at=datetime.utcnow().isoformat()
+                last_check_at=datetime.utcnow().isoformat(),
+                is_connected=True,
+                can_launch=launch_config.is_available,
+                comfy_path=launch_config.path
             )
     except Exception as e:
         return EngineStatus(
             state="error",
-            detail=f"cannot reach comfyui: {str(e)[:50]}",
-            last_check_at=datetime.utcnow().isoformat()
+            detail=f"comfyui not running" if launch_config.is_available else f"cannot reach comfyui",
+            last_check_at=datetime.utcnow().isoformat(),
+            is_connected=False,
+            can_launch=launch_config.is_available,
+            comfy_path=launch_config.path
         )
 
 

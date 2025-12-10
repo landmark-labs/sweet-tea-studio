@@ -16,6 +16,7 @@ const navItems = [
 ];
 import { PerformanceHUD } from "@/components/PerformanceHUD";
 import { StatusBar } from "@/components/StatusBar";
+import { ConnectionBanner } from "@/components/ConnectionBanner";
 
 export default function Layout() {
   const [collapsed, setCollapsed] = useState(false);
@@ -92,6 +93,7 @@ export default function Layout() {
           </div>
         </div>
       </main>
+      <ConnectionBanner />
       <StatusBar />
       <PerformanceHUD />
     </div>
