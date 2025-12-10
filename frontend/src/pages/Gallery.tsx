@@ -20,7 +20,6 @@ export default function Gallery() {
     const [items, setItems] = useState<GalleryItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [captioningId, setCaptioningId] = useState<number | null>(null);
     const [search, setSearch] = useState("");
     const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
     const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -230,7 +229,7 @@ export default function Gallery() {
         if (!confirm("Are you sure you want to delete this image?")) return;
         try {
             await api.deleteImage(id);
-            setItems(items.filter((i) => i.image.id !== id));
+            await loadGallery(search, selectedProjectId);
         } catch (err) {
             alert("Failed to delete image");
         }
@@ -260,30 +259,6 @@ export default function Gallery() {
             alert("Prompt saved to library!");
         } catch (err) {
             alert("Failed to save prompt");
-        }
-    };
-
-    const handleCaption = async (item: GalleryItem) => {
-        setCaptioningId(item.image.id);
-        try {
-            const res = await fetch(`/api/v1/gallery/image/path?path=${encodeURIComponent(item.image.path)}`);
-            if (!res.ok) throw new Error("Unable to fetch image bytes");
-            const blob = await res.blob();
-            const file = new File([blob], item.image.filename, { type: blob.type || "image/png" });
-            const caption = await api.captionImage(file, item.image.id);
-
-            setItems((prev) =>
-                prev.map((i) =>
-                    i.image.id === item.image.id
-                        ? { ...i, image: { ...i.image, caption: caption.caption, tags: caption.ranked_tags || [] } }
-                        : i
-                )
-            );
-        } catch (err) {
-            console.error(err);
-            alert(err instanceof Error ? err.message : "Caption request failed");
-        } finally {
-            setCaptioningId(null);
         }
     };
 
