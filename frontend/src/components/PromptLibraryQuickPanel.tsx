@@ -66,16 +66,13 @@ export function PromptLibraryQuickPanel({
               )}
               {prompts.map((prompt) => (
                 <div key={`${prompt.image_id}-${prompt.prompt_id ?? ""}`} className="p-2 border border-slate-200 rounded-md bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer" onClick={() => onApply(prompt)}>
-                  {/* Project/Pipe Header */}
-                  <div className="flex items-center justify-between mb-1.5 pb-1 border-b border-slate-200">
-                    <div className="text-[9px] text-slate-500 uppercase tracking-wide font-semibold flex items-center gap-1">
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="flex flex-wrap items-center gap-1 text-[10px] text-slate-600">
+                      <span className="font-semibold text-slate-800 truncate max-w-[12rem]">{prompt.job_params?.project_name || prompt.prompt_name || `Image #${prompt.image_id}`}</span>
+                      {prompt.image_id && <span className="text-slate-400">· Img {prompt.image_id}</span>}
                       {prompt.workflow_template_id && (
-                        <>
-                          <span>Pipe #{prompt.workflow_template_id}</span>
-                          {prompt.image_id && <span className="text-slate-300">|</span>}
-                        </>
+                        <span className="px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded-full text-[9px] font-medium">Pipe {prompt.workflow_template_id}</span>
                       )}
-                      {prompt.image_id && <span>Img #{prompt.image_id}</span>}
                     </div>
                     <Button size="sm" variant="ghost" className="h-5 text-blue-600 hover:text-blue-700 text-[10px] px-1.5" onClick={(e) => { e.stopPropagation(); onApply(prompt); }}>
                       Load
@@ -83,7 +80,7 @@ export function PromptLibraryQuickPanel({
                   </div>
 
                   {/* Prompts Grid */}
-                  <div className="grid grid-cols-2 gap-2 mb-1.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-1.5">
                     {prompt.active_positive && (
                       <div className="min-w-0">
                         <div className="text-[8px] text-green-600 font-semibold uppercase mb-0.5">Positive</div>
