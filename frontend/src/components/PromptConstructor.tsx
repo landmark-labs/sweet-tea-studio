@@ -12,6 +12,7 @@ import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } 
 import { Plus, X, Type, Trash2, CornerDownLeft, Eraser, Check, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUndoRedo } from "@/lib/undoRedo";
+import { PromptAutocompleteTextarea } from "./PromptAutocompleteTextarea";
 
 // --- Types ---
 
@@ -568,11 +569,11 @@ export function PromptConstructor({ schema, onUpdate, currentValues, targetField
                             />
                             {editingSnippetId && <span className="text-[10px] font-bold text-amber-600 ml-2 whitespace-nowrap">EDITING</span>}
                         </div>
-                        <Textarea
+                        <PromptAutocompleteTextarea
                             placeholder="Prompt text... (Ctrl+Enter to save)"
                             className="h-[140px] text-xs font-mono bg-white resize-none"
                             value={snippetContent}
-                            onChange={e => setSnippetContent(e.target.value)}
+                            onValueChange={setSnippetContent}
                             onKeyDown={handleKeyDown}
                         />
                     </div>

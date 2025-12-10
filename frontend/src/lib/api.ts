@@ -486,7 +486,7 @@ export const api = {
 
     // --- Tags ---
     getTagSuggestions: async (prefix: string): Promise<TagSuggestion[]> => {
-        const res = await fetch(`${API_BASE}/tags/suggest?prefix=${encodeURIComponent(prefix)}`);
+        const res = await fetch(`${API_BASE}/library/tags/suggest?query=${encodeURIComponent(prefix)}`);
         if (!res.ok) throw new Error("Failed to fetch tag suggestions");
         return res.json();
     },

@@ -49,8 +49,25 @@ export function DraggablePanel({ children, className, defaultPosition = { x: 0, 
     useEffect(() => {
         const handleMouseMove = (e: MouseEvent) => {
             if (!isDragging) return;
-            const newX = e.clientX - dragStart.x;
-            const newY = e.clientY - dragStart.y;
+            
+            // Calculate new position
+            let newX = e.clientX - dragStart.x;
+            let newY = e.clientY - dragStart.y;
+            
+            // Get panel dimensions for boundary calculation
+            if (nodeRef.current) {
+                const rect = nodeRef.current.getBoundingClientRect();
+                const panelWidth = rect.width;
+                const panelHeight = rect.height;
+                
+                // Constrain to viewport boundaries
+                const maxX = window.innerWidth - panelWidth;
+                const maxY = window.innerHeight - panelHeight;
+                
+                newX = Math.max(0, Math.min(newX, maxX));
+                newY = Math.max(0, Math.min(newY, maxY));
+            }
+            
             setPosition({ x: newX, y: newY });
         };
 

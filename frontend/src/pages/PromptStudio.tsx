@@ -913,27 +913,55 @@ export default function PromptStudio() {
       <DraggablePanel
         persistenceKey="ds_feed_pos"
         defaultPosition={{ x: 20, y: 100 }}
-        className={`bg-white border-l shadow-xl z-20 w-[320px] h-[80vh] ${feedOpen ? "" : "hidden"}`}
+        className={`bg-white border-l shadow-xl z-20 ${feedOpen ? "" : "hidden"}`}
+        style={{ width: 'auto', maxWidth: '90vw' }}
       >
-        <div className="flex-none border-b flex flex-col bg-white h-auto max-h-[40%]">
-          <div className="p-2 bg-slate-100 border-b text-xs font-semibold">Generation Feed</div>
-          <div className="overflow-hidden">
-            <GenerationFeed items={generationFeed} onSelectPreview={(path) => setPreviewPath(path)} />
+        <div className="p-2 bg-slate-100 border-b text-xs font-semibold">Generation Feed</div>
+        {/* HORIZONTAL LAYOUT: Feed on left, Recent images on right */}
+        <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'stretch' }}>
+          {/* LEFT: Generation Feed (preview + stats) */}
+          <div style={{ flexShrink: 0 }}>
+            <GenerationFeed
+              items={generationFeed}
+              onSelectPreview={(path) => setPreviewPath(path)}
+              onGenerate={() => handleGenerate(formData)}
+            />
           </div>
-        </div>
 
-        <div className="flex-1 flex flex-col bg-slate-50 overflow-hidden">
-          <RunningGallery
-            images={galleryImages}
-            selectedIds={selectedGalleryIds}
-            onSelectionChange={setSelectedGalleryIds}
-            onRefresh={loadGallery}
-            onDelete={handleGalleryDelete}
-            onLoadParams={(item) => {
-              if (item.job_params) setFormData((prev: any) => ({ ...prev, ...item.job_params }));
-            }}
-            onPreview={(item) => setPreviewPath(item.image.path)}
-          />
+          {/* RIGHT: Running Gallery (horizontal layout) */}
+          <div style={{ display: 'flex', flexDirection: 'column', borderLeft: '1px solid #e2e8f0' }}>
+            <div className="px-3 py-2 bg-white border-b border-slate-200">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-slate-700">Recent</span>
+                <button onClick={loadGallery} className="text-slate-500 hover:text-slate-800" title="Refresh">
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'row', gap: '8px', padding: '12px', alignItems: 'center' }}>
+              {galleryImages.slice(0, 4).map((item) => (
+                <div
+                  key={item.image.id}
+                  style={{ width: '256px', height: '256px', flexShrink: 0 }}
+                  className="rounded overflow-hidden bg-slate-100 border border-slate-200 cursor-pointer hover:ring-2 hover:ring-blue-400 transition-all"
+                  onClick={() => setPreviewPath(item.image.path)}
+                >
+                  <img
+                    src={`/api/v1/gallery/image/path?path=${encodeURIComponent(item.image.path)}`}
+                    alt={`Image ${item.image.id}`}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              ))}
+              {galleryImages.length === 0 && (
+                <div style={{ width: '256px', height: '256px' }} className="flex items-center justify-center text-xs text-slate-400">
+                  no recent images
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </DraggablePanel>
 

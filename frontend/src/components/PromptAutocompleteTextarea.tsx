@@ -11,7 +11,7 @@ interface PromptAutocompleteTextareaProps {
     onBlur?: (event: React.FocusEvent<HTMLTextAreaElement>) => void;
     className?: string;
     rows?: number;
-    isActive?: boolean;
+    onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
 }
 
 function computeScore(query: string, candidate: string): number {
@@ -63,6 +63,7 @@ export function PromptAutocompleteTextarea({
     className,
     rows = 6,
     isActive,
+    onKeyDown,
 }: PromptAutocompleteTextareaProps) {
     const textareaRef = useRef<HTMLTextAreaElement | null>(null);
     const cacheRef = useRef<Map<string, TagSuggestion[]>>(new Map());
@@ -129,8 +130,13 @@ export function PromptAutocompleteTextarea({
             .map((s) => ({ suggestion: s, score: computeScore(token, s.name) }))
             .filter((item) => item.score > 0)
             .sort((a, b) => {
-                if (a.score !== b.score) return b.score - a.score;
-                if (a.suggestion.frequency !== b.suggestion.frequency) return b.suggestion.frequency - a.suggestion.frequency;
+                // Sort by score first (descending), then by frequency, then alphabetically
+                if (a.score !== b.score) {
+                    return b.score - a.score;
+                }
+                if (a.suggestion.frequency !== b.suggestion.frequency) {
+                    return b.suggestion.frequency - a.suggestion.frequency;
+                }
                 return a.suggestion.name.localeCompare(b.suggestion.name);
             })
             .slice(0, 15)
@@ -141,8 +147,11 @@ export function PromptAutocompleteTextarea({
         if (!textareaRef.current) return;
         const before = value.slice(0, cursor);
         const after = value.slice(cursor);
-        const match = before.match(/([a-zA-Z0-9:_-]*)$/);
-        const start = match ? cursor - match[0].length : cursor;
+
+        // Use activeToken to determine exactly how much to replace
+        // This ensures what we matched against is what gets replaced
+        const start = cursor - activeToken.length;
+
         const newValue = `${before.slice(0, start)}${name}, ${after.replace(/^\s*/, "")}`;
         onValueChange(newValue);
 
@@ -155,20 +164,27 @@ export function PromptAutocompleteTextarea({
     };
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-        if (!isOpen || rankedSuggestions.length === 0) return;
-
-        if (e.key === "ArrowDown") {
-            e.preventDefault();
-            setHighlightIndex((idx) => (idx + 1) % rankedSuggestions.length);
-        } else if (e.key === "ArrowUp") {
-            e.preventDefault();
-            setHighlightIndex((idx) => (idx - 1 + rankedSuggestions.length) % rankedSuggestions.length);
-        } else if (e.key === "Tab" || e.key === "Enter") {
-            e.preventDefault();
-            insertSuggestion(rankedSuggestions[highlightIndex]?.name);
-        } else if (e.key === "Escape") {
-            setIsOpen(false);
+        if (isOpen && rankedSuggestions.length > 0) {
+            if (e.key === "ArrowDown") {
+                e.preventDefault();
+                setHighlightIndex((idx) => (idx + 1) % rankedSuggestions.length);
+                return;
+            } else if (e.key === "ArrowUp") {
+                e.preventDefault();
+                setHighlightIndex((idx) => (idx - 1 + rankedSuggestions.length) % rankedSuggestions.length);
+                return;
+            } else if (e.key === "Tab" || (e.key === "Enter" && !e.ctrlKey && !e.metaKey)) {
+                e.preventDefault();
+                insertSuggestion(rankedSuggestions[highlightIndex]?.name);
+                return;
+            } else if (e.key === "Escape") {
+                setIsOpen(false);
+                return;
+            }
         }
+
+        // Pass through to parent if not consumed
+        onKeyDown?.(e);
     };
 
     const showDropdown = isOpen && rankedSuggestions.length > 0;

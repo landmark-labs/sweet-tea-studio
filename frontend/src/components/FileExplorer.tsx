@@ -146,15 +146,46 @@ export function FileExplorer({ engineId, projectId, onFileSelect }: FileExplorer
         setCurrentPath("");
     };
 
+    const goUp = () => {
+        if (!currentPath) return;
+        // Get parent directory by splitting path and removing last segment
+        const segments = currentPath.split(/[/\\]/).filter(Boolean);
+        if (segments.length === 0) {
+            setCurrentPath("");
+        } else {
+            segments.pop();
+            const parentPath = segments.join("/");
+            setCurrentPath(parentPath);
+            setCustomPath(parentPath);
+        }
+    };
+
     return (
         <div className="h-full flex flex-col border-r bg-slate-50/50">
             <div className="p-2 border-b space-y-2">
                 <div className="flex items-center justify-between text-xs font-semibold text-slate-500 uppercase tracking-wider">
                     <span>Explorer</span>
-                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={goHome} title="Reset to Defaults">
-                        <Home className="w-3 h-3" />
-                    </Button>
+                    <div className="flex gap-1">
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6"
+                            onClick={goUp}
+                            title="Go Up"
+                            disabled={!currentPath}
+                        >
+                            <ArrowRight className="w-3 h-3 rotate-180" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={goHome} title="Reset to Defaults">
+                            <Home className="w-3 h-3" />
+                        </Button>
+                    </div>
                 </div>
+                {currentPath && (
+                    <div className="text-[10px] text-slate-600 truncate px-1 py-0.5 bg-slate-100 rounded border border-slate-200" title={currentPath}>
+                        📁 {currentPath || "(root)"}
+                    </div>
+                )}
                 <form onSubmit={handleNavigate} className="flex gap-1">
                     <Input
                         value={customPath}
