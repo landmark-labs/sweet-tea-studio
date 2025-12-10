@@ -121,11 +121,14 @@ class RunBase(SQLModel):
     seed: Optional[str] = None
     steps: Optional[int] = None
     cfg: Optional[float] = None
-    
+    sampler: Optional[str] = None
+
     # Performance/status
     status: str = "success"  # 'success', 'error', 'canceled'
-    duration_ms: Optional[int] = None
+    duration_ms: Optional[int] = None  # end-to-end runtime in ms
+    final_iterations_per_second: Optional[float] = None
     engine_name: Optional[str] = None
+    engine_version: Optional[str] = None
     app_version: str = "0.6.0"
 
 
@@ -183,9 +186,10 @@ class Output(OutputBase, table=True):
     Optionally stores tiny thumbnails for fast preview.
     """
     __tablename__ = "outputs"
-    
+
     id: Optional[int] = Field(default=None, primary_key=True)
     thumb_jpeg: Optional[bytes] = Field(default=None, sa_column=Column(LargeBinary))
+    perceptual_hash: Optional[str] = None
     meta_json: Optional[str] = None  # File size, frame count, etc.
 
 
