@@ -143,15 +143,8 @@ def get_versions():
 def get_comfyui_status():
     """Get status of the managed ComfyUI process."""
     from app.services.comfy_launcher import comfy_launcher
-    
-    config = comfy_launcher.get_config()
-    return {
-        "running": comfy_launcher.is_running(),
-        "pid": comfy_launcher._process.pid if comfy_launcher._process else None,
-        "available": config.is_available,
-        "path": config.path,
-        "detection_method": config.detection_method,
-    }
+
+    return comfy_launcher.get_status()
 
 
 @router.post("/comfyui/start")
@@ -164,10 +157,10 @@ async def start_comfyui():
 
 
 @router.post("/comfyui/stop")
-def stop_comfyui():
+async def stop_comfyui():
     """Stop the ComfyUI process."""
     from app.services.comfy_launcher import comfy_launcher
-    
-    result = comfy_launcher.stop()
+
+    result = await comfy_launcher.stop()
     return result
 

@@ -27,6 +27,11 @@ class EngineStatus(StatusItem):
     is_connected: bool = False  # True when ComfyUI is reachable
     can_launch: bool = False    # True if ComfyUI can be started
     comfy_path: Optional[str] = None  # Detected ComfyUI path
+    is_process_running: bool = False  # True when managed process is alive
+    launcher_error: Optional[str] = None  # Last launcher error
+    launcher_cooldown: Optional[float] = None  # Cooldown before toggling again
+    last_launcher_action_at: Optional[str] = None  # Timestamp of last launcher action
+    pid: Optional[int] = None
 
 
 class QueueStatus(StatusItem):
@@ -81,6 +86,7 @@ async def check_engine_status() -> EngineStatus:
     """Check ComfyUI engine connectivity."""
     # Get launch config to check if we can start ComfyUI
     launch_config = comfy_launcher.get_config()
+    launcher_status = comfy_launcher.get_status()
     
     try:
         client = ComfyClient("http://127.0.0.1:8188")
@@ -93,7 +99,12 @@ async def check_engine_status() -> EngineStatus:
                 last_check_at=datetime.utcnow().isoformat(),
                 is_connected=True,
                 can_launch=launch_config.is_available,
-                comfy_path=launch_config.path
+                comfy_path=launch_config.path,
+                is_process_running=launcher_status.get("running", False),
+                launcher_error=launcher_status.get("last_error"),
+                launcher_cooldown=launcher_status.get("cooldown_remaining"),
+                last_launcher_action_at=launcher_status.get("last_action_at"),
+                pid=launcher_status.get("pid"),
             )
         else:
             return EngineStatus(
@@ -102,7 +113,12 @@ async def check_engine_status() -> EngineStatus:
                 last_check_at=datetime.utcnow().isoformat(),
                 is_connected=True,
                 can_launch=launch_config.is_available,
-                comfy_path=launch_config.path
+                comfy_path=launch_config.path,
+                is_process_running=launcher_status.get("running", False),
+                launcher_error=launcher_status.get("last_error"),
+                launcher_cooldown=launcher_status.get("cooldown_remaining"),
+                last_launcher_action_at=launcher_status.get("last_action_at"),
+                pid=launcher_status.get("pid"),
             )
     except Exception as e:
         return EngineStatus(
@@ -111,7 +127,12 @@ async def check_engine_status() -> EngineStatus:
             last_check_at=datetime.utcnow().isoformat(),
             is_connected=False,
             can_launch=launch_config.is_available,
-            comfy_path=launch_config.path
+            comfy_path=launch_config.path,
+            is_process_running=launcher_status.get("running", False),
+            launcher_error=launcher_status.get("last_error") or str(e),
+            launcher_cooldown=launcher_status.get("cooldown_remaining"),
+            last_launcher_action_at=launcher_status.get("last_action_at"),
+            pid=launcher_status.get("pid"),
         )
 
 
