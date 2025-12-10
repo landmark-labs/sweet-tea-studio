@@ -9,6 +9,7 @@ from sqlmodel import Session, select
 from app.db.engine import engine as db_engine
 from app.models.engine import Engine, EngineCreate, EngineRead, EngineUpdate
 from app.services.comfy_watchdog import watchdog
+from app.services.comfy_launcher import comfy_launcher
 
 router = APIRouter()
 
@@ -20,6 +21,16 @@ class EngineHealth(BaseModel):
     last_error: Optional[str]
     last_checked_at: Optional[datetime]
     next_check_in: int
+
+
+class LaunchConfig(BaseModel):
+    """ComfyUI launch configuration."""
+    path: Optional[str] = None
+    python_path: Optional[str] = None
+    port: int = 8188
+    is_available: bool = False
+    detection_method: str = ""
+
 
 @router.post("/", response_model=EngineRead)
 def create_engine(engine_in: EngineCreate):
@@ -72,3 +83,65 @@ def read_engine(engine_id: int):
         if not engine:
             raise HTTPException(status_code=404, detail="Engine not found")
         return engine
+
+
+@router.get("/comfyui/config", response_model=LaunchConfig)
+def get_comfyui_config():
+    """
+    Get ComfyUI launch configuration.
+    
+    Returns detected ComfyUI paths and whether it can be launched.
+    """
+    config = comfy_launcher.detect_comfyui()
+    return LaunchConfig(
+        path=config.path,
+        python_path=config.python_path,
+        port=config.port,
+        is_available=config.is_available,
+        detection_method=config.detection_method,
+    )
+
+
+@router.post("/comfyui/launch")
+async def launch_comfyui():
+    """
+    Launch ComfyUI as a subprocess.
+    
+    Requires ComfyUI to be installed and detectable.
+    Returns launch status and process ID if successful.
+    """
+    result = await comfy_launcher.launch()
+    if not result.get("success"):
+        raise HTTPException(
+            status_code=503,
+            detail=result.get("error", "Failed to launch ComfyUI")
+        )
+    return result
+
+
+@router.post("/comfyui/stop")
+def stop_comfyui():
+    """
+    Stop the managed ComfyUI process.
+    
+    Only stops ComfyUI if it was started by Sweet Tea Studio.
+    """
+    result = comfy_launcher.stop()
+    return result
+
+
+@router.get("/comfyui/status")
+def get_comfyui_status():
+    """
+    Get current ComfyUI process status.
+    
+    Returns whether ComfyUI is running and if it can be launched.
+    """
+    config = comfy_launcher.get_config()
+    return {
+        "is_running": comfy_launcher.is_running(),
+        "can_launch": config.is_available,
+        "path": config.path,
+        "detection_method": config.detection_method,
+    }
+

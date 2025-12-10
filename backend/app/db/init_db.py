@@ -7,9 +7,19 @@ from app.models.job import Job
 from app.models.image import Image
 from app.models.prompt import Prompt
 from app.models.tag import TagSyncState
+from app.models.project import Project
+# Portfolio models for generation tracking
+from app.models.portfolio import (
+    ComfyWorkflow, Pipe, ModelCatalog, Run, RunModelLink, Output
+)
+from app.core.config import settings
+
 
 def init_db():
     SQLModel.metadata.create_all(engine)
+    
+    # Ensure directory structure exists
+    settings.ensure_dirs()
     
     with Session(engine) as session:
         # Seed default engine if empty
@@ -24,3 +34,15 @@ def init_db():
             session.add(default_engine)
             session.commit()
             print("Seeded default engine.")
+        
+        # Seed default 'drafts' project if empty
+        if not session.exec(select(Project)).first():
+            drafts_project = Project(
+                name="Drafts",
+                slug="drafts",
+                config_json={"is_default": True}
+            )
+            session.add(drafts_project)
+            session.commit()
+            print("Seeded drafts project.")
+

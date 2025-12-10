@@ -10,6 +10,7 @@ import { FileJson, AlertTriangle, GitBranch, Edit2, Trash2, Save, RotateCw, Chec
 import { api, WorkflowTemplate } from "@/lib/api";
 import { WorkflowGraphViewer } from "@/components/WorkflowGraphViewer";
 import { cn } from "@/lib/utils";
+import { labels } from "@/ui/labels";
 
 export default function WorkflowLibrary() {
     const [workflows, setWorkflows] = useState<WorkflowTemplate[]>([]);
@@ -227,18 +228,18 @@ export default function WorkflowLibrary() {
         return (
             <div className="container mx-auto p-4 h-[calc(100vh-4rem)] flex flex-col">
                 <div className="flex justify-between items-center mb-6">
-                    <h1 className="text-2xl font-bold">Edit Workflow: {editingWorkflow.name}</h1>
+                    <h1 className="text-2xl font-bold">edit pipe: {editingWorkflow.name}</h1>
                     <div className="flex gap-2">
                         <Dialog>
                             <DialogTrigger asChild>
                                 <Button variant="secondary" size="sm">
                                     <AlertTriangle className="w-4 h-4 mr-2" />
-                                    Add Bypass
+                                    add bypass
                                 </Button>
                             </DialogTrigger>
                             <DialogContent>
                                 <DialogHeader>
-                                    <DialogTitle>Add Node Bypass Toggle</DialogTitle>
+                                    <DialogTitle>add node bypass toggle</DialogTitle>
                                     <DialogDescription>
                                         Select a node to allow bypassing (disabling) in the configurator.
                                     </DialogDescription>
@@ -291,7 +292,7 @@ export default function WorkflowLibrary() {
                     </div>
                 </div>
                 <Card className="flex-1 overflow-auto">
-                    <CardHeader><CardTitle>Exposed Parameters</CardTitle></CardHeader>
+                    <CardHeader><CardTitle>exposed parameters</CardTitle></CardHeader>
                     <CardContent>
                         <Table>
                             <TableHeader>
@@ -341,16 +342,16 @@ export default function WorkflowLibrary() {
     return (
         <div className="container mx-auto p-4">
             <div className="flex justify-between items-center mb-6">
-                <h1 className="text-3xl font-bold">Workflow Library</h1>
+                <h1 className="text-3xl font-bold">{labels.pageTitle.pipes}</h1>
                 <div className="flex gap-2">
                     <Dialog open={composeOpen} onOpenChange={setComposeOpen}>
                         <DialogTrigger asChild>
-                            <Button variant="outline">Compose</Button>
+                            <Button variant="outline">compose</Button>
                         </DialogTrigger>
                         <DialogContent>
                             <DialogHeader>
-                                <DialogTitle>Compose Workflows</DialogTitle>
-                                <DialogDescription>Merge two workflows by piping the output of one into the other.</DialogDescription>
+                                <DialogTitle>compose pipes</DialogTitle>
+                                <DialogDescription>merge two pipes by piping the output of one into the other.</DialogDescription>
                             </DialogHeader>
                             <div className="grid gap-4 py-4">
                                 <div className="grid grid-cols-4 items-center gap-4">
@@ -396,11 +397,11 @@ export default function WorkflowLibrary() {
 
                     <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                         <DialogTrigger asChild>
-                            <Button>Import Workflow</Button>
+                            <Button>import pipe</Button>
                         </DialogTrigger>
                         <DialogContent>
                             <DialogHeader>
-                                <DialogTitle>Import from ComfyUI</DialogTitle>
+                                <DialogTitle>import from comfyui</DialogTitle>
                                 <DialogDescription>
                                     Upload a workflow exported as <b>API Format (JSON)</b>.
                                 </DialogDescription>

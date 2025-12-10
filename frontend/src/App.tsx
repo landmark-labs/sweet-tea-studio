@@ -3,8 +3,9 @@ import Layout from "./components/Layout";
 import PromptStudio from "./pages/PromptStudio";
 import Gallery from "./pages/Gallery";
 import PromptLibrary from "./pages/PromptLibrary";
-import WorkflowLibrary from "./pages/WorkflowLibrary";
+import WorkflowLibrary from "./pages/WorkflowLibrary"; // Will be renamed to PipesLibrary
 import Models from "./pages/Models";
+import Projects from "./pages/Projects";
 
 import { ErrorBoundary } from "./components/ErrorBoundary";
 
@@ -18,10 +19,13 @@ function App() {
           </ErrorBoundary>
         }>
           <Route path="/" element={<PromptStudio />} />
+          <Route path="/projects" element={<Projects />} />
+          <Route path="/pipes" element={<WorkflowLibrary />} />
           <Route path="/gallery" element={<Gallery />} />
           <Route path="/library" element={<PromptLibrary />} />
-          <Route path="/workflows" element={<WorkflowLibrary />} />
           <Route path="/models" element={<Models />} />
+          {/* Legacy route redirect for bookmarks */}
+          <Route path="/workflows" element={<WorkflowLibrary />} />
         </Route>
       </Routes>
     </BrowserRouter>
@@ -29,3 +33,4 @@ function App() {
 }
 
 export default App;
+
