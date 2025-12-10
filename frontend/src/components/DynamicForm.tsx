@@ -55,7 +55,7 @@ export function DynamicForm({
     isLoading,
     persistenceKey,
     engineId,
-    submitLabel = "Generate & Upscale",
+    submitLabel = "run pipe",
     formData: externalData,
     onChange: externalOnChange,
     onFieldFocus,
