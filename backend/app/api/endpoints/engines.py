@@ -11,6 +11,8 @@ from app.models.engine import Engine, EngineCreate, EngineRead, EngineUpdate
 from app.services.comfy_watchdog import watchdog
 from app.services.comfy_launcher import comfy_launcher
 
+from app.core.comfy_client import ComfyClient
+
 router = APIRouter()
 
 
@@ -83,6 +85,20 @@ def read_engine(engine_id: int):
         if not engine:
             raise HTTPException(status_code=404, detail="Engine not found")
         return engine
+
+
+@router.get("/{engine_id}/object_info")
+def read_object_info(engine_id: int):
+    with Session(db_engine) as session:
+        engine = session.get(Engine, engine_id)
+        if not engine:
+            raise HTTPException(status_code=404, detail="Engine not found")
+        
+        client = ComfyClient(engine)
+        try:
+            return client.get_object_info()
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=f"Failed to fetch object info from ComfyUI: {str(e)}")
 
 
 @router.get("/comfyui/config", response_model=LaunchConfig)

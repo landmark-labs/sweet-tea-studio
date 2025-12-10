@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import { PromptAutocompleteTextarea } from "@/components/PromptAutocompleteTextarea";
 import { sendTelemetryEvent } from "@/lib/telemetry";
 import { labels } from "@/ui/labels";
+import { api } from "@/lib/api";
 
 type FormSection = "inputs" | "prompts" | "loras" | "nodes";
 
@@ -68,6 +69,7 @@ export function DynamicForm({
 }: DynamicFormProps) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const [internalData, setInternalData] = useState<any>({});
+    const [dynamicOptions, setDynamicOptions] = useState<Record<string, string[]>>({});
 
     const isControlled = externalData !== undefined;
     const formData = isControlled ? externalData : internalData;
@@ -96,6 +98,48 @@ export function DynamicForm({
             setInternalData({ ...defaults, ...(storedData || {}) });
         }
     }, [schema, persistenceKey, isControlled]);
+
+    // Load dynamic options from Engine
+    useEffect(() => {
+        if (!engineId || !schema) return;
+
+        const loadDynamicOptions = async () => {
+            try {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const info = await api.getEngineObjectInfo(parseInt(engineId));
+                const newOptions: Record<string, string[]> = {};
+
+                Object.keys(schema).forEach(key => {
+                    const field = schema[key];
+                    const classType = field.x_class_type;
+
+                    if (classType && info[classType]) {
+                        const nodeDef = info[classType];
+                        // Identify parameter name from key (usually "Class.param") or just match field title?
+                        // Schema key is "Class.param" usually.
+                        const paramName = key.split('.').pop();
+
+                        if (paramName) {
+                            // Check inputs
+                            const inputs = { ...nodeDef.input?.required, ...nodeDef.input?.optional };
+                            const inputDef = inputs[paramName];
+
+                            if (inputDef && Array.isArray(inputDef[0])) {
+                                // It's an enum!
+                                newOptions[key] = inputDef[0];
+                            }
+                        }
+                    }
+                });
+
+                setDynamicOptions(newOptions);
+            } catch (e) {
+                console.error("Failed to load dynamic options", e);
+            }
+        };
+
+        loadDynamicOptions();
+    }, [engineId, schema]);
 
     const defaults = useMemo(() => {
         if (!schema) return {} as Record<string, unknown>;
@@ -472,22 +516,37 @@ export function DynamicForm({
         return (
             <div key={key} className="space-y-2">
                 <Label htmlFor={key} className={cn("text-xs text-slate-500", isActive && "text-blue-600 font-semibold")}>{field.title || key}</Label>
-                {field.enum ? (
-                    <Select
-                        value={String(formData[key] || "")}
-                        onValueChange={(val) => handleChange(key, val)}
-                    >
-                        <SelectTrigger id={key} className={cn("h-8 text-xs", isActive && "ring-1 ring-blue-400 border-blue-400")}>
-                            <SelectValue placeholder="Select..." />
-                        </SelectTrigger>
-                        <SelectContent position="popper" sideOffset={5} className="max-h-[300px] overflow-y-auto z-50">
-                            {field.enum.map((opt: string) => (
-                                <SelectItem key={opt} value={opt} className="text-xs">
-                                    {opt}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
+                {field.enum || dynamicOptions[key] ? (
+                    (() => {
+                        const rawOptions = dynamicOptions[key] || field.enum || [];
+                        const currentVal = String(formData[key] || "");
+                        // Ensure the current value is always an option to prevent auto-reset/invalidation
+                        const options = currentVal && !rawOptions.includes(currentVal)
+                            ? [currentVal, ...rawOptions]
+                            : rawOptions;
+
+                        return (
+                            <Select
+                                value={currentVal}
+                                onValueChange={(val) => {
+                                    handleChange(key, val);
+                                }}
+                            >
+                                <SelectTrigger id={key} className={cn("h-8 text-xs", isActive && "ring-1 ring-blue-400 border-blue-400")}>
+                                    {/* Debugging helpers */}
+                                    {key.includes("checkpoint") && console.log("[DEBUG] Rendering Checkpoint Select", key, formData[key], field.enum)}
+                                    <SelectValue placeholder="Select..." />
+                                </SelectTrigger>
+                                <SelectContent position="popper" sideOffset={5} className="max-h-[300px] overflow-y-auto z-50">
+                                    {options.map((opt: string) => (
+                                        <SelectItem key={opt} value={opt} className="text-xs">
+                                            {opt}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        );
+                    })()
                 ) : (
                     <Input
                         id={key}

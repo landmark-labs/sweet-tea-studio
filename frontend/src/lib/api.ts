@@ -187,6 +187,20 @@ export const api = {
         return res.json();
     },
 
+    getEngineObjectInfo: async (engineId: number): Promise<Record<string, any>> => {
+        const res = await fetch(`${API_BASE}/engines/${engineId}/object_info`);
+        if (!res.ok) throw new Error("Failed to fetch engine object info");
+        return res.json();
+    },
+
+    // --- Tag Suggestions ---
+    getTagSuggestions: async (query: string, limit: number = 20): Promise<TagSuggestion[]> => {
+        const params = new URLSearchParams({ query, limit: String(limit) });
+        const res = await fetch(`${API_BASE}/library/tags/suggest?${params}`);
+        if (!res.ok) throw new Error("Failed to fetch tag suggestions");
+        return res.json();
+    },
+
     rebootComfyUI: async (): Promise<void> => {
         await fetch(`${API_BASE}/monitoring/reboot`, { method: "POST" });
     },

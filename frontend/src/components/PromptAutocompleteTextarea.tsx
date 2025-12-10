@@ -145,10 +145,11 @@ export function PromptAutocompleteTextarea({
         // This ensures what we matched against is what gets replaced
         const start = cursor - activeToken.length;
 
-        const newValue = `${before.slice(0, start)}${name}, ${after.replace(/^\s*/, "")} `;
+        // Just insert the word - no comma/space, user controls their own formatting
+        const newValue = `${before.slice(0, start)}${name}${after}`;
         onValueChange(newValue);
 
-        const newPos = start + name.length + 2;
+        const newPos = start + name.length;
         requestAnimationFrame(() => {
             textareaRef.current?.setSelectionRange(newPos, newPos);
             textareaRef.current?.focus();

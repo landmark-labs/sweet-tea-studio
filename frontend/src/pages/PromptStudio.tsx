@@ -195,7 +195,7 @@ export default function PromptStudio() {
   useEffect(() => {
     if (selectedWorkflow) {
       const schema = selectedWorkflow.input_schema;
-      const key = `ds_pipe_params_${selectedWorkflow.id}`;
+      const key = `ds_pipe_params_${String(selectedWorkflow.id)}`;
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let initialData: any = {};
@@ -217,6 +217,13 @@ export default function PromptStudio() {
   const { registerStateChange } = useUndoRedo();
 
   const persistForm = (data: any) => {
+    // Safety: Don't persist if checkpoint got wiped (common init race condition)
+    if (data['CheckpointLoaderSimple.ckpt_name'] === "" && formData['CheckpointLoaderSimple.ckpt_name']) {
+      console.warn("[SafeGuard] Prevented overwriting checkpoint with empty string");
+      // Keep the old checkpoint value
+      data['CheckpointLoaderSimple.ckpt_name'] = formData['CheckpointLoaderSimple.ckpt_name'];
+    }
+
     setFormData(data);
     if (selectedWorkflowId) {
       localStorage.setItem(`ds_pipe_params_${selectedWorkflowId}`, JSON.stringify(data));
@@ -681,7 +688,8 @@ export default function PromptStudio() {
           });
 
           if (imageFieldKey) {
-            const key = `workflow_form_${workflowId}`;
+            // Use the standardized persistence key to ensure this image selection survives reloads
+            const key = `ds_pipe_params_${workflowId}`;
             const currentStored = JSON.parse(localStorage.getItem(key) || "{}");
             const newData = { ...currentStored, [imageFieldKey]: uploaded.filename };
             localStorage.setItem(key, JSON.stringify(newData));
