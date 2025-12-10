@@ -86,6 +86,7 @@ Visit `http://localhost:5173` to start.
 ## Documentation
 - [Development Handoff (v0.6.0)](./HANDOFF_CONTEXT.md) - **Start Here for Development** (Architecture, Context, Roadmap)
 - [Roadmap](./docs/ROADMAP.md) - Detailed Feature Status
+- jko
 
 ## License
 MIT
