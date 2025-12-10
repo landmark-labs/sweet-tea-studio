@@ -432,7 +432,35 @@ export function DynamicForm({
                         <span className="text-[10px] text-slate-400 uppercase">{formData[key] ? "Bypassed" : "Active"}</span>
                         <Switch
                             checked={!!formData[key]}
-                            onCheckedChange={(c) => handleChange(key, c)}
+                            onCheckedChange={(c) => {
+                                // If enabling bypass, auto-fill any empty required enum fields in the same group
+                                // This prevents "Value not in list" errors from ComfyUI validation
+                                let updates: Record<string, any> = { [key]: c };
+
+                                if (c === true) {
+                                    const placement = groups.placements[key];
+                                    if (placement && placement.groupId) {
+                                        const groupKeys = groups.nodes[placement.groupId]?.keys || [];
+                                        groupKeys.forEach(siblingKey => {
+                                            if (siblingKey === key) return;
+                                            const siblingField = schema[siblingKey];
+                                            const currentValue = formData[siblingKey];
+
+                                            // Check if it's an enum field and currently empty
+                                            if (siblingField?.enum && Array.isArray(siblingField.enum) && siblingField.enum.length > 0) {
+                                                if (currentValue === "" || currentValue === undefined || currentValue === null) {
+                                                    updates[siblingKey] = siblingField.enum[0];
+                                                }
+                                            }
+                                        });
+                                    }
+                                }
+
+                                const next = { ...formData, ...updates };
+                                if (persistenceKey) localStorage.setItem(persistenceKey, JSON.stringify(next));
+                                if (isControlled) externalOnChange?.(next);
+                                else setInternalData(next);
+                            }}
                             className={cn(formData[key] ? "bg-amber-500" : "bg-slate-200")}
                         />
                     </div>

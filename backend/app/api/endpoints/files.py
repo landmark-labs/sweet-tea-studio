@@ -2,6 +2,8 @@ from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends
 from sqlmodel import Session, select
 from app.db.database import get_session
 from app.models.engine import Engine
+from app.models.project import Project
+from app.core.config import settings
 import shutil
 import os
 import uuid
@@ -50,28 +52,58 @@ def upload_file(
 @router.get("/tree")
 def get_file_tree(
     engine_id: Optional[int] = None,
+    project_id: Optional[int] = None,
     path: str = "",  # Relative path to scan
     session: Session = Depends(get_session)
 ):
     """
     Get file tree for input/output directories.
-    Returns list of items in the specified path.
+    
+    If project_id is provided, returns the project folder inside ComfyUI/sweet_tea/ as root.
+    Otherwise, returns the engine's input/output directories.
     """
+    # Get the engine first
     if engine_id:
         engine = session.get(Engine, engine_id)
-        # If engine not found, we could error or fallback. Let's error if ID provided.
         if not engine and engine_id:
-             # Just fallback silently if weirdness
-             pass
+            pass  # Fallback silently
     else:
         engine = None
 
     if not engine:
-         engine = session.exec(select(Engine).where(Engine.name == "Local ComfyUI")).first()
+        engine = session.exec(select(Engine).where(Engine.name == "Local ComfyUI")).first()
 
     if not engine:
-         raise HTTPException(status_code=404, detail="No engine configuration found")
+        raise HTTPException(status_code=404, detail="No engine configuration found")
 
+    # If project_id is provided, return project folder as root
+    if project_id and not path:
+        project = session.get(Project, project_id)
+        if project and engine.output_dir:
+            project_dir = settings.get_project_dir_in_comfy(engine.output_dir, project.slug)
+            
+            # Ensure directories exist
+            if not project_dir.exists():
+                settings.ensure_sweet_tea_project_dirs(
+                    engine.output_dir,
+                    project.slug,
+                    subfolders=project.config_json.get("folders", ["input", "output", "masks"]) if project.config_json else ["input", "output", "masks"]
+                )
+            
+            # Return project subfolders as roots
+            folders = project.config_json.get("folders", ["input", "output", "masks"]) if project.config_json else ["input", "output", "masks"]
+            return [
+                {
+                    "name": folder,
+                    "type": "directory",
+                    "path": str(project_dir / folder),
+                    "is_root": True
+                }
+                for folder in folders
+                if (project_dir / folder).exists()
+            ]
+
+    # Default behavior: engine input/output directories
     base_dirs = []
     if engine.input_dir:
         base_dirs.append({"name": "Inputs", "path": engine.input_dir, "type": "directory"})

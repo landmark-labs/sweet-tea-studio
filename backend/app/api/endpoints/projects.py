@@ -13,6 +13,7 @@ from app.db.engine import engine
 from app.models.project import Project, ProjectCreate, ProjectRead
 from app.models.job import Job
 from app.models.image import Image
+from app.models.engine import Engine
 from app.core.config import settings
 
 
@@ -128,7 +129,7 @@ def create_project(data: ProjectCreate, session: Session = Depends(get_session))
     Create a new project.
     
     If slug is not provided, it will be auto-generated from the name.
-    Project directories are automatically created on disk using default folders.
+    Project directories are created inside ComfyUI/sweet_tea/{project_slug}/.
     """
     # Generate slug if not provided
     slug = data.slug if data.slug else slugify(data.name)
@@ -142,7 +143,7 @@ def create_project(data: ProjectCreate, session: Session = Depends(get_session))
         )
     
     # Default config with folders
-    default_folders = ["inputs", "output", "masks"]
+    default_folders = ["input", "output", "masks"]
     config = {
         "folders": default_folders
     }
@@ -159,8 +160,19 @@ def create_project(data: ProjectCreate, session: Session = Depends(get_session))
     session.commit()
     session.refresh(project)
     
-    # Create project directories on disk
-    settings.ensure_project_dirs(slug, subfolders=default_folders)
+    # Get active engine to find ComfyUI path
+    active_engine = session.exec(select(Engine).where(Engine.is_active == True)).first()
+    
+    if active_engine and active_engine.output_dir:
+        # Create project directories inside ComfyUI/sweet_tea/
+        settings.ensure_sweet_tea_project_dirs(
+            active_engine.output_dir, 
+            slug, 
+            subfolders=default_folders
+        )
+    else:
+        # Fallback to legacy location if no engine configured
+        settings.ensure_project_dirs(slug, subfolders=default_folders)
     
     return ProjectRead(**project.dict(), image_count=0, last_activity=project.updated_at)
 
@@ -199,8 +211,16 @@ def add_project_folder(
     session.commit()
     session.refresh(project)
     
-    # Create directory
-    settings.ensure_project_dirs(project.slug, subfolders=[folder_name])
+    # Create directory in ComfyUI/sweet_tea/ if engine available
+    active_engine = session.exec(select(Engine).where(Engine.is_active == True)).first()
+    if active_engine and active_engine.output_dir:
+        settings.ensure_sweet_tea_project_dirs(
+            active_engine.output_dir, 
+            project.slug, 
+            subfolders=[folder_name]
+        )
+    else:
+        settings.ensure_project_dirs(project.slug, subfolders=[folder_name])
     
     # Return with empty stats as we just modified it (or could refetch stats)
     # Refetching stats logic reused to keep consistency
@@ -347,3 +367,66 @@ def adopt_jobs_into_project(
         "project_name": project.name,
         "project_slug": project.slug,
     }
+
+
+class FolderImage(SQLModel):
+    """Schema for an image file in a project folder."""
+    path: str
+    filename: str
+    mtime: str
+
+
+@router.get("/{project_id}/folders/{folder_name}/images", response_model=List[FolderImage])
+def list_project_folder_images(
+    project_id: int,
+    folder_name: str,
+    session: Session = Depends(get_session)
+):
+    """
+    List all image files in a project's subfolder.
+    
+    Returns images sorted by modification time (newest first).
+    Supported formats: .png, .jpg, .jpeg, .webp
+    """
+    import os
+    from datetime import datetime as dt
+    
+    project = session.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Validate folder exists in project config
+    config = project.config_json or {"folders": ["inputs", "output", "masks"]}
+    folders = config.get("folders", [])
+    if folder_name not in folders:
+        raise HTTPException(status_code=404, detail=f"Folder '{folder_name}' not found in project")
+    
+    # Get the folder path
+    folder_path = settings.get_project_dir(project.slug) / folder_name
+    
+    if not folder_path.exists():
+        return []
+    
+    # Supported image extensions
+    image_extensions = {".png", ".jpg", ".jpeg", ".webp"}
+    
+    images = []
+    try:
+        for entry in os.scandir(folder_path):
+            if entry.is_file():
+                ext = os.path.splitext(entry.name)[1].lower()
+                if ext in image_extensions:
+                    stat = entry.stat()
+                    images.append({
+                        "path": entry.path,
+                        "filename": entry.name,
+                        "mtime": dt.fromtimestamp(stat.st_mtime).isoformat()
+                    })
+    except Exception as e:
+        print(f"Error scanning folder {folder_path}: {e}")
+        return []
+    
+    # Sort by modification time, newest first
+    images.sort(key=lambda x: x["mtime"], reverse=True)
+    
+    return images

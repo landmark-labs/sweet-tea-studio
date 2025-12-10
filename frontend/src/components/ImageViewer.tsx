@@ -1,7 +1,7 @@
 import React from "react";
 import { Download, ExternalLink, X, Check, Trash2, ArrowLeft, ArrowRight, RotateCcw } from "lucide-react";
 import { Button } from "./ui/button";
-import { api, Image as ApiImage, Collection } from "@/lib/api";
+import { api, Image as ApiImage, Collection, GalleryItem } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { FolderPlus, FolderCheck } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -9,7 +9,8 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 
 interface ImageViewerProps {
     images: ApiImage[];
-    metadata?: Record<string, unknown>;
+    galleryItems?: GalleryItem[];  // Full items with per-image metadata
+    metadata?: Record<string, unknown>;  // Fallback for legacy callers
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     workflows?: any[];
     onSelectWorkflow?: (workflowId: string, imagePath?: string) => void;
@@ -21,6 +22,7 @@ interface ImageViewerProps {
 
 export function ImageViewer({
     images,
+    galleryItems,
     metadata,
     workflows = [],
     onSelectWorkflow,
@@ -51,36 +53,19 @@ export function ImageViewer({
     const currentImage = images[selectedIndex];
     const imagePath = currentImage?.path;
 
-    // Toggle Keep Status
-    const toggleKeep = async (e?: React.MouseEvent) => {
-        e?.stopPropagation();
-        if (!currentImage || !currentImage.id || currentImage.id < 0) return;
+    // Derive metadata from currently selected gallery item if available
+    const selectedGalleryItem = galleryItems?.[selectedIndex];
+    const currentMetadata = selectedGalleryItem ? {
+        prompt: selectedGalleryItem.prompt,
+        job_params: selectedGalleryItem.job_params,
+        created_at: selectedGalleryItem.created_at,
+        negative_prompt: selectedGalleryItem.negative_prompt
+    } : metadata;
 
-        const newStatus = !currentImage.is_kept;
-        try {
-            // Optimistic update using callback if available
-            const updatedImage = { ...currentImage, is_kept: newStatus };
-
-            if (onImageUpdate) {
-                onImageUpdate(updatedImage);
-            } else {
-                // Fallback to mutation if handler not provided
-                currentImage.is_kept = newStatus;
-                setSelectedIndex(prev => prev);
-            }
-
-            await api.keepImages([currentImage.id], newStatus);
-        } catch (error) {
-            console.error("Failed to toggle keep", error);
-        }
-    };
 
     // Keyboard Shortcuts
     React.useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.ctrlKey && e.key === "Enter") {
-                toggleKeep();
-            }
             if (e.key === "ArrowLeft") {
                 setSelectedIndex(prev => Math.max(0, prev - 1));
             }
@@ -270,10 +255,6 @@ export function ImageViewer({
                                         onClick={(e) => { e.stopPropagation(); setSelectedIndex(idx); }}
                                     >
                                         <img src={`/api/v1/gallery/image/path?path=${encodeURIComponent(img.path)}`} className="w-full h-full object-cover" />
-                                        {/* Status Indicator */}
-                                        {img.is_kept && (
-                                            <div className="absolute top-0 right-0 bg-green-500 w-3 h-3 rounded-full border border-white" />
-                                        )}
                                     </div>
                                 ))}
                             </div>
@@ -282,16 +263,11 @@ export function ImageViewer({
 
                     <img
                         src={imageUrl}
-                        className={`max-w-full max-h-full object-contain shadow-2xl rounded-lg transition-all ${currentImage?.is_kept ? 'ring-4 ring-green-500/50' : ''}`}
+                        className="max-w-full max-h-full object-contain shadow-2xl rounded-lg transition-all"
                         alt="Preview"
                     />
 
-                    {currentImage?.is_kept && (
-                        <div className="absolute top-8 right-8 bg-green-500 text-white px-3 py-1 rounded-full shadow-lg flex items-center gap-2">
-                            <Check size={14} strokeWidth={3} />
-                            <span className="text-sm font-bold">KEPT</span>
-                        </div>
-                    )}
+
                 </div>
 
                 {/* Context Menu */}
@@ -313,18 +289,12 @@ export function ImageViewer({
                             <Download size={14} /> Download
                         </div>
                         <div className="h-px bg-slate-100 my-1" />
-                        <div
-                            className="px-3 py-2 hover:bg-slate-100 cursor-pointer flex items-center gap-2 text-primary"
-                            onClick={(e) => { toggleKeep(e); setContextMenu(null); }}
-                        >
-                            {currentImage?.is_kept ? <><Trash2 size={14} /> Discard</> : <><Check size={14} /> Keep (Ctrl+Enter)</>}
-                        </div>
 
                         {onRegenerate && (
                             <div
                                 className="px-3 py-2 hover:bg-slate-100 cursor-pointer flex items-center gap-2 text-slate-700"
                                 onClick={() => {
-                                    onRegenerate(metadata || {});
+                                    onRegenerate(currentMetadata || {});
                                     setContextMenu(null);
                                 }}
                             >
@@ -403,9 +373,6 @@ export function ImageViewer({
                         </div>
                         {/* Right: Keep/Download */}
                         <div className="flex items-center gap-2">
-                            <Button variant={currentImage?.is_kept ? "default" : "outline"} size="sm" onClick={(e) => toggleKeep(e)} className={cn("h-7 text-xs", currentImage?.is_kept ? "bg-green-600 hover:bg-green-700 text-white" : "")}>
-                                <Check className="w-3 h-3 mr-1" />{currentImage?.is_kept ? "Kept" : "Keep"}
-                            </Button>
                             <Button variant="outline" size="sm" onClick={handleDownload} className="h-7 text-xs">
                                 <Download className="w-3 h-3 mr-1" />Download
                             </Button>
@@ -420,32 +387,32 @@ export function ImageViewer({
                             <span className="text-[10px] text-slate-400 font-mono ml-2 flex-shrink-0">{currentImage?.created_at ? new Date(currentImage.created_at).toLocaleString() : ""}</span>
                         </div>
 
-                        {metadata && (
+                        {currentMetadata && (
                             <div className="space-y-3">
                                 {/* Positive Prompt */}
-                                {(metadata.prompt || (metadata.job_params as Record<string, unknown>)?.positive || (metadata.job_params as Record<string, unknown>)?.positive_prompt) && (
+                                {(currentMetadata.prompt || (currentMetadata.job_params as Record<string, unknown>)?.positive || (currentMetadata.job_params as Record<string, unknown>)?.positive_prompt) && (
                                     <div>
                                         <span className="font-medium text-slate-500 text-[10px] uppercase block mb-1">Positive Prompt</span>
                                         <p className="text-slate-700 bg-slate-50 p-2 rounded border text-[11px] font-mono max-h-16 overflow-y-auto whitespace-pre-wrap leading-relaxed">
-                                            {String(metadata.prompt || (metadata.job_params as Record<string, unknown>)?.positive || (metadata.job_params as Record<string, unknown>)?.positive_prompt || '')}
+                                            {String(currentMetadata.prompt || (currentMetadata.job_params as Record<string, unknown>)?.positive || (currentMetadata.job_params as Record<string, unknown>)?.positive_prompt || '')}
                                         </p>
                                     </div>
                                 )}
 
                                 {/* Negative Prompt */}
-                                {((metadata.job_params as Record<string, unknown>)?.negative || (metadata.job_params as Record<string, unknown>)?.negative_prompt) && (
+                                {((currentMetadata.job_params as Record<string, unknown>)?.negative || (currentMetadata.job_params as Record<string, unknown>)?.negative_prompt) && (
                                     <div>
                                         <span className="font-medium text-slate-500 text-[10px] uppercase block mb-1">Negative Prompt</span>
                                         <p className="text-slate-700 bg-slate-50 p-2 rounded border text-[11px] font-mono max-h-16 overflow-y-auto whitespace-pre-wrap leading-relaxed">
-                                            {String((metadata.job_params as Record<string, unknown>)?.negative || (metadata.job_params as Record<string, unknown>)?.negative_prompt || '')}
+                                            {String((currentMetadata.job_params as Record<string, unknown>)?.negative || (currentMetadata.job_params as Record<string, unknown>)?.negative_prompt || '')}
                                         </p>
                                     </div>
                                 )}
 
                                 {/* Other Params Grid */}
-                                {metadata.job_params && typeof metadata.job_params === 'object' && (
+                                {currentMetadata.job_params && typeof currentMetadata.job_params === 'object' && (
                                     <div className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-x-4 gap-y-2 pt-2 border-t border-slate-100">
-                                        {Object.entries(metadata.job_params as Record<string, unknown>)
+                                        {Object.entries(currentMetadata.job_params as Record<string, unknown>)
                                             .filter(([k]) =>
                                                 !['positive', 'positive_prompt', 'prompt', 'negative', 'negative_prompt'].includes(k) &&
                                                 !k.toLowerCase().includes('cliptextencode')

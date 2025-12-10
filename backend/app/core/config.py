@@ -84,6 +84,43 @@ class Settings(BaseSettings):
         """Get the directory for a specific project."""
         return self.projects_dir / project_slug
 
+    def get_sweet_tea_dir_from_engine_path(self, engine_output_dir: str) -> Path:
+        """
+        Get the sweet_tea folder inside ComfyUI directory.
+        Derives ComfyUI root from engine's output_dir (e.g., C:/ComfyUI/output -> C:/ComfyUI/sweet_tea)
+        """
+        comfy_root = Path(engine_output_dir).parent
+        return comfy_root / "sweet_tea"
+
+    def get_project_dir_in_comfy(self, engine_output_dir: str, project_slug: str) -> Path:
+        """Get the project directory inside ComfyUI/sweet_tea/."""
+        sweet_tea_dir = self.get_sweet_tea_dir_from_engine_path(engine_output_dir)
+        return sweet_tea_dir / project_slug
+
+    def ensure_sweet_tea_project_dirs(
+        self, 
+        engine_output_dir: str, 
+        project_slug: str, 
+        subfolders: Optional[List[str]] = None
+    ) -> Path:
+        """
+        Create project directories inside ComfyUI/sweet_tea/ and return the project path.
+        Creates: sweet_tea/{project_slug}/input, output, masks, etc.
+        """
+        sweet_tea_dir = self.get_sweet_tea_dir_from_engine_path(engine_output_dir)
+        sweet_tea_dir.mkdir(exist_ok=True)
+        
+        project_dir = sweet_tea_dir / project_slug
+        project_dir.mkdir(exist_ok=True)
+        
+        # Default folders if none provided
+        folders_to_create = subfolders if subfolders is not None else ["input", "output", "masks"]
+        
+        for folder in folders_to_create:
+            (project_dir / folder).mkdir(exist_ok=True)
+            
+        return project_dir
+
     def ensure_project_dirs(self, project_slug: str, subfolders: Optional[List[str]] = None) -> Path:
         """Create project directories and return the project path."""
         project_dir = self.get_project_dir(project_slug)

@@ -253,9 +253,10 @@ export const api = {
     },
 
     // --- Files ---
-    getFileTree: async (engineId?: number, path: string = ""): Promise<FileItem[]> => {
+    getFileTree: async (engineId?: number, path: string = "", projectId?: number): Promise<FileItem[]> => {
         let url = `${API_BASE}/files/tree?path=${encodeURIComponent(path)}`;
         if (engineId) url += `&engine_id=${engineId}`;
+        if (projectId) url += `&project_id=${projectId}`;
         const res = await fetch(url);
         if (!res.ok) throw new Error("Failed to fetch file tree");
         return res.json();
@@ -495,6 +496,13 @@ export const api = {
         if (!res.ok) throw new Error("Failed to fetch prompt suggestions");
         return res.json();
     },
+
+    // --- Project Folder Images ---
+    getProjectFolderImages: async (projectId: number, folderName: string): Promise<FolderImage[]> => {
+        const res = await fetch(`${API_BASE}/projects/${projectId}/folders/${encodeURIComponent(folderName)}/images`);
+        if (!res.ok) throw new Error("Failed to fetch folder images");
+        return res.json();
+    },
 };
 
 export interface Image {
@@ -550,3 +558,10 @@ export interface FileItem {
     type: "file" | "directory";
     is_root?: boolean;
 }
+
+export interface FolderImage {
+    path: string;
+    filename: string;
+    mtime: string;
+}
+

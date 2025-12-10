@@ -44,8 +44,7 @@ export function GenerationFeed({ items, onSelectPreview }: GenerationFeedProps) 
       itPerSec: iterationsPerSecond.toFixed(2),
       secPerIt: secondsPerIteration.toFixed(2),
       estimatedTotal: Math.round(estimatedTotalDuration),
-      remaining: Math.round(estimatedRemaining),
-      elapsedPercent: progressFraction > 0 ? Math.round((elapsed / estimatedTotalDuration) * 100) : 0
+      remaining: Math.round(estimatedRemaining)
     };
   };
 
@@ -94,7 +93,7 @@ export function GenerationFeed({ items, onSelectPreview }: GenerationFeedProps) 
                       const metrics = getMetrics(activeItem);
                       return (
                         <span>
-                          {metrics.itPerSec} it/s | {metrics.secPerIt} s/it | {metrics.elapsed}s / ~{metrics.estimatedTotal}s ({metrics.elapsedPercent}%)
+                          {metrics.itPerSec} it/s | {metrics.secPerIt} s/it | {metrics.elapsed}s / ~{metrics.estimatedTotal}s
                         </span>
                       );
                     })()}

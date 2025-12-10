@@ -73,21 +73,48 @@ def process_job(job_id: int):
             # Handle random seed (-1 or "-1") for ANY parameter named like "seed"
             # This handles "seed", "seed (KSampler)", "noise_seed", etc.
             bypass_nodes = []
+            
+            # Helper to check schema for bypass indication
+            schema = workflow.input_schema or {}
+            
             for key in list(working_params.keys()):
+                 # Seed Handling
                  if "seed" in key.lower() and str(working_params[key]) == "-1":
                      working_params[key] = random.randint(1, 1125899906842624)
                  
-                 # Handle Bypassing
+                 # Explicit Backend Bypass Key
                  if key.startswith("__bypass_") and working_params[key] is True:
                      node_id = key.replace("__bypass_", "")
                      bypass_nodes.append(node_id)
-                     # We remove it so it doesn't try to map to anything (though apply_params_to_graph handles missing keys fine)
                      del working_params[key]
+                     continue
+
+                 # Schema-based Bypass Detection (matches Frontend DynamicForm logic)
+                 # matches widget="toggle" AND (title starts with "bypass" OR key includes "bypass")
+                 if key in schema:
+                     field_def = schema[key]
+                     widget = field_def.get("widget", "")
+                     title = field_def.get("title", "").lower()
+                     
+                     is_toggle = widget == "toggle"
+                     is_bypass_title = title.startswith("bypass") or "bypass" in key.lower()
+                     
+                     if is_toggle and is_bypass_title and working_params[key] is True:
+                         # Try to find target node ID
+                         # x_node_id is preferred
+                         node_id = str(field_def.get("x_node_id", ""))
+                         
+                         if node_id:
+                             bypass_nodes.append(node_id)
+                             del working_params[key]
 
             # Apply Bypass Mode (4 = Bypass in ComfyUI)
             for node_id in bypass_nodes:
                 if node_id in final_graph:
                     final_graph[node_id]["mode"] = 4
+                    # Clear node inputs so ComfyUI doesn't validate them
+                    if "inputs" in final_graph[node_id]:
+                        final_graph[node_id]["inputs"] = {}
 
             if workflow.node_mapping:
                 apply_params_to_graph(final_graph, workflow.node_mapping, working_params)
@@ -117,21 +144,29 @@ def process_job(job_id: int):
             job.completed_at = datetime.utcnow()
             session.add(job)
 
-            # Determine Target Directory
+            # Determine Target Directory for saving images
             target_output_dir = None
+            
+            # If job has a project, use the project's output folder in ComfyUI/sweet_tea/
+            if job.project_id:
+                project = session.get(Project, job.project_id)
+                if project and engine.output_dir:
+                    # Use the new sweet_tea path
+                    project_dir = settings.get_project_dir_in_comfy(engine.output_dir, project.slug)
+                    target_output_dir = str(project_dir / "output")
+                    # Ensure the directory exists
+                    os.makedirs(target_output_dir, exist_ok=True)
+            
+            # If explicit output dir set on job, use that
             if job.output_dir:
-                # If explicit output dir set, check if it needs project resolution
                 if job.project_id and not os.path.isabs(job.output_dir):
                     project = session.get(Project, job.project_id)
-                    if project:
-                        project_dir = settings.get_project_dir(project.slug)
+                    if project and engine.output_dir:
+                        project_dir = settings.get_project_dir_in_comfy(engine.output_dir, project.slug)
                         target_output_dir = str(project_dir / job.output_dir)
                 else:
                     target_output_dir = job.output_dir
             
-            # Fallback to engine output if no target set
-            if not target_output_dir:
-                target_output_dir = engine.output_dir
             saved_images = []
             for img_data in images:
                 base_dir = engine.output_dir

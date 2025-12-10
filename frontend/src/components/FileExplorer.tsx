@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 
 interface FileExplorerProps {
     engineId?: string;
+    projectId?: string;
     onFileSelect: (file: FileItem) => void;
 }
 
@@ -15,11 +16,13 @@ const FileNode = ({
     item,
     level,
     engineId,
+    projectId,
     onSelect
 }: {
     item: FileItem,
     level: number,
     engineId?: string,
+    projectId?: string,
     onSelect: (f: FileItem) => void
 }) => {
     const [isOpen, setIsOpen] = useState(false);
@@ -37,7 +40,8 @@ const FileNode = ({
             setIsLoading(true);
             try {
                 const id = engineId ? parseInt(engineId) : undefined;
-                const data = await api.getFileTree(id, item.path);
+                const pid = projectId ? parseInt(projectId) : undefined;
+                const data = await api.getFileTree(id, item.path, pid);
                 setChildren(data);
             } catch (e) {
                 console.error("Failed to load directory", e);
@@ -95,6 +99,7 @@ const FileNode = ({
                                 item={child}
                                 level={level + 1}
                                 engineId={engineId}
+                                projectId={projectId}
                                 onSelect={onSelect}
                             />
                         ))
@@ -108,7 +113,7 @@ const FileNode = ({
     );
 };
 
-export function FileExplorer({ engineId, onFileSelect }: FileExplorerProps) {
+export function FileExplorer({ engineId, projectId, onFileSelect }: FileExplorerProps) {
     const [roots, setRoots] = useState<FileItem[]>([]);
     const [customPath, setCustomPath] = useState("");
     const [currentPath, setCurrentPath] = useState(""); // "" means default view (Inputs/Outputs)
@@ -117,9 +122,10 @@ export function FileExplorer({ engineId, onFileSelect }: FileExplorerProps) {
         const loadRoots = async () => {
             try {
                 const id = engineId ? parseInt(engineId) : undefined;
-                // If currentPath is empty, it loads the default roots (Inputs/Outputs).
-                // If set to a path, it loads contents of that path.
-                const data = await api.getFileTree(id, currentPath);
+                const pid = projectId ? parseInt(projectId) : undefined;
+                // If currentPath is empty, it loads the default roots.
+                // With projectId, it will show project folders instead of engine input/output.
+                const data = await api.getFileTree(id, currentPath, pid);
                 setRoots(data);
             } catch (e) {
                 console.error("Failed to load roots", e);
@@ -128,7 +134,7 @@ export function FileExplorer({ engineId, onFileSelect }: FileExplorerProps) {
             }
         };
         loadRoots();
-    }, [engineId, currentPath]);
+    }, [engineId, projectId, currentPath]);
 
     const handleNavigate = (e: React.FormEvent) => {
         e.preventDefault();
@@ -169,6 +175,7 @@ export function FileExplorer({ engineId, onFileSelect }: FileExplorerProps) {
                             item={root}
                             level={0}
                             engineId={engineId}
+                            projectId={projectId}
                             onSelect={onFileSelect}
                         />
                     ))}

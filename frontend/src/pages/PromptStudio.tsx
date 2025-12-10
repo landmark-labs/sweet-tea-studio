@@ -19,6 +19,7 @@ import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { useUndoRedo } from "@/lib/undoRedo";
 import { GenerationFeed, GenerationFeedItem } from "@/components/GenerationFeed";
 import { PromptLibraryQuickPanel } from "@/components/PromptLibraryQuickPanel";
+import { ProjectGallery } from "@/components/ProjectGallery";
 
 export default function PromptStudio() {
   const [engines, setEngines] = useState<Engine[]>([]);
@@ -654,7 +655,7 @@ export default function PromptStudio() {
       <div className="w-[480px] flex-none bg-white border-r hidden xl:block overflow-hidden">
         <PanelGroup direction="vertical">
           <Panel defaultSize={40} minSize={20}>
-            <FileExplorer engineId={selectedEngineId} onFileSelect={handleFileSelect} />
+            <FileExplorer engineId={selectedEngineId} projectId={selectedProjectId || undefined} onFileSelect={handleFileSelect} />
           </Panel>
 
           <PanelResizeHandle className="h-2 bg-slate-100 hover:bg-slate-200 transition-colors flex items-center justify-center cursor-row-resize border-y border-slate-200">
@@ -891,6 +892,7 @@ export default function PromptStudio() {
         <ErrorBoundary>
           <ImageViewer
             images={galleryImages.map(gi => gi.image)}
+            galleryItems={galleryImages}
             metadata={previewMetadata}
             workflows={workflows}
             onSelectWorkflow={handleWorkflowSelect}
@@ -903,6 +905,9 @@ export default function PromptStudio() {
           />
         </ErrorBoundary>
       </div>
+
+      {/* 4. Project Gallery (Right Side) */}
+      <ProjectGallery projects={projects} />
 
       {/* 4. Draggable Panels Area (Feed & Library) & Running Gallery Override */}
       <DraggablePanel
