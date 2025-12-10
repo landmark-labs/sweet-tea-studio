@@ -3,7 +3,7 @@ import { api, GalleryItem, Project } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Save, Trash2, Calendar, Search, Sparkles, RotateCcw, Copy, Check, X, ChevronLeft, ChevronRight } from "lucide-react";
+import { Save, Trash2, Calendar, Search, RotateCcw, Copy, Check, X, ChevronLeft, ChevronRight } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
@@ -432,15 +432,7 @@ export default function Gallery() {
                                                 >
                                                     <Save className="w-4 h-4" />
                                                 </Button>
-                                                <Button
-                                                    variant="secondary"
-                                                    size="icon"
-                                                    onClick={(e) => { e.stopPropagation(); handleCaption(item); }}
-                                                    disabled={captioningId === item.image.id}
-                                                    title="Generate caption"
-                                                >
-                                                    <Sparkles className="w-4 h-4" />
-                                                </Button>
+
 
                                                 <Button
                                                     variant="secondary"
@@ -491,9 +483,9 @@ export default function Gallery() {
                                                 </div>
                                             )}
 
-                                              {(() => {
-                                                  const { positive, negative } = getPrompts(item.job_params);
-                                                  return (
+                                            {(() => {
+                                                const { positive, negative } = getPrompts(item.job_params);
+                                                return (
                                                     <div className="mt-2 space-y-2">
                                                         {positive && (
                                                             <div className="group/prompt">

@@ -370,12 +370,31 @@ export default function PromptStudio() {
 
 
 
+  // On mount, check if we have a running job in the feed and restore lastJobId to resume WS
+  useEffect(() => {
+    // We only want to do this ONCE on mount
+    if (lastJobId) return;
+
+    const active = generationFeed[0];
+    if (active && (active.status === "queued" || active.status === "processing" || active.status === "initiating")) {
+      console.log("Resuming WebSocket for job", active.jobId);
+      setLastJobId(active.jobId);
+      setJobStatus(active.status);
+      setProgress(active.progress);
+    }
+  }, []); // Empty dependency array intentionally to run only on mount
+
   useEffect(() => {
     if (!lastJobId) return;
 
-    setJobStatus("initiating");
-    setProgress(0);
-    setJobStartTime(Date.now());
+    // Don't reconnect if job is already known to be completed/failed only if we are just starting?
+    // Actually we might want to get the final status if we missed it.
+    // But for now, always connect if lastJobId is set.
+
+    setJobStatus(prev => prev || "initiating");
+    // Only set progress if not already set (e.g. by restoration)
+    setProgress(prev => prev > 0 ? prev : 0);
+    if (!jobStartTime) setJobStartTime(Date.now());
 
 
     const ws = new WebSocket(`ws://127.0.0.1:8000/api/v1/jobs/${lastJobId}/ws`);
@@ -392,8 +411,9 @@ export default function PromptStudio() {
         updateFeed(lastJobId, { status: data.status });
       } else if (data.type === "progress") {
         const { value, max } = data.data;
-        setProgress((value / max) * 100);
-        updateFeed(lastJobId, { progress: (value / max) * 100, status: "processing" });
+        const pct = (value / max) * 100;
+        setProgress(pct);
+        updateFeed(lastJobId, { progress: pct, status: "processing" });
       } else if (data.type === "executing") {
         setJobStatus("processing");
         updateFeed(lastJobId, { status: "processing" });
@@ -401,43 +421,27 @@ export default function PromptStudio() {
         setJobStatus("completed");
         setProgress(100);
 
-
-        if (data.images && data.images.length > 0) {
-          updateFeed(lastJobId, {
-            status: "completed",
-            progress: 100,
-            previewPath: data.images[0].path,
-          });
-        } else {
-          updateFeed(lastJobId, { status: "completed", progress: 100 });
-        }
-
         if (data.images && data.images.length > 0) {
           const imagePath = data.images[0].path;
 
-          // Try to find the main prompt
-          const params = lastSubmittedParamsRef.current || {};
-          // Heuristic: finding the longest string or specific keys
-          const potentialPromptKeys = ["positive", "positive_prompt", "prompt", "text", "undefined"];
-          let mainPrompt = "Generated Image";
+          // Use authoritative params from Backend (robust) instead of frontend state
+          const params = data.job_params || {};
+          const mainPrompt = data.prompt || "Generated Image";
 
-          for (const key of potentialPromptKeys) {
-            if (params[key] && typeof params[key] === 'string' && params[key].length > 0) {
-              mainPrompt = params[key];
-              break;
-            }
-          }
-          // Fallback: Use the first long string found
-          if (mainPrompt === "Generated Image") {
-            const longString = Object.values(params).find(v => typeof v === 'string' && v.length > 20);
-            if (longString) mainPrompt = String(longString);
-          }
+          updateFeed(lastJobId, {
+            status: "completed",
+            progress: 100,
+            previewPath: imagePath,
+          });
 
           handlePreviewSelect(imagePath, {
             prompt: mainPrompt,
+            negative_prompt: data.negative_prompt,
             created_at: new Date().toISOString(),
             job_params: params
           });
+        } else {
+          updateFeed(lastJobId, { status: "completed", progress: 100 });
         }
         setGalleryRefresh(prev => prev + 1);
       } else if (data.type === "preview") {
@@ -581,17 +585,49 @@ export default function PromptStudio() {
     setIsSubmitting(true);
     setError(null);
     try {
+      // Filter params to only include those in the current schema
+      // This prevents "pollution" from previous workflows or uncleaned state
+      // Filter params to only include those in the current schema AND not bypassed
+      // This prevents "pollution" from previous workflows or bypassed nodes
+      const schema = selectedWorkflow.input_schema || {};
+
+      // Identify bypassed nodes
+      const bypassedNodeIds = new Set<string>();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      Object.entries(schema).forEach(([key, field]: [string, any]) => {
+        if (field.widget === 'toggle' && (key.toLowerCase().includes('bypass') || field.title?.toLowerCase().includes('bypass'))) {
+          if (data[key]) {
+            if (field.x_node_id) bypassedNodeIds.add(field.x_node_id);
+          }
+        }
+      });
+
+      const cleanParams = Object.keys(data).reduce((acc, key) => {
+        if (key in schema) {
+          // Check if belonging to a bypassed node
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const field = schema[key] as any;
+          if (field.x_node_id && bypassedNodeIds.has(field.x_node_id)) {
+            // Keep the toggle itself, drop parameters
+            const isBypassToggle = field.widget === 'toggle' && (key.toLowerCase().includes('bypass') || field.title?.toLowerCase().includes('bypass'));
+            if (!isBypassToggle) return acc;
+          }
+          acc[key] = data[key];
+        }
+        return acc;
+      }, {} as Record<string, any>);
+
       const job = await api.createJob(
         parseInt(selectedEngineId),
         parseInt(selectedWorkflowId),
         selectedProjectId ? parseInt(selectedProjectId) : null,
-        data,
+        cleanParams,
         generationTarget || null
       );
       if (!selectedProjectId) {
         setUnsavedJobIds((prev) => (prev.includes(job.id) ? prev : [...prev, job.id]));
       }
-      lastSubmittedParamsRef.current = data; // Persist for preview
+      lastSubmittedParamsRef.current = cleanParams; // Persist for preview
       setLastJobId(job.id);
       trackFeedStart(job.id);
     } catch (err) {
@@ -930,7 +966,14 @@ export default function PromptStudio() {
       </div>
 
       {/* 4. Project Gallery (Right Side) */}
-      <ProjectGallery projects={projects} />
+      <ProjectGallery
+        projects={projects}
+        onSelectImage={(imagePath) => {
+          // Show clicked image in the viewer
+          setPreviewPath(`/api/v1/gallery/image/path?path=${encodeURIComponent(imagePath)}`);
+          setPreviewMetadata(null); // Clear old metadata, will be fetched by ImageViewer
+        }}
+      />
 
       {/* 4. Draggable Panels Area (Feed & Library) & Running Gallery Override */}
       <DraggablePanel
@@ -959,46 +1002,9 @@ export default function PromptStudio() {
             />
           </div>
 
-          {/* RIGHT: Running Gallery (horizontal layout) */}
-          <div style={{ display: 'flex', flexDirection: 'column', borderLeft: '1px solid #e2e8f0' }}>
-            <div className="px-3 py-2 bg-white border-b border-slate-200">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-slate-700">Recent</span>
-                <button onClick={loadGallery} className="text-slate-500 hover:text-slate-800" title="Refresh">
-                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                </button>
-              </div>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'row', gap: '8px', padding: '12px', alignItems: 'center' }}>
-              {galleryImages.slice(0, 4).map((item) => (
-                <div
-                  key={item.image.id}
-                  style={{ width: '256px', height: '256px', flexShrink: 0 }}
-                  className="rounded overflow-hidden bg-slate-100 border border-slate-200 cursor-pointer hover:ring-2 hover:ring-blue-400 transition-all"
-                  onClick={() => handlePreviewSelect(item.image.path, {
-                    prompt: item.prompt,
-                    created_at: item.created_at,
-                    job_params: item.job_params
-                  })}
-                >
-                  <img
-                    src={`/api/v1/gallery/image/path?path=${encodeURIComponent(item.image.path)}`}
-                    alt={`Image ${item.image.id}`}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-              ))}
-              {galleryImages.length === 0 && (
-                <div style={{ width: '256px', height: '256px' }} className="flex items-center justify-center text-xs text-slate-400">
-                  no recent images
-                </div>
-              )}
-            </div>
-          </div>
         </div>
-      </DraggablePanel>
+
+      </DraggablePanel >
 
 
       <DraggablePanel

@@ -1,11 +1,9 @@
 import React from "react";
 import { Download, ExternalLink, X, Check, Trash2, ArrowLeft, ArrowRight, RotateCcw } from "lucide-react";
 import { Button } from "./ui/button";
-import { api, Image as ApiImage, Collection, GalleryItem } from "@/lib/api";
+import { api, Image as ApiImage, GalleryItem } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { FolderPlus, FolderCheck } from "lucide-react";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+
 
 interface ImageViewerProps {
     images: ApiImage[];
@@ -35,22 +33,37 @@ export function ImageViewer({
     const [selectedIndex, setSelectedIndex] = React.useState<number>(0);
     const [contextMenu, setContextMenu] = React.useState<{ x: number, y: number } | null>(null);
     const containerRef = React.useRef<HTMLDivElement>(null);
-    const [collections, setCollections] = React.useState<Collection[]>([]);
-    const [isCollectionOpen, setIsCollectionOpen] = React.useState(false);
 
-    // Fetch collections on mount
-    React.useEffect(() => {
-        api.getCollections().then(setCollections).catch(console.error);
-    }, []);
 
     const displayImages = React.useMemo(() => {
         if (selectedImagePath && !images.some((img) => img.path === selectedImagePath)) {
+            // Extract raw file path if selectedImagePath is an API URL
+            let rawFilePath = selectedImagePath;
+            let isApiUrl = false;
+
+            if (selectedImagePath.includes('/api/') && selectedImagePath.includes('?path=')) {
+                isApiUrl = true;
+                try {
+                    const url = new URL(selectedImagePath, window.location.origin);
+                    const pathParam = url.searchParams.get('path');
+                    if (pathParam) {
+                        rawFilePath = pathParam;
+                    }
+                } catch {
+                    // If URL parsing fails, use as-is
+                }
+            }
+
             const synthetic: ApiImage = {
                 id: -1,
                 job_id: -1,
+                // Store the original selectedImagePath for display purposes
+                // but use _isApiPath to signal that it's already an API URL
                 path: selectedImagePath,
-                filename: selectedImagePath.split(/[\\/]/).pop() || "preview.png",
-                created_at: new Date().toISOString()
+                filename: rawFilePath.split(/[\\/]/).pop() || "preview.png",
+                created_at: new Date().toISOString(),
+                // @ts-expect-error - custom property to flag API URLs
+                _isApiUrl: isApiUrl
             };
             return [synthetic, ...images];
         }
@@ -78,13 +91,60 @@ export function ImageViewer({
     const currentImage = displayImages[selectedIndex];
     const imagePath = currentImage?.path;
 
-    // Derive metadata from currently selected gallery item if available
-    const selectedGalleryItem = galleryItems?.[selectedIndex];
-    const currentMetadata = selectedGalleryItem ? {
-        prompt: selectedGalleryItem.prompt,
-        job_params: selectedGalleryItem.job_params,
-        created_at: selectedGalleryItem.created_at,
-        negative_prompt: selectedGalleryItem.negative_prompt
+    // State for PNG-sourced metadata (fetched from the image file itself)
+    const [pngMetadata, setPngMetadata] = React.useState<{
+        prompt?: string | null;
+        negative_prompt?: string | null;
+        parameters: Record<string, unknown>;
+        source: string;
+    } | null>(null);
+    const [metadataLoading, setMetadataLoading] = React.useState(false);
+
+    // Fetch metadata from PNG when image path changes
+    React.useEffect(() => {
+        if (!imagePath) {
+            setPngMetadata(null);
+            return;
+        }
+
+        // Extract the actual file path from API URLs
+        // e.g., "/api/v1/gallery/image/path?path=C%3A%5C..." -> "C:\..."
+        let rawPath = imagePath;
+        if (imagePath.includes('/api/') && imagePath.includes('?path=')) {
+            try {
+                const url = new URL(imagePath, window.location.origin);
+                const pathParam = url.searchParams.get('path');
+                if (pathParam) {
+                    rawPath = pathParam;
+                }
+            } catch {
+                // If URL parsing fails, use the path as-is
+            }
+        }
+
+        setMetadataLoading(true);
+        api.getImageMetadata(rawPath)
+            .then((data) => {
+                setPngMetadata({
+                    prompt: data.prompt,
+                    negative_prompt: data.negative_prompt,
+                    parameters: data.parameters,
+                    source: data.source
+                });
+            })
+            .catch((err) => {
+                console.warn("Failed to fetch image metadata:", err);
+                setPngMetadata(null);
+            })
+            .finally(() => setMetadataLoading(false));
+    }, [imagePath]);
+
+    // Use PNG metadata as the authoritative source
+    const currentMetadata = pngMetadata ? {
+        prompt: pngMetadata.prompt,
+        negative_prompt: pngMetadata.negative_prompt,
+        job_params: pngMetadata.parameters,
+        source: pngMetadata.source
     } : metadata;
 
 
@@ -116,7 +176,16 @@ export function ImageViewer({
     const [isDragging, setIsDragging] = React.useState(false);
     const [dragStart, setDragStart] = React.useState({ x: 0, y: 0 });
 
-    const imageUrl = imagePath ? `/api/v1/gallery/image/path?path=${encodeURIComponent(imagePath)}` : "";
+    // Compute image display URL - avoid double-encoding if already an API URL
+    const imageUrl = React.useMemo(() => {
+        if (!imagePath) return "";
+        // If the path is already an API URL, use it directly
+        if (imagePath.startsWith('/api/') || imagePath.startsWith('http')) {
+            return imagePath;
+        }
+        // Otherwise, construct the API URL
+        return `/api/v1/gallery/image/path?path=${encodeURIComponent(imagePath)}`;
+    }, [imagePath]);
 
     // Reset zoom on close
     React.useEffect(() => {
@@ -179,30 +248,7 @@ export function ImageViewer({
         }
     };
 
-    const handleToggleCollection = async (collectionId: number) => {
-        if (!currentImage || !currentImage.id) return;
-        const isInCollection = currentImage.collection_id === collectionId;
 
-        try {
-            if (isInCollection) {
-                await api.removeImagesFromCollection([currentImage.id]);
-                // Update local state
-                if (onImageUpdate) onImageUpdate({ ...currentImage, collection_id: undefined });
-                else currentImage.collection_id = undefined;
-            } else {
-                await api.addImagesToCollection(collectionId, [currentImage.id]);
-                // Update local state
-                if (onImageUpdate) onImageUpdate({ ...currentImage, collection_id: collectionId });
-                else currentImage.collection_id = collectionId;
-            }
-            // Close popover
-            setIsCollectionOpen(false);
-            // Force re-render
-            setSelectedIndex(prev => prev);
-        } catch (e) {
-            console.error("Failed to update collection", e);
-        }
-    };
 
     const handleContextMenu = (e: React.MouseEvent) => {
         e.preventDefault();
@@ -239,6 +285,10 @@ export function ImageViewer({
         );
     }
 
+    // Extract and process metadata for display
+    // Heuristics removed as per user request to revert the spam filter patch
+
+
     return (
         <>
             <div ref={containerRef} className="h-full flex flex-col bg-white relative">
@@ -249,7 +299,7 @@ export function ImageViewer({
                     onDoubleClick={toggleFullScreen}
                     onContextMenu={handleContextMenu}
                 >
-                    {/* Batch Navigation (Overlay) */}
+                    {/* (Image Area Content Omitted for Brevity - Unchanged) */}
                     {displayImages.length > 1 && (
                         <>
                             <Button
@@ -271,17 +321,23 @@ export function ImageViewer({
                                 <ArrowRight className="w-5 h-5 text-slate-800" />
                             </Button>
 
-                            {/* Thumbnails */}
+                            {/* Thumbnails - Limited to last 12 images */}
                             <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 p-2 bg-black/20 backdrop-blur-sm rounded-lg overflow-x-auto max-w-[80%]">
-                                {displayImages.map((img, idx) => (
-                                    <div
-                                        key={img.id}
-                                        className={`w-12 h-12 rounded overflow-hidden cursor-pointer border-2 transition-all ${idx === selectedIndex ? 'border-primary scale-105' : 'border-transparent opacity-70 hover:opacity-100'}`}
-                                        onClick={(e) => { e.stopPropagation(); setSelectedIndex(idx); }}
-                                    >
-                                        <img src={`/api/v1/gallery/image/path?path=${encodeURIComponent(img.path)}`} className="w-full h-full object-cover" />
-                                    </div>
-                                ))}
+                                {displayImages.slice(0, 12).map((img, idx) => {
+                                    // Construct proper thumbnail URL
+                                    const thumbUrl = img.path.startsWith('/api/') || img.path.startsWith('http')
+                                        ? img.path
+                                        : `/api/v1/gallery/image/path?path=${encodeURIComponent(img.path)}`;
+                                    return (
+                                        <div
+                                            key={img.id !== -1 ? img.id : `synth-${idx}`}
+                                            className={`w-12 h-12 rounded overflow-hidden cursor-pointer border-2 transition-all flex-shrink-0 ${idx === selectedIndex ? 'border-primary scale-105' : 'border-transparent opacity-70 hover:opacity-100'}`}
+                                            onClick={(e) => { e.stopPropagation(); setSelectedIndex(idx); }}
+                                        >
+                                            <img src={thumbUrl} className="w-full h-full object-cover" alt="" />
+                                        </div>
+                                    );
+                                })}
                             </div>
                         </>
                     )}
@@ -372,29 +428,7 @@ export function ImageViewer({
                                     </div>
                                 </div>
                             )}
-                            <Popover open={isCollectionOpen} onOpenChange={setIsCollectionOpen}>
-                                <PopoverTrigger asChild>
-                                    <Button variant="outline" size="sm" className="h-7 text-xs truncate border-slate-200">
-                                        {currentImage?.collection_id ? (<><FolderCheck className="h-3 w-3 mr-1 text-blue-500" />{collections.find(c => c.id === currentImage.collection_id)?.name || "Collection"}</>) : (<><FolderPlus className="h-3 w-3 mr-1" />Add to Collection</>)}
-                                    </Button>
-                                </PopoverTrigger>
-                                <PopoverContent className="p-0 w-[200px]" align="start">
-                                    <Command>
-                                        <CommandInput placeholder="Search..." className="h-8 text-xs" />
-                                        <CommandList>
-                                            <CommandEmpty>No collections.</CommandEmpty>
-                                            <CommandGroup>
-                                                {collections.map((col) => (
-                                                    <CommandItem key={col.id} value={col.name} onSelect={() => handleToggleCollection(col.id)} className="text-xs">
-                                                        <div className={cn("mr-2 flex h-3 w-3 items-center justify-center rounded-sm border", currentImage?.collection_id === col.id ? "bg-primary text-primary-foreground" : "opacity-50")}><Check className="h-3 w-3" /></div>
-                                                        {col.name}
-                                                    </CommandItem>
-                                                ))}
-                                            </CommandGroup>
-                                        </CommandList>
-                                    </Command>
-                                </PopoverContent>
-                            </Popover>
+
                         </div>
                         {/* Right: Keep/Download */}
                         <div className="flex items-center gap-2">
@@ -414,34 +448,31 @@ export function ImageViewer({
 
                         {currentMetadata && (
                             <div className="space-y-3">
-                                {/* Positive Prompt */}
-                                {(currentMetadata.prompt || (currentMetadata.job_params as Record<string, unknown>)?.positive || (currentMetadata.job_params as Record<string, unknown>)?.positive_prompt) && (
-                                    <div>
+                                {/* Positive Prompt - Full width, auto-height */}
+                                {currentMetadata.prompt && (
+                                    <div className="w-full">
                                         <span className="font-medium text-slate-500 text-[10px] uppercase block mb-1">Positive Prompt</span>
-                                        <p className="text-slate-700 bg-slate-50 p-2 rounded border text-[11px] font-mono max-h-16 overflow-y-auto whitespace-pre-wrap leading-relaxed">
-                                            {String(currentMetadata.prompt || (currentMetadata.job_params as Record<string, unknown>)?.positive || (currentMetadata.job_params as Record<string, unknown>)?.positive_prompt || '')}
+                                        <p className="text-slate-700 bg-slate-50 p-2 rounded border text-[11px] font-mono whitespace-pre-wrap leading-relaxed w-full">
+                                            {String(currentMetadata.prompt)}
                                         </p>
                                     </div>
                                 )}
 
-                                {/* Negative Prompt */}
-                                {((currentMetadata.job_params as Record<string, unknown>)?.negative || (currentMetadata.job_params as Record<string, unknown>)?.negative_prompt) && (
-                                    <div>
+                                {/* Negative Prompt - Full width, auto-height */}
+                                {currentMetadata.negative_prompt && (
+                                    <div className="w-full">
                                         <span className="font-medium text-slate-500 text-[10px] uppercase block mb-1">Negative Prompt</span>
-                                        <p className="text-slate-700 bg-slate-50 p-2 rounded border text-[11px] font-mono max-h-16 overflow-y-auto whitespace-pre-wrap leading-relaxed">
-                                            {String((currentMetadata.job_params as Record<string, unknown>)?.negative || (currentMetadata.job_params as Record<string, unknown>)?.negative_prompt || '')}
+                                        <p className="text-slate-700 bg-red-50/50 p-2 rounded border border-red-100 text-[11px] font-mono whitespace-pre-wrap leading-relaxed w-full">
+                                            {String(currentMetadata.negative_prompt)}
                                         </p>
                                     </div>
                                 )}
 
-                                {/* Other Params Grid */}
-                                {currentMetadata.job_params && typeof currentMetadata.job_params === 'object' && (
+                                {/* Parameters Grid */}
+                                {currentMetadata.job_params && typeof currentMetadata.job_params === 'object' && Object.keys(currentMetadata.job_params).length > 0 && (
                                     <div className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-x-4 gap-y-2 pt-2 border-t border-slate-100">
                                         {Object.entries(currentMetadata.job_params as Record<string, unknown>)
-                                            .filter(([k]) =>
-                                                !['positive', 'positive_prompt', 'prompt', 'negative', 'negative_prompt'].includes(k) &&
-                                                !k.toLowerCase().includes('cliptextencode')
-                                            )
+                                            .filter(([, v]) => v !== null && v !== undefined && v !== "" && typeof v !== 'object')
                                             .map(([k, v]) => (
                                                 <div key={k} className="min-w-0">
                                                     <span className="font-medium text-slate-500 capitalize text-[9px] uppercase tracking-wide block truncate">{k.replace(/_/g, ' ')}</span>
@@ -450,6 +481,11 @@ export function ImageViewer({
                                             ))
                                         }
                                     </div>
+                                )}
+
+                                {/* Loading indicator */}
+                                {metadataLoading && (
+                                    <div className="text-xs text-slate-400 italic">Loading metadata...</div>
                                 )}
                             </div>
                         )}

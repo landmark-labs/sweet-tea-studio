@@ -396,6 +396,7 @@ export function DynamicForm({
                     <Label htmlFor={key} className={cn(isActive && "text-blue-600 font-semibold")}>{field.title || key}</Label>
                     {isPromptField ? (
                         <PromptAutocompleteTextarea
+                            id={key}
                             value={formData[key] || ""}
                             onValueChange={(val) => handleChange(key, val)}
                             onFocus={() => onFieldFocus?.(key)}

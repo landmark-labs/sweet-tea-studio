@@ -401,8 +401,15 @@ def list_project_folder_images(
     if folder_name not in folders:
         raise HTTPException(status_code=404, detail=f"Folder '{folder_name}' not found in project")
     
-    # Get the folder path
-    folder_path = settings.get_project_dir(project.slug) / folder_name
+    # Resolve path: Check active engine first
+    active_engine = session.exec(select(Engine).where(Engine.is_active == True)).first()
+    
+    if active_engine and active_engine.output_dir:
+        # Use ComfyUI/sweet_tea location
+        folder_path = settings.get_project_dir_in_comfy(active_engine.output_dir, project.slug) / folder_name
+    else:
+        # Fallback to local storage
+        folder_path = settings.get_project_dir(project.slug) / folder_name
     
     if not folder_path.exists():
         return []

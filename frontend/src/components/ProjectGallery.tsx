@@ -9,24 +9,44 @@ import { cn } from "@/lib/utils";
 interface ProjectGalleryProps {
     projects: Project[];
     className?: string;
+    onSelectImage?: (imagePath: string) => void;
 }
 
-export function ProjectGallery({ projects, className }: ProjectGalleryProps) {
+export function ProjectGallery({ projects, className, onSelectImage }: ProjectGalleryProps) {
     // Panel state - persisted
     const [collapsed, setCollapsed] = useState(() => {
         const saved = localStorage.getItem("ds_project_gallery_collapsed");
         return saved === "true";
     });
 
-    // Selection state
-    const [selectedProjectId, setSelectedProjectId] = useState<string>("");
-    const [selectedFolder, setSelectedFolder] = useState<string>("");
+    // Selection state - persisted
+    const [selectedProjectId, setSelectedProjectId] = useState<string>(() => {
+        return localStorage.getItem("ds_project_gallery_project") || "";
+    });
+    const [selectedFolder, setSelectedFolder] = useState<string>(() => {
+        return localStorage.getItem("ds_project_gallery_folder") || "";
+    });
     const [images, setImages] = useState<FolderImage[]>([]);
     const [isLoading, setIsLoading] = useState(false);
 
     // Get selected project
     const selectedProject = projects.find(p => String(p.id) === selectedProjectId);
     const folders = (selectedProject?.config_json as { folders?: string[] })?.folders || [];
+
+    // Persist collapsed state
+    useEffect(() => {
+        localStorage.setItem("ds_project_gallery_collapsed", String(collapsed));
+    }, [collapsed]);
+
+    // Persist project selection
+    useEffect(() => {
+        localStorage.setItem("ds_project_gallery_project", selectedProjectId);
+    }, [selectedProjectId]);
+
+    // Persist folder selection
+    useEffect(() => {
+        localStorage.setItem("ds_project_gallery_folder", selectedFolder);
+    }, [selectedFolder]);
 
     // Persist collapsed state
     useEffect(() => {
@@ -190,10 +210,11 @@ export function ProjectGallery({ projects, className }: ProjectGalleryProps) {
                             {images.map((image) => (
                                 <div
                                     key={image.path}
-                                    className="aspect-square relative group cursor-grab active:cursor-grabbing rounded overflow-hidden border border-slate-200 hover:border-blue-400 hover:shadow-md transition-all"
+                                    className="aspect-square relative group cursor-pointer rounded overflow-hidden border border-slate-200 hover:border-blue-400 hover:shadow-md transition-all"
                                     draggable
                                     onDragStart={(e) => handleDragStart(e, image)}
-                                    title={`${image.filename}\nDrag to use as input`}
+                                    onClick={() => onSelectImage?.(image.path)}
+                                    title={`${image.filename}\nClick to view, drag to use as input`}
                                 >
                                     <img
                                         src={`/api/v1/gallery/image/path?path=${encodeURIComponent(image.path)}`}

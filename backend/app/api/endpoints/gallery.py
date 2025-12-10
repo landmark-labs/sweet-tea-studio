@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse
+from PIL import Image as PILImage
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session, func, or_, select
@@ -348,3 +349,159 @@ def serve_image(image_id: int, session: Session = Depends(get_session)):
 
     logger.info("Serving image", extra={"image_id": image_id, "path": image.path})
     return FileResponse(image.path, media_type="image/png")
+
+
+@router.get("/image/path/metadata")
+def get_image_metadata_by_path(path: str, session: Session = Depends(get_session)):
+    """
+    Read metadata directly from a PNG file.
+    
+    Returns ComfyUI workflow/prompt data and Sweet Tea provenance if embedded.
+    Falls back to database extra_metadata if PNG metadata is not available.
+    """
+    # Resolve the actual file path
+    actual_path = None
+    
+    if os.path.exists(path):
+        actual_path = path
+    else:
+        # Try engine directories
+        engine = session.exec(select(Engine).where(Engine.name == "Local ComfyUI")).first()
+        if not engine:
+            engine = session.exec(select(Engine)).first()
+        
+        if engine:
+            if engine.input_dir:
+                input_path = os.path.join(engine.input_dir, path)
+                if os.path.exists(input_path):
+                    actual_path = input_path
+            if not actual_path and engine.output_dir:
+                output_path = os.path.join(engine.output_dir, path)
+                if os.path.exists(output_path):
+                    actual_path = output_path
+    
+    if not actual_path:
+        raise HTTPException(status_code=404, detail=f"File not found: {path}")
+    
+    result = {
+        "path": path,
+        "prompt": None,
+        "negative_prompt": None,
+        "workflow": None,
+        "parameters": {},
+        "source": "none"
+    }
+    
+    try:
+        with PILImage.open(actual_path) as img:
+            info = img.info or {}
+            
+            # Try Sweet Tea provenance first (our custom format)
+            if "sweet_tea_provenance" in info:
+                try:
+                    provenance = json.loads(info["sweet_tea_provenance"])
+                    result["prompt"] = provenance.get("positive_prompt")
+                    result["negative_prompt"] = provenance.get("negative_prompt")
+                    result["parameters"] = {
+                        k: v for k, v in provenance.items()
+                        if k not in ["positive_prompt", "negative_prompt", "models", "params"]
+                        and v is not None
+                    }
+                    # Include flattened params
+                    if "params" in provenance and isinstance(provenance["params"], dict):
+                        result["parameters"].update(provenance["params"])
+                    result["source"] = "sweet_tea"
+                    return result
+                except json.JSONDecodeError:
+                    pass
+            
+            # Try ComfyUI "prompt" metadata (standard ComfyUI format)
+            if "prompt" in info:
+                try:
+                    prompt_data = json.loads(info["prompt"])
+                    # Extract prompts from CLIPTextEncode nodes
+                    for node_id, node in prompt_data.items():
+                        if isinstance(node, dict):
+                            class_type = node.get("class_type", "")
+                            inputs = node.get("inputs", {})
+                            if class_type == "CLIPTextEncode":
+                                text = inputs.get("text", "")
+                                if not result["prompt"]:
+                                    result["prompt"] = text
+                                elif not result["negative_prompt"]:
+                                    result["negative_prompt"] = text
+                            # Extract KSampler parameters
+                            elif "KSampler" in class_type or "Sampler" in class_type:
+                                for k in ["seed", "steps", "cfg", "sampler_name", "scheduler", "denoise"]:
+                                    if k in inputs and inputs[k] is not None:
+                                        result["parameters"][k] = inputs[k]
+                            # Extract checkpoint/model info
+                            elif "CheckpointLoader" in class_type or "Load Checkpoint" in class_type:
+                                ckpt = inputs.get("ckpt_name")
+                                if ckpt:
+                                    result["parameters"]["checkpoint"] = ckpt
+                            # Extract dimensions from EmptyLatentImage
+                            elif "EmptyLatentImage" in class_type or "LatentImage" in class_type:
+                                if "width" in inputs:
+                                    result["parameters"]["width"] = inputs["width"]
+                                if "height" in inputs:
+                                    result["parameters"]["height"] = inputs["height"]
+                            # Extract dimensions from general image nodes
+                            elif "width" in inputs and "height" in inputs:
+                                if "width" not in result["parameters"]:
+                                    result["parameters"]["width"] = inputs["width"]
+                                if "height" not in result["parameters"]:
+                                    result["parameters"]["height"] = inputs["height"]
+                    result["source"] = "comfyui"
+                    return result
+                except json.JSONDecodeError:
+                    pass
+            
+            # Try ComfyUI "workflow" metadata
+            if "workflow" in info:
+                try:
+                    result["workflow"] = json.loads(info["workflow"])
+                    result["source"] = "comfyui_workflow"
+                except json.JSONDecodeError:
+                    pass
+    
+    except Exception as e:
+        logger.warning("Failed to read PNG metadata", extra={"path": path, "error": str(e)})
+    
+    # Fallback: try to find in database by path
+    image = session.exec(select(Image).where(Image.path == path)).first()
+    if image and image.extra_metadata:
+        metadata = image.extra_metadata if isinstance(image.extra_metadata, dict) else {}
+        if isinstance(image.extra_metadata, str):
+            try:
+                metadata = json.loads(image.extra_metadata)
+            except json.JSONDecodeError:
+                metadata = {}
+        
+        active_prompt = metadata.get("active_prompt", {})
+        result["prompt"] = active_prompt.get("positive_text")
+        result["negative_prompt"] = active_prompt.get("negative_text")
+        result["source"] = "database"
+        
+        # Use generation_params if available (ALL non-bypassed node params)
+        # Fall back to job.input_params for legacy images
+        gen_params = metadata.get("generation_params")
+        if gen_params and isinstance(gen_params, dict):
+            # Filter only primitives for display, but include ALL params
+            result["parameters"] = {
+                k: v for k, v in gen_params.items() 
+                if v is not None and not isinstance(v, (dict, list))
+            }
+        else:
+            # Legacy fallback: get params from job.input_params
+            job = session.get(Job, image.job_id) if image.job_id else None
+            if job and job.input_params:
+                params = job.input_params if isinstance(job.input_params, dict) else {}
+                # For legacy: include all primitive params
+                result["parameters"] = {
+                    k: v for k, v in params.items() 
+                    if v is not None and not isinstance(v, (dict, list)) and not k.startswith("__")
+                }
+    
+    return result
+

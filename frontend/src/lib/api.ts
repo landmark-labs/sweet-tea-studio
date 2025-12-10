@@ -164,6 +164,15 @@ export interface InstallStatus {
     error?: string;
 }
 
+export interface ImageMetadata {
+    path: string;
+    prompt?: string | null;
+    negative_prompt?: string | null;
+    workflow?: unknown;
+    parameters: Record<string, unknown>;
+    source: "sweet_tea" | "comfyui" | "comfyui_workflow" | "database" | "none";
+}
+
 export const api = {
     // --- Engines ---
     getEngines: async (): Promise<Engine[]> => {
@@ -319,6 +328,12 @@ export const api = {
             body: JSON.stringify(data),
         });
         if (!res.ok) throw new Error("Failed to update image");
+    },
+
+    getImageMetadata: async (path: string): Promise<ImageMetadata> => {
+        const res = await fetch(`${API_BASE}/gallery/image/path/metadata?path=${encodeURIComponent(path)}`);
+        if (!res.ok) throw new Error("Failed to fetch image metadata");
+        return res.json();
     },
 
     // --- Captioning ---

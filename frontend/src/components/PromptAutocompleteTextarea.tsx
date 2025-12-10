@@ -1,17 +1,13 @@
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { api, TagSuggestion } from "@/lib/api";
 
-interface PromptAutocompleteTextareaProps {
+interface PromptAutocompleteTextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
     value: string;
     onValueChange: (value: string) => void;
-    placeholder?: string;
-    onFocus?: () => void;
-    onBlur?: (event: React.FocusEvent<HTMLTextAreaElement>) => void;
-    className?: string;
-    rows?: number;
-    onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
+    isActive?: boolean;
 }
 
 function computeScore(query: string, candidate: string): number {
@@ -57,13 +53,10 @@ function sourceBadgeClass(source: string): string {
 export function PromptAutocompleteTextarea({
     value,
     onValueChange,
-    placeholder,
-    onFocus,
-    onBlur,
-    className,
-    rows = 6,
     isActive,
+    className,
     onKeyDown,
+    ...props
 }: PromptAutocompleteTextareaProps) {
     const textareaRef = useRef<HTMLTextAreaElement | null>(null);
     const cacheRef = useRef<Map<string, TagSuggestion[]>>(new Map());
@@ -152,7 +145,7 @@ export function PromptAutocompleteTextarea({
         // This ensures what we matched against is what gets replaced
         const start = cursor - activeToken.length;
 
-        const newValue = `${before.slice(0, start)}${name}, ${after.replace(/^\s*/, "")}`;
+        const newValue = `${before.slice(0, start)}${name}, ${after.replace(/^\s*/, "")} `;
         onValueChange(newValue);
 
         const newPos = start + name.length + 2;
@@ -192,40 +185,49 @@ export function PromptAutocompleteTextarea({
     return (
         <div className="relative">
             <Textarea
+                {...props}
                 ref={textareaRef}
                 value={value}
-                placeholder={placeholder}
-                rows={rows}
                 onChange={(e) => {
                     onValueChange(e.target.value);
                     setCursor(e.target.selectionStart || 0);
+                    props.onChange?.(e);
                 }}
                 onFocus={(e) => {
                     setIsFocused(true);
                     updateCursor();
-                    onFocus?.();
+                    props.onFocus?.(e);
                 }}
                 onBlur={(e) => {
                     setIsFocused(false);
                     setTimeout(() => setIsOpen(false), 100);
-                    onBlur?.(e);
+                    props.onBlur?.(e);
                 }}
-                onKeyDown={handleKeyDown}
-                onClick={updateCursor}
-                onKeyUp={updateCursor}
-                onSelect={updateCursor}
+                onClick={(e) => {
+                    updateCursor();
+                    props.onClick?.(e);
+                }}
+                onKeyUp={(e) => {
+                    updateCursor();
+                    props.onKeyUp?.(e);
+                }}
+                onSelect={(e) => {
+                    updateCursor();
+                    props.onSelect?.(e);
+                }}
                 className={cn(
                     "text-xs font-mono transition-all min-h-[150px]",
                     isActive && "ring-2 ring-blue-400 border-blue-400 bg-blue-50/20",
                     className,
                 )}
+                onKeyDown={handleKeyDown}
             />
 
             {showDropdown && (
                 <div className="absolute left-0 right-0 mt-1 z-20 rounded-lg border border-slate-200 bg-white shadow-xl max-h-60 overflow-y-auto text-sm">
                     {rankedSuggestions.map((s, idx) => (
                         <button
-                            key={`${s.source}-${s.name}`}
+                            key={`${s.source} -${s.name} `}
                             type="button"
                             className={cn(
                                 "w-full px-3 py-2 text-left flex items-start gap-2 hover:bg-slate-50",

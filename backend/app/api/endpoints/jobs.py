@@ -222,13 +222,18 @@ def process_job(job_id: int):
                 image_metadata = incoming_metadata.copy()
                 image_metadata["active_prompt"] = latest_prompt
                 image_metadata["prompt_history"] = stacked_history
+                # Store ALL generation parameters (every non-bypassed node's params)
+                image_metadata["generation_params"] = {
+                    k: v for k, v in working_params.items() 
+                    if k != "metadata" and not k.startswith("__")
+                }
 
                 new_image = Image(
                     job_id=job_id,
                     path=full_path,
                     filename=img_data['filename'],
                     format="png",
-                    metadata=image_metadata,
+                    extra_metadata=image_metadata,
                     is_kept=False
                 )
                 session.add(new_image)
@@ -254,13 +259,36 @@ def process_job(job_id: int):
                 for img in saved_images
             ]
             
-            manager.broadcast_sync({"type": "completed", "images": images_payload}, str(job_id))
+            # Robust extraction of Prompt fields for Metadata/WS
+            # 1. Try standard keys
+            pos = working_params.get("prompt") or working_params.get("positive") or working_params.get("positive_prompt") or ""
+            neg = working_params.get("negative_prompt") or working_params.get("negative") or ""
+            
+            # 2. Heuristic fallback for common text node outputs
+            if not pos:
+                for k, v in working_params.items():
+                    k_low = k.lower()
+                    if isinstance(v, str) and len(v) > 0 and ("positive" in k_low or "prompt" in k_low) and "neg" not in k_low and "clip" not in k_low:
+                         pos = v
+                         break
+            if not neg:
+                for k, v in working_params.items():
+                    k_low = k.lower()
+                    if isinstance(v, str) and len(v) > 0 and "negative" in k_low:
+                         neg = v
+                         break
+
+            manager.broadcast_sync({
+                "type": "completed", 
+                "images": images_payload,
+                "job_params": working_params, # Send the actual final params used
+                "prompt": pos,
+                "negative_prompt": neg
+            }, str(job_id))
             print(f"Job {job_id} finished with {len(images)} images.")
             
             # Auto-Save Prompt
             if saved_images:
-                pos = working_params.get("prompt", "")
-                neg = working_params.get("negative_prompt", "")
                 content_str = f"{pos}|{neg}".encode('utf-8')
                 content_hash = hashlib.md5(content_str).hexdigest()
                 
