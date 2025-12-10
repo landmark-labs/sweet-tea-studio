@@ -3,7 +3,7 @@ import { api, GalleryItem, Project } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Save, Trash2, Calendar, Search, Sparkles, RotateCcw, Copy, Check } from "lucide-react";
+import { Trash2, Calendar, Search, RotateCcw, Copy, Check } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
@@ -20,7 +20,6 @@ export default function Gallery() {
     const [items, setItems] = useState<GalleryItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [captioningId, setCaptioningId] = useState<number | null>(null);
     const [search, setSearch] = useState("");
     const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
     const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -150,7 +149,7 @@ export default function Gallery() {
         if (!confirm("Are you sure you want to delete this image?")) return;
         try {
             await api.deleteImage(id);
-            setItems(items.filter((i) => i.image.id !== id));
+            await loadGallery(search, selectedProjectId);
         } catch (err) {
             alert("Failed to delete image");
         }
@@ -180,30 +179,6 @@ export default function Gallery() {
             alert("Prompt saved to library!");
         } catch (err) {
             alert("Failed to save prompt");
-        }
-    };
-
-    const handleCaption = async (item: GalleryItem) => {
-        setCaptioningId(item.image.id);
-        try {
-            const res = await fetch(`/api/v1/gallery/image/path?path=${encodeURIComponent(item.image.path)}`);
-            if (!res.ok) throw new Error("Unable to fetch image bytes");
-            const blob = await res.blob();
-            const file = new File([blob], item.image.filename, { type: blob.type || "image/png" });
-            const caption = await api.captionImage(file, item.image.id);
-
-            setItems((prev) =>
-                prev.map((i) =>
-                    i.image.id === item.image.id
-                        ? { ...i, image: { ...i.image, caption: caption.caption, tags: caption.ranked_tags || [] } }
-                        : i
-                )
-            );
-        } catch (err) {
-            console.error(err);
-            alert(err instanceof Error ? err.message : "Caption request failed");
-        } finally {
-            setCaptioningId(null);
         }
     };
 
@@ -356,58 +331,6 @@ export default function Gallery() {
                                             />
 
                                             <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                                                {/* Keep existing overlay buttons but make them stop propagation so they don't trigger select */}
-                                                <Button
-                                                    variant="secondary"
-                                                    size="icon"
-                                                    onClick={(e) => { e.stopPropagation(); handleSavePrompt(item); }}
-                                                    title="Save Prompt to Library"
-                                                >
-                                                    <Save className="w-4 h-4" />
-                                                </Button>
-                                                <Button
-                                                    variant="secondary"
-                                                    size="icon"
-                                                    onClick={(e) => { e.stopPropagation(); handleCaption(item); }}
-                                                    disabled={captioningId === item.image.id}
-                                                    title="Generate caption"
-                                                >
-                                                    <Sparkles className="w-4 h-4" />
-                                                </Button>
-                                                {/* Open Viewer Button (since clicking might now select) */}
-                                                {/* Actually, let's keep click behavior natural but add explicit 'View' button if needed. 
-                                                     For now just relying on standard click opening viewer unless modifiers used. 
-                                                     Wait, I didn't verify standard click opens viewer in my logic above. 
-                                                     I removed the onContextMenu.
-                                                  */}
-                                                {/* Restore click to open viewer if NO modifiers */}
-                                                <div className="absolute inset-0 z-0" onClick={(e) => {
-                                                    if (!e.ctrlKey && !e.shiftKey && !e.metaKey) {
-                                                        // Open Viewer (Currently handled by child API? No, removed logic?)
-                                                        // Wait, the original code had NO onClick for the Card?!
-                                                        // Ah, looking at previous file content...
-                                                        // It seems it relied on the ImageViewer being separate? 
-                                                        // No, previous code:
-                                                        // <Card ... onContextMenu={...}>
-                                                        // There was NO onClick handler for the card itself in previous version?
-                                                        // It seems I missed where the viewer opened.
-                                                        // Looking closely at Lines 171-333 of previous content.
-                                                        // There is NO onClick on the Card. 
-                                                        // Wait, how did the user view images?
-                                                        // Only via the overlay?
-                                                        // The overlay doesn't have a "View" button.
-                                                        // Ah, maybe the user wants to ADD the ability to view it?
-                                                        // Or maybe I missed something.
-                                                        // Let's re-read the file.
-                                                        // <img src... />
-                                                        // It seems... there was no click to view full screen in Gallery?! 
-                                                        // Only "Regenerate" and "Delete".
-                                                        // That seems like a missing feature if true.
-                                                        // BUT, my task is "Multi-select" and "Move".
-                                                        // If I simply add onClick to Toggle Selection, that is fine.
-                                                    }
-                                                }} />
-
                                                 <Button
                                                     variant="secondary"
                                                     size="icon"

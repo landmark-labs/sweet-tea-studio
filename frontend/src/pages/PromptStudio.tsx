@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from "react";
-import { useOutletContext } from "react-router-dom";
+import { useLocation, useNavigate, useOutletContext } from "react-router-dom";
 import { api, Engine, WorkflowTemplate, FileItem, GalleryItem, PromptLibraryItem, EngineHealth, Project } from "@/lib/api";
 import { DynamicForm } from "@/components/DynamicForm";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -8,7 +8,6 @@ import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Loader2, GripHorizontal } from "lucide-react";
-import { RunningGallery } from "@/components/RunningGallery";
 import { FileExplorer } from "@/components/FileExplorer";
 import { ImageViewer } from "@/components/ImageViewer";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -39,6 +38,9 @@ export default function PromptStudio() {
   const [galleryScopeAll, setGalleryScopeAll] = useState(
     localStorage.getItem("ds_gallery_scope") === "all"
   );
+
+  const location = useLocation();
+  const navigate = useNavigate();
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -244,6 +246,36 @@ export default function PromptStudio() {
   const handlePromptUpdate = (field: string, value: string) => {
     handleFormChange({ ...formData, [field]: value });
   };
+
+  useEffect(() => {
+    const state = location.state as { loadParams?: GalleryItem } | null;
+    if (!state?.loadParams) return;
+
+    const { loadParams } = state;
+
+    if (loadParams.workflow_template_id) {
+      setSelectedWorkflowId(String(loadParams.workflow_template_id));
+    }
+
+    if (loadParams.project_id !== undefined) {
+      setSelectedProjectId(loadParams.project_id ? String(loadParams.project_id) : null);
+    }
+
+    if (loadParams.job_params) {
+      handleFormChange(loadParams.job_params);
+    }
+
+    setPreviewPath(`/api/v1/gallery/image/path?path=${encodeURIComponent(loadParams.image.path)}`);
+    setPreviewMetadata({
+      prompt: loadParams.prompt || loadParams.job_params?.prompt,
+      negative_prompt: loadParams.negative_prompt || loadParams.job_params?.negative_prompt,
+      caption: loadParams.caption,
+      created_at: loadParams.created_at,
+    });
+
+    navigate(location.pathname, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state, navigate, location.pathname]);
 
   const loadPromptLibrary = async (query?: string) => {
     if (!selectedWorkflowId) return;
