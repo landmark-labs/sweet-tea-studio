@@ -8,6 +8,10 @@ from app.models.image import Image
 from app.models.prompt import Prompt
 from app.models.tag import TagSyncState
 from app.models.project import Project
+# Portfolio models for generation tracking
+from app.models.portfolio import (
+    ComfyWorkflow, Pipe, ModelCatalog, Run, RunModelLink, Output
+)
 from app.core.config import settings
 
 
