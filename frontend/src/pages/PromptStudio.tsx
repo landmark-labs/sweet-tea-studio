@@ -138,6 +138,7 @@ export default function PromptStudio() {
   const engineOffline = Boolean(selectedEngineHealth && !selectedEngineHealth.healthy);
 
   const projectPaths = (selectedProject?.config_json || {}) as { input_dir?: string; output_dir?: string; mask_dir?: string };
+  const [generationTarget, setGenerationTarget] = useState<string>("");
 
   // Persist selections
   useEffect(() => {
@@ -163,6 +164,14 @@ export default function PromptStudio() {
   useEffect(() => {
     localStorage.setItem("ds_unsaved_job_ids", JSON.stringify(unsavedJobIds));
   }, [unsavedJobIds]);
+
+  useEffect(() => {
+    if (selectedProject) {
+      setGenerationTarget(projectPaths.output_dir || projectPaths.input_dir || "");
+    } else {
+      setGenerationTarget("");
+    }
+  }, [selectedProject, projectPaths.input_dir, projectPaths.output_dir]);
 
   const previousProjectRef = useRef<string | null>(selectedProjectId);
   useEffect(() => {
@@ -489,7 +498,8 @@ export default function PromptStudio() {
         parseInt(selectedEngineId),
         parseInt(selectedWorkflowId),
         selectedProjectId ? parseInt(selectedProjectId) : null,
-        data
+        data,
+        generationTarget || null
       );
       if (!selectedProjectId) {
         setUnsavedJobIds((prev) => (prev.includes(job.id) ? prev : [...prev, job.id]));
@@ -688,6 +698,32 @@ export default function PromptStudio() {
                   <span>Inputs: {projectPaths.input_dir || "project/input"}</span>
                   <span>Outputs: {projectPaths.output_dir || "project/output"}</span>
                   <span>Masks: {projectPaths.mask_dir || "project/masks"}</span>
+                </div>
+                <div className="mt-3 space-y-2 p-3 bg-white border rounded-md">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-slate-700 text-[11px] uppercase tracking-wide">Generations go to</span>
+                  </div>
+                  <Select
+                    value={generationTarget || "engine-default"}
+                    onValueChange={(value) => setGenerationTarget(value === "engine-default" ? "" : value)}
+                  >
+                    <SelectTrigger className="h-9 text-sm">
+                      <SelectValue placeholder="Choose destination folder" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="engine-default">Engine default output</SelectItem>
+                      {projectPaths.input_dir && (
+                        <SelectItem value={projectPaths.input_dir}>Project inputs ({projectPaths.input_dir})</SelectItem>
+                      )}
+                      {projectPaths.output_dir && (
+                        <SelectItem value={projectPaths.output_dir}>Project outputs ({projectPaths.output_dir})</SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-slate-600 text-[11px] leading-snug">
+                    Choose where new generations should be saved. Point renders to project inputs when preparing sources, then
+                    switch to project outputs when exporting upscales.
+                  </p>
                 </div>
                 <div className="flex items-center justify-between pt-2">
                   {selectedProjectId && (

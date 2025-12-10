@@ -26,6 +26,7 @@ export default function Gallery() {
     const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
     const [lastSelectedId, setLastSelectedId] = useState<number | null>(null);
     const [projects, setProjects] = useState<Project[]>([]);
+    const [cleanupMode, setCleanupMode] = useState(false);
 
     const navigate = useNavigate();
 
@@ -68,14 +69,7 @@ export default function Gallery() {
         // If clicking button/interactive element, ignore
         if ((e.target as HTMLElement).closest("button")) return;
 
-        if (e.ctrlKey || e.metaKey) {
-            e.preventDefault();
-            const newSet = new Set(selectedIds);
-            if (newSet.has(id)) newSet.delete(id);
-            else newSet.add(id);
-            setSelectedIds(newSet);
-            setLastSelectedId(id);
-        } else if (e.shiftKey && lastSelectedId !== null) {
+        if (e.shiftKey && lastSelectedId !== null) {
             e.preventDefault();
             const startIdx = items.findIndex(i => i.image.id === lastSelectedId);
             const endIdx = items.findIndex(i => i.image.id === id);
@@ -87,23 +81,19 @@ export default function Gallery() {
                 const newSet = new Set(selectedIds);
                 newRange.forEach(rid => newSet.add(rid));
                 setSelectedIds(newSet);
+                setLastSelectedId(id);
             }
         } else {
-            // Normal click - check if we are in 'selection mode' (multiple selected)
-            // If strictly normal click logic requested: Open Viewer.
-            // But if user wants to just select one? They can Ctrl+Click.
-            // Let's stick to standard explorer: Click clears others and selects this one (if not opening).
-            // But since we open on click, we just open.
-
-            // Wait, if opening viewer, we should probably pass the list of all images? 
-            // Currently ImageViewer takes 'items' which is good.
-            // But we want to let user view THIS image.
-
-            // However, user asked for: ctrl+click to select.
-            // So normal click = Interaction.
-
-            // We just clear selection if normal click? Maybe not. 
-            // Let's just open the viewer.
+            const newSet = new Set(selectedIds);
+            if (cleanupMode || e.ctrlKey || e.metaKey) {
+                if (newSet.has(id)) newSet.delete(id);
+                else newSet.add(id);
+                setSelectedIds(newSet);
+                setLastSelectedId(id);
+            } else {
+                setSelectedIds(new Set([id]));
+                setLastSelectedId(id);
+            }
         }
     };
 
@@ -117,6 +107,37 @@ export default function Gallery() {
             setSelectedIds(new Set());
         } catch (e) {
             alert("Failed to delete some images");
+        }
+    };
+
+    const handleCleanupStart = () => {
+        setCleanupMode(true);
+        setSelectedIds(new Set());
+        setLastSelectedId(null);
+    };
+
+    const handleCleanupPurge = async () => {
+        const deleteCandidates = items.filter(item => !selectedIds.has(item.image.id));
+        const deleteCount = deleteCandidates.length;
+
+        if (deleteCount === 0) {
+            alert("Select at least one image to keep before cleaning up.");
+            return;
+        }
+
+        const keepCount = selectedIds.size;
+        const confirmed = confirm(`Clean up the gallery by deleting ${deleteCount} images and keeping ${keepCount}?`);
+        if (!confirmed) return;
+
+        try {
+            await Promise.all(deleteCandidates.map((item) => api.deleteImage(item.image.id)));
+            setItems(items.filter((item) => selectedIds.has(item.image.id)));
+            setCleanupMode(false);
+            setSelectedIds(new Set());
+            setLastSelectedId(null);
+        } catch (err) {
+            console.error(err);
+            alert("Failed to clean up some images");
         }
     };
 
@@ -228,6 +249,8 @@ export default function Gallery() {
         return { positive, negative };
     };
 
+    const cleanupDeleteCount = Math.max(items.length - selectedIds.size, 0);
+
     if (isLoading) return <div className="p-8">Loading gallery...</div>;
 
     return (
@@ -248,27 +271,49 @@ export default function Gallery() {
                         {selectedIds.size > 0 && (
                             <div className="flex items-center gap-2 bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-sm font-medium border border-blue-100 animate-in fade-in slide-in-from-left-4">
                                 <Check className="w-4 h-4" />
-                                {selectedIds.size} Selected
+                                {cleanupMode ? `${selectedIds.size} to keep` : `${selectedIds.size} Selected`}
                                 <div className="h-4 w-px bg-blue-200 mx-1" />
-                                <button onClick={handleBulkDelete} className="hover:underline text-red-600">Delete</button>
+                                {!cleanupMode && (
+                                    <button onClick={handleBulkDelete} className="hover:underline text-red-600">Delete</button>
+                                )}
                                 <button onClick={() => setSelectedIds(new Set())} className="hover:underline text-slate-500">Clear</button>
                             </div>
                         )}
                     </div>
-
-                    <form onSubmit={handleSearch} className="w-full md:max-w-lg">
-                        <div className="relative">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
-                            <Input
-                                type="search"
-                                placeholder="Search prompts, tags, captions..."
-                                className="pl-9"
-                                value={search}
-                                onChange={(e) => setSearch(e.target.value)}
-                            />
+                    <div className="w-full md:max-w-2xl flex flex-col gap-2 md:flex-row md:items-center md:justify-end">
+                        <form onSubmit={handleSearch} className="flex-1">
+                            <div className="relative">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+                                <Input
+                                    type="search"
+                                    placeholder="Search prompts, tags, captions..."
+                                    className="pl-9"
+                                    value={search}
+                                    onChange={(e) => setSearch(e.target.value)}
+                                />
+                            </div>
+                        </form>
+                        <div className="flex items-center gap-2">
+                            <Button variant={cleanupMode ? "secondary" : "outline"} onClick={cleanupMode ? () => setCleanupMode(false) : handleCleanupStart}>
+                                {cleanupMode ? "Done selecting" : "Gallery cleanup"}
+                            </Button>
+                            {cleanupMode && (
+                                <Button variant="destructive" onClick={handleCleanupPurge} disabled={items.length === 0}>
+                                    Clean up gallery
+                                </Button>
+                            )}
                         </div>
-                    </form>
+                    </div>
                 </div>
+
+                {cleanupMode && (
+                    <Alert className="mb-4">
+                        <AlertTitle>Cleanup mode</AlertTitle>
+                        <AlertDescription>
+                            Select every image you want to keep (Ctrl/Cmd, Shift, and Ctrl+Shift all work). When you clean up, {cleanupDeleteCount} images will be removed.
+                        </AlertDescription>
+                    </Alert>
+                )}
 
                 {error && (
                     <Alert variant="destructive" className="mb-6">

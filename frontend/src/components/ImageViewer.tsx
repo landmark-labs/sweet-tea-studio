@@ -3,8 +3,6 @@ import { Download, ExternalLink, X, Check, Trash2, ArrowLeft, ArrowRight, Rotate
 import { Button } from "./ui/button";
 import { api, Image as ApiImage, Collection } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { Switch } from "./ui/switch";
-import { Label } from "./ui/label";
 import { FolderPlus, FolderCheck } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
@@ -15,9 +13,6 @@ interface ImageViewerProps {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     workflows?: any[];
     onSelectWorkflow?: (workflowId: string, imagePath?: string) => void;
-    // autoCleanup logic lifted to parent or handled via props
-    autoCleanup?: boolean;
-    onAutoCleanupChange?: (enabled: boolean) => void;
     onImageUpdate?: (image: ApiImage) => void;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     onRegenerate?: (item: any) => void;
@@ -29,8 +24,6 @@ export function ImageViewer({
     metadata,
     workflows = [],
     onSelectWorkflow,
-    autoCleanup = true,
-    onAutoCleanupChange,
     onImageUpdate,
     onRegenerate,
     onDelete
@@ -45,11 +38,6 @@ export function ImageViewer({
     React.useEffect(() => {
         api.getCollections().then(setCollections).catch(console.error);
     }, []);
-
-    // Local state backoff if no prop provided
-    const [localAutoCleanup, setLocalAutoCleanup] = React.useState(true);
-    const effectiveAutoCleanup = onAutoCleanupChange !== undefined ? autoCleanup : localAutoCleanup;
-    const handleAutoCleanupChange = onAutoCleanupChange || setLocalAutoCleanup;
 
     // Sync selected index with images length if it changes
     React.useEffect(() => {
@@ -103,29 +91,6 @@ export function ImageViewer({
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
     }, [currentImage, images]);
-    // Auto-Discard Logic
-    // We track the ID of the image we were just looking at.
-    const lastImageIdRef = React.useRef<number | null>(currentImage?.id || null);
-
-    React.useEffect(() => {
-        const lastId = lastImageIdRef.current;
-        const currentId = currentImage?.id;
-
-        // If we switched to a DIFFERENT image (or no image), process the OLD one
-        if (lastId && lastId !== currentId && effectiveAutoCleanup) {
-            // Find the old image object in our list if possible, or we need to know its keep status.
-            // Since 'images' props might have changed (new generation added), the old image object might be shifted.
-            const oldImage = images.find(img => img.id === lastId);
-
-            if (oldImage && !oldImage.is_kept) {
-                console.log("Auto-discarding image:", lastId);
-                onDelete?.(lastId);
-            }
-        }
-
-        // Update ref to current
-        lastImageIdRef.current = currentId || null;
-    }, [currentImage?.id, effectiveAutoCleanup, images, onDelete]);
 
     // Close menu on global click
     React.useEffect(() => {
@@ -436,12 +401,8 @@ export function ImageViewer({
                                 </PopoverContent>
                             </Popover>
                         </div>
-                        {/* Right: Keep/Download/Auto */}
+                        {/* Right: Keep/Download */}
                         <div className="flex items-center gap-2">
-                            <div className="flex items-center gap-1.5 px-2 py-0.5 bg-white rounded border h-7">
-                                <Switch id="auto-cleanup" checked={effectiveAutoCleanup} onCheckedChange={handleAutoCleanupChange} className="scale-75" />
-                                <Label htmlFor="auto-cleanup" className="text-[10px] text-slate-500 cursor-pointer uppercase font-semibold">Auto-Discard</Label>
-                            </div>
                             <Button variant={currentImage?.is_kept ? "default" : "outline"} size="sm" onClick={(e) => toggleKeep(e)} className={cn("h-7 text-xs", currentImage?.is_kept ? "bg-green-600 hover:bg-green-700 text-white" : "")}>
                                 <Check className="w-3 h-3 mr-1" />{currentImage?.is_kept ? "Kept" : "Keep"}
                             </Button>
