@@ -17,9 +17,10 @@ import { PromptConstructor } from "@/components/PromptConstructor";
 import { DraggablePanel } from "@/components/ui/draggable-panel";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { useUndoRedo } from "@/lib/undoRedo";
-import { GenerationFeed, GenerationFeedItem } from "@/components/GenerationFeed";
+import { GenerationFeed } from "@/components/GenerationFeed";
 import { PromptLibraryQuickPanel } from "@/components/PromptLibraryQuickPanel";
 import { ProjectGallery } from "@/components/ProjectGallery";
+import { useGenerationFeedStore, usePromptLibraryStore } from "@/lib/stores/promptDataStore";
 
 export default function PromptStudio() {
   const [engines, setEngines] = useState<Engine[]>([]);
@@ -59,11 +60,10 @@ export default function PromptStudio() {
   const [formData, setFormData] = useState<any>({});
   const [focusedField, setFocusedField] = useState<string>("");
 
-  const [generationFeed, setGenerationFeed] = useState<GenerationFeedItem[]>([]);
+  const { generationFeed, trackFeedStart, updateFeed } = useGenerationFeedStore();
 
   // Prompt Library State
-  const [prompts, setPrompts] = useState<PromptLibraryItem[]>([]);
-  const [promptSearch, setPromptSearch] = useState("");
+  const { prompts, searchQuery: promptSearch, setSearchQuery: setPromptSearch, setPrompts, clearPrompts, shouldRefetch: shouldRefetchPrompts } = usePromptLibraryStore();
   const [promptLoading, setPromptLoading] = useState(false);
   const [promptError, setPromptError] = useState<string | null>(null);
 
@@ -246,12 +246,20 @@ export default function PromptStudio() {
   };
 
   const loadPromptLibrary = async (query?: string) => {
-    if (!selectedWorkflowId) return;
+    if (!selectedWorkflowId) {
+      clearPrompts();
+      return;
+    }
     setPromptLoading(true);
     setPromptError(null);
     try {
-      const data = await api.getPrompts(query, parseInt(selectedWorkflowId));
-      setPrompts(data);
+      const search = query ?? promptSearch;
+      if (!shouldRefetchPrompts(selectedWorkflowId, search)) {
+        setPromptLoading(false);
+        return;
+      }
+      const data = await api.getPrompts(search, parseInt(selectedWorkflowId));
+      setPrompts(data, selectedWorkflowId, search);
     } catch (err) {
       setPromptError(err instanceof Error ? err.message : "Failed to load prompts");
     } finally {
@@ -263,7 +271,7 @@ export default function PromptStudio() {
     if (selectedWorkflowId) {
       loadPromptLibrary();
     } else {
-      setPrompts([]);
+      clearPrompts();
     }
   }, [selectedWorkflowId]);
 
@@ -306,25 +314,6 @@ export default function PromptStudio() {
     } finally {
       setIsCreatingProject(false);
     }
-  };
-
-  const trackFeedStart = (jobId: number) => {
-    setGenerationFeed((prev) => [
-      {
-        jobId,
-        status: "queued",
-        progress: 0,
-        previewPath: null,
-        startedAt: new Date().toISOString(),
-      },
-      ...prev.filter((item) => item.jobId !== jobId),
-    ].slice(0, 8));
-  };
-
-  const updateFeed = (jobId: number, updates: Partial<GenerationFeedItem>) => {
-    setGenerationFeed((prev) =>
-      prev.map((item) => (item.jobId === jobId ? { ...item, ...updates } : item))
-    );
   };
 
   const applyPrompt = (prompt: PromptLibraryItem) => {
