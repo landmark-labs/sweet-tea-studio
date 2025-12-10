@@ -1,15 +1,15 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { api, PromptLibraryItem, PromptSuggestion } from "@/lib/api";
+import { api, PromptSuggestion } from "@/lib/api";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Trash2, Search, LayoutTemplate, Sparkles, Copy, Loader2, Wand2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { usePromptLibraryStore } from "@/lib/stores/promptDataStore";
 
 export default function PromptLibrary() {
-    const [prompts, setPrompts] = useState<PromptLibraryItem[]>([]);
+    const { prompts, searchQuery, setSearchQuery, setPrompts, shouldRefetch, lastWorkflowId, lastQuery } = usePromptLibraryStore();
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [searchQuery, setSearchQuery] = useState("");
     const [tagInput, setTagInput] = useState("");
     const [expandedPrompt, setExpandedPrompt] = useState<string>("");
     const [expanding, setExpanding] = useState(false);
@@ -31,8 +31,13 @@ export default function PromptLibrary() {
     const loadPrompts = async (query?: string) => {
         try {
             setIsLoading(true);
-            const data = await api.getPrompts(query);
-            setPrompts(data);
+            const search = query ?? searchQuery;
+            if (!shouldRefetch(undefined, search)) {
+                setIsLoading(false);
+                return;
+            }
+            const data = await api.getPrompts(search);
+            setPrompts(data, null, search);
         } catch (err) {
             setError("Failed to load prompts");
         } finally {
@@ -84,7 +89,7 @@ export default function PromptLibrary() {
         if (!confirm("Are you sure you want to delete this prompt?")) return;
         try {
             await api.deletePrompt(id);
-            setPrompts(prev => prev.filter(p => p.prompt_id !== id));
+            setPrompts(prompts.filter(p => p.prompt_id !== id), lastWorkflowId, lastQuery);
         } catch (e) {
             alert("Failed to delete prompt");
         }

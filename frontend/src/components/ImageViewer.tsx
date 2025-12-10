@@ -18,6 +18,7 @@ interface ImageViewerProps {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     onRegenerate?: (item: any) => void;
     onDelete?: (imageId: number) => void;
+    selectedImagePath?: string;
 }
 
 export function ImageViewer({
@@ -28,7 +29,8 @@ export function ImageViewer({
     onSelectWorkflow,
     onImageUpdate,
     onRegenerate,
-    onDelete
+    onDelete,
+    selectedImagePath
 }: ImageViewerProps) {
     const [selectedIndex, setSelectedIndex] = React.useState<number>(0);
     const [contextMenu, setContextMenu] = React.useState<{ x: number, y: number } | null>(null);
@@ -41,16 +43,39 @@ export function ImageViewer({
         api.getCollections().then(setCollections).catch(console.error);
     }, []);
 
+    const displayImages = React.useMemo(() => {
+        if (selectedImagePath && !images.some((img) => img.path === selectedImagePath)) {
+            const synthetic: ApiImage = {
+                id: -1,
+                job_id: -1,
+                path: selectedImagePath,
+                filename: selectedImagePath.split(/[\\/]/).pop() || "preview.png",
+                created_at: new Date().toISOString()
+            };
+            return [synthetic, ...images];
+        }
+        return images;
+    }, [images, selectedImagePath]);
+
     // Sync selected index with images length if it changes
     React.useEffect(() => {
-        if (images.length > 0) {
-            if (selectedIndex >= images.length) {
+        if (displayImages.length > 0) {
+            if (selectedIndex >= displayImages.length) {
                 setSelectedIndex(0);
             }
         }
-    }, [images, selectedIndex]);
+    }, [displayImages, selectedIndex]);
 
-    const currentImage = images[selectedIndex];
+    // Align selection when a specific image path is provided
+    React.useEffect(() => {
+        if (!selectedImagePath) return;
+        const idx = displayImages.findIndex((img) => img.path === selectedImagePath);
+        if (idx >= 0 && idx !== selectedIndex) {
+            setSelectedIndex(idx);
+        }
+    }, [displayImages, selectedImagePath, selectedIndex]);
+
+    const currentImage = displayImages[selectedIndex];
     const imagePath = currentImage?.path;
 
     // Derive metadata from currently selected gallery item if available
@@ -70,12 +95,12 @@ export function ImageViewer({
                 setSelectedIndex(prev => Math.max(0, prev - 1));
             }
             if (e.key === "ArrowRight") {
-                setSelectedIndex(prev => Math.min(images.length - 1, prev + 1));
+                setSelectedIndex(prev => Math.min(displayImages.length - 1, prev + 1));
             }
         };
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [currentImage, images]);
+    }, [currentImage, displayImages]);
 
     // Close menu on global click
     React.useEffect(() => {
@@ -206,7 +231,7 @@ export function ImageViewer({
         return jsonStr.includes("LoadImage") || jsonStr.includes("VAEEncode");
     });
 
-    if (!images || images.length === 0) {
+    if (!displayImages || displayImages.length === 0) {
         return (
             <div className="h-full flex items-center justify-center bg-slate-100 text-slate-400">
                 Select a job or image to view
@@ -225,7 +250,7 @@ export function ImageViewer({
                     onContextMenu={handleContextMenu}
                 >
                     {/* Batch Navigation (Overlay) */}
-                    {images.length > 1 && (
+                    {displayImages.length > 1 && (
                         <>
                             <Button
                                 variant="ghost"
@@ -240,15 +265,15 @@ export function ImageViewer({
                                 variant="ghost"
                                 size="icon"
                                 className="absolute right-4 top-1/2 -translate-y-1/2 bg-white/50 hover:bg-white/80 rounded-full"
-                                onClick={(e) => { e.stopPropagation(); setSelectedIndex(p => Math.min(images.length - 1, p + 1)); }}
-                                disabled={selectedIndex === images.length - 1}
+                                onClick={(e) => { e.stopPropagation(); setSelectedIndex(p => Math.min(displayImages.length - 1, p + 1)); }}
+                                disabled={selectedIndex === displayImages.length - 1}
                             >
                                 <ArrowRight className="w-5 h-5 text-slate-800" />
                             </Button>
 
                             {/* Thumbnails */}
                             <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 p-2 bg-black/20 backdrop-blur-sm rounded-lg overflow-x-auto max-w-[80%]">
-                                {images.map((img, idx) => (
+                                {displayImages.map((img, idx) => (
                                     <div
                                         key={img.id}
                                         className={`w-12 h-12 rounded overflow-hidden cursor-pointer border-2 transition-all ${idx === selectedIndex ? 'border-primary scale-105' : 'border-transparent opacity-70 hover:opacity-100'}`}

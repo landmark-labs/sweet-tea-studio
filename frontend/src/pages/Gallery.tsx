@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, GalleryItem, Project } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Trash2, Calendar, Search, RotateCcw, Copy, Check } from "lucide-react";
+import { Save, Trash2, Calendar, Search, Sparkles, RotateCcw, Copy, Check, X, ChevronLeft, ChevronRight } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
@@ -26,12 +26,48 @@ export default function Gallery() {
     const [lastSelectedId, setLastSelectedId] = useState<number | null>(null);
     const [projects, setProjects] = useState<Project[]>([]);
     const [cleanupMode, setCleanupMode] = useState(false);
+    const [selectionMode, setSelectionMode] = useState(false);
+    const [fullscreenIndex, setFullscreenIndex] = useState<number | null>(null);
+
+    const clickTimeout = useRef<NodeJS.Timeout | null>(null);
 
     const navigate = useNavigate();
 
     useEffect(() => {
         loadGallery();
         fetchProjects();
+    }, []);
+
+    // Keep fullscreen index valid when items update
+    useEffect(() => {
+        if (fullscreenIndex !== null && fullscreenIndex >= items.length) {
+            setFullscreenIndex(null);
+        }
+    }, [items, fullscreenIndex]);
+
+    // Keyboard navigation for fullscreen
+    useEffect(() => {
+        if (fullscreenIndex === null) return;
+
+        const handleKey = (event: KeyboardEvent) => {
+            if (event.key === "Escape") {
+                closeFullscreen();
+            } else if (event.key === "ArrowRight") {
+                navigateFullscreen(1);
+            } else if (event.key === "ArrowLeft") {
+                navigateFullscreen(-1);
+            }
+        };
+
+        window.addEventListener("keydown", handleKey);
+        return () => window.removeEventListener("keydown", handleKey);
+    }, [fullscreenIndex, items.length]);
+
+    // Clear click timeout on unmount
+    useEffect(() => {
+        return () => {
+            if (clickTimeout.current) clearTimeout(clickTimeout.current);
+        };
     }, []);
 
     const loadGallery = async (query?: string, projectId?: number | null) => {
@@ -63,12 +99,9 @@ export default function Gallery() {
         loadGallery(search, selectedProjectId);
     };
 
-    // Selection Logic
-    const handleImageClick = (id: number, e: React.MouseEvent) => {
-        // If clicking button/interactive element, ignore
-        if ((e.target as HTMLElement).closest("button")) return;
-
-        if (e.shiftKey && lastSelectedId !== null) {
+    // Selection & fullscreen logic
+    const handleSelectionToggle = (id: number, e?: React.MouseEvent) => {
+        if (e?.shiftKey && lastSelectedId !== null) {
             e.preventDefault();
             const startIdx = items.findIndex(i => i.image.id === lastSelectedId);
             const endIdx = items.findIndex(i => i.image.id === id);
@@ -81,19 +114,65 @@ export default function Gallery() {
                 newRange.forEach(rid => newSet.add(rid));
                 setSelectedIds(newSet);
                 setLastSelectedId(id);
-            }
-        } else {
-            const newSet = new Set(selectedIds);
-            if (cleanupMode || e.ctrlKey || e.metaKey) {
-                if (newSet.has(id)) newSet.delete(id);
-                else newSet.add(id);
-                setSelectedIds(newSet);
-                setLastSelectedId(id);
-            } else {
-                setSelectedIds(new Set([id]));
-                setLastSelectedId(id);
+                return;
             }
         }
+
+        const newSet = new Set(selectedIds);
+        if (newSet.has(id)) newSet.delete(id);
+        else newSet.add(id);
+        setSelectedIds(newSet);
+        setLastSelectedId(id);
+    };
+
+    const openFullscreen = (index: number) => {
+        if (index < 0 || index >= items.length) return;
+        setFullscreenIndex(index);
+    };
+
+    const closeFullscreen = () => setFullscreenIndex(null);
+
+    const navigateFullscreen = (direction: 1 | -1) => {
+        if (fullscreenIndex === null || items.length === 0) return;
+        const nextIndex = (fullscreenIndex + direction + items.length) % items.length;
+        setFullscreenIndex(nextIndex);
+    };
+
+    const handleImageInteraction = (item: GalleryItem, e: React.MouseEvent) => {
+        if ((e.target as HTMLElement).closest("button")) return;
+
+        // Determine whether to select or view
+        const shouldSelect = selectionMode || cleanupMode || e.ctrlKey || e.metaKey || e.shiftKey;
+
+        if (shouldSelect) {
+            handleSelectionToggle(item.image.id, e);
+            return;
+        }
+
+        const index = items.findIndex(i => i.image.id === item.image.id);
+        openFullscreen(index);
+    };
+
+    const handleImageDoubleClick = (item: GalleryItem) => {
+        setSelectionMode(true);
+        handleSelectionToggle(item.image.id);
+    };
+
+    const handleCardClick = (item: GalleryItem, e: React.MouseEvent) => {
+        e.persist();
+        if (clickTimeout.current) clearTimeout(clickTimeout.current);
+        clickTimeout.current = setTimeout(() => {
+            handleImageInteraction(item, e);
+            clickTimeout.current = null;
+        }, 200);
+    };
+
+    const handleCardDoubleClick = (item: GalleryItem) => {
+        if (clickTimeout.current) {
+            clearTimeout(clickTimeout.current);
+            clickTimeout.current = null;
+        }
+        handleImageDoubleClick(item);
     };
 
     const handleBulkDelete = async () => {
@@ -113,6 +192,7 @@ export default function Gallery() {
         setCleanupMode(true);
         setSelectedIds(new Set());
         setLastSelectedId(null);
+        setSelectionMode(true);
     };
 
     const handleCleanupPurge = async () => {
@@ -225,6 +305,7 @@ export default function Gallery() {
     };
 
     const cleanupDeleteCount = Math.max(items.length - selectedIds.size, 0);
+    const fullscreenItem = fullscreenIndex !== null ? items[fullscreenIndex] : null;
 
     if (isLoading) return <div className="p-8">Loading gallery...</div>;
 
@@ -243,6 +324,13 @@ export default function Gallery() {
                         <div className="text-sm text-slate-600 bg-slate-100 border border-slate-200 px-3 py-1 rounded-full">
                             Viewing {selectedProjectId ? projects.find(p => p.id === selectedProjectId)?.name || "project" : "all projects"}
                         </div>
+                        {selectionMode && (
+                            <div className="flex items-center gap-2 bg-amber-50 text-amber-700 px-3 py-1 rounded-full text-sm font-medium border border-amber-100 animate-in fade-in slide-in-from-left-4">
+                                Selection mode
+                                <div className="h-4 w-px bg-amber-200 mx-1" />
+                                <button onClick={() => setSelectionMode(false)} className="hover:underline text-amber-600">Exit</button>
+                            </div>
+                        )}
                         {selectedIds.size > 0 && (
                             <div className="flex items-center gap-2 bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-sm font-medium border border-blue-100 animate-in fade-in slide-in-from-left-4">
                                 <Check className="w-4 h-4" />
@@ -269,6 +357,9 @@ export default function Gallery() {
                             </div>
                         </form>
                         <div className="flex items-center gap-2">
+                            <Button variant={selectionMode ? "default" : "outline"} onClick={() => setSelectionMode(!selectionMode)}>
+                                {selectionMode ? "Selection mode on" : "Selection mode off"}
+                            </Button>
                             <Button variant={cleanupMode ? "secondary" : "outline"} onClick={cleanupMode ? () => setCleanupMode(false) : handleCleanupStart}>
                                 {cleanupMode ? "Done selecting" : "Gallery cleanup"}
                             </Button>
@@ -311,7 +402,8 @@ export default function Gallery() {
                                             "group overflow-hidden flex flex-col relative transition-all duration-200",
                                             selectedIds.has(item.image.id) ? "ring-2 ring-blue-500 shadow-lg scale-[0.98] bg-blue-50/50" : ""
                                         )}
-                                        onClick={(e) => handleImageClick(item.image.id, e)}
+                                        onClick={(e) => handleCardClick(item, e)}
+                                        onDoubleClick={() => handleCardDoubleClick(item)}
                                     >
                                         <div className="relative aspect-square bg-slate-100">
                                             {/* Selection Overlay Checkbox */}
@@ -331,6 +423,25 @@ export default function Gallery() {
                                             />
 
                                             <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                                                {/* Keep existing overlay buttons but make them stop propagation so they don't trigger select */}
+                                                <Button
+                                                    variant="secondary"
+                                                    size="icon"
+                                                    onClick={(e) => { e.stopPropagation(); handleSavePrompt(item); }}
+                                                    title="Save Prompt to Library"
+                                                >
+                                                    <Save className="w-4 h-4" />
+                                                </Button>
+                                                <Button
+                                                    variant="secondary"
+                                                    size="icon"
+                                                    onClick={(e) => { e.stopPropagation(); handleCaption(item); }}
+                                                    disabled={captioningId === item.image.id}
+                                                    title="Generate caption"
+                                                >
+                                                    <Sparkles className="w-4 h-4" />
+                                                </Button>
+
                                                 <Button
                                                     variant="secondary"
                                                     size="icon"
@@ -380,14 +491,9 @@ export default function Gallery() {
                                                 </div>
                                             )}
 
-                                            {/* Skipping getPrompts rendering logic for brevity in replacement, assuming it's just 'content' */}
-                                            {/* Actually, I need to include the content or I will lose it. */}
-                                            {/* Since I am replacing the entire map block, I should check if I can just wrap the Card. */}
-                                            {/* It is safer to re-render the content. I will copy the getPrompts logic block. */}
-
-                                            {(() => {
-                                                const { positive, negative } = getPrompts(item.job_params);
-                                                return (
+                                              {(() => {
+                                                  const { positive, negative } = getPrompts(item.job_params);
+                                                  return (
                                                     <div className="mt-2 space-y-2">
                                                         {positive && (
                                                             <div className="group/prompt">
@@ -424,6 +530,54 @@ export default function Gallery() {
                     </div>
                 )}
             </div>
+            {fullscreenItem && (
+                <div className="fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-center p-6 text-white">
+                    <button
+                        className="absolute top-4 right-4 rounded-full bg-white/10 hover:bg-white/20 transition p-2"
+                        onClick={closeFullscreen}
+                        aria-label="Close fullscreen"
+                    >
+                        <X className="w-5 h-5" />
+                    </button>
+
+                    <button
+                        className="absolute left-4 top-1/2 -translate-y-1/2 rounded-full bg-white/10 hover:bg-white/20 p-3"
+                        onClick={() => navigateFullscreen(-1)}
+                        aria-label="Previous image"
+                    >
+                        <ChevronLeft className="w-6 h-6" />
+                    </button>
+                    <button
+                        className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full bg-white/10 hover:bg-white/20 p-3"
+                        onClick={() => navigateFullscreen(1)}
+                        aria-label="Next image"
+                    >
+                        <ChevronRight className="w-6 h-6" />
+                    </button>
+
+                    <div className="max-w-6xl w-full flex flex-col items-center gap-4">
+                        <div className="relative w-full flex items-center justify-center">
+                            {selectedIds.has(fullscreenItem.image.id) && (
+                                <div className="absolute top-3 left-3 bg-blue-500 text-white rounded-full p-1 shadow-sm flex items-center gap-1 text-xs">
+                                    <Check className="w-3 h-3" /> Selected
+                                </div>
+                            )}
+                            <img
+                                src={`/api/v1/gallery/image/${fullscreenItem.image.id}`}
+                                alt={fullscreenItem.image.filename}
+                                className="max-h-[80vh] w-auto object-contain rounded-lg shadow-2xl"
+                            />
+                        </div>
+                        <div className="bg-white/5 rounded-lg px-4 py-2 text-sm w-full flex items-center justify-between">
+                            <div className="flex items-center gap-2 text-slate-100">
+                                <span className="font-semibold">{fullscreenItem.prompt_name || fullscreenItem.image.filename}</span>
+                                <span className="text-xs text-slate-300">{new Date(fullscreenItem.created_at).toLocaleString()}</span>
+                            </div>
+                            <div className="text-xs text-slate-200">Use ← → arrows or on-screen controls to navigate. ESC closes.</div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

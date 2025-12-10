@@ -15,7 +15,7 @@ export interface GenerationFeedItem {
 
 interface GenerationFeedProps {
   items: GenerationFeedItem[];
-  onSelectPreview?: (path: string) => void;
+  onSelectPreview?: (item: GenerationFeedItem) => void;
   onGenerate?: () => void;
 }
 
@@ -59,7 +59,7 @@ export function GenerationFeed({ items, onSelectPreview, onGenerate }: Generatio
               ) : activeItem.previewPath ? (
                 <div
                   className="relative w-full h-48 rounded overflow-hidden bg-black/5 border border-slate-200 cursor-pointer hover:opacity-90 transition-opacity"
-                  onClick={() => onSelectPreview?.(activeItem.previewPath || "")}
+                  onClick={() => activeItem.previewPath && onSelectPreview?.(activeItem)}
                 >
                   <div className="w-full h-full flex flex-col items-center justify-center text-xs text-slate-400">
                     <span className="font-semibold">ready</span>
@@ -81,16 +81,16 @@ export function GenerationFeed({ items, onSelectPreview, onGenerate }: Generatio
 
               {/* Buttons */}
               <div className="space-y-1.5">
-                {activeItem.previewPath && !activeItem.previewBlob && (
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    className="h-7 w-full text-xs"
-                    onClick={() => onSelectPreview?.(activeItem.previewPath || "")}
-                  >
-                    view result
-                  </Button>
-                )}
+                  {activeItem.previewPath && !activeItem.previewBlob && (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      className="h-7 w-full text-xs"
+                      onClick={() => activeItem.previewPath && onSelectPreview?.(activeItem)}
+                    >
+                      view result
+                    </Button>
+                  )}
                 {onGenerate && (
                   <Button
                     size="sm"
@@ -115,7 +115,7 @@ export function GenerationFeed({ items, onSelectPreview, onGenerate }: Generatio
                     key={item.jobId}
                     style={{ width: '256px', height: '256px', flexShrink: 0 }}
                     className="rounded overflow-hidden bg-slate-100 border border-slate-200 cursor-pointer hover:ring-2 hover:ring-blue-400 transition-all"
-                    onClick={() => onSelectPreview?.(item.previewPath || "")}
+                    onClick={() => item.previewPath && onSelectPreview?.(item)}
                   >
                     <img
                       src={`/api/v1/gallery/image/path?path=${encodeURIComponent(item.previewPath || "")}`}

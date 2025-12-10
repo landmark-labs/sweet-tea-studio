@@ -4,11 +4,13 @@ Provides ability to detect, configure, and launch ComfyUI from Sweet Tea Studio.
 """
 import asyncio
 import os
-import subprocess
 import signal
+import subprocess
+import time
 from pathlib import Path
 from typing import Optional, List
 from dataclasses import dataclass
+from datetime import datetime
 from app.core.config import settings
 
 
@@ -29,6 +31,10 @@ class ComfyUILauncher:
     def __init__(self):
         self._process: Optional[subprocess.Popen] = None
         self._config: Optional[LaunchConfig] = None
+        self._lock = asyncio.Lock()
+        self._last_action_at: float = 0.0
+        self._last_error: Optional[str] = None
+        self._cooldown_seconds = 3.0
     
     def detect_comfyui(self) -> LaunchConfig:
         """Detect ComfyUI installation paths."""
@@ -135,104 +141,146 @@ class ComfyUILauncher:
         if self._process is None:
             return False
         return self._process.poll() is None
+
+    def _cooldown_remaining(self) -> float:
+        """How much cooldown time is left before we allow another toggle."""
+        elapsed = time.time() - self._last_action_at
+        remaining = self._cooldown_seconds - elapsed
+        return max(0.0, remaining)
+
+    def get_status(self) -> dict:
+        """Return detailed status for the managed process."""
+        config = self.get_config()
+        return {
+            "running": self.is_running(),
+            "pid": self._process.pid if self._process else None,
+            "available": config.is_available,
+            "path": config.path,
+            "detection_method": config.detection_method,
+            "last_error": self._last_error,
+            "last_action_at": datetime.fromtimestamp(self._last_action_at).isoformat()
+            if self._last_action_at
+            else None,
+            "cooldown_remaining": round(self._cooldown_remaining(), 1),
+        }
     
     async def launch(self, extra_args: Optional[List[str]] = None) -> dict:
         """Launch ComfyUI as a subprocess."""
-        config = self.get_config()
-        
-        if not config.is_available:
-            return {
-                "success": False,
-                "error": "ComfyUI installation not found",
-                "detection_method": config.detection_method,
-            }
-        
-        if self.is_running():
-            return {
-                "success": True,
-                "message": "ComfyUI is already running",
-                "pid": self._process.pid,
-            }
-        
-        try:
-            # Build command
-            python_exe = config.python_path or "python"
-            main_py = str(Path(config.path) / "main.py")
-            
-            cmd = [python_exe, main_py]
-            
-            # Add port argument
-            cmd.extend(["--port", str(config.port)])
-            
-            # Add settings args
-            settings_args = getattr(settings, 'COMFYUI_ARGS', '')
-            if settings_args:
-                cmd.extend(settings_args.split())
-            
-            # Add extra args
-            if extra_args:
-                cmd.extend(extra_args)
-            
-            # Launch process
-            self._process = subprocess.Popen(
-                cmd,
-                cwd=config.path,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                # Don't create console window on Windows
-                creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0,
-            )
-            
-            # Wait a moment to check if it started successfully
-            await asyncio.sleep(1)
-            
-            if self._process.poll() is not None:
-                # Process already exited
-                _, stderr = self._process.communicate()
+        async with self._lock:
+            config = self.get_config()
+
+            cooldown_remaining = self._cooldown_remaining()
+            if cooldown_remaining > 0:
                 return {
                     "success": False,
-                    "error": f"ComfyUI failed to start: {stderr.decode()[:500]}",
+                    "error": f"ComfyUI toggle is cooling down. Try again in {cooldown_remaining:.1f}s",
+                    "cooldown_remaining": round(cooldown_remaining, 1),
                 }
-            
-            return {
-                "success": True,
-                "message": "ComfyUI launched successfully",
-                "pid": self._process.pid,
-                "path": config.path,
-            }
-        
-        except Exception as e:
-            return {
-                "success": False,
-                "error": str(e),
-            }
-    
-    def stop(self) -> dict:
-        """Stop the managed ComfyUI process."""
-        if not self.is_running():
-            return {"success": True, "message": "ComfyUI was not running"}
-        
-        try:
-            # Send graceful shutdown signal
-            if os.name == 'nt':
-                self._process.terminate()
-            else:
-                self._process.send_signal(signal.SIGTERM)
-            
-            # Wait for process to end
+
+            if not config.is_available:
+                self._last_error = "ComfyUI installation not found"
+                return {
+                    "success": False,
+                    "error": self._last_error,
+                    "detection_method": config.detection_method,
+                }
+
+            if self.is_running():
+                return {
+                    "success": True,
+                    "message": "ComfyUI is already running",
+                    "pid": self._process.pid,
+                }
+
             try:
-                self._process.wait(timeout=10)
-            except subprocess.TimeoutExpired:
-                # Force kill if it doesn't respond
-                self._process.kill()
-                self._process.wait()
-            
-            return {"success": True, "message": "ComfyUI stopped"}
-        
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-        finally:
-            self._process = None
+                python_exe = config.python_path or "python"
+                main_py = str(Path(config.path) / "main.py")
+
+                cmd = [python_exe, main_py]
+
+                cmd.extend(["--port", str(config.port)])
+
+                settings_args = getattr(settings, 'COMFYUI_ARGS', '')
+                if settings_args:
+                    cmd.extend(settings_args.split())
+
+                if extra_args:
+                    cmd.extend(extra_args)
+
+                self._process = subprocess.Popen(
+                    cmd,
+                    cwd=config.path,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0,
+                )
+
+                await asyncio.sleep(1)
+
+                if self._process.poll() is not None:
+                    _, stderr = self._process.communicate()
+                    self._last_error = f"ComfyUI failed to start: {stderr.decode()[:500]}"
+                    self._last_action_at = time.time()
+                    return {
+                        "success": False,
+                        "error": self._last_error,
+                    }
+
+                self._last_action_at = time.time()
+                self._last_error = None
+                return {
+                    "success": True,
+                    "message": "ComfyUI launched successfully",
+                    "pid": self._process.pid,
+                    "path": config.path,
+                }
+
+            except Exception as e:
+                self._last_error = str(e)
+                self._last_action_at = time.time()
+                return {
+                    "success": False,
+                    "error": self._last_error,
+                }
+    
+    async def stop(self) -> dict:
+        """Stop the managed ComfyUI process."""
+        async with self._lock:
+            cooldown_remaining = self._cooldown_remaining()
+            if cooldown_remaining > 0:
+                return {
+                    "success": False,
+                    "error": f"ComfyUI toggle is cooling down. Try again in {cooldown_remaining:.1f}s",
+                    "cooldown_remaining": round(cooldown_remaining, 1),
+                }
+
+            if not self.is_running():
+                self._last_action_at = time.time()
+                self._last_error = None
+                return {"success": True, "message": "ComfyUI was not running"}
+
+            try:
+                if os.name == 'nt':
+                    self._process.terminate()
+                else:
+                    self._process.send_signal(signal.SIGTERM)
+
+                try:
+                    self._process.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    self._process.kill()
+                    self._process.wait()
+
+                self._last_action_at = time.time()
+                self._last_error = None
+                return {"success": True, "message": "ComfyUI stopped"}
+
+            except Exception as e:
+                self._last_action_at = time.time()
+                self._last_error = str(e)
+                return {"success": False, "error": self._last_error}
+            finally:
+                self._process = None
 
 
 # Global launcher instance

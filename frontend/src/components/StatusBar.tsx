@@ -24,6 +24,11 @@ interface EngineStatusItem extends StatusItem {
     is_connected?: boolean;
     can_launch?: boolean;
     comfy_path?: string;
+    is_process_running?: boolean;
+    launcher_error?: string | null;
+    launcher_cooldown?: number | null;
+    last_launcher_action_at?: string | null;
+    pid?: number | null;
 }
 
 interface QueueStatus extends StatusItem {
@@ -114,6 +119,7 @@ export function StatusBar() {
     const [status, setStatus] = useState<StatusSummary | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isLaunching, setIsLaunching] = useState(false);
+    const [actionFeedback, setActionFeedback] = useState<string | null>(null);
 
     const fetchStatus = async () => {
         try {
@@ -136,23 +142,29 @@ export function StatusBar() {
         }
     };
 
-    const launchComfyUI = async () => {
+    const toggleComfyUI = async (action: "start" | "stop") => {
         setIsLaunching(true);
+        setActionFeedback(null);
         try {
-            const res = await fetch("/api/v1/engines/comfyui/launch", {
+            const res = await fetch(`/api/v1/monitoring/comfyui/${action}`, {
                 method: "POST",
             });
-            if (res.ok) {
-                // Poll more frequently after launch
-                setTimeout(fetchStatus, 2000);
-                setTimeout(fetchStatus, 5000);
-                setTimeout(fetchStatus, 10000);
+            const data = await res.json();
+
+            if (!res.ok || data.success === false) {
+                const errorMessage = data.error || data.detail || "Unable to toggle ComfyUI";
+                setActionFeedback(errorMessage);
+                console.error("ComfyUI toggle failed:", errorMessage);
             } else {
-                const data = await res.json();
-                console.error("Failed to launch ComfyUI:", data.detail);
+                setActionFeedback(data.message || `${action}ed ComfyUI`);
             }
+
+            // Refresh status regardless to update UI
+            setTimeout(fetchStatus, 500);
+            setTimeout(fetchStatus, 2500);
         } catch (e) {
-            console.error("Failed to launch ComfyUI:", e);
+            console.error("Failed to toggle ComfyUI:", e);
+            setActionFeedback("Failed to reach backend while toggling ComfyUI");
         } finally {
             setIsLaunching(false);
         }
@@ -174,12 +186,28 @@ export function StatusBar() {
         return null;
     }
 
+    const isProcessRunning = status.engine.is_process_running ?? status.engine.is_connected;
+    const cooldownSeconds = status.engine.launcher_cooldown ?? 0;
+
     // Build extra info for engine
-    const engineExtraInfo = status.engine.is_connected
-        ? undefined
-        : status.engine.can_launch
-            ? "click to launch comfyui"
-            : "comfyui not detected";
+    const engineExtraInfoParts = [] as string[];
+    if (!status.engine.is_connected) {
+        if (status.engine.can_launch) {
+            engineExtraInfoParts.push("click to start comfyui");
+        } else {
+            engineExtraInfoParts.push("comfyui not detected");
+        }
+    }
+    if (status.engine.launcher_error) {
+        engineExtraInfoParts.push(`launcher: ${status.engine.launcher_error}`);
+    }
+    if (actionFeedback) {
+        engineExtraInfoParts.push(actionFeedback);
+    }
+    if (cooldownSeconds && cooldownSeconds > 0) {
+        engineExtraInfoParts.push(`cooldown ${cooldownSeconds.toFixed(1)}s`);
+    }
+    const engineExtraInfo = engineExtraInfoParts.length ? engineExtraInfoParts.join("\n") : undefined;
 
     // Build extra info for queue
     const queueExtraInfo =
@@ -194,7 +222,14 @@ export function StatusBar() {
             : undefined;
 
     // Determine if engine pill should be clickable
-    const canLaunch = !status.engine.is_connected && status.engine.can_launch;
+    const canStart = !isProcessRunning && status.engine.can_launch && (cooldownSeconds ?? 0) <= 0;
+    const canStop = isProcessRunning && (cooldownSeconds ?? 0) <= 0;
+    const actionLabel = canStart ? "start" : canStop ? "stop" : undefined;
+    const onEngineClick = canStart
+        ? () => toggleComfyUI("start")
+        : canStop
+            ? () => toggleComfyUI("stop")
+            : undefined;
 
     return (
         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 z-50">
@@ -202,8 +237,8 @@ export function StatusBar() {
                 label={labels.status.engine}
                 status={status.engine}
                 extraInfo={engineExtraInfo}
-                onClick={canLaunch ? launchComfyUI : undefined}
-                actionLabel={canLaunch ? "launch" : undefined}
+                onClick={onEngineClick}
+                actionLabel={actionLabel}
                 actionLoading={isLaunching}
             />
             <StatusPill
