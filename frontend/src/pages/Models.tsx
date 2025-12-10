@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -66,86 +66,78 @@ type DownloadJob = {
   eta?: string;
 };
 
-const seededModels: InstalledModel[] = [
-  {
-    id: "mdl-1",
-    name: "Juggernaut XL",
-    category: "Checkpoint",
-    source: "Hugging Face",
-    size: "6.1 GB",
-    location: "ComfyUI/models/checkpoints/juggernautXL.safetensors",
-    version: "1.2",
-    notes: "Primary XL base used by Sweet Tea Studio",
-  },
-  {
-    id: "mdl-2",
-    name: "epiCPhotoGasm",
-    category: "LoRA",
-    source: "Civitai",
-    size: "220 MB",
-    location: "ComfyUI/models/loras/epiCPhotoGasm.safetensors",
-    notes: "Portrait enhancer for people-focused workflows",
-  },
-  {
-    id: "mdl-3",
-    name: "ControlNet OpenPose",
-    category: "ControlNet",
-    source: "Hugging Face",
-    size: "1.5 GB",
-    location: "ComfyUI/models/controlnet/control_v11p_sd15_openpose.pth",
-  },
-  {
-    id: "mdl-4",
-    name: "4x-AnimeSharp",
-    category: "Upscaler",
-    source: "Manual",
-    size: "140 MB",
-    location: "ComfyUI/models/upscale/4x-AnimeSharp.pth",
-  },
-  {
-    id: "mdl-5",
-    name: "Qwen2-VL-7B-Instruct",
-    category: "VLM",
-    source: "Hugging Face",
-    size: "14.3 GB",
-    location: "ComfyUI/models/vlm/qwen2-vl-7b-instruct",
-    notes: "Used for automatic captioning and tags",
-  },
-];
-
-const initialQueue: DownloadJob[] = [
-  {
-    id: "job-1",
-    source: "Hugging Face",
-    link: "https://huggingface.co/stabilityai/sd_xl_base_1.0",
-    category: "Checkpoint",
-    target: "checkpoints",
-    status: "downloading",
-    progress: 68,
-    speed: "32 MB/s via aria2c",
-    eta: "1m",
-  },
-  {
-    id: "job-2",
-    source: "Civitai",
-    link: "https://civitai.com/models/12345/custom-lora",
-    category: "LoRA",
-    target: "loras",
-    status: "queued",
-    progress: 0,
-    eta: "pending",
-  },
-];
+// Models are now fetched from API - see fetchModels()
 
 export default function Models() {
-  const [models] = useState<InstalledModel[]>(seededModels);
-  const [downloadQueue, setDownloadQueue] = useState<DownloadJob[]>(initialQueue);
+  const [models, setModels] = useState<InstalledModel[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [downloadQueue, setDownloadQueue] = useState<DownloadJob[]>([]);
   const [hfLinks, setHfLinks] = useState("");
   const [civitaiLinks, setCivitaiLinks] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<ModelCategory>("Checkpoint");
   const [search, setSearch] = useState("");
   const [targetFolder, setTargetFolder] = useState("checkpoints");
   const { registerStateChange } = useUndoRedo();
+
+  // Fetch installed models from API
+  const fetchModels = async () => {
+    setIsLoading(true);
+    try {
+      const res = await fetch("/api/v1/models/installed");
+      if (res.ok) {
+        const data = await res.json();
+        // Map API response to component format
+        const mapped: InstalledModel[] = data.map((m: any) => ({
+          id: m.id,
+          name: m.name,
+          category: m.kind.charAt(0).toUpperCase() + m.kind.slice(1) as ModelCategory,
+          source: m.source === "civitai" ? "Civitai" : m.source === "huggingface" ? "Hugging Face" : "Manual",
+          size: m.size_display,
+          location: m.path,
+          notes: m.meta?.description,
+        }));
+        setModels(mapped);
+      }
+    } catch (e) {
+      console.error("Failed to load models:", e);
+      // Fall back to empty list
+      setModels([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Fetch download queue
+  const fetchDownloads = async () => {
+    try {
+      const res = await fetch("/api/v1/models/downloads");
+      if (res.ok) {
+        const data = await res.json();
+        const mapped: DownloadJob[] = data.map((d: any) => ({
+          id: d.job_id,
+          source: "Hugging Face" as DownloadSource,
+          link: d.url || "",
+          category: selectedCategory,
+          target: targetFolder,
+          status: d.status,
+          progress: d.progress,
+          speed: d.speed,
+          eta: d.eta,
+        }));
+        setDownloadQueue(mapped);
+      }
+    } catch (e) {
+      console.error("Failed to load downloads:", e);
+    }
+  };
+
+  useEffect(() => {
+    fetchModels();
+    fetchDownloads();
+    // Poll downloads every 2 seconds
+    const interval = setInterval(fetchDownloads, 2000);
+    return () => clearInterval(interval);
+  }, []);
 
   const applyQueue = (next: DownloadJob[]) => setDownloadQueue(next);
   const updateQueue = (
@@ -172,7 +164,7 @@ export default function Models() {
     });
   }, [models, search, selectedCategory]);
 
-  const addDownloads = (links: string, source: DownloadSource) => {
+  const addDownloads = async (links: string, source: DownloadSource) => {
     const entries = links
       .split("\n")
       .map((link) => link.trim())
@@ -180,18 +172,24 @@ export default function Models() {
 
     if (!entries.length) return;
 
-    const newJobs: DownloadJob[] = entries.map((link, idx) => ({
-      id: `${source}-${Date.now()}-${idx}`,
-      source,
-      link,
-      category: selectedCategory,
-      target: targetFolder,
-      status: "queued",
-      progress: 0,
-      eta: "pending",
-    }));
+    // Call API for each download
+    for (const url of entries) {
+      try {
+        await fetch("/api/v1/models/download", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            url,
+            target_folder: targetFolder.toLowerCase(),
+          }),
+        });
+      } catch (e) {
+        console.error("Failed to queue download:", e);
+      }
+    }
 
-    updateQueue("Queued downloads", (prev) => [...newJobs, ...prev]);
+    // Refresh download list
+    fetchDownloads();
     if (source === "Hugging Face") setHfLinks("");
     if (source === "Civitai") setCivitaiLinks("");
   };
@@ -201,11 +199,11 @@ export default function Models() {
       prev.map((job) =>
         job.id === id
           ? {
-              ...job,
-              status: "completed",
-              progress: 100,
-              eta: "done",
-            }
+            ...job,
+            status: "completed",
+            progress: 100,
+            eta: "done",
+          }
           : job
       )
     );
@@ -420,7 +418,9 @@ export default function Models() {
                 <SelectItem value="VLM">VLM</SelectItem>
               </SelectContent>
             </Select>
-            <Button variant="outline">Refresh inventory</Button>
+            <Button variant="outline" onClick={fetchModels} disabled={isLoading}>
+              {isLoading ? "loading..." : "refresh inventory"}
+            </Button>
           </div>
 
           <ScrollArea className="max-h-[420px] rounded-md border border-slate-200">
