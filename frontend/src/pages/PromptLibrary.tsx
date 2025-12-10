@@ -223,7 +223,7 @@ export default function PromptLibrary() {
                             <div className="flex items-center gap-2 mb-1">
                                 <h3 className="font-semibold text-slate-900 truncate">{prompt.prompt_name || `Image #${prompt.image_id}`}</h3>
                                 <span className="px-2 py-0.5 rounded-full bg-slate-100 text-xs text-slate-600 font-medium">
-                                    Workflow #{prompt.workflow_template_id || "?"}
+                                    pipe #{prompt.workflow_template_id || "?"}
                                 </span>
                             </div>
                             {prompt.active_positive && (

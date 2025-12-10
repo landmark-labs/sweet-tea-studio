@@ -298,11 +298,11 @@ export const api = {
         return res.json();
     },
 
-    installMissingNodes: async (missingNodes: string[]) => {
+    installMissingNodes: async (missingNodes: string[], allowManualClone = false) => {
         const res = await fetch(`${API_BASE}/extensions/install_missing`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ missing_nodes: missingNodes }),
+            body: JSON.stringify({ missing_nodes: missingNodes, allow_manual_clone: allowManualClone }),
         });
         if (!res.ok) {
             const errorData = await res.json().catch(() => ({}));

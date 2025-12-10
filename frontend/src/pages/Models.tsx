@@ -33,9 +33,9 @@ const comfyModelFolders = [
     description: "High-resolution upscalers or alternate VAEs.",
   },
   {
-    name: "VLM / Vision",
+    name: "vlm / vision",
     path: "ComfyUI/models/vlm",
-    description: "Vision-language models used by Sweet Tea's captioning/tagging.",
+    description: "vision-language models used by sweet tea's captioning/tagging.",
   },
 ];
 
@@ -226,7 +226,7 @@ export default function Models() {
           <div>
             <h1 className="text-2xl font-semibold text-slate-900">Models & Checkpoints</h1>
             <p className="text-sm text-slate-600">
-              Manage everything Sweet Tea feeds to ComfyUI: checkpoints, LoRAs, ControlNets, upscalers, and VLM assets.
+              manage everything sweet tea feeds to comfyui: checkpoints, loras, controlnets, upscalers, and vlm assets.
             </p>
           </div>
         </div>
@@ -297,13 +297,13 @@ export default function Models() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Quick facts</CardTitle>
-            <CardDescription>Everything Sweet Tea expects for a single Comfy instance.</CardDescription>
+            <CardDescription>everything sweet tea expects for a single comfy instance.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 text-sm text-slate-700">
             <div className="flex items-start gap-2">
               <Info size={16} className="text-blue-500 mt-0.5" />
               <p>
-                This page replaces "engines"—assumes one Sweet Tea instance talking to one ComfyUI host.
+                this page replaces "engines"—assumes one sweet tea instance talking to one comfyui host.
               </p>
             </div>
             <div className="flex items-start gap-2">
@@ -315,7 +315,7 @@ export default function Models() {
             <div className="flex items-start gap-2">
               <ExternalLink size={16} className="text-purple-600 mt-0.5" />
               <p>
-                Drop direct links or model IDs; Sweet Tea will place files into the right ComfyUI directory for you.
+                drop direct links or model ids; sweet tea will place files into the right comfyui directory for you.
               </p>
             </div>
           </CardContent>
@@ -397,7 +397,7 @@ export default function Models() {
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">Installed models</CardTitle>
-          <CardDescription>Discover what is already available inside ComfyUI for this Sweet Tea instance.</CardDescription>
+          <CardDescription>discover what is already available inside comfyui for this sweet tea instance.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">

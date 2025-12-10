@@ -10,6 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { PromptAutocompleteTextarea } from "@/components/PromptAutocompleteTextarea";
 import { sendTelemetryEvent } from "@/lib/telemetry";
+import { labels } from "@/ui/labels";
 
 type FormSection = "inputs" | "prompts" | "loras" | "nodes";
 
@@ -93,6 +94,17 @@ export function DynamicForm({
             setInternalData({ ...defaults, ...(storedData || {}) });
         }
     }, [schema, persistenceKey, isControlled]);
+
+    const defaults = useMemo(() => {
+        if (!schema) return {} as Record<string, unknown>;
+        const initial: Record<string, unknown> = {};
+        Object.keys(schema).forEach((key) => {
+            if (schema[key].default !== undefined) {
+                initial[key] = schema[key].default;
+            }
+        });
+        return initial;
+    }, [schema]);
 
     const handleChange = (key: string, value: string | number | boolean) => {
         const next = { ...formData, [key]: value };
@@ -245,6 +257,63 @@ export function DynamicForm({
         return { inputs, prompts: prompts.map((prompt) => prompt.key), loras, nodes, placements };
     }, [schema]);
 
+    const primaryKeys = useMemo(() => {
+        if (!schema) return new Set<string>();
+        const keywords = [
+            "positive",
+            "negative",
+            "prompt",
+            "resolution",
+            "width",
+            "height",
+            "scale",
+            "upscale",
+            "model",
+            "checkpoint",
+            "refiner",
+            "vae",
+            "sampler",
+            "scheduler",
+            "seed",
+            "cfg",
+            "denoise",
+        ];
+
+        const matches = Object.keys(schema).filter((key) => {
+            const field = schema[key];
+            const title = String(field.title || key).toLowerCase();
+            return keywords.some((kw) => title.includes(kw));
+        });
+        return new Set(matches);
+    }, [schema]);
+
+    const [settingsOpen, setSettingsOpen] = useState(false);
+
+    const settingsFields = useMemo(() => {
+        const promptExtras = groups.prompts.filter((key) => !primaryKeys.has(key));
+        const loraExtras = groups.loras.filter((key) => !primaryKeys.has(key));
+        const nodeEntries = Object.entries(groups.nodes).map(([id, group]) => ({
+            id,
+            title: group.title,
+            order: group.order,
+            keys: group.keys.filter((key) => !primaryKeys.has(key)),
+        })).filter((group) => group.keys.length > 0);
+        return { promptExtras, loraExtras, nodeEntries };
+    }, [groups.loras, groups.nodes, groups.prompts, primaryKeys]);
+
+    const isSettingsCustomized = useMemo(() => {
+        const fieldsToCheck = [
+            ...settingsFields.promptExtras,
+            ...settingsFields.loraExtras,
+            ...settingsFields.nodeEntries.flatMap((g) => g.keys),
+        ];
+
+        return fieldsToCheck.some((key) => {
+            if (!(key in formData)) return false;
+            return formData[key] !== defaults[key];
+        });
+    }, [defaults, formData, settingsFields.loraExtras, settingsFields.nodeEntries, settingsFields.promptExtras]);
+
     useEffect(() => {
         if (!schema) return;
 
@@ -384,6 +453,13 @@ export function DynamicForm({
         onSubmit(formData);
     };
 
+    const primaryFieldList = useMemo(
+        () => Array.from(primaryKeys).filter((key) => schema && schema[key]),
+        [primaryKeys, schema]
+    );
+
+    const primaryCore = primaryFieldList.filter((key) => !groups.inputs.includes(key));
+
     if (!schema) return null;
 
     return (
@@ -391,46 +467,72 @@ export function DynamicForm({
             {/* 1. Main Inputs (Images) */}
             {groups.inputs.length > 0 && (
                 <div className="space-y-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
-                    <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider">Input Images</h3>
+                    <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider">input images</h3>
                     <div className="space-y-4">
                         {groups.inputs.map(renderField)}
                     </div>
                 </div>
             )}
 
-            {/* 2. Prompts */}
-            {groups.prompts.length > 0 && (
-                <div className="space-y-4">
-                    {groups.prompts.map(renderField)}
+            {/* 2. Core controls */}
+            {primaryCore.length > 0 && (
+                <div className="space-y-4 p-4 bg-white rounded-lg border border-slate-200">
+                    <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider">core pipe controls</h3>
+                    <div className="space-y-4">
+                        {primaryCore.map(renderField)}
+                    </div>
                 </div>
             )}
 
-            {/* 3. LoRAs */}
-            {groups.loras.length > 0 && (
-                <Accordion type="single" collapsible className="w-full">
-                    <AccordionItem value="loras" className="border rounded-lg px-2 bg-white">
-                        <AccordionTrigger className="text-xs font-semibold uppercase text-slate-500 hover:no-underline py-2">LoRA Models</AccordionTrigger>
-                        <AccordionContent className="space-y-4 pt-0 pb-4">
-                            {groups.loras.map(renderField)}
-                        </AccordionContent>
-                    </AccordionItem>
-                </Accordion>
-            )}
+            {/* 3. Settings */}
+            <Accordion
+                type="single"
+                collapsible
+                value={settingsOpen ? "settings" : undefined}
+                onValueChange={(val) => setSettingsOpen(Boolean(val))}
+                className="w-full"
+            >
+                <AccordionItem value="settings" className="border rounded-lg px-2 bg-white">
+                    <AccordionTrigger className="text-xs font-semibold uppercase text-slate-500 hover:no-underline py-2">
+                        {isSettingsCustomized ? labels.config.settingsCustomized : labels.config.settingsDefault}
+                    </AccordionTrigger>
+                    <AccordionContent className="space-y-4 pt-0 pb-4">
+                        {settingsFields.promptExtras.length > 0 && (
+                            <div className="space-y-2">
+                                <h4 className="text-[11px] font-semibold uppercase text-slate-500">additional prompts</h4>
+                                <div className="space-y-4">
+                                    {settingsFields.promptExtras.map(renderField)}
+                                </div>
+                            </div>
+                        )}
 
-            {/* 4. Advanced/Node Groups */}
-            <Accordion type="multiple" defaultValue={["Configuration", "default"]} className="w-full space-y-2">
-                {Object.entries(groups.nodes)
-                    .sort(([, a], [, b]) => a.order - b.order)
-                    .map(([id, group]) => (
-                        <AccordionItem key={id} value={id} className="border rounded-lg px-2 bg-white">
-                            <AccordionTrigger className="text-xs font-semibold uppercase text-slate-500 hover:no-underline py-2">
-                                {group.title}
-                            </AccordionTrigger>
-                            <AccordionContent className="space-y-4 pt-0 pb-4">
-                                {group.keys.map(renderField)}
-                            </AccordionContent>
-                        </AccordionItem>
-                    ))}
+                        {settingsFields.loraExtras.length > 0 && (
+                            <div className="space-y-2">
+                                <h4 className="text-[11px] font-semibold uppercase text-slate-500">loras</h4>
+                                <div className="space-y-4">
+                                    {settingsFields.loraExtras.map(renderField)}
+                                </div>
+                            </div>
+                        )}
+
+                        {settingsFields.nodeEntries.length > 0 && (
+                            <Accordion type="multiple" className="w-full space-y-2">
+                                {settingsFields.nodeEntries
+                                    .sort((a, b) => a.order - b.order)
+                                    .map((group) => (
+                                        <AccordionItem key={group.id} value={group.id} className="border rounded-lg px-2 bg-white">
+                                            <AccordionTrigger className="text-xs font-semibold uppercase text-slate-500 hover:no-underline py-2">
+                                                {group.title}
+                                            </AccordionTrigger>
+                                            <AccordionContent className="space-y-4 pt-0 pb-4">
+                                                {group.keys.map(renderField)}
+                                            </AccordionContent>
+                                        </AccordionItem>
+                                    ))}
+                            </Accordion>
+                        )}
+                    </AccordionContent>
+                </AccordionItem>
             </Accordion>
 
             <Button type="submit" disabled={isLoading || submitDisabled} className="w-full bg-slate-900 hover:bg-slate-800 text-white shadow-lg transition-all hover:scale-[1.02]">
