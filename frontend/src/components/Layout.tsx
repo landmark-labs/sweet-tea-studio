@@ -1,18 +1,21 @@
 import { useState } from "react";
 import { Outlet, NavLink } from "react-router-dom";
-import { PlusCircle, Settings, Library, Image as ImageIcon, Workflow, ChevronLeft, ChevronRight, HardDrive } from "lucide-react";
+import { PlusCircle, Settings, Library, Image as ImageIcon, GitBranch, ChevronLeft, ChevronRight, HardDrive, FolderOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { UndoRedoBar } from "@/components/UndoRedoBar";
+import { labels } from "@/ui/labels";
 
 const navItems = [
-  { to: "/", label: "Generation", icon: PlusCircle },
-  { to: "/gallery", label: "Gallery", icon: ImageIcon },
-  { to: "/library", label: "Prompt Library", icon: Library },
-  { to: "/workflows", label: "Workflows", icon: Workflow },
-  { to: "/models", label: "Models", icon: HardDrive },
+  { to: "/", label: labels.nav.generation, icon: PlusCircle },
+  { to: "/projects", label: labels.nav.projects, icon: FolderOpen },
+  { to: "/pipes", label: labels.nav.pipes, icon: GitBranch },
+  { to: "/gallery", label: labels.nav.gallery, icon: ImageIcon },
+  { to: "/library", label: labels.nav.library, icon: Library },
+  { to: "/models", label: labels.nav.models, icon: HardDrive },
 ];
 import { PerformanceHUD } from "@/components/PerformanceHUD";
+import { StatusBar } from "@/components/StatusBar";
 
 export default function Layout() {
   const [collapsed, setCollapsed] = useState(false);
@@ -70,7 +73,7 @@ export default function Layout() {
             )}
           >
             <Settings size={20} />
-            {!collapsed && <span>Settings</span>}
+            {!collapsed && <span>{labels.nav.settings}</span>}
           </div>
         </div>
       </aside>
@@ -89,6 +92,7 @@ export default function Layout() {
           </div>
         </div>
       </main>
+      <StatusBar />
       <PerformanceHUD />
     </div>
   );

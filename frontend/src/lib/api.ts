@@ -138,6 +138,37 @@ export interface CollectionCreate {
     description?: string;
 }
 
+// --- Projects ---
+export interface Project {
+    id: number;
+    slug: string;
+    name: string;
+    created_at: string;
+    updated_at: string;
+    archived_at: string | null;
+    config_json: Record<string, unknown> | null;
+}
+
+export interface ProjectCreate {
+    name: string;
+    slug?: string;
+}
+
+// --- Status ---
+export interface StatusItem {
+    state: "ok" | "warn" | "error";
+    detail: string;
+    last_check_at?: string;
+}
+
+export interface StatusSummary {
+    engine: StatusItem;
+    queue: StatusItem & { pending_jobs: number; oldest_job_age_s: number };
+    io: StatusItem;
+    models: StatusItem & { missing_models: number };
+}
+
+
 export const api = {
     getEngines: async (): Promise<Engine[]> => {
         const res = await fetch(`${API_BASE}/engines/`);
@@ -401,7 +432,51 @@ export const api = {
         const res = await fetch(`${API_BASE}/monitoring/metrics`);
         if (!res.ok) throw new Error("Failed to read monitoring metrics");
         return res.json();
-    }
+    },
+
+    // --- Projects ---
+    getProjects: async (includeArchived = false): Promise<Project[]> => {
+        const params = includeArchived ? "?include_archived=true" : "";
+        const res = await fetch(`${API_BASE}/projects/${params}`);
+        if (!res.ok) throw new Error("Failed to fetch projects");
+        return res.json();
+    },
+
+    createProject: async (data: ProjectCreate): Promise<Project> => {
+        const res = await fetch(`${API_BASE}/projects/`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(data),
+        });
+        if (!res.ok) {
+            const errorData = await res.json().catch(() => ({}));
+            throw new Error(errorData.detail || "Failed to create project");
+        }
+        return res.json();
+    },
+
+    archiveProject: async (projectId: number): Promise<Project> => {
+        const res = await fetch(`${API_BASE}/projects/${projectId}/archive`, {
+            method: "POST",
+        });
+        if (!res.ok) throw new Error("Failed to archive project");
+        return res.json();
+    },
+
+    unarchiveProject: async (projectId: number): Promise<Project> => {
+        const res = await fetch(`${API_BASE}/projects/${projectId}/unarchive`, {
+            method: "POST",
+        });
+        if (!res.ok) throw new Error("Failed to unarchive project");
+        return res.json();
+    },
+
+    // --- Status ---
+    getStatusSummary: async (): Promise<StatusSummary> => {
+        const res = await fetch(`${API_BASE}/status/summary`);
+        if (!res.ok) throw new Error("Failed to fetch status");
+        return res.json();
+    },
 };
 
 export interface Image {
