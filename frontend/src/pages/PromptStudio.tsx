@@ -54,6 +54,10 @@ export default function PromptStudio() {
   // Selection State
   const [previewPath, setPreviewPath] = useState<string | null>(null);
   const [previewMetadata, setPreviewMetadata] = useState<any>(null);
+  const handlePreviewSelect = (path: string, metadata?: any) => {
+    setPreviewPath(path);
+    setPreviewMetadata(metadata ?? null);
+  };
 
   // Form Data State
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -322,8 +326,7 @@ export default function PromptStudio() {
     setFocusedField("");
 
     if (prompt.preview_path) {
-      setPreviewPath(prompt.preview_path);
-      setPreviewMetadata({
+      handlePreviewSelect(prompt.preview_path, {
         prompt: prompt.active_positive,
         created_at: prompt.created_at,
       });
@@ -378,7 +381,7 @@ export default function PromptStudio() {
         }
 
         if (data.images && data.images.length > 0) {
-          setPreviewPath(data.images[0].path);
+          const imagePath = data.images[0].path;
 
           // Try to find the main prompt
           const params = lastSubmittedParamsRef.current || {};
@@ -398,7 +401,7 @@ export default function PromptStudio() {
             if (longString) mainPrompt = String(longString);
           }
 
-          setPreviewMetadata({
+          handlePreviewSelect(imagePath, {
             prompt: mainPrompt,
             created_at: new Date().toISOString(),
             job_params: params
@@ -577,15 +580,13 @@ export default function PromptStudio() {
   };
 
   const handleFileSelect = (file: FileItem) => {
-    setPreviewPath(file.path);
-    setPreviewMetadata({
+    handlePreviewSelect(file.path, {
       created_at: null // External file
     });
   };
 
   const handleGallerySelect = (item: GalleryItem) => {
-    setPreviewPath(item.image.path);
-    setPreviewMetadata({
+    handlePreviewSelect(item.image.path, {
       prompt: item.prompt,
       created_at: item.created_at,
       job_params: item.job_params
@@ -883,6 +884,7 @@ export default function PromptStudio() {
             images={galleryImages.map(gi => gi.image)}
             galleryItems={galleryImages}
             metadata={previewMetadata}
+            selectedImagePath={previewPath || undefined}
             workflows={workflows}
             onSelectWorkflow={handleWorkflowSelect}
             onImageUpdate={(updatedCalc) => {
@@ -912,7 +914,15 @@ export default function PromptStudio() {
           <div style={{ flexShrink: 0 }}>
             <GenerationFeed
               items={generationFeed}
-              onSelectPreview={(path) => setPreviewPath(path)}
+              onSelectPreview={(item) => {
+                if (!item.previewPath) return;
+                handlePreviewSelect(item.previewPath, {
+                  job_id: item.jobId,
+                  status: item.status,
+                  started_at: item.startedAt,
+                  estimated_total_steps: item.estimatedTotalSteps
+                });
+              }}
               onGenerate={() => handleGenerate(formData)}
             />
           </div>
@@ -935,7 +945,11 @@ export default function PromptStudio() {
                   key={item.image.id}
                   style={{ width: '256px', height: '256px', flexShrink: 0 }}
                   className="rounded overflow-hidden bg-slate-100 border border-slate-200 cursor-pointer hover:ring-2 hover:ring-blue-400 transition-all"
-                  onClick={() => setPreviewPath(item.image.path)}
+                  onClick={() => handlePreviewSelect(item.image.path, {
+                    prompt: item.prompt,
+                    created_at: item.created_at,
+                    job_params: item.job_params
+                  })}
                 >
                   <img
                     src={`/api/v1/gallery/image/path?path=${encodeURIComponent(item.image.path)}`}
