@@ -10,12 +10,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import { FileJson, AlertTriangle, GitBranch, Edit2, Trash2, Save, RotateCw, CheckCircle2, XCircle, GripVertical } from "lucide-react";
 import { api, WorkflowTemplate } from "@/lib/api";
 import { WorkflowGraphViewer } from "@/components/WorkflowGraphViewer";
 import { cn } from "@/lib/utils";
 import { labels } from "@/ui/labels";
 import { stripSchemaMeta } from "@/lib/schema";
+import { useGeneration } from "@/lib/GenerationContext";
 
 const arraysEqual = (a: string[], b: string[]) => {
     if (a.length !== b.length) return false;
@@ -31,17 +33,24 @@ const getNodeDisplayOrder = (graph: any, schema: any) => {
     return [...validStored, ...remaining];
 };
 
+
 export default function WorkflowLibrary() {
     const [workflows, setWorkflows] = useState<WorkflowTemplate[]>([]);
     const [error, setError] = useState<string | null>(null);
     const [importFile, setImportFile] = useState<File | null>(null);
     const [importName, setImportName] = useState("");
+    const [importDescription, setImportDescription] = useState("");
     const [isImporting, setIsImporting] = useState(false);
     const [isDialogOpen, setIsDialogOpen] = useState(false);
 
     // Edit State
     const [editingWorkflow, setEditingWorkflow] = useState<WorkflowTemplate | null>(null);
     const [schemaEdits, setSchemaEdits] = useState<any>(null);
+    const [editName, setEditName] = useState("");
+    const [nameError, setNameError] = useState("");
+    const [isSaving, setIsSaving] = useState(false);
+
+    const generation = useGeneration();
 
     // Install State
     const [installOpen, setInstallOpen] = useState(false);
@@ -49,6 +58,9 @@ export default function WorkflowLibrary() {
     const [allowManualClone, setAllowManualClone] = useState(false);
     // eslint-disable-line @typescript-eslint/no-unused-vars
     const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+    // Visibility Dialog
+    const [visibilityDialogOpen, setVisibilityDialogOpen] = useState(false);
 
     // Graph Viewer State
     const [viewGraphOpen, setViewGraphOpen] = useState(false);
@@ -65,6 +77,7 @@ export default function WorkflowLibrary() {
             activationConstraint: { distance: 6 }
         })
     );
+    const [composeDescription, setComposeDescription] = useState("");
 
     useEffect(() => {
         loadWorkflows();
@@ -93,8 +106,22 @@ export default function WorkflowLibrary() {
     // --- Import Logic ---
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
-            setImportFile(e.target.files[0]);
-            setImportName(e.target.files[0].name.replace(".json", ""));
+            const file = e.target.files[0];
+            setImportFile(file);
+            setImportName(file.name.replace(".json", ""));
+
+            file.text().then(text => {
+                try {
+                    const parsed = JSON.parse(text);
+                    if (parsed?._sweet_tea?.name) {
+                        setImportName(parsed._sweet_tea.name);
+                    }
+                } catch (err) {
+                    console.debug("Ignoring filename inference error", err);
+                }
+            }).catch(() => {
+                // ignore background parse errors; manual name entry still works
+            });
         }
     };
 
@@ -105,6 +132,8 @@ export default function WorkflowLibrary() {
             const text = await importFile.text();
             const graph = JSON.parse(text);
 
+            const cleanedDescription = importDescription.trim().slice(0, 500);
+
             if (graph.nodes && Array.isArray(graph.nodes)) {
                 alert("It looks like you uploaded a 'Saved' workflow. Please use 'Save (API Format)' in ComfyUI.");
                 setIsImporting(false);
@@ -113,7 +142,7 @@ export default function WorkflowLibrary() {
 
             const payload = {
                 name: importName,
-                description: "imported pipe",
+                description: cleanedDescription || "imported pipe",
                 graph_json: graph,
                 input_schema: {}
             };
@@ -122,21 +151,40 @@ export default function WorkflowLibrary() {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(payload)
+            const bundleName = importName || graph?._sweet_tea?.name || importFile.name.replace(".json", "");
+            await api.importWorkflow({
+                data: graph,
+                name: bundleName,
+                description: graph?._sweet_tea?.description,
             });
-
-            if (!res.ok) {
-                const body = await res.json();
-                throw new Error(body.detail || "Import failed");
-            }
 
             setImportFile(null);
             setImportName("");
+            setImportDescription("");
             setIsDialogOpen(false);
             loadWorkflows();
         } catch (err) {
             setError(err instanceof Error ? err.message : "Import failed");
         } finally {
             setIsImporting(false);
+        }
+    };
+
+    const handleExport = async (workflow: WorkflowTemplate) => {
+        try {
+            const bundle = await api.exportWorkflow(workflow.id);
+            const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            const safeName = (workflow.name || `workflow_${workflow.id}`).replace(/[^a-z0-9-_]+/gi, "_").toLowerCase();
+            link.download = `${safeName}_pipe.json`;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            URL.revokeObjectURL(url);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "Failed to export workflow");
         }
     };
 
@@ -154,13 +202,15 @@ export default function WorkflowLibrary() {
     const handleCompose = async () => {
         if (!composeSource || !composeTarget || !composeName) return;
         try {
+            const cleanedDescription = composeDescription.trim().slice(0, 500);
             const res = await fetch("/api/v1/workflows/compose", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     source_id: parseInt(composeSource),
                     target_id: parseInt(composeTarget),
-                    name: composeName
+                    name: composeName,
+                    description: cleanedDescription || undefined
                 })
             });
 
@@ -173,6 +223,7 @@ export default function WorkflowLibrary() {
             setComposeName("");
             setComposeSource("");
             setComposeTarget("");
+            setComposeDescription("");
             loadWorkflows();
             alert("pipe created successfully!");
         } catch (err) {
@@ -188,22 +239,49 @@ export default function WorkflowLibrary() {
         setEditingWorkflow(w);
         setSchemaEdits(edits);
         setNodeOrder(orderedIds);
+        setEditName(w.name);
+        setNameError("");
+    };
+
+    const validateName = (value: string, currentId?: number) => {
+        const trimmed = value.trim();
+        if (trimmed.length === 0) return "name is required";
+
+        const duplicate = workflows.some(w => w.id !== currentId && w.name.toLowerCase() === trimmed.toLowerCase());
+        if (duplicate) return "name must be unique";
+
+        return "";
     };
 
     const handleSaveSchema = async () => {
         if (!editingWorkflow || !schemaEdits) return;
+
+        const validationError = validateName(editName, editingWorkflow.id);
+        if (validationError) {
+            setNameError(validationError);
+            return;
+        }
+
+        const payload: WorkflowTemplate = {
+            ...editingWorkflow,
+            name: editName.trim(),
+            input_schema: schemaEdits
+        };
+
+        setIsSaving(true);
+        setWorkflows(prev => prev.map(w => w.id === payload.id ? payload : w));
         try {
-            const res = await fetch(`/api/v1/workflows/${editingWorkflow.id}`, {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ ...editingWorkflow, input_schema: schemaEdits })
-            });
-            if (!res.ok) throw new Error("Failed to update");
+            await api.updateWorkflow(payload.id, payload);
             setEditingWorkflow(null);
             setNodeOrder([]);
-            loadWorkflows();
+            setSchemaEdits(null);
+            await loadWorkflows();
+            await generation?.refreshWorkflows();
         } catch (err) {
             setError("Failed to save schema");
+            await loadWorkflows();
+        } finally {
+            setIsSaving(false);
         }
     };
 
@@ -238,13 +316,15 @@ export default function WorkflowLibrary() {
             const hidden = allParams.filter(([_, val]: [string, any]) => val.__hidden);
 
             if (active.length === 0 && hidden.length === 0) return null;
+            const hiddenInControls = Boolean(node._meta?.hiddenInControls);
 
             return {
                 id: nodeId,
                 title: node._meta?.title || node.title || `Node ${nodeId}`,
                 type: node.class_type,
                 active,
-                hidden
+                hidden,
+                hiddenInControls
             };
         };
 
@@ -422,11 +502,40 @@ export default function WorkflowLibrary() {
             );
         };
 
+        const toggleHidden = (nodeId: string, hidden: boolean) => {
+            const updatedGraph = { ...editingWorkflow.graph_json };
+            const targetNode = updatedGraph[nodeId];
+            if (!targetNode) return;
+
+            updatedGraph[nodeId] = {
+                ...targetNode,
+                _meta: { ...(targetNode._meta || {}), hiddenInControls: hidden }
+            };
+
+            setEditingWorkflow({ ...editingWorkflow, graph_json: updatedGraph });
+        };
+
         return (
             <div className="container mx-auto p-4 h-[calc(100vh-4rem)] flex flex-col">
                 <div className="flex justify-between items-center mb-6">
-                    <h1 className="text-2xl font-bold">edit pipe: {editingWorkflow.name}</h1>
-                    <div className="flex gap-2">
+                    <div className="flex flex-col gap-2 flex-1">
+                        <h1 className="text-2xl font-bold">edit pipe</h1>
+                        <div className="flex flex-col gap-1 max-w-lg">
+                            <Label htmlFor="pipe-name">pipe name</Label>
+                            <Input
+                                id="pipe-name"
+                                value={editName}
+                                onChange={(e) => {
+                                    setEditName(e.target.value);
+                                    if (nameError) setNameError(validateName(e.target.value, editingWorkflow.id));
+                                }}
+                                onBlur={() => setNameError(validateName(editName, editingWorkflow.id))}
+                                placeholder="enter a unique name"
+                            />
+                            {nameError && <span className="text-xs text-red-600">{nameError}</span>}
+                        </div>
+                    </div>
+                    <div className="flex gap-2 items-start">
                         {/* We reuse the Bypass dialog as a generic "Add stuff" entry point for now */}
                         <Dialog>
                             <DialogTrigger asChild>
@@ -485,8 +594,92 @@ export default function WorkflowLibrary() {
                                 </div>
                             </DialogContent>
                         </Dialog>
-                        <Button variant="outline" onClick={() => { setEditingWorkflow(null); setNodeOrder([]); }}>Cancel</Button>
+                        <Button variant="outline" onClick={() => { setEditingWorkflow(null); setNodeOrder([]); }}disabled={isSaving}>Cancel</Button>
+                        <Button onClick={handleSaveSchema} disabled={Boolean(nameError) || isSaving}>
+                            <Save className="w-4 h-4 mr-2" /> {isSaving ? "Saving..." : "Save Changes"}
+                        </Button>
+                        <Dialog open={visibilityDialogOpen} onOpenChange={setVisibilityDialogOpen}>
+                            <DialogTrigger asChild>
+                                <Button variant="secondary" size="sm">
+                                    <GitBranch className="w-4 h-4 mr-2" />
+                                    manage controls visibility
+                                </Button>
+                            </DialogTrigger>
+                            <DialogContent className="max-w-xl">
+                                <DialogHeader>
+                                    <DialogTitle>Hide nodes from configurator</DialogTitle>
+                                    <DialogDescription>
+                                        Hidden nodes stay in the execution graph with their defaults intact; they just don’t show up in the configurator UI.
+                                    </DialogDescription>
+                                </DialogHeader>
+
+                                <div className="space-y-3 max-h-[60vh] overflow-y-auto pt-2">
+                                    {sortedNodeIds.map((id) => {
+                                        const node = editingWorkflow.graph_json[id];
+                                        if (!node) return null;
+                                        const hidden = Boolean(node._meta?.hiddenInControls);
+                                        return (
+                                            <div
+                                                key={id}
+                                                className={cn(
+                                                    "flex items-center justify-between rounded border bg-white px-3 py-2 shadow-sm",
+                                                    hidden && "border-amber-200 bg-amber-50"
+                                                )}
+                                            >
+                                                <div className="flex flex-col gap-0.5">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-xs font-mono text-slate-500">#{id}</span>
+                                                        <span className="text-sm font-semibold text-slate-800">{node._meta?.title || node.title || `Node ${id}`}</span>
+                                                        {hidden && (
+                                                            <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium uppercase text-amber-700">
+                                                                Hidden in controls
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <span className="text-[11px] text-slate-500">{node.class_type}</span>
+                                                </div>
+
+                                                <Switch
+                                                    checked={hidden}
+                                                    onCheckedChange={(checked) => toggleHidden(String(id), checked)}
+                                                    className={cn("h-5 w-9", hidden ? "bg-amber-500" : "bg-slate-200")}
+                                                />
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+
+                                <DialogFooter>
+                                    <Button variant="outline" onClick={() => setVisibilityDialogOpen(false)}>Close</Button>
+                                </DialogFooter>
+                            </DialogContent>
+                        </Dialog>
+                        <Button variant="outline" onClick={() => setEditingWorkflow(null)}>Cancel</Button>
                         <Button onClick={handleSaveSchema}><Save className="w-4 h-4 mr-2" /> Save Changes</Button>
+                    </div>
+                </div>
+                <div className="bg-white border rounded-md p-4 space-y-4 mb-4">
+                    <div className="grid grid-cols-6 items-center gap-4">
+                        <Label htmlFor="edit-name" className="text-right">pipe name</Label>
+                        <Input
+                            id="edit-name"
+                            className="col-span-5"
+                            value={editingWorkflow.name}
+                            onChange={(e) => setEditingWorkflow({ ...editingWorkflow, name: e.target.value })}
+                        />
+                    </div>
+                    <div className="grid grid-cols-6 items-start gap-4">
+                        <Label htmlFor="edit-description" className="text-right mt-2">description</Label>
+                        <div className="col-span-5 space-y-1">
+                            <Textarea
+                                id="edit-description"
+                                value={editingWorkflow.description || ""}
+                                onChange={(e) => setEditingWorkflow({ ...editingWorkflow, description: e.target.value.slice(0, 500) })}
+                                placeholder="summarize what this pipe generates"
+                                maxLength={500}
+                            />
+                            <div className="text-[11px] text-slate-500 text-right">{(editingWorkflow.description || "").length}/500</div>
+                        </div>
                     </div>
                 </div>
                 <Card className="flex-1 overflow-auto bg-slate-50/50">
@@ -501,6 +694,164 @@ export default function WorkflowLibrary() {
                                 ))}
                             </SortableContext>
                         </DndContext>
+                        {nodesRenderData.map(node => {
+                            // Check if any field in this node is marked as core
+                            const isCore = node!.active.some(([_, f]: [string, any]) => f.x_core === true) ||
+                                node!.hidden.some(([_, f]: [string, any]) => f.x_core === true);
+
+                            const toggleCore = () => {
+                                const s = { ...schemaEdits };
+                                // Toggle x_core for all fields belonging to this node
+                                [...node!.active, ...node!.hidden].forEach(([key]: [string, any]) => {
+                                    s[key].x_core = !isCore;
+                                });
+                                setSchemaEdits(s);
+                            };
+
+                            return (
+                                <div
+                                    key={node!.id}
+                                    className={cn(
+                                        "bg-white border rounded-lg overflow-hidden shadow-sm",
+                                        node!.hiddenInControls && "opacity-70 ring-1 ring-amber-100"
+                                    )}
+                                >
+                                    <div className="px-4 py-2 bg-slate-100 border-b flex justify-between items-center">
+                                        <div className="font-semibold text-sm text-slate-700 flex items-center gap-2">
+                                            <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-xs font-mono text-slate-500">{node!.id}</div>
+                                            {node!.title}
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-[10px] text-slate-400 uppercase">
+                                                    {isCore ? "Core" : "Expanded"}
+                                                </span>
+                                                <Switch
+                                                    checked={isCore}
+                                                    onCheckedChange={toggleCore}
+                                                    className={cn(
+                                                        "h-4 w-7",
+                                                        isCore ? "bg-blue-500" : "bg-slate-200"
+                                                    )}
+                                                />
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-[10px] text-slate-400 uppercase">
+                                                    {node!.hiddenInControls ? "Hidden" : "Visible"}
+                                                </span>
+                                                <Switch
+                                                    checked={node!.hiddenInControls}
+                                                    onCheckedChange={(checked) => toggleHidden(String(node!.id), checked)}
+                                                    className={cn(
+                                                        "h-4 w-7",
+                                                        node!.hiddenInControls ? "bg-amber-500" : "bg-slate-200"
+                                                    )}
+                                                />
+                                            </div>
+                                            <span className="text-[10px] font-mono text-slate-400">{node!.type}</span>
+                                        </div>
+                                    </div>
+
+                                    {/* Active Parameters */}
+                                    {node!.active.length > 0 && (
+                                        <Table>
+                                            <TableHeader>
+                                                <TableRow className="border-b-0 hover:bg-transparent">
+                                                    <TableHead className="h-8 text-xs w-[30%]">Label</TableHead>
+                                                    <TableHead className="h-8 text-xs w-[20%]">Field ID</TableHead>
+                                                    <TableHead className="h-8 text-xs w-[15%]">Type</TableHead>
+                                                    <TableHead className="h-8 text-xs w-[25%]">Default Value</TableHead>
+                                                    <TableHead className="h-8 text-xs text-right w-[10%]">Action</TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {node!.active.map(([key, field]: [string, any]) => (
+                                                    <TableRow key={key} className="hover:bg-slate-50/50">
+                                                        <TableCell className="py-2">
+                                                            <Input
+                                                                className="h-7 text-xs"
+                                                                value={field.title || ""}
+                                                                onChange={(e) => {
+                                                                    const s = { ...schemaEdits };
+                                                                    s[key].title = e.target.value;
+                                                                    setSchemaEdits(s);
+                                                                }}
+                                                            />
+                                                        </TableCell>
+                                                        <TableCell className="font-mono text-[10px] text-slate-500 py-2 break-all">{key}</TableCell>
+                                                        <TableCell className="text-xs py-2">{field.type}</TableCell>
+                                                        <TableCell className="py-2">
+                                                            {field.widget === "toggle" || field.type === "boolean" ? (
+                                                                <Switch
+                                                                    checked={field.default}
+                                                                    onCheckedChange={(checked) => {
+                                                                        const s = { ...schemaEdits };
+                                                                        s[key].default = checked;
+                                                                        setSchemaEdits(s);
+                                                                    }}
+                                                                />
+                                                            ) : (
+                                                                <Input
+                                                                    className="h-7 text-xs"
+                                                                    value={String(field.default ?? "")}
+                                                                    onChange={(e) => {
+                                                                        const s = { ...schemaEdits };
+                                                                        // Store raw value - let backend handle type conversion
+                                                                        // This allows typing -1, decimals, etc without interference
+                                                                        s[key].default = e.target.value;
+                                                                        setSchemaEdits(s);
+                                                                    }}
+                                                                />
+
+                                                            )}
+                                                        </TableCell>
+                                                        <TableCell className="text-right py-2">
+                                                            <Button variant="ghost" size="sm" className="h-6 text-xs text-slate-500 hover:text-amber-600" onClick={() => {
+                                                                // Soft Hide
+                                                                const s = { ...schemaEdits };
+                                                                s[key].__hidden = true;
+                                                                setSchemaEdits(s);
+                                                            }}>
+                                                                Hide
+                                                            </Button>
+                                                        </TableCell>
+                                                    </TableRow>
+                                                ))}
+                                            </TableBody>
+                                        </Table>
+                                    )}
+
+                                    {/* Hidden Parameters (if any) */}
+                                    {node!.hidden.length > 0 && (
+                                        <div className="bg-slate-50/50 border-t">
+                                            <div className="px-4 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Hidden Parameters</div>
+                                            <Table>
+                                                <TableBody>
+                                                    {node!.hidden.map(([key, field]: [string, any]) => (
+                                                        <TableRow key={key} className="hover:bg-slate-100/50 opacity-60">
+                                                            <TableCell className="py-2 text-xs text-slate-500 w-[30%]">{field.title || key}</TableCell>
+                                                            <TableCell className="font-mono text-[10px] text-slate-400 py-2 w-[20%] break-all">{key}</TableCell>
+                                                            <TableCell className="text-xs py-2 text-slate-400 w-[15%]">{field.type}</TableCell>
+                                                            <TableCell className="py-2 text-xs text-slate-400 w-[25%]">{String(field.default ?? "-")}</TableCell>
+                                                            <TableCell className="text-right py-2 w-[10%]">
+                                                                <Button variant="ghost" size="sm" className="h-6 text-xs text-blue-500 hover:text-blue-700" onClick={() => {
+                                                                    // Restore
+                                                                    const s = { ...schemaEdits };
+                                                                    delete s[key].__hidden;
+                                                                    setSchemaEdits(s);
+                                                                }}>
+                                                                    Restore
+                                                                </Button>
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    ))}
+                                                </TableBody>
+                                            </Table>
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
                     </CardContent>
                 </Card>
             </div>
@@ -673,7 +1024,15 @@ export default function WorkflowLibrary() {
             <div className="flex justify-between items-center mb-6">
                 <h1 className="text-3xl font-bold">{labels.pageTitle.pipes}</h1>
                 <div className="flex gap-2">
-                    <Dialog open={composeOpen} onOpenChange={setComposeOpen}>
+                    <Dialog open={composeOpen} onOpenChange={(open) => {
+                        setComposeOpen(open);
+                        if (!open) {
+                            setComposeName("");
+                            setComposeSource("");
+                            setComposeTarget("");
+                            setComposeDescription("");
+                        }
+                    }}>
                         <DialogTrigger asChild>
                             <Button variant="outline">compose</Button>
                         </DialogTrigger>
@@ -715,6 +1074,19 @@ export default function WorkflowLibrary() {
                                     <Label htmlFor="compose-name" className="text-right">new pipe name</Label>
                                     <Input id="compose-name" value={composeName} onChange={(e) => setComposeName(e.target.value)} className="col-span-3" />
                                 </div>
+                                <div className="grid grid-cols-4 items-start gap-4">
+                                    <Label htmlFor="compose-description" className="text-right mt-2">description</Label>
+                                    <div className="col-span-3 space-y-1">
+                                        <Textarea
+                                            id="compose-description"
+                                            value={composeDescription}
+                                            onChange={(e) => setComposeDescription(e.target.value.slice(0, 500))}
+                                            placeholder="how should this composed pipe be used?"
+                                            maxLength={500}
+                                        />
+                                        <div className="text-[11px] text-slate-500 text-right">{composeDescription.length}/500</div>
+                                    </div>
+                                </div>
                             </div>
                             <DialogFooter>
                                 <Button onClick={handleCompose} disabled={!composeSource || !composeTarget || !composeName}>
@@ -724,7 +1096,14 @@ export default function WorkflowLibrary() {
                         </DialogContent>
                     </Dialog>
 
-                    <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                    <Dialog open={isDialogOpen} onOpenChange={(open) => {
+                        setIsDialogOpen(open);
+                        if (!open) {
+                            setImportFile(null);
+                            setImportName("");
+                            setImportDescription("");
+                        }
+                    }}>
                         <DialogTrigger asChild>
                             <Button>import pipe</Button>
                         </DialogTrigger>
@@ -732,13 +1111,26 @@ export default function WorkflowLibrary() {
                             <DialogHeader>
                                 <DialogTitle>import pipe from comfyui</DialogTitle>
                                 <DialogDescription>
-                                    Upload a pipe exported as <b>API Format (JSON)</b>.
+                                    Upload a Sweet Tea export bundle (includes integrity metadata) or a ComfyUI <b>Save (API Format)</b> JSON.
                                 </DialogDescription>
                             </DialogHeader>
                             <div className="grid gap-4 py-4">
                                 <div className="grid grid-cols-4 items-center gap-4">
                                     <Label htmlFor="name" className="text-right">pipe name</Label>
                                     <Input id="name" value={importName} onChange={(e) => setImportName(e.target.value)} className="col-span-3" />
+                                </div>
+                                <div className="grid grid-cols-4 items-start gap-4">
+                                    <Label htmlFor="description" className="text-right mt-2">description</Label>
+                                    <div className="col-span-3 space-y-1">
+                                        <Textarea
+                                            id="description"
+                                            value={importDescription}
+                                            onChange={(e) => setImportDescription(e.target.value.slice(0, 500))}
+                                            placeholder="what does this pipe do?"
+                                            maxLength={500}
+                                        />
+                                        <div className="text-[11px] text-slate-500 text-right">{importDescription.length}/500</div>
+                                    </div>
                                 </div>
                                 <div className="grid grid-cols-4 items-center gap-4">
                                     <Label htmlFor="file" className="text-right">file</Label>
@@ -766,13 +1158,13 @@ export default function WorkflowLibrary() {
                 {workflows.map((w) => {
                     const missing = getMissingNodes(w);
                     return (
-                        <Card key={w.id} className="relative group hover:shadow-lg transition-shadow">
+                        <Card key={w.id} className="relative group hover:shadow-lg transition-shadow" title={w.description || undefined}>
                             <CardHeader>
                                 <div className="flex justify-between items-start">
-                                    <CardTitle className="truncate pr-4">{w.name}</CardTitle>
+                                    <CardTitle className="truncate pr-4" title={w.name}>{w.name}</CardTitle>
                                     <FileJson className="w-5 h-5 text-slate-400" />
                                 </div>
-                                <CardDescription className="line-clamp-2 h-10">
+                                <CardDescription className="line-clamp-2 h-10" title={w.description || undefined}>
                                     {w.description?.split("[Missing")[0] || "No description"}
                                 </CardDescription>
                             </CardHeader>
@@ -800,6 +1192,9 @@ export default function WorkflowLibrary() {
                             <CardFooter className="flex justify-end gap-2 text-slate-400">
                                 <Button variant="ghost" size="sm" onClick={() => handleViewGraph(w)}>
                                     <GitBranch className="w-4 h-4 mr-1" /> View Graph
+                                </Button>
+                                <Button variant="ghost" size="sm" onClick={() => handleExport(w)}>
+                                    <Save className="w-4 h-4 mr-1" /> Export
                                 </Button>
                                 <Button variant="ghost" size="sm" onClick={() => handleEdit(w)}>
                                     <Edit2 className="w-4 h-4 mr-1" /> Edit

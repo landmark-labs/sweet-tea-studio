@@ -3,7 +3,7 @@ from sqlmodel import Field, SQLModel, JSON
 
 class WorkflowTemplateBase(SQLModel):
     name: str
-    description: Optional[str] = None
+    description: Optional[str] = Field(default=None, max_length=500)
     graph_json: Dict[str, Any] = Field(sa_type=JSON)
     input_schema: Dict[str, Any] = Field(sa_type=JSON)
     node_mapping: Optional[Dict[str, Any]] = Field(default=None, sa_type=JSON)

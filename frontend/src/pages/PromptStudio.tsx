@@ -274,6 +274,25 @@ export default function PromptStudio() {
     handleFormChange({ ...formData, [field]: value });
   };
 
+  const visibleSchema = useMemo(() => {
+    if (!selectedWorkflow) return null;
+
+    const hiddenNodes = new Set(
+      Object.entries(selectedWorkflow.graph_json || {})
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .filter(([_, node]: [string, any]) => node?._meta?.hiddenInControls)
+        .map(([id]) => String(id))
+    );
+
+    return Object.fromEntries(
+      Object.entries(selectedWorkflow.input_schema || {}).filter(([_, val]: [string, any]) => {
+        if (val.__hidden) return false;
+        if (!val.x_node_id && val.x_node_id !== 0) return true;
+        return !hiddenNodes.has(String(val.x_node_id));
+      })
+    );
+  }, [selectedWorkflow]);
+
   useEffect(() => {
     const state = location.state as { loadParams?: GalleryItem } | null;
     if (!state?.loadParams) return;
@@ -811,7 +830,9 @@ export default function PromptStudio() {
                 // Filter out hidden parameters if the new editor logic flagged them
                 schema={
                   Object.fromEntries(
-                    Object.entries(visibleSchema).filter(([_, val]: [string, any]) => !val.__hidden)
+                    Object.entries(visibleSchema ?? {}).filter(
+                      ([_, val]: [string, any]) => !val.__hidden
+                    )
                   )
                 }
                 currentValues={formData}
@@ -967,7 +988,12 @@ export default function PromptStudio() {
                   <SelectItem value="__empty" disabled>no pipes found</SelectItem>
                 ) : (
                   workflows.map((w) => (
-                    <SelectItem key={w.id} value={String(w.id)}>{w.name}</SelectItem>
+                    <SelectItem key={w.id} value={String(w.id)} title={w.description || undefined}>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="font-medium">{w.name}</span>
+                        <span className="text-[11px] text-slate-500 line-clamp-2">{w.description || "No description"}</span>
+                      </div>
+                    </SelectItem>
                   ))
                 )}
               </SelectContent>
@@ -999,7 +1025,7 @@ export default function PromptStudio() {
           {/* Dynamic Form ... */}
           {selectedWorkflow && (
             <DynamicForm
-              schema={visibleSchema}
+              schema={visibleSchema ?? {}}
               onSubmit={handleGenerate}
               nodeOrder={nodeOrder}
               isLoading={isSubmitting || jobStatus === "initiating" || jobStatus === "processing"}
