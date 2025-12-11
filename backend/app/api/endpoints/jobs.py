@@ -1,5 +1,6 @@
 import os
 import shutil
+from pathlib import Path
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from typing import List
 from app.models.job import Job, JobCreate, JobRead
