@@ -392,28 +392,34 @@ export default function PromptStudio() {
     }
   }, []); // Empty dependency array intentionally to run only on mount
 
+  const wsRef = useRef<WebSocket | null>(null);
+
   useEffect(() => {
     if (!lastJobId) return;
 
-    // Don't reconnect if job is already known to be completed/failed only if we are just starting?
-    // Actually we might want to get the final status if we missed it.
-    // But for now, always connect if lastJobId is set.
+    // Close previous WebSocket if exists
+    if (wsRef.current && wsRef.current.readyState !== WebSocket.CLOSED) {
+      wsRef.current.close();
+    }
 
     setJobStatus(prev => prev || "initiating");
-    // Only set progress if not already set (e.g. by restoration)
     setProgress(prev => prev > 0 ? prev : 0);
     if (!jobStartTime) setJobStartTime(Date.now());
 
-
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const ws = new WebSocket(`${wsProtocol}//${window.location.host}/api/v1/jobs/${lastJobId}/ws`);
+    const wsUrl = `${wsProtocol}//${window.location.host}/api/v1/jobs/${lastJobId}/ws`;
+    console.log(`[WS] Connecting to: ${wsUrl}`);
+
+    const ws = new WebSocket(wsUrl);
+    wsRef.current = ws;
 
     ws.onopen = () => {
-      // Connected
+      console.log(`[WS] Connected to job ${lastJobId}`);
     };
 
     ws.onmessage = (event) => {
       const data = JSON.parse(event.data);
+      console.log(`[WS] Message received:`, data.type);
 
       if (data.type === "status") {
         setJobStatus(data.status);
@@ -466,8 +472,12 @@ export default function PromptStudio() {
       }
     };
 
-    ws.onerror = () => {
-      console.error("Job WebSocket error - checking job status via API");
+    ws.onclose = (event) => {
+      console.log(`[WS] Closed for job ${lastJobId}. Code: ${event.code}, Reason: ${event.reason}, Clean: ${event.wasClean}`);
+    };
+
+    ws.onerror = (errorEvent) => {
+      console.error("Job WebSocket error - checking job status via API", errorEvent);
       // Don't immediately mark as failed - the job may have completed on the backend
       // Check job status via API before giving up
       setTimeout(async () => {
@@ -495,7 +505,12 @@ export default function PromptStudio() {
     };
 
     return () => {
-      ws.close();
+      // Only close if this is still the current WebSocket
+      if (wsRef.current === ws) {
+        console.log(`[WS] Cleanup: closing connection for job ${lastJobId}`);
+        ws.close();
+        wsRef.current = null;
+      }
     };
   }, [lastJobId]);
 
