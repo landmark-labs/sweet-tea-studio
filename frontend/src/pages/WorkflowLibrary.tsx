@@ -72,8 +72,22 @@ export default function WorkflowLibrary() {
     // --- Import Logic ---
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
-            setImportFile(e.target.files[0]);
-            setImportName(e.target.files[0].name.replace(".json", ""));
+            const file = e.target.files[0];
+            setImportFile(file);
+            setImportName(file.name.replace(".json", ""));
+
+            file.text().then(text => {
+                try {
+                    const parsed = JSON.parse(text);
+                    if (parsed?._sweet_tea?.name) {
+                        setImportName(parsed._sweet_tea.name);
+                    }
+                } catch (err) {
+                    console.debug("Ignoring filename inference error", err);
+                }
+            }).catch(() => {
+                // ignore background parse errors; manual name entry still works
+            });
         }
     };
 
@@ -90,23 +104,12 @@ export default function WorkflowLibrary() {
                 return;
             }
 
-            const payload = {
-                name: importName,
-                description: "imported pipe",
-                graph_json: graph,
-                input_schema: {}
-            };
-
-            const res = await fetch("/api/v1/workflows/", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payload)
+            const bundleName = importName || graph?._sweet_tea?.name || importFile.name.replace(".json", "");
+            await api.importWorkflow({
+                data: graph,
+                name: bundleName,
+                description: graph?._sweet_tea?.description,
             });
-
-            if (!res.ok) {
-                const body = await res.json();
-                throw new Error(body.detail || "Import failed");
-            }
 
             setImportFile(null);
             setImportName("");
@@ -116,6 +119,24 @@ export default function WorkflowLibrary() {
             setError(err instanceof Error ? err.message : "Import failed");
         } finally {
             setIsImporting(false);
+        }
+    };
+
+    const handleExport = async (workflow: WorkflowTemplate) => {
+        try {
+            const bundle = await api.exportWorkflow(workflow.id);
+            const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            const safeName = (workflow.name || `workflow_${workflow.id}`).replace(/[^a-z0-9-_]+/gi, "_").toLowerCase();
+            link.download = `${safeName}_pipe.json`;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            URL.revokeObjectURL(url);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "Failed to export workflow");
         }
     };
 
@@ -751,7 +772,7 @@ export default function WorkflowLibrary() {
                             <DialogHeader>
                                 <DialogTitle>import pipe from comfyui</DialogTitle>
                                 <DialogDescription>
-                                    Upload a pipe exported as <b>API Format (JSON)</b>.
+                                    Upload a Sweet Tea export bundle (includes integrity metadata) or a ComfyUI <b>Save (API Format)</b> JSON.
                                 </DialogDescription>
                             </DialogHeader>
                             <div className="grid gap-4 py-4">
@@ -819,6 +840,9 @@ export default function WorkflowLibrary() {
                             <CardFooter className="flex justify-end gap-2 text-slate-400">
                                 <Button variant="ghost" size="sm" onClick={() => handleViewGraph(w)}>
                                     <GitBranch className="w-4 h-4 mr-1" /> View Graph
+                                </Button>
+                                <Button variant="ghost" size="sm" onClick={() => handleExport(w)}>
+                                    <Save className="w-4 h-4 mr-1" /> Export
                                 </Button>
                                 <Button variant="ghost" size="sm" onClick={() => handleEdit(w)}>
                                     <Edit2 className="w-4 h-4 mr-1" /> Edit
