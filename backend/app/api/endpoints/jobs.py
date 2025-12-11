@@ -199,26 +199,31 @@ def process_job(job_id: int):
                 # Resolve project directory
                 # We need the project slug
                 project = session.get(Project, job.project_id)
-                if project and engine.output_dir:
+                if project:
                     # Construct path: ComfyUI/sweet_tea/{slug}/output
-                    # If engine.output_dir is .../ComfyUI/output, we want .../ComfyUI/sweet_tea/{slug}/output
-                    # But cleaner is to use the engine's root if possible. 
-                    # For now, let's assume engine.output_dir is reliable.
+                    # Find ComfyUI root from either output_dir or input_dir
+                    comfy_root = None
                     
-                    # We want to step out of 'output' if it ends with it, to find 'sweet_tea' sibling?
-                    # Or just use a standard convention.
-                    # Let's use the logic found earlier or a simple robust path.
+                    # Try output_dir first
+                    if engine.output_dir:
+                        output_path = Path(engine.output_dir)
+                        if output_path.name in ("output", "input"):
+                            comfy_root = output_path.parent
+                        else:
+                            comfy_root = output_path
                     
-                    # Robust: Place inside "sweet_tea/{slug}/output" relative to Comfy Root?
-                    # We don't easily know Comfy Root here (only input/output dirs).
-                    # But usually output_dir is "ComfyUI/output".
-                    output_path = Path(engine.output_dir)
-                    if output_path.name == "output":
-                        base = output_path.parent
+                    # Fallback to input_dir if output_dir didn't work
+                    if not comfy_root and engine.input_dir:
+                        input_path = Path(engine.input_dir)
+                        if input_path.name in ("output", "input"):
+                            comfy_root = input_path.parent
+                        else:
+                            comfy_root = input_path
+                    
+                    if comfy_root:
+                        target_output_dir = str(comfy_root / "sweet_tea" / project.slug / "output")
                     else:
-                        base = output_path
-                        
-                    target_output_dir = str(base / "sweet_tea" / project.slug / "output")
+                        target_output_dir = job.output_dir
 
                 else:
                     # Fallback if no engine output dir configured
@@ -331,11 +336,35 @@ def process_job(job_id: int):
                         with PILImage.open(full_path) as img_embed:
                             fmt = (img_embed.format or "").upper()
                             if fmt in ("JPEG", "JPG"):
-                                # Save JPEG with comment
+                                # Save JPEG with comment in COM marker
                                 if img_embed.mode in ("RGBA", "P"):
                                     img_embed = img_embed.convert("RGB")
-                                img_embed.save(full_path, "JPEG", quality=95, comment=provenance_json.encode("utf-8"))
-                                print(f"Embedded provenance metadata into {filename}")
+                                
+                                # Try to add EXIF UserComment for Windows compatibility
+                                try:
+                                    import piexif
+                                    
+                                    # Create EXIF data with UserComment
+                                    exif_dict = {"0th": {}, "Exif": {}, "GPS": {}, "1st": {}}
+                                    user_comment = piexif.helper.UserComment.dump(provenance_json, encoding="unicode")
+                                    exif_dict["Exif"][piexif.ExifIFD.UserComment] = user_comment
+                                    
+                                    # Also set ImageDescription for another common field
+                                    exif_dict["0th"][piexif.ImageIFD.ImageDescription] = provenance_json.encode("utf-8")
+                                    
+                                    exif_bytes = piexif.dump(exif_dict)
+                                    img_embed.save(full_path, "JPEG", quality=95, exif=exif_bytes)
+                                    print(f"Embedded EXIF metadata into {filename}")
+                                except ImportError:
+                                    # piexif not available - fall back to COM marker
+                                    img_embed.save(full_path, "JPEG", quality=95, comment=provenance_json.encode("utf-8"))
+                                    print(f"Embedded COM marker metadata into {filename} (piexif not available)")
+                                    
+                                    # Also save a sidecar JSON file for guaranteed access
+                                    sidecar_path = full_path.rsplit(".", 1)[0] + ".json"
+                                    with open(sidecar_path, "w", encoding="utf-8") as sf:
+                                        sf.write(provenance_json)
+                                    
                             elif fmt == "PNG":
                                 # For PNG, use PngInfo to add text chunk
                                 from PIL import PngImagePlugin
