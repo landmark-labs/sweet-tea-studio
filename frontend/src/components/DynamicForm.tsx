@@ -36,6 +36,7 @@ interface DynamicFormProps {
     schema: any;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     onSubmit: (data: any) => void;
+    nodeOrder?: string[];
     isLoading?: boolean;
     persistenceKey?: string;
     engineId?: string;
@@ -55,6 +56,7 @@ interface DynamicFormProps {
 export function DynamicForm({
     schema,
     onSubmit,
+    nodeOrder,
     isLoading,
     persistenceKey,
     engineId,
@@ -150,7 +152,7 @@ export function DynamicForm({
             }
         });
         return initial;
-    }, [schema]);
+    }, [schema, nodeOrder]);
 
     const handleChange = (key: string, value: string | number | boolean) => {
         const next = { ...formData, [key]: value };
@@ -182,6 +184,9 @@ export function DynamicForm({
         const nodes: Record<string, GroupMap> = {};
         const placements: Record<string, PlacementMeta> = {};
 
+        const nodeOrderIndex = new Map<string, number>();
+        nodeOrder?.forEach((id, idx) => nodeOrderIndex.set(String(id), idx));
+
         const parseOrder = (value?: string | number, fallback = 999) => {
             if (typeof value === "number") return value;
             const parsed = parseInt(value || "");
@@ -190,6 +195,10 @@ export function DynamicForm({
 
         const resolvePlacement = (key: string): PlacementMeta => {
             const field = schema[key];
+            const nodeId = field.x_node_id ? String(field.x_node_id) : undefined;
+            const nodeOrderPosition = nodeId !== undefined && nodeOrderIndex.has(nodeId)
+                ? nodeOrderIndex.get(nodeId)
+                : undefined;
             const annotations = field.x_form as {
                 section?: FormSection;
                 groupId?: string;
@@ -203,7 +212,7 @@ export function DynamicForm({
                     section: annotations.section,
                     groupId: annotations.groupId || annotations.section,
                     groupTitle: annotations.groupTitle || field.title || annotations.groupId || key,
-                    order: parseOrder(annotations.order ?? field.x_node_id),
+                    order: nodeOrderPosition ?? parseOrder(annotations.order ?? field.x_node_id),
                     source: "annotation",
                     reason: "explicit_annotation"
                 };
@@ -216,7 +225,7 @@ export function DynamicForm({
                     section: "inputs",
                     groupId: "inputs",
                     groupTitle: field.title || "Input Images",
-                    order: parseOrder(field.x_node_id, 0),
+                    order: nodeOrderPosition ?? parseOrder(field.x_node_id, 0),
                     source: "heuristic",
                     reason: "image_upload"
                 };
@@ -234,7 +243,7 @@ export function DynamicForm({
                     section: "prompts",
                     groupId: field.x_node_id || "prompt",
                     groupTitle: field.title || "Prompt",
-                    order: parseOrder(field.x_node_id, 0),
+                    order: nodeOrderPosition ?? parseOrder(field.x_node_id, 0),
                     source: "heuristic",
                     reason: "prompt_textarea"
                 };
@@ -246,7 +255,7 @@ export function DynamicForm({
                     section: "loras",
                     groupId: field.x_node_id ? String(field.x_node_id) : "loras",  // Use unique node ID
                     groupTitle: field.x_title || field.title || "LoRA",
-                    order: parseOrder(field.x_node_id, 0),
+                    order: nodeOrderPosition ?? parseOrder(field.x_node_id, 0),
                     source: "heuristic",
                     reason: "lora_loader"
                 };
@@ -257,14 +266,14 @@ export function DynamicForm({
             const match = field.title?.match(/\((.+)\)$/);
             const heuristicTitle = match ? match[1] : fallbackGroupTitle;
             // Always prefer the clean x_node_id for grouping stability if available
-            const nodeId = field.x_node_id ? String(field.x_node_id) : (match ? heuristicTitle : fallbackNodeId);
+            const nodeGroupId = field.x_node_id ? String(field.x_node_id) : (match ? heuristicTitle : fallbackNodeId);
 
             return {
                 key,
                 section: "nodes",
-                groupId: nodeId,
+                groupId: nodeGroupId,
                 groupTitle: heuristicTitle,
-                order: parseOrder(field.x_node_id),
+                order: nodeOrderPosition ?? parseOrder(field.x_node_id),
                 source: "heuristic",
                 reason: match ? "title_annotation_match" : "fallback_configuration"
             };
@@ -300,13 +309,23 @@ export function DynamicForm({
                 // Upgrade title if we found a better one
                 nodes[placement.groupId].title = placement.groupTitle;
             }
+            nodes[placement.groupId].order = Math.min(nodes[placement.groupId].order, placement.order ?? nodes[placement.groupId].order);
             nodes[placement.groupId].keys.push(key);
         });
 
         prompts.sort((a, b) => a.order - b.order);
 
         return { inputs, prompts: prompts.map((prompt) => prompt.key), loras, nodes, placements };
-    }, [schema]);
+    }, [schema, nodeOrder]);
+
+    const compareGroups = (a: { order: number; id?: string; title?: string }, b: { order: number; id?: string; title?: string }) => {
+        const orderA = Number.isFinite(a.order) ? a.order : 999;
+        const orderB = Number.isFinite(b.order) ? b.order : 999;
+        if (orderA !== orderB) return orderA - orderB;
+        const titleA = (a.title || a.id || "").toString();
+        const titleB = (b.title || b.id || "").toString();
+        return titleA.localeCompare(titleB);
+    };
 
     const { topLevelFields, nodeFieldsGroup } = useMemo(() => {
         const top = [] as string[];
@@ -379,7 +398,7 @@ export function DynamicForm({
 
         return Object.entries(groupMap)
             .map(([id, group]) => ({ id, ...group }))
-            .sort((a, b) => a.order - b.order);
+            .sort(compareGroups);
     }, [schema, strictCoreKeys, groups.placements]);
 
     // Re-calculate settingsFields using strictCoreKeys
@@ -391,9 +410,11 @@ export function DynamicForm({
             title: group.title,
             order: group.order,
             keys: group.keys.filter((key) => !strictCoreKeys.has(key)),
-        })).filter((group) => group.keys.length > 0);
+        }))
+            .filter((group) => group.keys.length > 0)
+            .sort(compareGroups);
         return { promptExtras, loraExtras, nodeEntries };
-    }, [groups.loras, groups.nodes, groups.prompts, strictCoreKeys]);
+    }, [compareGroups, groups.loras, groups.nodes, groups.prompts, strictCoreKeys]);
 
     // Check customization based on strict fields
     const isStrictSettingsCustomized = useMemo(() => {

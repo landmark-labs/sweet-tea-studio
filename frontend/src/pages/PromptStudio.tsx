@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { useLocation, useNavigate, useOutletContext } from "react-router-dom";
 import { api, Engine, WorkflowTemplate, FileItem, GalleryItem, PromptLibraryItem, EngineHealth, Project } from "@/lib/api";
 import { DynamicForm } from "@/components/DynamicForm";
@@ -21,6 +21,7 @@ import { PromptLibraryQuickPanel } from "@/components/PromptLibraryQuickPanel";
 import { ProjectGallery } from "@/components/ProjectGallery";
 import { useGenerationFeedStore, usePromptLibraryStore } from "@/lib/stores/promptDataStore";
 import { useGeneration } from "@/lib/GenerationContext";
+import { stripSchemaMeta } from "@/lib/schema";
 
 export default function PromptStudio() {
   const [engines, setEngines] = useState<Engine[]>([]);
@@ -142,6 +143,20 @@ export default function PromptStudio() {
   const healthIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const selectedWorkflow = workflows.find((w) => String(w.id) === selectedWorkflowId);
+  const selectedWorkflowSchema = useMemo(
+    () => selectedWorkflow?.input_schema || {},
+    [selectedWorkflow]
+  );
+  const nodeOrder = useMemo(
+    () => Array.isArray(selectedWorkflowSchema?.__node_order)
+      ? selectedWorkflowSchema.__node_order.map(String)
+      : [],
+    [selectedWorkflowSchema]
+  );
+  const visibleSchema = useMemo(
+    () => stripSchemaMeta(selectedWorkflowSchema || {}),
+    [selectedWorkflowSchema]
+  );
   const selectedProject = selectedProjectId ? projects.find((p) => String(p.id) === selectedProjectId) || null : null;
   const draftsProject = projects.find((p) => p.slug === "drafts");
   const selectedEngineHealth = engineHealth.find((h) => String(h.engine_id) === selectedEngineId);
@@ -195,7 +210,7 @@ export default function PromptStudio() {
 
   useEffect(() => {
     if (selectedWorkflow) {
-      const schema = selectedWorkflow.input_schema;
+      const schema = visibleSchema;
       const key = `ds_pipe_params_${String(selectedWorkflow.id)}`;
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -212,7 +227,7 @@ export default function PromptStudio() {
       } catch (e) { /* ignore */ }
       setFormData(initialData);
     }
-  }, [selectedWorkflowId, workflows]);
+  }, [selectedWorkflowId, visibleSchema, workflows]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { registerStateChange } = useUndoRedo();
@@ -233,7 +248,7 @@ export default function PromptStudio() {
 
   const handleResetDefaults = () => {
     if (!selectedWorkflow) return;
-    const schema = selectedWorkflow.input_schema;
+    const schema = visibleSchema;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let defaults: any = {};
     Object.keys(schema).forEach((k) => {
@@ -658,7 +673,7 @@ export default function PromptStudio() {
       // This prevents "pollution" from previous workflows or uncleaned state
       // Filter params to only include those in the current schema AND not bypassed
       // This prevents "pollution" from previous workflows or bypassed nodes
-      const schema = selectedWorkflow.input_schema || {};
+      const schema = visibleSchema || {};
 
       // Identify bypassed nodes
       const bypassedNodeIds = new Set<string>();
@@ -813,7 +828,13 @@ export default function PromptStudio() {
             {selectedWorkflow ? (
               <PromptConstructor
                 // Filter out hidden parameters if the new editor logic flagged them
-                schema={visibleSchema || {}}
+                schema={
+                  Object.fromEntries(
+                    Object.entries(visibleSchema ?? {}).filter(
+                      ([_, val]: [string, any]) => !val.__hidden
+                    )
+                  )
+                }
                 currentValues={formData}
                 onUpdate={handlePromptUpdate}
                 targetField={focusedField}
@@ -1004,8 +1025,9 @@ export default function PromptStudio() {
           {/* Dynamic Form ... */}
           {selectedWorkflow && (
             <DynamicForm
-              schema={visibleSchema || {}}
+              schema={visibleSchema ?? {}}
               onSubmit={handleGenerate}
+              nodeOrder={nodeOrder}
               isLoading={isSubmitting || jobStatus === "initiating" || jobStatus === "processing"}
               submitLabel="generate"
               formData={formData}
