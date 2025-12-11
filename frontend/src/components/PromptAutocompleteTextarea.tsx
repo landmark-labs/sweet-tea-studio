@@ -134,7 +134,7 @@ export function PromptAutocompleteTextarea({
             }
         };
 
-        const handle = setTimeout(load, 160);
+        const handle = setTimeout(load, 50);
         return () => clearTimeout(handle);
     }, [activeToken, isFocused]);
 
@@ -235,7 +235,7 @@ export function PromptAutocompleteTextarea({
                 }}
                 onBlur={(e) => {
                     setIsFocused(false);
-                    setTimeout(() => setIsOpen(false), 100);
+                    setTimeout(() => setIsOpen(false), 200);
                     props.onBlur?.(e);
                 }}
                 onClick={(e) => {

@@ -1,0 +1,270 @@
+[16:35:37.845] [INFO] DiagnosticComfyClient initialized for engine: http://127.0.0.1:8188
+[16:35:37.856] [INFO] ============================================================
+[16:35:37.857] [INFO] NEW GENERATION REQUEST - Job ID: 20251211_163537_856914
+[16:35:37.858] [INFO] ============================================================
+[16:35:37.859] [WARN] ⚠️  VALIDATION WARNINGS (2 issues found):
+[16:35:37.861] [WARN]    - Node 17 (KSampler): 'sampler_name' (Sampler) is EMPTY
+[16:35:37.861] [WARN]    - Node 17 (KSampler): 'scheduler' (Scheduler) is EMPTY
+[16:35:37.863] [INFO] 📄 Graph saved to: C:\Users\jkoti\sts\sweet-tea-studio\backend\logs\sent_graphs\20251211_163537_856914_graph.json
+[16:35:37.864] [INFO] 📊 Graph contains 7 nodes: KSampler, VAEDecode, CLIPTextEncode, EmptyLatentImage, CheckpointLoaderSimple, SaveImage
+[16:35:37.866] [INFO]    🎲 [17] KSampler:
+[16:35:37.866] [INFO]       seed: 869767281163668
+[16:35:37.867] [INFO]       sampler_name: ''
+[16:35:37.868] [INFO]       scheduler: ''
+[16:35:37.868] [INFO]       steps: 30
+[16:35:37.869] [INFO]       cfg: 6
+[16:35:37.869] [INFO]    🔧 [20] CheckpointLoaderSimple:
+[16:35:37.871] [INFO]       ckpt_name: 'hassakuXLIllustrious_v21fix.safetensors'
+[16:35:37.876] [ERROR] ❌ ComfyUI REJECTED the graph: ComfyUI Error 400: {"error": {"type": "prompt_outputs_failed_validation", "message": "Prompt outputs failed validation", "details": "", "extra_info": {}}, "node_errors": {"17": {"errors": [{"type": "value_not_in_list", "message": "Value not in list", "details": "sampler_name: '' not in (list of length 38)", "extra_info": {"input_name": "sampler_name", "input_config": null, "received_value": ""}}, {"type": "value_not_in_list", "message": "Value not in list", "details": "scheduler: '' not in ['normal', 'karras', 'exponential', 'sgm_uniform', 'simple', 'ddim_uniform', 'beta', 'linear_quadratic', 'kl_optimal']", "extra_info": {"input_name": "scheduler", "input_config": [["normal", "karras", "exponential", "sgm_uniform", "simple", "ddim_uniform", "beta", "linear_quadratic", "kl_optimal"], {"tooltip": "The scheduler controls how noise is gradually removed to form the image."}], "received_value": ""}}], "dependent_outputs": ["24"], "class_type": "KSampler"}}}
+[16:35:37.877] [ERROR]    This appears to be a node type or input validation error
+[16:35:50.362] [INFO] DiagnosticComfyClient initialized for engine: http://127.0.0.1:8188
+[16:35:50.371] [INFO] ============================================================
+[16:35:50.372] [INFO] NEW GENERATION REQUEST - Job ID: 20251211_163550_371684
+[16:35:50.373] [INFO] ============================================================
+[16:35:50.374] [INFO] ✅ Graph validation passed - all critical inputs populated
+[16:35:50.377] [INFO] 📄 Graph saved to: C:\Users\jkoti\sts\sweet-tea-studio\backend\logs\sent_graphs\20251211_163550_371684_graph.json
+[16:35:50.378] [INFO] 📊 Graph contains 7 nodes: KSampler, VAEDecode, CLIPTextEncode, EmptyLatentImage, CheckpointLoaderSimple, SaveImage
+[16:35:50.379] [INFO]    🎲 [17] KSampler:
+[16:35:50.380] [INFO]       seed: 1021027520141797
+[16:35:50.381] [INFO]       sampler_name: 'euler_ancestral'
+[16:35:50.382] [INFO]       scheduler: 'normal'
+[16:35:50.383] [INFO]       steps: 30
+[16:35:50.383] [INFO]       cfg: 6
+[16:35:50.384] [INFO]    🔧 [20] CheckpointLoaderSimple:
+[16:35:50.385] [INFO]       ckpt_name: 'hassakuXLIllustrious_v21fix.safetensors'
+[16:35:50.389] [INFO] ✅ Queued successfully. ComfyUI prompt_id: 3a06026a-71db-4526-b8d4-3e0ec8207556
+[16:35:50.412] [INFO] 🎧 Starting to listen for prompt_id: 3a06026a-71db-4526-b8d4-3e0ec8207556
+[16:35:50.412] [INFO] 📋 Status: {'exec_info': {'queue_remaining': 0}} @ 0.0s
+[16:35:50.414] [INFO] 📋 Status: {'exec_info': {'queue_remaining': 1}} @ 0.0s
+[16:35:50.416] [INFO] 📋 Status: {'exec_info': {'queue_remaining': 1}} @ 0.0s
+[16:35:50.418] [INFO] 🚀 Execution started @ 0.0s
+[16:35:50.421] [INFO] 💾 Cached nodes: [] @ 0.0s
+[16:35:50.422] [INFO] ⚙️  Executing node: 20 @ 0.1s
+[16:36:05.982] [INFO] ⚙️  Executing node: 19 @ 15.6s
+[16:36:05.983] [INFO] ⚙️  Executing node: 9 @ 15.6s
+[16:36:07.449] [INFO] ⚙️  Executing node: 4 @ 17.1s
+[16:36:10.641] [INFO] ⚙️  Executing node: 17 @ 20.3s
+[16:36:15.440] [INFO] 📈 Progress: 1/30 (3%) @ 25.1s
+[16:36:15.503] [INFO] 🖼️  Preview received (17255 bytes) @ 25.1s
+[16:36:17.860] [INFO] 📈 Progress: 2/30 (7%) @ 27.5s
+[16:36:17.865] [INFO] 🖼️  Preview received (51823 bytes) @ 27.5s
+[16:36:20.253] [INFO] 📈 Progress: 3/30 (10%) @ 29.9s
+[16:36:20.258] [INFO] 🖼️  Preview received (41591 bytes) @ 29.9s
+[16:36:23.072] [INFO] 📈 Progress: 4/30 (13%) @ 32.7s
+[16:36:23.079] [INFO] 🖼️  Preview received (34387 bytes) @ 32.7s
+[16:36:25.569] [INFO] 📈 Progress: 5/30 (17%) @ 35.2s
+[16:36:25.574] [INFO] 🖼️  Preview received (55567 bytes) @ 35.2s
+[16:36:28.479] [INFO] 📈 Progress: 6/30 (20%) @ 38.1s
+[16:36:28.484] [INFO] 🖼️  Preview received (42923 bytes) @ 38.1s
+[16:36:30.920] [INFO] 📈 Progress: 7/30 (23%) @ 40.5s
+[16:36:30.926] [INFO] 🖼️  Preview received (38823 bytes) @ 40.6s
+[16:36:33.741] [INFO] 📈 Progress: 8/30 (27%) @ 43.4s
+[16:36:33.747] [INFO] 🖼️  Preview received (42627 bytes) @ 43.4s
+[16:36:36.184] [INFO] 📈 Progress: 9/30 (30%) @ 45.8s
+[16:36:36.189] [INFO] 🖼️  Preview received (44307 bytes) @ 45.8s
+[16:36:39.052] [INFO] 📈 Progress: 10/30 (33%) @ 48.7s
+[16:36:39.057] [INFO] 🖼️  Preview received (42415 bytes) @ 48.7s
+[16:36:41.495] [INFO] 📈 Progress: 11/30 (37%) @ 51.1s
+[16:36:41.501] [INFO] 🖼️  Preview received (42579 bytes) @ 51.1s
+[16:36:44.315] [INFO] 📈 Progress: 12/30 (40%) @ 53.9s
+[16:36:44.321] [INFO] 🖼️  Preview received (42579 bytes) @ 54.0s
+[16:36:46.769] [INFO] 📈 Progress: 13/30 (43%) @ 56.4s
+[16:36:46.774] [INFO] 🖼️  Preview received (41551 bytes) @ 56.4s
+[16:36:49.517] [INFO] 📈 Progress: 14/30 (47%) @ 59.1s
+[16:36:49.522] [INFO] 🖼️  Preview received (41683 bytes) @ 59.2s
+[16:36:51.973] [INFO] 📈 Progress: 15/30 (50%) @ 61.6s
+[16:36:51.977] [INFO] 🖼️  Preview received (40607 bytes) @ 61.6s
+[16:36:55.179] [INFO] 📈 Progress: 16/30 (53%) @ 64.8s
+[16:36:55.185] [INFO] 🖼️  Preview received (40451 bytes) @ 64.8s
+[16:36:57.641] [INFO] 📈 Progress: 17/30 (57%) @ 67.3s
+[16:36:57.647] [INFO] 🖼️  Preview received (42227 bytes) @ 67.3s
+[16:37:00.177] [INFO] 📈 Progress: 18/30 (60%) @ 69.8s
+[16:37:00.183] [INFO] 🖼️  Preview received (41315 bytes) @ 69.8s
+[16:37:03.157] [INFO] 📈 Progress: 19/30 (63%) @ 72.8s
+[16:37:03.163] [INFO] 🖼️  Preview received (41375 bytes) @ 72.8s
+[16:37:05.642] [INFO] 📈 Progress: 20/30 (67%) @ 75.3s
+[16:37:05.647] [INFO] 🖼️  Preview received (40935 bytes) @ 75.3s
+[16:37:08.486] [INFO] 📈 Progress: 21/30 (70%) @ 78.1s
+[16:37:08.492] [INFO] 🖼️  Preview received (40763 bytes) @ 78.1s
+[16:37:10.990] [INFO] 📈 Progress: 22/30 (73%) @ 80.6s
+[16:37:10.993] [INFO] 🖼️  Preview received (40987 bytes) @ 80.6s
+[16:37:13.896] [INFO] 📈 Progress: 23/30 (77%) @ 83.5s
+[16:37:13.901] [INFO] 🖼️  Preview received (41059 bytes) @ 83.5s
+[16:37:16.330] [INFO] 📈 Progress: 24/30 (80%) @ 86.0s
+[16:37:16.334] [INFO] 🖼️  Preview received (40999 bytes) @ 86.0s
+[16:37:19.273] [INFO] 📈 Progress: 25/30 (83%) @ 88.9s
+[16:37:19.279] [INFO] 🖼️  Preview received (41139 bytes) @ 88.9s
+[16:37:21.813] [INFO] 📈 Progress: 26/30 (87%) @ 91.4s
+[16:37:21.819] [INFO] 🖼️  Preview received (41227 bytes) @ 91.4s
+[16:37:24.827] [INFO] 📈 Progress: 27/30 (90%) @ 94.5s
+[16:37:24.831] [INFO] 🖼️  Preview received (41375 bytes) @ 94.5s
+[16:37:27.363] [INFO] 📈 Progress: 28/30 (93%) @ 97.0s
+[16:37:27.367] [INFO] 🖼️  Preview received (41491 bytes) @ 97.0s
+[16:37:30.246] [INFO] 📈 Progress: 29/30 (97%) @ 99.9s
+[16:37:30.251] [INFO] 🖼️  Preview received (41547 bytes) @ 99.9s
+[16:37:32.749] [INFO] 📈 Progress: 30/30 (100%) @ 102.4s
+[16:37:32.755] [INFO] 🖼️  Preview received (41543 bytes) @ 102.4s
+[16:37:32.757] [INFO] ⚙️  Executing node: 18 @ 102.4s
+[16:37:35.198] [INFO] ⚙️  Executing node: 24 @ 104.8s
+[16:37:35.201] [DEBUG] 📨 WS Message [executed]: {"type": "executed", "data": {"node": "24", "display_node": "24", "output": {"images": [{"filename": "ComfyUI_00057_.png", "subfolder": "", "type": "output"}]}, "prompt_id": "3a06026a-71db-4526-b8d4-3
+[16:37:35.203] [DEBUG] 📨 WS Message [execution_success]: {"type": "execution_success", "data": {"prompt_id": "3a06026a-71db-4526-b8d4-3e0ec8207556", "timestamp": 1765489054751}}
+[16:37:35.204] [INFO] 📋 Status: {'exec_info': {'queue_remaining': 0}} @ 104.8s
+[16:37:35.206] [INFO] ⚙️  Execution starting @ 104.8s
+[16:37:45.239] [INFO] ✅ Generation complete! 1 images received in 114.9s
+[16:37:45.240] [INFO]    Image 1: ComfyUI_00057_.png (output)
+[16:37:45.251] [INFO] 📄 WS history saved to: C:\Users\jkoti\sts\sweet-tea-studio\backend\logs\ws_messages\20251211_163550_371684_ws.json
+[16:55:16.554] [INFO] DiagnosticComfyClient initialized for engine: http://127.0.0.1:8188
+[16:55:16.574] [INFO] ============================================================
+[16:55:16.576] [INFO] NEW GENERATION REQUEST - Job ID: 20251211_165516_574718
+[16:55:16.578] [INFO] ============================================================
+[16:55:16.593] [INFO] ✅ Graph validation passed - all critical inputs populated
+[16:55:16.596] [INFO] 📄 Graph saved to: C:\Users\jkoti\sts\sweet-tea-studio\backend\logs\sent_graphs\20251211_165516_574718_graph.json
+[16:55:16.600] [INFO] 📊 Graph contains 8 nodes: KSampler, VAEDecode, CLIPTextEncode, EmptyLatentImage, CheckpointLoaderSimple, SaveImage
+[16:55:16.601] [INFO]    🎲 [3] KSampler:
+[16:55:16.602] [INFO]       seed: 932581767393521
+[16:55:16.602] [INFO]       sampler_name: 'euler_ancestral'
+[16:55:16.603] [INFO]       scheduler: 'normal'
+[16:55:16.604] [INFO]       steps: 20
+[16:55:16.606] [INFO]       cfg: 6
+[16:55:16.609] [INFO]    🔧 [4] CheckpointLoaderSimple:
+[16:55:16.611] [INFO]       ckpt_name: 'hassakuXLIllustrious_v21fix.safetensors'
+[16:55:16.613] [INFO]    🔧 [10] CheckpointLoaderSimple:
+[16:55:16.615] [INFO]       ckpt_name: 'hassakuXLIllustrious_v21fix.safetensors'
+[16:55:16.622] [INFO] ✅ Queued successfully. ComfyUI prompt_id: 117b3d90-21a4-4ca9-9bae-36a8fe1c6675
+[16:55:16.655] [INFO] 🎧 Starting to listen for prompt_id: 117b3d90-21a4-4ca9-9bae-36a8fe1c6675
+[16:55:16.659] [INFO] 📋 Status: {'exec_info': {'queue_remaining': 0}} @ 0.1s
+[16:55:16.660] [INFO] 📋 Status: {'exec_info': {'queue_remaining': 1}} @ 0.1s
+[16:55:16.662] [INFO] 📋 Status: {'exec_info': {'queue_remaining': 1}} @ 0.1s
+[16:55:16.665] [INFO] 🚀 Execution started @ 0.1s
+[16:55:16.666] [INFO] 💾 Cached nodes: ['4', '6', '7', '10'] @ 0.1s
+[16:55:16.669] [INFO] ⚙️  Executing node: 5 @ 0.1s
+[16:55:16.671] [INFO] ⚙️  Executing node: 3 @ 0.1s
+[16:55:23.052] [INFO] 📈 Progress: 1/20 (5%) @ 6.5s
+[16:55:23.056] [INFO] 🖼️  Preview received (37483 bytes) @ 6.5s
+[16:55:27.714] [INFO] 📈 Progress: 2/20 (10%) @ 11.1s
+[16:55:27.718] [INFO] 🖼️  Preview received (41255 bytes) @ 11.1s
+[16:55:32.497] [INFO] 📈 Progress: 3/20 (15%) @ 15.9s
+[16:55:32.501] [INFO] 🖼️  Preview received (29511 bytes) @ 15.9s
+[16:55:37.166] [INFO] 📈 Progress: 4/20 (20%) @ 20.6s
+[16:55:37.170] [INFO] 🖼️  Preview received (40387 bytes) @ 20.6s
+[16:55:41.867] [INFO] 📈 Progress: 5/20 (25%) @ 25.3s
+[16:55:41.901] [INFO] 🖼️  Preview received (45419 bytes) @ 25.3s
+[16:55:46.159] [INFO] 📈 Progress: 6/20 (30%) @ 29.6s
+[16:55:46.164] [INFO] 🖼️  Preview received (44059 bytes) @ 29.6s
+[16:55:50.753] [INFO] 📈 Progress: 7/20 (35%) @ 34.2s
+[16:55:50.758] [INFO] 🖼️  Preview received (46763 bytes) @ 34.2s
+[16:55:55.492] [INFO] 📈 Progress: 8/20 (40%) @ 38.9s
+[16:55:55.496] [INFO] 🖼️  Preview received (46083 bytes) @ 38.9s
+[16:56:00.107] [INFO] 📈 Progress: 9/20 (45%) @ 43.5s
+[16:56:00.111] [INFO] 🖼️  Preview received (45779 bytes) @ 43.5s
+[16:56:04.670] [INFO] 📈 Progress: 10/20 (50%) @ 48.1s
+[16:56:04.675] [INFO] 🖼️  Preview received (48131 bytes) @ 48.1s
+[16:56:09.014] [INFO] 📈 Progress: 11/20 (55%) @ 52.4s
+[16:56:09.018] [INFO] 🖼️  Preview received (46431 bytes) @ 52.4s
+[16:56:13.661] [INFO] 📈 Progress: 12/20 (60%) @ 57.1s
+[16:56:13.667] [INFO] 🖼️  Preview received (46027 bytes) @ 57.1s
+[16:56:18.337] [INFO] 📈 Progress: 13/20 (65%) @ 61.8s
+[16:56:18.341] [INFO] 🖼️  Preview received (45687 bytes) @ 61.8s
+[16:56:23.726] [INFO] 📈 Progress: 14/20 (70%) @ 67.2s
+[16:56:23.732] [INFO] 🖼️  Preview received (46023 bytes) @ 67.2s
+[16:56:28.413] [INFO] 📈 Progress: 15/20 (75%) @ 71.8s
+[16:56:28.418] [INFO] 🖼️  Preview received (45963 bytes) @ 71.8s
+[16:56:33.825] [INFO] 📈 Progress: 16/20 (80%) @ 77.3s
+[16:56:33.830] [INFO] 🖼️  Preview received (45707 bytes) @ 77.3s
+[16:56:38.473] [INFO] 📈 Progress: 17/20 (85%) @ 81.9s
+[16:56:38.479] [INFO] 🖼️  Preview received (45931 bytes) @ 81.9s
+[16:56:42.852] [INFO] 📈 Progress: 18/20 (90%) @ 86.3s
+[16:56:42.857] [INFO] 🖼️  Preview received (46231 bytes) @ 86.3s
+[16:56:50.113] [INFO] 📈 Progress: 19/20 (95%) @ 93.5s
+[16:56:50.149] [INFO] 🖼️  Preview received (46395 bytes) @ 93.6s
+[16:56:54.449] [INFO] 📈 Progress: 20/20 (100%) @ 97.9s
+[16:56:54.458] [INFO] 🖼️  Preview received (46439 bytes) @ 97.9s
+[16:56:54.460] [INFO] ⚙️  Executing node: 8 @ 97.9s
+[16:56:57.527] [INFO] ⚙️  Executing node: 9 @ 101.0s
+[16:56:57.597] [DEBUG] 📨 WS Message [executed]: {"type": "executed", "data": {"node": "9", "display_node": "9", "output": {"images": [{"filename": "ComfyUI_00058_.png", "subfolder": "", "type": "output"}, {"filename": "ComfyUI_00059_.png", "subfold
+[16:56:57.599] [DEBUG] 📨 WS Message [execution_success]: {"type": "execution_success", "data": {"prompt_id": "117b3d90-21a4-4ca9-9bae-36a8fe1c6675", "timestamp": 1765490217596}}
+[16:56:57.825] [INFO] 📋 Status: {'exec_info': {'queue_remaining': 0}} @ 101.3s
+[16:56:57.827] [INFO] ⚙️  Execution starting @ 101.3s
+[16:57:07.835] [INFO] ✅ Generation complete! 2 images received in 111.3s
+[16:57:07.835] [INFO]    Image 1: ComfyUI_00058_.png (output)
+[16:57:07.836] [INFO]    Image 2: ComfyUI_00059_.png (output)
+[16:57:07.846] [INFO] 📄 WS history saved to: C:\Users\jkoti\sts\sweet-tea-studio\backend\logs\ws_messages\20251211_165516_574718_ws.json
+[18:34:08.451] [INFO] DiagnosticComfyClient initialized for engine: http://127.0.0.1:8188
+[18:34:09.106] [INFO] ============================================================
+[18:34:09.107] [INFO] NEW GENERATION REQUEST - Job ID: 20251211_183409_106554
+[18:34:09.107] [INFO] ============================================================
+[18:34:09.109] [INFO] ✅ Graph validation passed - all critical inputs populated
+[18:34:09.113] [INFO] 📄 Graph saved to: C:\Users\jkoti\sts\sweet-tea-studio\backend\logs\sent_graphs\20251211_183409_106554_graph.json
+[18:34:09.113] [INFO] 📊 Graph contains 8 nodes: VAEDecode, CheckpointLoaderSimple, EmptyLatentImage, KSampler, SaveImage, CLIPTextEncode
+[18:34:09.114] [INFO]    🎲 [3] KSampler:
+[18:34:09.115] [INFO]       seed: 1124465251350178
+[18:34:09.115] [INFO]       sampler_name: 'euler_ancestral'
+[18:34:09.116] [INFO]       scheduler: 'normal'
+[18:34:09.116] [INFO]       steps: 20
+[18:34:09.118] [INFO]       cfg: 6
+[18:34:09.118] [INFO]    🔧 [4] CheckpointLoaderSimple:
+[18:34:09.119] [INFO]       ckpt_name: 'hassakuXLIllustrious_v21fix.safetensors'
+[18:34:09.119] [INFO]    🔧 [10] CheckpointLoaderSimple:
+[18:34:09.121] [INFO]       ckpt_name: 'hassakuXLIllustrious_v21fix.safetensors'
+[18:34:09.943] [INFO] ✅ Queued successfully. ComfyUI prompt_id: 2216fcb0-f32c-499f-ac72-54ecd4af4550
+[18:34:10.247] [INFO] 🎧 Starting to listen for prompt_id: 2216fcb0-f32c-499f-ac72-54ecd4af4550
+[18:34:10.254] [INFO] 📋 Status: {'exec_info': {'queue_remaining': 0}} @ 1.1s
+[18:34:10.256] [INFO] 📋 Status: {'exec_info': {'queue_remaining': 1}} @ 1.1s
+[18:34:10.257] [INFO] 📋 Status: {'exec_info': {'queue_remaining': 1}} @ 1.2s
+[18:34:10.259] [INFO] 🚀 Execution started @ 1.2s
+[18:34:10.261] [INFO] 💾 Cached nodes: [] @ 1.2s
+[18:34:10.262] [INFO] ⚙️  Executing node: 4 @ 1.2s
+[18:34:15.022] [INFO] ⚙️  Executing node: 5 @ 5.9s
+[18:34:15.071] [INFO] ⚙️  Executing node: 7 @ 6.0s
+[18:34:16.058] [INFO] ⚙️  Executing node: 6 @ 7.0s
+[18:34:18.459] [INFO] ⚙️  Executing node: 3 @ 9.4s
+[18:34:24.493] [INFO] 📈 Progress: 1/20 (5%) @ 15.4s
+[18:34:24.552] [INFO] 🖼️  Preview received (42023 bytes) @ 15.4s
+[18:34:29.006] [INFO] 📈 Progress: 2/20 (10%) @ 19.9s
+[18:34:29.009] [INFO] 🖼️  Preview received (55995 bytes) @ 19.9s
+[18:34:33.430] [INFO] 📈 Progress: 3/20 (15%) @ 24.3s
+[18:34:33.434] [INFO] 🖼️  Preview received (48195 bytes) @ 24.3s
+[18:34:37.856] [INFO] 📈 Progress: 4/20 (20%) @ 28.8s
+[18:34:37.861] [INFO] 🖼️  Preview received (52647 bytes) @ 28.8s
+[18:34:42.096] [INFO] 📈 Progress: 5/20 (25%) @ 33.0s
+[18:34:42.100] [INFO] 🖼️  Preview received (56327 bytes) @ 33.0s
+[18:34:46.581] [INFO] 📈 Progress: 6/20 (30%) @ 37.5s
+[18:34:46.585] [INFO] 🖼️  Preview received (56395 bytes) @ 37.5s
+[18:34:51.018] [INFO] 📈 Progress: 7/20 (35%) @ 41.9s
+[18:34:51.022] [INFO] 🖼️  Preview received (54539 bytes) @ 41.9s
+[18:34:55.427] [INFO] 📈 Progress: 8/20 (40%) @ 46.3s
+[18:34:55.431] [INFO] 🖼️  Preview received (55139 bytes) @ 46.3s
+[18:34:59.884] [INFO] 📈 Progress: 9/20 (45%) @ 50.8s
+[18:34:59.889] [INFO] 🖼️  Preview received (55139 bytes) @ 50.8s
+[18:35:04.519] [INFO] 📈 Progress: 10/20 (50%) @ 55.4s
+[18:35:04.541] [INFO] 🖼️  Preview received (55567 bytes) @ 55.4s
+[18:35:08.639] [INFO] 📈 Progress: 11/20 (55%) @ 59.5s
+[18:35:08.644] [INFO] 🖼️  Preview received (56327 bytes) @ 59.5s
+[18:35:13.610] [INFO] 📈 Progress: 12/20 (60%) @ 64.5s
+[18:35:13.638] [INFO] 🖼️  Preview received (55411 bytes) @ 64.5s
+[18:35:20.184] [INFO] 📈 Progress: 13/20 (65%) @ 71.1s
+[18:35:20.188] [INFO] 🖼️  Preview received (55195 bytes) @ 71.1s
+[18:35:24.724] [INFO] 📈 Progress: 14/20 (70%) @ 75.6s
+[18:35:24.728] [INFO] 🖼️  Preview received (55587 bytes) @ 75.6s
+[18:35:29.852] [INFO] 📈 Progress: 15/20 (75%) @ 80.7s
+[18:35:29.857] [INFO] 🖼️  Preview received (55287 bytes) @ 80.8s
+[18:35:35.673] [INFO] 📈 Progress: 16/20 (80%) @ 86.6s
+[18:35:35.678] [INFO] 🖼️  Preview received (55287 bytes) @ 86.6s
+[18:35:41.125] [INFO] 📈 Progress: 17/20 (85%) @ 92.0s
+[18:35:41.131] [INFO] 🖼️  Preview received (55927 bytes) @ 92.0s
+[18:35:45.878] [INFO] 📈 Progress: 18/20 (90%) @ 96.8s
+[18:35:45.884] [INFO] 🖼️  Preview received (56443 bytes) @ 96.8s
+[18:35:50.308] [INFO] 📈 Progress: 19/20 (95%) @ 101.2s
+[18:35:50.314] [INFO] 🖼️  Preview received (56543 bytes) @ 101.2s
+[18:35:55.070] [INFO] 📈 Progress: 20/20 (100%) @ 106.0s
+[18:35:55.075] [INFO] 🖼️  Preview received (56479 bytes) @ 106.0s
+[18:35:55.078] [INFO] ⚙️  Executing node: 8 @ 106.0s
+[18:35:57.725] [INFO] ⚙️  Executing node: 9 @ 108.6s
+[18:35:57.796] [DEBUG] 📨 WS Message [executed]: {"type": "executed", "data": {"node": "9", "display_node": "9", "output": {"images": [{"filename": "ComfyUI_00060_.png", "subfolder": "", "type": "output"}, {"filename": "ComfyUI_00061_.png", "subfold
+[18:35:57.798] [DEBUG] 📨 WS Message [execution_success]: {"type": "execution_success", "data": {"prompt_id": "2216fcb0-f32c-499f-ac72-54ecd4af4550", "timestamp": 1765496157796}}
+[18:35:57.800] [INFO] 📋 Status: {'exec_info': {'queue_remaining': 0}} @ 108.7s
+[18:35:57.802] [INFO] ⚙️  Execution starting @ 108.7s
+[18:36:08.149] [INFO] ✅ Generation complete! 2 images received in 119.0s
+[18:36:08.151] [INFO]    Image 1: ComfyUI_00060_.png (output)
+[18:36:08.151] [INFO]    Image 2: ComfyUI_00061_.png (output)
+[18:36:08.159] [INFO] 📄 WS history saved to: C:\Users\jkoti\sts\sweet-tea-studio\backend\logs\ws_messages\20251211_183409_106554_ws.json

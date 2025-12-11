@@ -24,6 +24,182 @@ const arraysEqual = (a: string[], b: string[]) => {
     return a.every((val, idx) => val === b[idx]);
 };
 
+// --- Types ---
+type RenderNode = {
+    id: string;
+    title: string;
+    type: string;
+    active: [string, any][];
+    hidden: [string, any][];
+    hiddenInControls?: boolean;
+};
+
+// --- Components ---
+interface NodeCardProps {
+    node: RenderNode;
+    schemaEdits: any;
+    setSchemaEdits: (edits: any) => void;
+}
+
+const NodeCard = ({ node, schemaEdits, setSchemaEdits }: NodeCardProps) => {
+    const {
+        attributes,
+        listeners,
+        setNodeRef,
+        transform,
+        transition,
+        isDragging
+    } = useSortable({ id: node.id });
+
+    const style = {
+        transform: CSS.Transform.toString(transform),
+        transition,
+        zIndex: isDragging ? 5 : "auto",
+    };
+
+    const isCore = node.active.some(([_, f]: [string, any]) => f.x_core === true) ||
+        node.hidden.some(([_, f]: [string, any]) => f.x_core === true);
+
+    const toggleCore = () => {
+        const s = { ...schemaEdits };
+        [...node.active, ...node.hidden].forEach(([key]: [string, any]) => {
+            s[key].x_core = !isCore;
+        });
+        setSchemaEdits(s);
+    };
+
+    return (
+        <div
+            ref={setNodeRef}
+            style={style}
+            className={cn(
+                "bg-white border rounded-lg overflow-hidden shadow-sm",
+                isDragging && "ring-2 ring-blue-200 shadow-lg"
+            )}
+        >
+            <div className="px-4 py-2 bg-slate-100 border-b flex justify-between items-center">
+                <div className="flex items-center gap-2">
+                    <button
+                        type="button"
+                        className="p-1 rounded-md text-slate-400 hover:text-slate-600 hover:bg-white"
+                        aria-label="Reorder node"
+                        {...attributes}
+                        {...listeners}
+                    >
+                        <GripVertical className="w-4 h-4" />
+                    </button>
+                    <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-xs font-mono text-slate-500">{node.id}</div>
+                    {node.title}
+                </div>
+                <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-slate-400 uppercase">
+                            {isCore ? "Core" : "Expanded"}
+                        </span>
+                        <Switch
+                            checked={isCore}
+                            onCheckedChange={toggleCore}
+                            className={cn(
+                                "h-4 w-7",
+                                isCore ? "bg-blue-500" : "bg-slate-200"
+                            )}
+                        />
+                    </div>
+                    <span className="text-[10px] font-mono text-slate-400">{node.type}</span>
+                </div>
+            </div>
+
+            {node.active.length > 0 && (
+                <Table>
+                    <TableHeader>
+                        <TableRow className="border-b-0 hover:bg-transparent">
+                            <TableHead className="h-8 text-xs w-[30%]">Label</TableHead>
+                            <TableHead className="h-8 text-xs w-[20%]">Field ID</TableHead>
+                            <TableHead className="h-8 text-xs w-[15%]">Type</TableHead>
+                            <TableHead className="h-8 text-xs w-[25%]">Default Value</TableHead>
+                            <TableHead className="h-8 text-xs text-right w-[10%]">Action</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {node.active.map(([key, field]: [string, any]) => (
+                            <TableRow key={key} className="hover:bg-slate-50/50">
+                                <TableCell className="py-2">
+                                    <Input
+                                        className="h-7 text-xs"
+                                        value={field.title || key}
+                                        onChange={(e) => {
+                                            const s = { ...schemaEdits };
+                                            s[key].title = e.target.value;
+                                            setSchemaEdits(s);
+                                        }}
+                                    />
+                                </TableCell>
+                                <TableCell className="font-mono text-[10px] text-slate-500 py-2">{key}</TableCell>
+                                <TableCell className="text-xs text-slate-500 py-2">{field.type}</TableCell>
+                                <TableCell className="py-2">
+                                    <Input
+                                        className="h-7 text-xs"
+                                        value={String(field.default ?? "")}
+                                        onChange={(e) => {
+                                            const s = { ...schemaEdits };
+                                            const val = e.target.value;
+                                            const type = field.type;
+                                            if (type === "number" || type === "float") {
+                                                s[key].default = parseFloat(val);
+                                            } else if (type === "integer") {
+                                                s[key].default = parseInt(val);
+                                            } else if (type === "boolean") {
+                                                s[key].default = val === "true";
+                                            } else {
+                                                s[key].default = val;
+                                            }
+                                            setSchemaEdits(s);
+                                        }}
+                                    />
+                                </TableCell>
+                                <TableCell className="text-right py-2">
+                                    <Button variant="ghost" size="sm" className="h-6 text-xs text-red-500 hover:text-red-700" onClick={() => {
+                                        const s = { ...schemaEdits };
+                                        s[key].__hidden = true;
+                                        setSchemaEdits(s);
+                                    }}>Hide</Button>
+                                </TableCell>
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
+            )}
+
+            {node.hidden.length > 0 && (
+                <div className="bg-slate-50 border-t border-slate-200">
+                    <div className="px-4 py-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Hidden Parameters</div>
+                    <Table>
+                        <TableBody>
+                            {node.hidden.map(([key, field]: [string, any]) => (
+                                <TableRow key={key} className="hover:bg-slate-100/50 opacity-60">
+                                    <TableCell className="py-2 text-xs text-slate-500 w-[30%]">{field.title || key}</TableCell>
+                                    <TableCell className="font-mono text-[10px] text-slate-400 py-2 w-[20%] break-all">{key}</TableCell>
+                                    <TableCell className="text-xs py-2 text-slate-400 w-[15%]">{field.type}</TableCell>
+                                    <TableCell className="py-2 text-xs text-slate-400 w-[25%]">{String(field.default ?? "-")}</TableCell>
+                                    <TableCell className="text-right py-2 w-[10%]">
+                                        <Button variant="ghost" size="sm" className="h-6 text-xs text-blue-500 hover:text-blue-700" onClick={() => {
+                                            const s = { ...schemaEdits };
+                                            delete s[key].__hidden;
+                                            setSchemaEdits(s);
+                                        }}>
+                                            Restore
+                                        </Button>
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                </div>
+            )}
+        </div>
+    );
+};
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const getNodeDisplayOrder = (graph: any, schema: any) => {
     const ids = Object.keys(graph);
@@ -79,10 +255,18 @@ export default function WorkflowLibrary() {
     );
     const [composeDescription, setComposeDescription] = useState("");
 
+    // Use workflows from context if available (faster on navigation)
+    const contextWorkflows = generation?.workflows;
+
     useEffect(() => {
-        loadWorkflows();
+        // If context already has workflows, use them initially
+        if (contextWorkflows && contextWorkflows.length > 0) {
+            setWorkflows(contextWorkflows);
+        } else {
+            loadWorkflows();
+        }
         return () => stopPolling();
-    }, []);
+    }, [contextWorkflows]);
 
     const loadWorkflows = async () => {
         try {
@@ -140,24 +324,12 @@ export default function WorkflowLibrary() {
                 return;
             }
 
-            const payload = {
-                name: importName,
-                description: cleanedDescription || "imported pipe",
-                graph_json: graph,
-                input_schema: {}
-            };
-
-            const res = await fetch("/api/v1/workflows/", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payload)
-            });
-            
             const bundleName = importName || graph?._sweet_tea?.name || importFile.name.replace(".json", "");
+
             await api.importWorkflow({
                 data: graph,
                 name: bundleName,
-                description: graph?._sweet_tea?.description,
+                description: cleanedDescription || graph?._sweet_tea?.description,
             });
 
             setImportFile(null);
@@ -298,14 +470,9 @@ export default function WorkflowLibrary() {
 
     if (editingWorkflow) {
         const displayOrder = nodeOrder.length > 0 ? nodeOrder : getNodeDisplayOrder(editingWorkflow.graph_json, schemaEdits);
+        const sortedNodeIds = displayOrder;
 
-        type RenderNode = {
-            id: string;
-            title: string;
-            type: string;
-            active: [string, any][];
-            hidden: [string, any][];
-        };
+
 
         const buildNodeRenderData = (nodeId: string): RenderNode | null => {
             const node = editingWorkflow.graph_json[nodeId];
@@ -345,164 +512,7 @@ export default function WorkflowLibrary() {
             setSchemaEdits((prev: any) => ({ ...prev, __node_order: updated }));
         };
 
-        const NodeCard = ({ node }: { node: RenderNode }) => {
-            const {
-                attributes,
-                listeners,
-                setNodeRef,
-                transform,
-                transition,
-                isDragging
-            } = useSortable({ id: node.id });
 
-            const style = {
-                transform: CSS.Transform.toString(transform),
-                transition,
-                zIndex: isDragging ? 5 : "auto",
-            };
-
-            const isCore = node.active.some(([_, f]: [string, any]) => f.x_core === true) ||
-                node.hidden.some(([_, f]: [string, any]) => f.x_core === true);
-
-            const toggleCore = () => {
-                const s = { ...schemaEdits };
-                [...node.active, ...node.hidden].forEach(([key]: [string, any]) => {
-                    s[key].x_core = !isCore;
-                });
-                setSchemaEdits(s);
-            };
-
-            return (
-                <div
-                    ref={setNodeRef}
-                    style={style}
-                    className={cn(
-                        "bg-white border rounded-lg overflow-hidden shadow-sm",
-                        isDragging && "ring-2 ring-blue-200 shadow-lg"
-                    )}
-                >
-                    <div className="px-4 py-2 bg-slate-100 border-b flex justify-between items-center">
-                        <div className="flex items-center gap-2">
-                            <button
-                                type="button"
-                                className="p-1 rounded-md text-slate-400 hover:text-slate-600 hover:bg-white"
-                                aria-label="Reorder node"
-                                {...attributes}
-                                {...listeners}
-                            >
-                                <GripVertical className="w-4 h-4" />
-                            </button>
-                            <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-xs font-mono text-slate-500">{node.id}</div>
-                            {node.title}
-                        </div>
-                        <div className="flex items-center gap-3">
-                            <div className="flex items-center gap-2">
-                                <span className="text-[10px] text-slate-400 uppercase">
-                                    {isCore ? "Core" : "Expanded"}
-                                </span>
-                                <Switch
-                                    checked={isCore}
-                                    onCheckedChange={toggleCore}
-                                    className={cn(
-                                        "h-4 w-7",
-                                        isCore ? "bg-blue-500" : "bg-slate-200"
-                                    )}
-                                />
-                            </div>
-                            <span className="text-[10px] font-mono text-slate-400">{node.type}</span>
-                        </div>
-                    </div>
-
-                    {node.active.length > 0 && (
-                        <Table>
-                            <TableHeader>
-                                <TableRow className="border-b-0 hover:bg-transparent">
-                                    <TableHead className="h-8 text-xs w-[30%]">Label</TableHead>
-                                    <TableHead className="h-8 text-xs w-[20%]">Field ID</TableHead>
-                                    <TableHead className="h-8 text-xs w-[15%]">Type</TableHead>
-                                    <TableHead className="h-8 text-xs w-[25%]">Default Value</TableHead>
-                                    <TableHead className="h-8 text-xs text-right w-[10%]">Action</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {node.active.map(([key, field]: [string, any]) => (
-                                    <TableRow key={key} className="hover:bg-slate-50/50">
-                                        <TableCell className="py-2">
-                                            <Input
-                                                className="h-7 text-xs"
-                                                value={field.title || key}
-                                                onChange={(e) => {
-                                                    const s = { ...schemaEdits };
-                                                    s[key].title = e.target.value;
-                                                    setSchemaEdits(s);
-                                                }}
-                                            />
-                                        </TableCell>
-                                        <TableCell className="font-mono text-[10px] text-slate-500 py-2">{key}</TableCell>
-                                        <TableCell className="text-xs text-slate-500 py-2">{field.type}</TableCell>
-                                        <TableCell className="py-2">
-                                            <Input
-                                                className="h-7 text-xs"
-                                                value={String(field.default ?? "")}
-                                                onChange={(e) => {
-                                                    const s = { ...schemaEdits };
-                                                    const val = e.target.value;
-                                                    const type = field.type;
-                                                    if (type === "number" || type === "float") {
-                                                        s[key].default = parseFloat(val);
-                                                    } else if (type === "integer") {
-                                                        s[key].default = parseInt(val);
-                                                    } else if (type === "boolean") {
-                                                        s[key].default = val === "true";
-                                                    } else {
-                                                        s[key].default = val;
-                                                    }
-                                                    setSchemaEdits(s);
-                                                }}
-                                            />
-                                        </TableCell>
-                                        <TableCell className="text-right py-2">
-                                            <Button variant="ghost" size="sm" className="h-6 text-xs text-red-500 hover:text-red-700" onClick={() => {
-                                                const s = { ...schemaEdits };
-                                                s[key].__hidden = true;
-                                                setSchemaEdits(s);
-                                            }}>Hide</Button>
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    )}
-
-                    {node.hidden.length > 0 && (
-                        <div className="bg-slate-50 border-t border-slate-200">
-                            <div className="px-4 py-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Hidden Parameters</div>
-                            <Table>
-                                <TableBody>
-                                    {node.hidden.map(([key, field]: [string, any]) => (
-                                        <TableRow key={key} className="hover:bg-slate-100/50 opacity-60">
-                                            <TableCell className="py-2 text-xs text-slate-500 w-[30%]">{field.title || key}</TableCell>
-                                            <TableCell className="font-mono text-[10px] text-slate-400 py-2 w-[20%] break-all">{key}</TableCell>
-                                            <TableCell className="text-xs py-2 text-slate-400 w-[15%]">{field.type}</TableCell>
-                                            <TableCell className="py-2 text-xs text-slate-400 w-[25%]">{String(field.default ?? "-")}</TableCell>
-                                            <TableCell className="text-right py-2 w-[10%]">
-                                                <Button variant="ghost" size="sm" className="h-6 text-xs text-blue-500 hover:text-blue-700" onClick={() => {
-                                                    const s = { ...schemaEdits };
-                                                    delete s[key].__hidden;
-                                                    setSchemaEdits(s);
-                                                }}>
-                                                    Restore
-                                                </Button>
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                        </div>
-                    )}
-                </div>
-            );
-        };
 
         const toggleHidden = (nodeId: string, hidden: boolean) => {
             const updatedGraph = { ...editingWorkflow.graph_json };
@@ -596,7 +606,7 @@ export default function WorkflowLibrary() {
                                 </div>
                             </DialogContent>
                         </Dialog>
-                        <Button variant="outline" onClick={() => { setEditingWorkflow(null); setNodeOrder([]); }}disabled={isSaving}>Cancel</Button>
+                        <Button variant="outline" onClick={() => { setEditingWorkflow(null); setNodeOrder([]); }} disabled={isSaving}>Cancel</Button>
                         <Button onClick={handleSaveSchema} disabled={Boolean(nameError) || isSaving}>
                             <Save className="w-4 h-4 mr-2" /> {isSaving ? "Saving..." : "Save Changes"}
                         </Button>
@@ -692,7 +702,7 @@ export default function WorkflowLibrary() {
                         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                             <SortableContext items={nodesRenderData.map(node => node.id)} strategy={verticalListSortingStrategy}>
                                 {nodesRenderData.map(node => (
-                                    <NodeCard key={node.id} node={node} />
+                                    <NodeCard key={node.id} node={node} schemaEdits={schemaEdits} setSchemaEdits={setSchemaEdits} />
                                 ))}
                             </SortableContext>
                         </DndContext>

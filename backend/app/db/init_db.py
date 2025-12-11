@@ -1,12 +1,12 @@
 from sqlmodel import SQLModel, Session, select
-from app.db.engine import engine
+from app.db.engine import engine, tags_engine
 # Import models so they are registered with SQLModel.metadata
 from app.models.engine import Engine
 from app.models.workflow import WorkflowTemplate
 from app.models.job import Job
 from app.models.image import Image
 from app.models.prompt import Prompt
-from app.models.tag import TagSyncState
+from app.models.tag import Tag, TagSyncState
 from app.models.project import Project
 # Portfolio models for generation tracking
 from app.models.portfolio import (
@@ -16,7 +16,11 @@ from app.core.config import settings
 
 
 def init_db():
+    # Create main app tables in profile.db
     SQLModel.metadata.create_all(engine)
+    
+    # Create tag tables in dedicated tags.db (auto-creates file if missing)
+    SQLModel.metadata.create_all(tags_engine, tables=[Tag.__table__, TagSyncState.__table__])
     
     # Ensure directory structure exists
     settings.ensure_dirs()

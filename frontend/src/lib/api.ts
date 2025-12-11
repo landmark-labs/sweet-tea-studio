@@ -375,6 +375,9 @@ export const api = {
         if (!res.ok) {
             const body = await res.json().catch(() => ({}));
             throw new Error(body.detail || "Failed to update workflow");
+        }
+        return res.json();
+    },
     exportWorkflow: async (workflowId: number): Promise<WorkflowExportBundle> => {
         const res = await fetch(`${API_BASE}/workflows/${workflowId}/export`);
         if (!res.ok) throw new Error("Failed to export workflow");

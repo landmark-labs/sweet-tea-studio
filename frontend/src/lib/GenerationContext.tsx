@@ -135,7 +135,8 @@ export function GenerationProvider({ children }: GenerationProviderProps) {
             }
         };
         loadData();
-    }, [applyWorkflows, selectedWorkflowId]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     const refreshWorkflows = useCallback(async () => {
         try {

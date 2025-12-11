@@ -2,14 +2,11 @@ import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ArrowDownCircle, ExternalLink, FolderOpen, Info, Link2, Rocket, Sparkles, Trash2, XCircle } from "lucide-react";
-import { useUndoRedo } from "@/lib/undoRedo";
+import { ArrowDownCircle, FolderOpen, Info, Link2, Rocket, Sparkles, Trash2, XCircle } from "lucide-react";
 
 type ModelCategory = string;
 
@@ -66,7 +63,6 @@ export default function Models() {
   const [selectedCategory, setSelectedCategory] = useState<ModelCategory>("all");
   const [search, setSearch] = useState("");
   // Removed single targetFolder state since it's now per-row
-  const { registerStateChange } = useUndoRedo();
 
   // Fetch installed models from API
   const fetchModels = async (refresh = false) => {
@@ -105,7 +101,8 @@ export default function Models() {
   // Fetch download queue
   const fetchDownloads = async () => {
     try {
-      const res = await fetch("/api/v1/models/downloads");
+      // Add timestamp to prevent caching
+      const res = await fetch(`/api/v1/models/downloads?t=${Date.now()}`);
       if (res.ok) {
         const data = await res.json();
         const mapped: DownloadJob[] = data.map((d: any) => ({
@@ -187,18 +184,7 @@ export default function Models() {
     }
   }, [modelFolders]);
 
-  const applyQueue = (next: DownloadJob[]) => setDownloadQueue(next);
-  const updateQueue = (
-    label: string,
-    builder: (prev: DownloadJob[]) => DownloadJob[],
-    guardable = false
-  ) => {
-    setDownloadQueue((prev) => {
-      const next = builder(prev);
-      registerStateChange(label, prev, next, applyQueue, guardable);
-      return next;
-    });
-  };
+
 
   const filteredModels = useMemo(() => {
     console.log("[Models] Computing filteredModels. models.length:", models.length, "selectedCategory:", selectedCategory, "search:", search);
@@ -277,21 +263,6 @@ export default function Models() {
     fetchDownloads();
   };
 
-  const markComplete = (id: string) => {
-    updateQueue("Marked download complete", (prev) =>
-      prev.map((job) =>
-        job.id === id
-          ? {
-            ...job,
-            status: "completed",
-            progress: 100,
-            eta: "done",
-          }
-          : job
-      )
-    );
-  };
-
   const cancelJob = async (id: string) => {
     try {
       const res = await fetch(`/api/v1/models/downloads/${id}`, {
@@ -307,89 +278,81 @@ export default function Models() {
     }
   };
 
-  const removeJob = (id: string) => {
-    if (!confirm("Remove this download from the queue? You can undo immediately if needed.")) return;
-    updateQueue(
-      "Removed download job",
-      (prev) => prev.filter((job) => job.id !== id),
-      true
-    );
-  };
-
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex flex-col gap-2">
-        <div className="flex items-center gap-3">
-          <Sparkles className="text-blue-600" size={24} />
+    <div className="h-full flex flex-col p-4 gap-4 overflow-hidden">
+      <div className="flex-none flex flex-col gap-1">
+        <div className="flex items-center gap-2">
+          <Sparkles className="text-blue-600" size={20} />
           <div>
-            <h1 className="text-2xl font-semibold text-slate-900">models</h1>
-            <p className="text-sm text-slate-600">
+            <h1 className="text-xl font-semibold text-slate-900">models</h1>
+            <p className="text-xs text-slate-600">
               manage everything sweet tea feeds to comfyui: checkpoints, loras, controlnets, upscalers, and vlm assets.
             </p>
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="flex-none grid grid-cols-1 md:grid-cols-3 gap-4 h-[400px]">
         {/* Column 1: ComfyUI Folders */}
-        <Card className="h-full flex flex-col">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-base">ComfyUI folders</CardTitle>
-            <FolderOpen
-              className="text-blue-500 cursor-pointer hover:text-blue-600 active:scale-95 transition-all"
-              size={18}
-              title="Click to set a custom models directory"
-              onClick={async () => {
-                const newPath = prompt(
-                  `Current models directory:\n${modelsRoot || "(not detected)"}\n\nEnter a new path to override (leave blank to auto-detect):`,
-                  modelsRoot || ""
-                );
-                if (newPath === null) return; // Cancelled
+        <Card className="h-full flex flex-col overflow-hidden">
+          <CardHeader className="flex flex-row items-center justify-between pb-1 p-3 flex-none">
+            <CardTitle className="text-sm">ComfyUI folders</CardTitle>
+            <span title="Click to set a custom models directory">
+              <FolderOpen
+                className="text-blue-500 cursor-pointer hover:text-blue-600 active:scale-95 transition-all"
+                size={14}
+                onClick={async () => {
+                  const newPath = prompt(
+                    `Current models directory:\n${modelsRoot || "(not detected)"}\n\nEnter a new path to override (leave blank to auto-detect):`,
+                    modelsRoot || ""
+                  );
+                  if (newPath === null) return; // Cancelled
 
-                try {
-                  const res = await fetch("/api/v1/models/directories", {
-                    method: "PUT",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ path: newPath || null }),
-                  });
-                  if (!res.ok) {
-                    const err = await res.json();
-                    alert(`Failed to update: ${err.detail || "Unknown error"}`);
-                    return;
+                  try {
+                    const res = await fetch("/api/v1/models/directories", {
+                      method: "PUT",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ path: newPath || null }),
+                    });
+                    if (!res.ok) {
+                      const err = await res.json();
+                      alert(`Failed to update: ${err.detail || "Unknown error"}`);
+                      return;
+                    }
+                    const data = await res.json();
+                    setModelsRoot(data.root || "");
+                    setModelFolders(data.folders || []);
+                    if (data.folders?.length) {
+                      setActiveFolder(data.folders[0].name);
+                    }
+                  } catch (e) {
+                    console.error("Failed to update models directory:", e);
+                    alert("Failed to update models directory. Check console.");
                   }
-                  const data = await res.json();
-                  setModelsRoot(data.root || "");
-                  setModelFolders(data.folders || []);
-                  if (data.folders?.length) {
-                    setActiveFolder(data.folders[0].name);
-                  }
-                } catch (e) {
-                  console.error("Failed to update models directory:", e);
-                  alert("Failed to update models directory. Check console.");
-                }
-              }}
-            />
+                }}
+              />
+            </span>
           </CardHeader>
-          <CardContent className="flex gap-3 flex-1 min-h-[320px]">
-            <ScrollArea className="w-1/3 border rounded-md max-h-[600px]">
-              <div className="p-2 space-y-1">
+          <CardContent className="flex gap-2 flex-1 min-h-0 p-2 overflow-hidden">
+            <ScrollArea className="w-1/3 border rounded-md h-full">
+              <div className="p-1 space-y-0.5">
                 {modelFolders.map((folder) => (
                   <button
                     key={folder.name}
-                    className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${activeFolder === folder.name ? "bg-blue-50 text-blue-700 border border-blue-200" : "hover:bg-slate-50"}`}
+                    className={`w-full text-left px-2 py-1.5 rounded-sm text-xs transition-colors ${activeFolder === folder.name ? "bg-blue-50 text-blue-700 border border-blue-200" : "hover:bg-slate-50"}`}
                     onClick={() => setActiveFolder(folder.name)}
                   >
-                    <div className="font-medium">{folder.name}</div>
-                    <div className="text-[11px] text-slate-500 break-all">{folder.path}</div>
+                    <div className="font-medium truncate">{folder.name}</div>
+                    <div className="text-[10px] text-slate-400 break-all truncate">{folder.path}</div>
                   </button>
                 ))}
                 {!modelFolders.length && (
-                  <div className="text-sm text-slate-500 px-2 py-1">no model folders found</div>
+                  <div className="text-xs text-slate-500 px-2 py-1">no folders detected</div>
                 )}
               </div>
             </ScrollArea>
-            <ScrollArea className="flex-1 border rounded-md max-h-[600px]">
-              <div className="p-3 space-y-2">
+            <ScrollArea className="flex-1 border rounded-md h-full">
+              <div className="p-2 space-y-1">
                 {modelFolders
                   .find((f) => f.name === activeFolder)
                   ?.items.filter((item) => {
@@ -398,18 +361,18 @@ export default function Models() {
                     return /\.(safetensors|gguf|pth|ckpt|pt|bin|onnx)$/i.test(item.name);
                   })
                   .map((item) => (
-                    <div key={item.path} className="flex items-center gap-2 rounded border border-slate-200 px-3 py-2 text-sm bg-white hover:bg-slate-50 transition-colors">
+                    <div key={item.path} className="flex items-center gap-2 rounded border border-slate-100 px-2 py-1 text-xs bg-white hover:bg-slate-50 transition-colors">
                       {item.type === "directory" ? (
-                        <FolderOpen size={14} className="text-slate-500 flex-shrink-0" />
+                        <FolderOpen size={12} className="text-slate-500 flex-shrink-0" />
                       ) : (
-                        <Link2 size={14} className="text-slate-400 flex-shrink-0" />
+                        <Link2 size={12} className="text-slate-400 flex-shrink-0" />
                       )}
                       <span className="truncate font-medium">{item.name}</span>
                     </div>
                   ))}
-                {!modelFolders.length && <div className="text-sm text-slate-500">select or add a models directory to explore contents.</div>}
+                {!modelFolders.length && <div className="text-xs text-slate-500">select directory</div>}
                 {modelFolders.length > 0 && !modelFolders.find((f) => f.name === activeFolder)?.items.length && (
-                  <div className="text-sm text-slate-500">no files found in this folder.</div>
+                  <div className="text-xs text-slate-500">empty folder</div>
                 )}
               </div>
             </ScrollArea>
@@ -417,14 +380,14 @@ export default function Models() {
         </Card>
 
         {/* Column 2: Add Model Downloads */}
-        <Card className="h-full flex flex-col">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Add model downloads</CardTitle>
-            <CardDescription className="text-xs">
+        <Card className="h-full flex flex-col overflow-hidden">
+          <CardHeader className="pb-1 p-3 flex-none">
+            <CardTitle className="text-sm">Add model downloads</CardTitle>
+            <CardDescription className="text-[10px]">
               Smart-detects Civitai vs Hugging Face links.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3 flex-1 overflow-y-auto max-h-[600px]">
+          <CardContent className="space-y-2 flex-1 overflow-y-auto p-2 scrollbar-thin">
             <div className="space-y-2">
               {downloadRows.map((row, index) => (
                 <div key={row.id} className="flex gap-2 items-start animate-in slide-in-from-left-2 duration-200" style={{ animationDelay: `${index * 50}ms` }}>
@@ -432,34 +395,34 @@ export default function Models() {
                     value={row.target}
                     onValueChange={(v) => handleRowChange(row.id, 'target', v)}
                   >
-                    <SelectTrigger className="w-[110px] flex-none">
+                    <SelectTrigger className="w-[100px] flex-none h-7 text-xs">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       {modelFolders.map((folder) => (
-                        <SelectItem key={folder.name} value={folder.name}>
+                        <SelectItem key={folder.name} value={folder.name} className="text-xs">
                           {folder.name}
                         </SelectItem>
                       ))}
                       {!modelFolders.length && (
-                        <SelectItem value="checkpoints" disabled>checkpoints (loading...)</SelectItem>
+                        <SelectItem value="checkpoints" disabled className="text-xs">checkpoints</SelectItem>
                       )}
                     </SelectContent>
                   </Select>
                   <Input
                     placeholder="Paste link..."
-                    className="flex-1 min-w-0"
+                    className="flex-1 min-w-0 h-7 text-xs"
                     value={row.url}
                     onChange={(e) => handleRowChange(row.id, 'url', e.target.value)}
                   />
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="flex-none text-slate-400 hover:text-red-500"
+                    className="flex-none h-7 w-7 text-slate-400 hover:text-red-500"
                     onClick={() => handleRemoveRow(row.id)}
                     disabled={downloadRows.length === 1 && !row.url}
                   >
-                    <Trash2 size={16} />
+                    <Trash2 size={14} />
                   </Button>
                 </div>
               ))}
@@ -467,44 +430,44 @@ export default function Models() {
 
             <Button
               variant="secondary"
-              className="w-full text-xs gap-1 h-8"
+              className="w-full text-[10px] gap-1 h-6"
               onClick={handleAddRow}
             >
-              <div className="w-4 h-4 rounded-full bg-slate-200 flex items-center justify-center font-bold text-slate-600">+</div>
+              <div className="w-3 h-3 rounded-full bg-slate-200 flex items-center justify-center font-bold text-slate-600">+</div>
               Add another link
             </Button>
 
-            <div className="pt-4 border-t mt-4">
-              <Button className="w-full" onClick={processQueue} disabled={!downloadRows.some(r => r.url.trim().length > 0)}>
-                <Rocket className="w-4 h-4 mr-2" />
+            <div className="pt-2 border-t mt-2">
+              <Button className="w-full h-8 text-xs" onClick={processQueue} disabled={!downloadRows.some(r => r.url.trim().length > 0)}>
+                <Rocket className="w-3 h-3 mr-2" />
                 Start Downloads
               </Button>
             </div>
 
-            <div className="bg-slate-50 p-3 rounded text-xs text-slate-500 space-y-1">
-              <div className="flex gap-2 items-center"><Info size={14} /> <span>Auto-sorted by link type</span></div>
-              <p>Civitai links use civitaidownloader (API key supported if env var set). HF links use aria2c (multiconnection).</p>
+            <div className="bg-slate-50 p-2 rounded text-[10px] text-slate-500 space-y-1">
+              <div className="flex gap-2 items-center"><Info size={12} /> <span>Auto-sorted by link type</span></div>
+              <p>Civitai links use civitaidownloader (API key supported). HF links use aria2c.</p>
             </div>
           </CardContent>
         </Card>
 
         {/* Column 3: Download Queue */}
-        <Card className="h-full flex flex-col">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Download queue</CardTitle>
-            <CardDescription className="text-xs">Active and past jobs.</CardDescription>
+        <Card className="h-full flex flex-col overflow-hidden">
+          <CardHeader className="pb-1 p-3 flex-none">
+            <CardTitle className="text-sm">Download queue</CardTitle>
+            <CardDescription className="text-[10px]">Active and past jobs.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3 flex-1 overflow-y-auto max-h-[600px]">
+          <CardContent className="space-y-2 flex-1 overflow-y-auto p-2 scrollbar-thin">
             {downloadQueue.map((job) => (
-              <div key={job.id} className={`rounded-md border p-3 bg-white space-y-2 ${job.status === "failed" ? "border-red-300 bg-red-50" :
+              <div key={job.id} className={`rounded-md border p-2 bg-white space-y-1 ${job.status === "failed" ? "border-red-300 bg-red-50" :
                 job.status === "cancelled" ? "border-slate-300 bg-slate-50" :
                   job.status === "completed" ? "border-green-200 bg-green-50" :
                     "border-slate-200"
                 }`}>
                 <div className="flex items-center justify-between">
-                  <div className="space-y-1 w-full overflow-hidden">
-                    <div className="flex items-center gap-2 text-sm font-medium text-slate-800">
-                      <ArrowDownCircle size={16} className={`flex-none ${job.status === "downloading" ? "text-blue-500 animate-pulse" :
+                  <div className="space-y-0.5 w-full overflow-hidden">
+                    <div className="flex items-center gap-1.5 text-xs font-medium text-slate-800">
+                      <ArrowDownCircle size={14} className={`flex-none ${job.status === "downloading" ? "text-blue-500 animate-pulse" :
                         job.status === "completed" ? "text-green-500" :
                           job.status === "failed" ? "text-red-500" :
                             job.status === "cancelled" ? "text-slate-400" :
@@ -512,29 +475,29 @@ export default function Models() {
                         }`} />
                       <span className="truncate">{job.filename || job.target}</span>
                     </div>
-                    <p className="text-xs text-slate-500 truncate" title={job.link}>{job.link}</p>
+                    <p className="text-[10px] text-slate-500 truncate" title={job.link}>{job.link}</p>
                   </div>
-                  <div className="flex gap-1 flex-none">
+                  <div className="flex gap-0.5 flex-none">
                     {(job.status === "queued" || job.status === "downloading") && (
                       <Button
                         size="icon"
                         variant="ghost"
-                        className="h-7 w-7 text-slate-400 hover:text-red-500"
+                        className="h-6 w-6 text-slate-400 hover:text-red-500"
                         onClick={() => cancelJob(job.id)}
                         title="Cancel download"
                       >
-                        <XCircle size={16} />
+                        <XCircle size={14} />
                       </Button>
                     )}
                     {(job.status === "completed" || job.status === "failed" || job.status === "cancelled") && (
-                      <Button size="icon" variant="ghost" className="h-7 w-7 text-slate-400 hover:text-red-500" onClick={() => cancelJob(job.id)} title="Remove from queue">
-                        <Trash2 size={14} />
+                      <Button size="icon" variant="ghost" className="h-6 w-6 text-slate-400 hover:text-red-500" onClick={() => cancelJob(job.id)} title="Remove from queue">
+                        <Trash2 size={12} />
                       </Button>
                     )}
                   </div>
                 </div>
                 <div className="space-y-1">
-                  <div className="flex items-center justify-between text-xs text-slate-500">
+                  <div className="flex items-center justify-between text-[10px] text-slate-500">
                     <span className={`capitalize font-medium ${job.status === "downloading" ? "text-blue-600" :
                       job.status === "completed" ? "text-green-600" :
                         job.status === "failed" ? "text-red-600" :
@@ -546,88 +509,88 @@ export default function Models() {
                       {job.eta && job.status === "downloading" && <span className="text-slate-400">ETA: {job.eta}</span>}
                     </span>
                   </div>
-                  <Progress value={job.progress} className="h-2" />
+                  <Progress value={job.progress} className="h-1.5" />
                   {job.error && (
-                    <p className="text-xs text-red-600 truncate" title={job.error}>{job.error}</p>
+                    <p className="text-[10px] text-red-600 truncate" title={job.error}>{job.error}</p>
                   )}
                 </div>
               </div>
             ))}
             {!downloadQueue.length && (
-              <div className="flex flex-col items-center justify-center py-12 text-slate-400">
-                <ArrowDownCircle className="w-8 h-8 opacity-20 mb-2" />
-                <p className="text-sm">Queue is empty</p>
+              <div className="flex flex-col items-center justify-center py-8 text-slate-400">
+                <ArrowDownCircle className="w-6 h-6 opacity-20 mb-1" />
+                <p className="text-xs">Queue is empty</p>
               </div>
             )}
           </CardContent>
         </Card>
       </div>
 
-      <Card className="h-full flex flex-col">
-        <CardHeader>
-          <CardTitle className="text-lg">Installed models</CardTitle>
-          <CardDescription>discover what is already available inside comfyui for this sweet tea instance.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4 flex-1 flex flex-col">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            <Input
-              placeholder="Search models or paths"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-            <Select value={selectedCategory} onValueChange={(value) => setSelectedCategory(value as ModelCategory)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Filter by type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">all</SelectItem>
-                {modelFolders.map((folder) => (
-                  <SelectItem key={folder.name} value={folder.name}>
-                    {folder.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button variant="outline" onClick={() => fetchModels(true)} disabled={isLoading}>
-              {isLoading ? "loading..." : "refresh inventory"}
-            </Button>
-          </div>
-
-          <div className="flex-1 rounded-md border border-slate-200 overflow-hidden min-h-[420px] max-h-[70vh] bg-white">
-            <div className="h-full overflow-auto">
-              <Table className="min-w-[760px]">
-                <TableHeader className="bg-slate-50 sticky top-0 z-10">
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Source</TableHead>
-                    <TableHead>Size</TableHead>
-                    <TableHead>Location</TableHead>
-                    <TableHead>Notes</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredModels.map((model) => (
-                    <TableRow key={model.id}>
-                      <TableCell className="font-medium">{model.name}</TableCell>
-                      <TableCell>{model.category}</TableCell>
-                      <TableCell>{model.source}</TableCell>
-                      <TableCell>{model.size}</TableCell>
-                      <TableCell className="text-xs text-slate-600 break-all">{model.location}</TableCell>
-                      <TableCell className="text-xs text-slate-600">{model.notes || "—"}</TableCell>
-                    </TableRow>
+      <Card className="flex-1 flex flex-col min-h-0 overflow-hidden">
+        <CardHeader className="py-2 px-4 flex-none border-b">
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-base">Installed models</CardTitle>
+              <CardDescription className="text-xs">discover what is already available inside comfyui for this sweet tea instance.</CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              <Input
+                placeholder="Search models..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="h-7 text-xs w-48"
+              />
+              <Select value={selectedCategory} onValueChange={(value) => setSelectedCategory(value as ModelCategory)}>
+                <SelectTrigger className="h-7 text-xs w-32">
+                  <SelectValue placeholder="Filter type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all" className="text-xs">all types</SelectItem>
+                  {modelFolders.map((folder) => (
+                    <SelectItem key={folder.name} value={folder.name} className="text-xs">
+                      {folder.name}
+                    </SelectItem>
                   ))}
-                  {!filteredModels.length && (
-                    <TableRow>
-                      <TableCell colSpan={6} className="text-center text-slate-500">
-                        No models match the current filters.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
+                </SelectContent>
+              </Select>
+              <Button variant="outline" size="sm" onClick={() => fetchModels(true)} disabled={isLoading} className="h-7 text-xs">
+                {isLoading ? "..." : "Refresh"}
+              </Button>
             </div>
           </div>
+        </CardHeader>
+        <CardContent className="flex-1 p-0 overflow-auto">
+          <Table className="text-xs w-full">
+            <TableHeader className="bg-slate-50 sticky top-0 z-10 shadow-sm">
+              <TableRow className="h-8 hover:bg-slate-50 border-b">
+                <TableHead className="h-8 py-1 pl-4 w-[25%]">Name</TableHead>
+                <TableHead className="h-8 py-1 w-[10%]">Type</TableHead>
+                <TableHead className="h-8 py-1 w-[10%]">Source</TableHead>
+                <TableHead className="h-8 py-1 w-[10%]">Size</TableHead>
+                <TableHead className="h-8 py-1 w-[30%]">Location</TableHead>
+                <TableHead className="h-8 py-1 w-[15%]">Notes</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredModels.map((model) => (
+                <TableRow key={model.id} className="h-8 hover:bg-slate-50 border-b-0">
+                  <TableCell className="py-1 pl-4 font-medium truncate max-w-[200px]" title={model.name}>{model.name}</TableCell>
+                  <TableCell className="py-1">{model.category}</TableCell>
+                  <TableCell className="py-1">{model.source}</TableCell>
+                  <TableCell className="py-1">{model.size}</TableCell>
+                  <TableCell className="py-1 text-slate-600 truncate max-w-[300px]" title={model.location}>{model.location}</TableCell>
+                  <TableCell className="py-1 text-slate-600 truncate max-w-[150px]">{model.notes || "—"}</TableCell>
+                </TableRow>
+              ))}
+              {!filteredModels.length && (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center text-slate-500 py-8">
+                    No models match the current filters.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
         </CardContent>
       </Card>
     </div>

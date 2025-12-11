@@ -40,7 +40,7 @@ class TagSuggestion(BaseModel):
 
 
 TAG_CACHE_MAX_AGE = timedelta(hours=24)
-TAG_CACHE_MAX_TAGS = 5000
+TAG_CACHE_MAX_TAGS = 10000
 TAG_CACHE_PAGE_SIZE = 200
 class PromptStage(BaseModel):
     stage: int
@@ -390,57 +390,67 @@ def suggest(query: str, limit: int = 15):
         return suggestions[:limit]
 
 
+import time
+
 def bulk_upsert_tag_suggestions(session: Session, tags: List[TagSuggestion], source: str) -> int:
     if not tags:
         return 0
 
-    names = [t.name for t in tags if t.name]
-    if not names:
-        return 0
-
-    existing: List[Tag] = []
-    chunk_size = 900  # stay well under SQLite's default 999 variable limit
-    for start in range(0, len(names), chunk_size):
-        chunk_names = names[start : start + chunk_size]
-        existing.extend(session.exec(select(Tag).where(col(Tag.name).in_(chunk_names))).all())
-
-    existing_map = {t.name: t for t in existing}
+    total_created = 0
+    total_updated = 0
     
-    # Track names processed in this batch to prevent duplicates within the batch causing IntegrityError
-    processed_in_batch = set()
-
-    updated = 0
-    created = 0
-    for tag in tags:
-        if not tag.name:
+    # Process in small batches to keep write transactions short
+    batch_size = 500
+    
+    for i in range(0, len(tags), batch_size):
+        batch = tags[i : i + batch_size]
+        batch_names = [t.name for t in batch if t.name]
+        
+        if not batch_names:
             continue
             
-        # If we already handled this tag name in this batch, skip duplicates
-        if tag.name in processed_in_batch:
-            continue
-        processed_in_batch.add(tag.name)
-
-        if tag.name in existing_map:
-            current = existing_map[tag.name]
-            current.frequency = max(current.frequency or 0, tag.frequency)
-            current.description = current.description or tag.description
-            current.updated_at = datetime.utcnow()
-            current.source = current.source or source
-            updated += 1
-            continue
-
-        session.add(
-            Tag(
-                name=tag.name,
-                source=source,
-                frequency=tag.frequency,
-                description=tag.description,
-            )
-        )
-        created += 1
-
-    session.commit()
-    return created + updated
+        # 1. Fetch existing tags for this batch
+        existing = session.exec(select(Tag).where(col(Tag.name).in_(batch_names))).all()
+        existing_map = {t.name: t for t in existing}
+        
+        processed_in_batch = set()
+        
+        for tag in batch:
+            if not tag.name:
+                continue
+            if tag.name in processed_in_batch:
+                continue
+            processed_in_batch.add(tag.name)
+            
+            if tag.name in existing_map:
+                current = existing_map[tag.name]
+                current.frequency = max(current.frequency or 0, tag.frequency)
+                current.description = current.description or tag.description
+                current.updated_at = datetime.utcnow()
+                current.source = current.source or source
+                total_updated += 1
+            else:
+                session.add(
+                    Tag(
+                        name=tag.name,
+                        source=source,
+                        frequency=tag.frequency,
+                        description=tag.description,
+                    )
+                )
+                total_created += 1
+        
+        # 2. Commit this batch immediately to release write lock
+        try:
+            session.commit()
+        except Exception as e:
+            print(f"Error committing batch {i}: {e}")
+            session.rollback()
+            
+        # 3. Yield to other threads/readers
+        time.sleep(0.05)
+        
+    return total_created + total_updated
 
 
 def fetch_danbooru_tags(query: str, limit: int = 10) -> List[TagSuggestion]:
@@ -690,6 +700,9 @@ def fetch_all_rule34_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int = 1
 
 
 
+from app.models.tag import Tag, TagCreate, TagSyncState
+from app.db.engine import engine as db_engine, tags_engine
+
 def refresh_remote_tag_cache_if_stale():
     sources = {
         "danbooru": fetch_all_danbooru_tags,
@@ -697,35 +710,58 @@ def refresh_remote_tag_cache_if_stale():
         "rule34": fetch_all_rule34_tags,
     }
 
-    with Session(db_engine) as session:
-        for source, fetcher in sources.items():
+    for source, fetcher in sources.items():
+        # 1. Check staleness (Quick Read)
+        is_stale = False
+        with Session(tags_engine) as session:
             state = session.exec(
                 select(TagSyncState).where(TagSyncState.source == source)
             ).first()
+            
+            if not state:
+                is_stale = True
+            elif datetime.utcnow() - state.last_synced_at > TAG_CACHE_MAX_AGE:
+                is_stale = True
+        
+        if not is_stale:
+            continue
 
-            is_stale = True
-            if state:
-                is_stale = datetime.utcnow() - state.last_synced_at > TAG_CACHE_MAX_AGE
+        # 2. Fetch data (Slow Network I/O) - NO DB CONNECTION HELD
+        try:
+            print(f"[TagSync] Fetching {source}...")
+            remote_tags = fetcher() # This can take seconds/minutes
+            print(f"[TagSync] Fetched {len(remote_tags)} tags from {source}")
+        except Exception as e:
+            print(f"[TagSync] Failed to fetch {source}: {e}")
+            continue
 
-            if not is_stale:
-                continue
-
-            remote_tags = fetcher()
-            bulk_upsert_tag_suggestions(session, remote_tags, source)
-
-            if state:
-                state.last_synced_at = datetime.utcnow()
-                state.tag_count = len(remote_tags)
-            else:
-                session.add(
-                    TagSyncState(
-                        source=source,
-                        last_synced_at=datetime.utcnow(),
-                        tag_count=len(remote_tags),
-                    )
-                )
-
-            session.commit()
+        # 3. Write data (Quick Write)
+        if remote_tags:
+            try:
+                with Session(tags_engine) as session:
+                    bulk_upsert_tag_suggestions(session, remote_tags, source)
+                    
+                    # Re-fetch state to update it
+                    state = session.exec(
+                        select(TagSyncState).where(TagSyncState.source == source)
+                    ).first()
+                    
+                    if state:
+                        state.last_synced_at = datetime.utcnow()
+                        state.tag_count = len(remote_tags)
+                        session.add(state)
+                    else:
+                        session.add(
+                            TagSyncState(
+                                source=source,
+                                last_synced_at=datetime.utcnow(),
+                                tag_count=len(remote_tags),
+                            )
+                        )
+                    session.commit()
+                    print(f"[TagSync] Saved {len(remote_tags)} tags for {source}")
+            except Exception as e:
+                print(f"[TagSync] Failed to save {source} tags: {e}")
 
 
 def start_tag_cache_refresh_background():
@@ -737,7 +773,7 @@ def save_discovered_tags(tags: List[TagSuggestion]):
     if not tags:
         return
     try:
-        with Session(db_engine) as session:
+        with Session(tags_engine) as session:
             for tag_data in tags:
                 # Check if exists (case-insensitive)
                 existing = session.exec(select(Tag).where(Tag.name == tag_data.name)).first()
@@ -775,7 +811,8 @@ def suggest_tags(query: str, background_tasks: BackgroundTasks, limit: int = 20)
     tags_to_save: List[TagSuggestion] = []
 
     # 1. Fetch from local DB (Tags and Prompts)
-    with Session(db_engine) as session:
+    # 1a. Fetch tags from dedicated tags.db
+    with Session(tags_engine) as session:
         tag_stmt = (
             select(Tag)
             .where(col(Tag.name).ilike(query_like))
@@ -790,8 +827,9 @@ def suggest_tags(query: str, background_tasks: BackgroundTasks, limit: int = 20)
                 frequency=tag.frequency or 0,
                 description=tag.description,
             )
-            
-        # Search prompts for matching names or content (restored functionality)
+    
+    # 1b. Fetch prompts from main profile.db
+    with Session(db_engine) as session:
         prompt_stmt = (
             select(Prompt)
             .where(
@@ -820,52 +858,50 @@ def suggest_tags(query: str, background_tasks: BackgroundTasks, limit: int = 20)
                 description=snippet[:180] if snippet else None,
             )
 
-    # 2. Fetch from external APIs in parallel
-    from concurrent.futures import ThreadPoolExecutor, as_completed
+    # 2. Fetch from external APIs in parallel - DISABLED for performance
+    # The user wants to rely on the local DB cache (populated in background)
+    # instead of hitting external APIs on every keystroke.
     
-    # Only fetch if query is long enough to be specific
-    if len(normalized_query) >= 2:
-        with ThreadPoolExecutor(max_workers=3) as executor:
-            future_to_source = {
-                executor.submit(fetch_rule34_tags, normalized_query, limit): "rule34",
-                executor.submit(fetch_danbooru_tags, normalized_query, limit): "danbooru",
-                executor.submit(fetch_e621_tags, normalized_query, limit): "e621",
-            }
-            
-            for future in as_completed(future_to_source):
-                try:
-                    results = future.result()
-                    for tag in results:
-                        name_lower = tag.name.lower()
-                        
-                        # Merge logic: if new, add it. If exists, keep higher frequency/priority
-                        should_replace = False
-                        is_new = False
-                        
-                        if name_lower not in merged:
-                            merged[name_lower] = tag
-                            is_new = True
-                            tags_to_save.append(tag)
-                        else:
-                            existing = merged[name_lower]
-                            if existing.source == "prompt":
-                                continue
-                            
-                            # Prefer higher frequency
-                            if tag.frequency > existing.frequency:
-                                should_replace = True
-                            elif tag.frequency == existing.frequency:
-                                new_prio = priority.get(tag.source, 99)
-                                old_prio = priority.get(existing.source, 99)
-                                if new_prio < old_prio:
-                                    should_replace = True
-                            
-                            if should_replace:
-                                merged[name_lower] = tag
-                                tags_to_save.append(tag)
-                                
-                except Exception as e:
-                    print(f"External API fetch failed: {e}")
+    # if len(normalized_query) >= 2:
+    #     with ThreadPoolExecutor(max_workers=3) as executor:
+    #         future_to_source = {
+    #             executor.submit(fetch_rule34_tags, normalized_query, limit): "rule34",
+    #             executor.submit(fetch_danbooru_tags, normalized_query, limit): "danbooru",
+    #             executor.submit(fetch_e621_tags, normalized_query, limit): "e621",
+    #         }
+    #         
+    #         for future in as_completed(future_to_source):
+    #             try:
+    #                 results = future.result()
+    #                 for tag in results:
+    #                     name_lower = tag.name.lower()
+    #                     
+    #                     # Merge logic: if new, add it. If exists, keep higher frequency/priority
+    #                     should_replace = False
+    #                     
+    #                     if name_lower not in merged:
+    #                         merged[name_lower] = tag
+    #                         tags_to_save.append(tag)
+    #                     else:
+    #                         existing = merged[name_lower]
+    #                         if existing.source == "prompt":
+    #                             continue
+    #                         
+    #                         # Prefer higher frequency
+    #                         if tag.frequency > existing.frequency:
+    #                             should_replace = True
+    #                         elif tag.frequency == existing.frequency:
+    #                             new_prio = priority.get(tag.source, 99)
+    #                             old_prio = priority.get(existing.source, 99)
+    #                             if new_prio < old_prio:
+    #                                 should_replace = True
+    #                         
+    #                         if should_replace:
+    #                             merged[name_lower] = tag
+    #                             tags_to_save.append(tag)
+    #                             
+    #             except Exception as e:
+    #                 print(f"External API fetch failed: {e}")
 
     # Schedule background save for new/updated tags
     if tags_to_save:

@@ -153,10 +153,25 @@ export default function PromptStudio() {
       : [],
     [selectedWorkflowSchema]
   );
-  const visibleSchema = useMemo(
-    () => stripSchemaMeta(selectedWorkflowSchema || {}),
-    [selectedWorkflowSchema]
-  );
+  const visibleSchema = useMemo(() => {
+    if (!selectedWorkflow) return {};
+
+    const hiddenNodes = new Set(
+      Object.entries(selectedWorkflow.graph_json || {})
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .filter(([_, node]: [string, any]) => node?._meta?.hiddenInControls)
+        .map(([id]) => String(id))
+    );
+
+    return Object.fromEntries(
+      Object.entries(selectedWorkflow.input_schema || {}).filter(([key, val]: [string, any]) => {
+        if (key.startsWith("__")) return false; // Hide internal keys like __node_order
+        if (val.__hidden) return false;
+        if (!val.x_node_id && val.x_node_id !== 0) return true;
+        return !hiddenNodes.has(String(val.x_node_id));
+      })
+    );
+  }, [selectedWorkflow]);
   const selectedProject = selectedProjectId ? projects.find((p) => String(p.id) === selectedProjectId) || null : null;
   const draftsProject = projects.find((p) => p.slug === "drafts");
   const selectedEngineHealth = engineHealth.find((h) => String(h.engine_id) === selectedEngineId);
@@ -274,24 +289,7 @@ export default function PromptStudio() {
     handleFormChange({ ...formData, [field]: value });
   };
 
-  const visibleSchema = useMemo(() => {
-    if (!selectedWorkflow) return null;
 
-    const hiddenNodes = new Set(
-      Object.entries(selectedWorkflow.graph_json || {})
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .filter(([_, node]: [string, any]) => node?._meta?.hiddenInControls)
-        .map(([id]) => String(id))
-    );
-
-    return Object.fromEntries(
-      Object.entries(selectedWorkflow.input_schema || {}).filter(([_, val]: [string, any]) => {
-        if (val.__hidden) return false;
-        if (!val.x_node_id && val.x_node_id !== 0) return true;
-        return !hiddenNodes.has(String(val.x_node_id));
-      })
-    );
-  }, [selectedWorkflow]);
 
   useEffect(() => {
     const state = location.state as { loadParams?: GalleryItem } | null;
@@ -561,13 +559,39 @@ export default function PromptStudio() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [selectedWorkflowId, isSubmitting, engineOffline, jobStatus, formData]);
 
+  // Use data from GenerationContext if available to avoid duplicate API calls
+  const generation = useGeneration();
+  const contextWorkflows = generation?.workflows;
+  const contextProjects = generation?.projects;
+
+  useEffect(() => {
+    // If GenerationContext already has workflows, use them instead of fetching again
+    if (contextWorkflows && contextWorkflows.length > 0) {
+      setWorkflows(contextWorkflows);
+      if (!selectedWorkflowId && contextWorkflows.length > 0) {
+        setSelectedWorkflowId(String(contextWorkflows[0].id));
+      }
+    }
+  }, [contextWorkflows, selectedWorkflowId]);
+
+  useEffect(() => {
+    // If GenerationContext already has projects, use them
+    if (contextProjects && contextProjects.length > 0) {
+      setProjects(contextProjects);
+    }
+  }, [contextProjects]);
+
   useEffect(() => {
     const loadData = async () => {
       try {
+        // Only fetch data that GenerationContext doesn't provide or hasn't loaded yet
+        const needsWorkflows = !contextWorkflows || contextWorkflows.length === 0;
+        const needsProjects = !contextProjects || contextProjects.length === 0;
+
         const [enginesRes, workflowsRes, projectsRes] = await Promise.allSettled([
           api.getEngines(),
-          api.getWorkflows(),
-          api.getProjects(),
+          needsWorkflows ? api.getWorkflows() : Promise.resolve([]),
+          needsProjects ? api.getProjects() : Promise.resolve([]),
         ]);
 
         if (enginesRes.status === "fulfilled") {
@@ -578,21 +602,22 @@ export default function PromptStudio() {
           console.error("Failed to load engines", enginesRes.reason);
         }
 
-        if (workflowsRes.status === "fulfilled") {
+        if (needsWorkflows && workflowsRes.status === "fulfilled") {
           const workflowsData = workflowsRes.value;
-          setWorkflows(workflowsData);
-          if (!selectedWorkflowId && workflowsData.length > 0) setSelectedWorkflowId(String(workflowsData[0].id));
-        } else {
+          if (workflowsData.length > 0) {
+            setWorkflows(workflowsData);
+            if (!selectedWorkflowId && workflowsData.length > 0) setSelectedWorkflowId(String(workflowsData[0].id));
+          }
+        } else if (needsWorkflows && workflowsRes.status === "rejected") {
           console.error("Failed to load workflows", workflowsRes.reason);
-          // If workflows specifically fail, we could set a workflowError state, 
-          // but for now relying on the empty list fallback or global error if everything fails.
-          // Setting the global error would hide successful engines, so better to log and maybe show toast.
-          // The dropdown will show "no pipes found" which is acceptable fallback.
         }
 
-        if (projectsRes.status === "fulfilled") {
-          setProjects(projectsRes.value);
-        } else {
+        if (needsProjects && projectsRes.status === "fulfilled") {
+          const projectsData = projectsRes.value;
+          if (projectsData.length > 0) {
+            setProjects(projectsData);
+          }
+        } else if (needsProjects && projectsRes.status === "rejected") {
           console.warn("Failed to load projects", projectsRes.reason);
         }
 
@@ -614,14 +639,13 @@ export default function PromptStudio() {
 
     loadData();
     pollHealth();
-    pollHealth();
     healthIntervalRef.current = setInterval(pollHealth, 2500);
 
     return () => {
       if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
       if (healthIntervalRef.current) clearInterval(healthIntervalRef.current);
     };
-  }, []);
+  }, [contextWorkflows, contextProjects]);
 
   // --- Install Logic ---
   const startInstall = async (missing: string[]) => {
@@ -722,7 +746,7 @@ export default function PromptStudio() {
   };
 
   // Delegate to Context for Global Header button
-  const generation = useGeneration();
+  // Note: 'generation' is already defined earlier in the component
   const handleGenerateRef = useRef(handleGenerate);
   handleGenerateRef.current = handleGenerate;
   const formDataRef = useRef(formData);
