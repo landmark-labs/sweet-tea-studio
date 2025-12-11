@@ -198,27 +198,40 @@ def process_job(job_id: int):
             
             saved_images = []
             for img_data in images:
-                base_dir = engine.output_dir
-                if not base_dir:
-                    raise ComfyResponseError("Engine output directory is not configured.")
-                subfolder = img_data.get('subfolder')
                 filename = img_data['filename']
-
-                # Original path from Comfy
-                full_path = os.path.join(base_dir, subfolder, filename) if subfolder else os.path.join(base_dir, filename)
-
-                # If a custom target directory is set, move the file there
-                if target_output_dir and target_output_dir != base_dir:
-                    dest_dir = os.path.join(target_output_dir, subfolder) if subfolder else target_output_dir
-                    os.makedirs(dest_dir, exist_ok=True)
-                    dest_path = os.path.join(dest_dir, filename)
+                img_url = img_data.get('url')
+                
+                # Determine where to save this image
+                if target_output_dir:
+                    save_dir = target_output_dir
+                elif engine.output_dir:
+                    save_dir = engine.output_dir
+                else:
+                    raise ComfyResponseError("No output directory configured.")
+                
+                os.makedirs(save_dir, exist_ok=True)
+                full_path = os.path.join(save_dir, filename)
+                
+                # Download the image via HTTP from ComfyUI (bypasses all path issues)
+                try:
+                    import urllib.request
+                    with urllib.request.urlopen(img_url, timeout=30) as response:
+                        image_bytes = response.read()
+                    with open(full_path, 'wb') as f:
+                        f.write(image_bytes)
+                    print(f"Downloaded and saved: {full_path}")
+                except Exception as e:
+                    print(f"Failed to download image from {img_url}: {e}")
+                    # Fallback: try the old filesystem approach
+                    base_dir = engine.output_dir
+                    subfolder = img_data.get('subfolder', '')
+                    src_path = os.path.join(base_dir, subfolder, filename) if subfolder else os.path.join(base_dir, filename)
                     try:
-                        shutil.copy2(full_path, dest_path)
-                        full_path = dest_path
-                    except FileNotFoundError:
-                        print(f"Generated file missing on disk: {full_path}")
-                    except OSError as e:
-                        print(f"Failed to move generated file to target directory: {e}")
+                        if os.path.exists(src_path):
+                            shutil.copy2(src_path, full_path)
+                            print(f"Fallback copy succeeded: {full_path}")
+                    except Exception as copy_err:
+                        print(f"Fallback copy also failed: {copy_err}")
 
                 # Build prompt history metadata so the latest prompt is always surfaced while retaining provenance
                 # Normalize any prior history that may have come through the workflow

@@ -194,10 +194,20 @@ class ComfyClient:
                     if progress_callback:
                         progress_callback(message)
 
-                    if message['type'] == 'executing':
-                        data = message['data']
-                        if data['node'] is None and data['prompt_id'] == prompt_id:
-                            break # Execution is done
+                if message['type'] == 'execution_error':
+                    # ComfyUI reports a node execution failure
+                    data = message.get('data', {})
+                    node_id = data.get('node_id', 'unknown')
+                    node_type = data.get('node_type', 'unknown')
+                    exception_message = data.get('exception_message', 'Unknown error')
+                    raise ComfyResponseError(
+                        f"ComfyUI execution failed at node {node_id} ({node_type}): {exception_message}"
+                    )
+
+                if message['type'] == 'executing':
+                    data = message['data']
+                    if data['node'] is None and data['prompt_id'] == prompt_id:
+                        break # Execution is done
 
                 elif isinstance(out, bytes):
                     # ComfyUI Binary Message Format:
