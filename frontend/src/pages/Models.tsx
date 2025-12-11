@@ -11,35 +11,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { ArrowDownCircle, ExternalLink, FolderOpen, Info, Link2, Rocket, Sparkles, Trash2 } from "lucide-react";
 import { useUndoRedo } from "@/lib/undoRedo";
 
-const comfyModelFolders = [
-  {
-    name: "Checkpoints",
-    path: "ComfyUI/models/checkpoints",
-    description: "Stable Diffusion or custom checkpoints used for base generations.",
-  },
-  {
-    name: "LoRAs",
-    path: "ComfyUI/models/loras",
-    description: "Style, character, or specialty LoRAs for fine-tuning outputs.",
-  },
-  {
-    name: "ControlNets",
-    path: "ComfyUI/models/controlnet",
-    description: "Edge, depth, and pose ControlNet weights.",
-  },
-  {
-    name: "Upscalers / VAEs",
-    path: "ComfyUI/models/upscale (or vae)",
-    description: "High-resolution upscalers or alternate VAEs.",
-  },
-  {
-    name: "vlm / vision",
-    path: "ComfyUI/models/vlm",
-    description: "vision-language models used by sweet tea's captioning/tagging.",
-  },
-];
-
-type ModelCategory = "Checkpoint" | "LoRA" | "ControlNet" | "Upscaler" | "VLM";
+type ModelCategory = string;
 
 type InstalledModel = {
   id: string;
@@ -66,19 +38,28 @@ type DownloadJob = {
   eta?: string;
 };
 
+type ModelFolder = {
+  name: string;
+  path: string;
+  items: { name: string; path: string; type: "file" | "directory" }[];
+};
+
 // Models are now fetched from API - see fetchModels()
 
 export default function Models() {
   const [models, setModels] = useState<InstalledModel[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [downloadQueue, setDownloadQueue] = useState<DownloadJob[]>([]);
+  const [modelFolders, setModelFolders] = useState<ModelFolder[]>([]);
+  const [activeFolder, setActiveFolder] = useState<string>("");
+  const [modelsRoot, setModelsRoot] = useState<string>("");
 
   // New State for Dynamic Download Rows
   const [downloadRows, setDownloadRows] = useState<{ target: string; url: string; id: number }[]>([
     { target: "checkpoints", url: "", id: Date.now() }
   ]);
 
-  const [selectedCategory, setSelectedCategory] = useState<ModelCategory>("Checkpoint");
+  const [selectedCategory, setSelectedCategory] = useState<ModelCategory>("all");
   const [search, setSearch] = useState("");
   // Removed single targetFolder state since it's now per-row
   const { registerStateChange } = useUndoRedo();
@@ -135,9 +116,26 @@ export default function Models() {
     }
   };
 
+  const fetchModelFolders = async () => {
+    try {
+      const res = await fetch("/api/v1/models/directories");
+      if (!res.ok) return;
+      const data = await res.json();
+      setModelsRoot(data.root || "");
+      setModelFolders(data.folders || []);
+      if (!activeFolder && data.folders?.length) {
+        setActiveFolder(data.folders[0].name);
+      }
+    } catch (e) {
+      console.error("Failed to load model folders", e);
+      setModelFolders([]);
+    }
+  };
+
   useEffect(() => {
     fetchModels();
     fetchDownloads();
+    fetchModelFolders();
     // Poll downloads every 2 seconds
     const interval = setInterval(fetchDownloads, 2000);
     return () => clearInterval(interval);
@@ -164,7 +162,10 @@ export default function Models() {
         m.name.toLowerCase().includes(term) ||
         m.location.toLowerCase().includes(term) ||
         (m.notes?.toLowerCase().includes(term) ?? false);
-      return matchesSearch && (selectedCategory ? m.category === selectedCategory : true);
+      if (selectedCategory === "all" || !selectedCategory) return matchesSearch;
+
+      const pathSegments = m.location.toLowerCase().split(/[\\/]/);
+      return matchesSearch && pathSegments.includes(selectedCategory.toLowerCase());
     });
   }, [models, search, selectedCategory]);
 
@@ -240,7 +241,7 @@ export default function Models() {
         <div className="flex items-center gap-3">
           <Sparkles className="text-blue-600" size={24} />
           <div>
-            <h1 className="text-2xl font-semibold text-slate-900">Models & Checkpoints</h1>
+            <h1 className="text-2xl font-semibold text-slate-900">models</h1>
             <p className="text-sm text-slate-600">
               manage everything sweet tea feeds to comfyui: checkpoints, loras, controlnets, upscalers, and vlm assets.
             </p>
@@ -257,24 +258,46 @@ export default function Models() {
               className="text-blue-500 cursor-pointer hover:text-blue-600 active:scale-95 transition-all"
               size={18}
               onClick={() => {
-                const manual = prompt(
-                  "Manually specify the root models directory if detection failed.\n\nNote: This is a client-side override for generating download commands.",
-                  "ComfyUI/models"
-                );
-                if (manual) alert(`Path override set to: ${manual} (This is a visual confirmation only - functionality to persist this to backend is pending backend API update).`);
+                alert(modelsRoot ? `Detected models directory: ${modelsRoot}` : "No models directory detected yet.");
               }}
             />
           </CardHeader>
-          <CardContent className="space-y-3 flex-1 overflow-y-auto max-h-[600px]">
-            {comfyModelFolders.map((folder) => (
-              <div key={folder.name} className="rounded-md border border-slate-200 p-3 bg-white">
-                <div className="flex items-center justify-between text-sm font-medium text-slate-800">
-                  <span>{folder.name}</span>
-                  <span className="text-xs text-slate-500 break-all">{folder.path}</span>
-                </div>
-                <p className="text-xs text-slate-500 mt-1">{folder.description}</p>
+          <CardContent className="flex gap-3 flex-1 min-h-[320px]">
+            <ScrollArea className="w-1/3 border rounded-md max-h-[600px]">
+              <div className="p-2 space-y-1">
+                {modelFolders.map((folder) => (
+                  <button
+                    key={folder.name}
+                    className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${activeFolder === folder.name ? "bg-blue-50 text-blue-700 border border-blue-200" : "hover:bg-slate-50"}`}
+                    onClick={() => setActiveFolder(folder.name)}
+                  >
+                    <div className="font-medium">{folder.name}</div>
+                    <div className="text-[11px] text-slate-500 break-all">{folder.path}</div>
+                  </button>
+                ))}
+                {!modelFolders.length && (
+                  <div className="text-sm text-slate-500 px-2 py-1">no model folders found</div>
+                )}
               </div>
-            ))}
+            </ScrollArea>
+            <ScrollArea className="flex-1 border rounded-md max-h-[600px]">
+              <div className="p-3 space-y-2">
+                {modelFolders
+                  .find((f) => f.name === activeFolder)?.items.map((item) => (
+                    <div key={item.path} className="flex items-center justify-between rounded border border-slate-200 px-3 py-2 text-sm bg-white">
+                      <span className="flex items-center gap-2">
+                        {item.type === "directory" ? <FolderOpen size={14} className="text-slate-500" /> : <Link2 size={14} className="text-slate-400" />}
+                        {item.name}
+                      </span>
+                      <span className="text-[11px] text-slate-500 break-all">{item.path}</span>
+                    </div>
+                  ))}
+                {!modelFolders.length && <div className="text-sm text-slate-500">select or add a models directory to explore contents.</div>}
+                {modelFolders.length > 0 && !modelFolders.find((f) => f.name === activeFolder)?.items.length && (
+                  <div className="text-sm text-slate-500">no files found in this folder.</div>
+                )}
+              </div>
+            </ScrollArea>
           </CardContent>
         </Card>
 
@@ -411,11 +434,12 @@ export default function Models() {
                 <SelectValue placeholder="Filter by type" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="Checkpoint">Checkpoint</SelectItem>
-                <SelectItem value="LoRA">LoRA</SelectItem>
-                <SelectItem value="ControlNet">ControlNet</SelectItem>
-                <SelectItem value="Upscaler">Upscaler</SelectItem>
-                <SelectItem value="VLM">VLM</SelectItem>
+                <SelectItem value="all">all</SelectItem>
+                {modelFolders.map((folder) => (
+                  <SelectItem key={folder.name} value={folder.name}>
+                    {folder.name}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
             <Button variant="outline" onClick={fetchModels} disabled={isLoading}>
