@@ -407,7 +407,8 @@ export default function PromptStudio() {
     if (!jobStartTime) setJobStartTime(Date.now());
 
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${wsProtocol}//${window.location.host}/api/v1/jobs/${lastJobId}/ws`;
+    const wsApiPath = window.location.pathname.startsWith('/studio') ? '/sts-api/api/v1' : '/api/v1';
+    const wsUrl = `${wsProtocol}//${window.location.host}${wsApiPath}/jobs/${lastJobId}/ws`;
     console.log(`[WS] Connecting to: ${wsUrl}`);
 
     const ws = new WebSocket(wsUrl);

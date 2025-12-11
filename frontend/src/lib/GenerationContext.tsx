@@ -231,7 +231,8 @@ export function GenerationProvider({ children }: GenerationProviderProps) {
 
             // Start WebSocket to track progress
             const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const ws = new WebSocket(`${wsProtocol}//${window.location.host}/api/v1/jobs/${job.id}/ws`);
+            const wsApiPath = window.location.pathname.startsWith('/studio') ? '/sts-api/api/v1' : '/api/v1';
+            const ws = new WebSocket(`${wsProtocol}//${window.location.host}${wsApiPath}/jobs/${job.id}/ws`);
             ws.onmessage = (event) => {
                 const data = JSON.parse(event.data);
                 if (data.type === "status") {

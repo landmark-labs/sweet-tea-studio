@@ -1,4 +1,10 @@
-const API_BASE = "/api/v1";
+// Detect if running behind nginx at /studio/ path - use /sts-api prefix
+// Otherwise (local dev), use /api directly
+export const isStudioPath = typeof window !== 'undefined' && window.location.pathname.startsWith('/studio');
+const API_BASE = isStudioPath ? "/sts-api/api/v1" : "/api/v1";
+
+// Utility function to get the API base path - use this in components
+export const getApiBase = () => API_BASE;
 
 export interface Engine {
     id: number;

@@ -6,6 +6,7 @@ import { useEffect, useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { X, Play, Loader2, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getApiBase } from "@/lib/api";
 
 interface ConnectionBannerProps {
     className?: string;
@@ -20,7 +21,7 @@ export function ConnectionBanner({ className }: ConnectionBannerProps) {
 
     const checkConnection = async () => {
         try {
-            const res = await fetch("/api/v1/monitoring/status/summary");
+            const res = await fetch(`${getApiBase()}/monitoring/status/summary`);
             if (res.ok) {
                 const data = await res.json();
                 const connected = data.engine?.is_connected ?? data.engine?.state === "ok";
@@ -42,7 +43,7 @@ export function ConnectionBanner({ className }: ConnectionBannerProps) {
     const launchComfyUI = async () => {
         setIsLaunching(true);
         try {
-            const res = await fetch("/api/v1/engines/comfyui/launch", {
+            const res = await fetch(`${getApiBase()}/engines/comfyui/launch`, {
                 method: "POST",
             });
             if (res.ok) {

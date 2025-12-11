@@ -4,7 +4,7 @@
  * Includes ComfyUI connection state and launch button
  */
 import { useEffect, useState } from "react";
-import { api, ComfyLaunchConfig } from "@/lib/api";
+import { api, getApiBase, ComfyLaunchConfig } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { labels } from "@/ui/labels";
 import {
@@ -21,6 +21,7 @@ import {
     DialogFooter,
     DialogHeader,
     DialogTitle,
+    DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -143,7 +144,7 @@ export function StatusBar() {
 
     const fetchStatus = async () => {
         try {
-            const res = await fetch("/api/v1/monitoring/status/summary");
+            const res = await fetch(`${getApiBase()}/monitoring/status/summary`);
             if (res.ok) {
                 const data = await res.json();
                 setStatus(data);
@@ -178,7 +179,7 @@ export function StatusBar() {
         setActionFeedback(null);
         setEngineAction(action === "start" ? "starting" : "stopping");
         try {
-            const res = await fetch(`/api/v1/monitoring/comfyui/${action}`, {
+            const res = await fetch(`${getApiBase()}/monitoring/comfyui/${action}`, {
                 method: "POST",
             });
             const data = await res.json();
