@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
 import { Outlet, NavLink } from "react-router-dom";
-import { PlusCircle, Settings, Library, Image as ImageIcon, GitBranch, ChevronLeft, ChevronRight, HardDrive, FolderOpen } from "lucide-react";
+import { PlusCircle, Settings, Library, Image as ImageIcon, GitBranch, ChevronLeft, ChevronRight, HardDrive, FolderOpen, Database, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { UndoRedoBar } from "@/components/UndoRedoBar";
 import { ConnectionIndicator } from "@/components/ConnectionIndicator";
 import { labels } from "@/ui/labels";
+import { api } from "@/lib/api";
 
 const navItems = [
   { to: "/", label: labels.nav.generation, icon: PlusCircle },
@@ -27,6 +28,7 @@ import { useGeneration } from "@/lib/GenerationContext";
 
 export default function Layout() {
   const [collapsed, setCollapsed] = useState(false);
+  const [isExportingDb, setIsExportingDb] = useState(false);
 
   // Persisted Panel States
   const [feedOpen, setFeedOpen] = useState(() => localStorage.getItem("ds_feed_open") !== "false");
@@ -37,6 +39,19 @@ export default function Layout() {
   useEffect(() => localStorage.setItem("ds_feed_open", String(feedOpen)), [feedOpen]);
   useEffect(() => localStorage.setItem("ds_library_open", String(libraryOpen)), [libraryOpen]);
   useEffect(() => localStorage.setItem("ds_perf_hud_open", String(perfHudOpen)), [perfHudOpen]);
+
+  const handleExportDatabase = async () => {
+    setIsExportingDb(true);
+    try {
+      const result = await api.exportDatabaseToComfy();
+      alert(`exported profile.db to ${result.path}`);
+    } catch (e) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      alert((e as any)?.message || "Failed to export database");
+    } finally {
+      setIsExportingDb(false);
+    }
+  };
 
   return (
     <div className="flex h-screen w-screen bg-gradient-to-br from-background via-surface to-muted text-foreground overflow-hidden">
@@ -134,6 +149,22 @@ export default function Layout() {
                   performance hud
                 </Button>
               </div>
+
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-xs"
+                onClick={handleExportDatabase}
+                disabled={isExportingDb}
+                title="vacuum profile.db and drop a zip into ComfyUI/sweet_tea"
+              >
+                {isExportingDb ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Database className="w-4 h-4 mr-2" />
+                )}
+                save db to comfy
+              </Button>
 
               <UndoRedoBar />
             </div>

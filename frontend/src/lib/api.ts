@@ -224,6 +224,15 @@ export const api = {
         return res.json();
     },
 
+    exportDatabaseToComfy: async (): Promise<{ path: string; filename: string; sweet_tea_dir: string }> => {
+        const res = await fetch(`${API_BASE}/portfolio/export`, { method: "POST" });
+        if (!res.ok) {
+            const errorData = await res.json().catch(() => ({}));
+            throw new Error(errorData.detail || "Failed to export database");
+        }
+        return res.json();
+    },
+
 
     // --- Collections ---
     getCollections: async (): Promise<Collection[]> => {
