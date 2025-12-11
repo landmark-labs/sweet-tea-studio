@@ -220,7 +220,14 @@ export const api = {
     getComfyUIStatus: async (): Promise<{ running: boolean; pid?: number; can_launch: boolean; error?: string }> => {
         const res = await fetch(`${API_BASE}/monitoring/comfyui/status`);
         if (!res.ok) return { running: false, can_launch: false, error: "Failed to fetch status" };
-        return res.json();
+        const data = await res.json();
+        // Backend returns "available" but we use "can_launch" in the frontend
+        return {
+            running: data.running,
+            pid: data.pid,
+            can_launch: data.available ?? false,
+            error: data.last_error,
+        };
     },
 
     getComfyUILaunchConfig: async (): Promise<ComfyLaunchConfig> => {

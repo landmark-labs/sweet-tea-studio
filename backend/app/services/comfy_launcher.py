@@ -241,16 +241,18 @@ class ComfyUILauncher:
                 self._process = subprocess.Popen(
                     cmd,
                     cwd=config.path,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
+                    # Use DEVNULL to prevent blocking - PIPE buffers fill up and block the process
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
                     creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0,
                 )
 
-                await asyncio.sleep(1)
+                # Give it a bit more time to crash if there's an immediate error
+                await asyncio.sleep(2)
 
                 if self._process.poll() is not None:
-                    _, stderr = self._process.communicate()
-                    self._last_error = f"ComfyUI failed to start: {stderr.decode()[:500]}"
+                    exit_code = self._process.returncode
+                    self._last_error = f"ComfyUI process exited immediately with code {exit_code}. Check ComfyUI logs or try running manually."
                     self._last_action_at = time.time()
                     return {
                         "success": False,
