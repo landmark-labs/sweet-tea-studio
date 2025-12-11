@@ -120,7 +120,7 @@ export default function PromptLibrary() {
     if (isLoading) return <div className="p-8">Loading library...</div>;
 
     return (
-        <div className="p-8 max-w-7xl mx-auto">
+        <div className="h-full overflow-auto p-8 max-w-7xl mx-auto">
             <div className="flex items-center justify-between mb-8">
                 <h1 className="text-3xl font-bold tracking-tight text-slate-900">Prompt Library</h1>
                 <form onSubmit={handleSearch} className="flex gap-2 w-full max-w-sm">
