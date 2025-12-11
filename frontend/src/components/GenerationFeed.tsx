@@ -30,7 +30,7 @@ export function GenerationFeed({ items, onSelectPreview, onGenerate }: Generatio
   return (
     <div className="w-full h-full pointer-events-auto">
       {activeItem ? (
-        <div className="shadow-lg border border-slate-200 bg-white/95 backdrop-blur overflow-hidden rounded-lg">
+        <div className="shadow-lg border border-blue-100 bg-blue-50/95 backdrop-blur overflow-hidden rounded-lg">
           {/* Header */}
           <div className="flex items-center justify-between px-3 py-2 border-b border-slate-200 bg-slate-50/50">
             <div className="text-xs font-semibold text-slate-700 flex items-center gap-2">
@@ -81,16 +81,16 @@ export function GenerationFeed({ items, onSelectPreview, onGenerate }: Generatio
 
               {/* Buttons */}
               <div className="space-y-1.5">
-                  {activeItem.previewPath && !activeItem.previewBlob && (
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      className="h-7 w-full text-xs"
-                      onClick={() => activeItem.previewPath && onSelectPreview?.(activeItem)}
-                    >
-                      view result
-                    </Button>
-                  )}
+                {activeItem.previewPath && !activeItem.previewBlob && (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="h-7 w-full text-xs"
+                    onClick={() => activeItem.previewPath && onSelectPreview?.(activeItem)}
+                  >
+                    view result
+                  </Button>
+                )}
                 {onGenerate && (
                   <Button
                     size="sm"
@@ -116,11 +116,19 @@ export function GenerationFeed({ items, onSelectPreview, onGenerate }: Generatio
                     style={{ width: '256px', height: '256px', flexShrink: 0 }}
                     className="rounded overflow-hidden bg-slate-100 border border-slate-200 cursor-pointer hover:ring-2 hover:ring-blue-400 transition-all"
                     onClick={() => item.previewPath && onSelectPreview?.(item)}
+                    draggable
+                    onDragStart={(e) => {
+                      const path = item.previewPath || "";
+                      e.dataTransfer.setData("text/plain", path);
+                      e.dataTransfer.setData("application/x-sweet-tea-image", path);
+                      e.dataTransfer.effectAllowed = "copy";
+                    }}
                   >
                     <img
                       src={`/api/v1/gallery/image/path?path=${encodeURIComponent(item.previewPath || "")}`}
                       alt={`Job ${item.jobId}`}
                       className="w-full h-full object-cover"
+                      draggable={false}
                     />
                   </div>
                 ))

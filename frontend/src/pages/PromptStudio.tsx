@@ -721,7 +721,7 @@ export default function PromptStudio() {
       <div className="w-[480px] flex-none bg-white border-r hidden xl:block overflow-hidden">
         <PanelGroup direction="vertical">
           <Panel defaultSize={40} minSize={20}>
-            <FileExplorer engineId={selectedEngineId} projectId={selectedProjectId || undefined} onFileSelect={handleFileSelect} />
+            <FileExplorer engineId={selectedEngineId} projectId={selectedProjectId || undefined} projectName={selectedProject?.name} onFileSelect={handleFileSelect} />
           </Panel>
 
           <PanelResizeHandle className="h-2 bg-slate-100 hover:bg-slate-200 transition-colors flex items-center justify-center cursor-row-resize border-y border-slate-200">
@@ -751,7 +751,7 @@ export default function PromptStudio() {
       </div>
 
       {/* 2. Configuration (Left) - NEW LAYOUT */}
-      <div className="w-[340px] flex-none bg-white border-r flex flex-col h-full overflow-hidden">
+      <div className="w-[340px] flex-none bg-blue-50 border-r border-blue-100 flex flex-col h-full overflow-hidden">
 
         {/* Sticky Header Section */}
         <div className="flex-none p-4 space-y-4 border-b bg-slate-50/50 backdrop-blur z-10">
@@ -983,54 +983,7 @@ export default function PromptStudio() {
         }}
       />
 
-      {/* 4. Draggable Panels Area (Feed & Library) & Running Gallery Override */}
-      <DraggablePanel
-        persistenceKey="ds_feed_pos"
-        defaultPosition={{ x: 20, y: 100 }}
-        className={`bg-white border-l shadow-xl z-20 ${feedOpen ? "" : "hidden"}`}
-        style={{ width: 'auto', maxWidth: '90vw' }}
-      >
-        <div className="p-2 bg-slate-100 border-b text-xs font-semibold">Generation Feed</div>
-        {/* HORIZONTAL LAYOUT: Feed on left, Recent images on right */}
-        <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'stretch' }}>
-          {/* LEFT: Generation Feed (preview + stats) */}
-          <div style={{ flexShrink: 0 }}>
-            <GenerationFeed
-              items={generationFeed}
-              onSelectPreview={(item) => {
-                if (!item.previewPath) return;
-                handlePreviewSelect(item.previewPath, {
-                  job_id: item.jobId,
-                  status: item.status,
-                  started_at: item.startedAt,
-                  estimated_total_steps: item.estimatedTotalSteps
-                });
-              }}
-              onGenerate={() => handleGenerate(formData)}
-            />
-          </div>
-
-        </div>
-
-      </DraggablePanel >
-
-
-      <DraggablePanel
-        defaultPosition={{ x: 100, y: 100 }}
-        persistenceKey="ds_library_pos"
-        className={`h-[600px] w-[400px] z-30 ${libraryOpen ? "" : "hidden"}`}
-      >
-        <PromptLibraryQuickPanel
-          open={libraryOpen}
-          prompts={prompts}
-          onApply={applyPrompt}
-          onSearchChange={handlePromptSearchChange}
-          onSearchSubmit={submitPromptSearch}
-          searchValue={promptSearch}
-          onClose={() => { }} // Controlled by Layout now
-          loading={promptLoading}
-        />
-      </DraggablePanel>
+      {/* Floating panels are now rendered globally in Layout.tsx */}
 
       <InstallStatusDialog
         open={installOpen}

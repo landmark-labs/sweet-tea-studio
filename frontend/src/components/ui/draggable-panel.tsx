@@ -49,25 +49,25 @@ export function DraggablePanel({ children, className, defaultPosition = { x: 0, 
     useEffect(() => {
         const handleMouseMove = (e: MouseEvent) => {
             if (!isDragging) return;
-            
+
             // Calculate new position
             let newX = e.clientX - dragStart.x;
             let newY = e.clientY - dragStart.y;
-            
+
             // Get panel dimensions for boundary calculation
             if (nodeRef.current) {
                 const rect = nodeRef.current.getBoundingClientRect();
                 const panelWidth = rect.width;
                 const panelHeight = rect.height;
-                
+
                 // Constrain to viewport boundaries
                 const maxX = window.innerWidth - panelWidth;
                 const maxY = window.innerHeight - panelHeight;
-                
+
                 newX = Math.max(0, Math.min(newX, maxX));
                 newY = Math.max(0, Math.min(newY, maxY));
             }
-            
+
             setPosition({ x: newX, y: newY });
         };
 
@@ -98,16 +98,22 @@ export function DraggablePanel({ children, className, defaultPosition = { x: 0, 
             style={{
                 left: position.x,
                 top: position.y,
-                userSelect: "none"
+                userSelect: isDragging ? "none" : "auto"
+            }}
+            onMouseDown={(e) => {
+                // Only allow dragging from elements that have data-drag-handle or have cursor-move class
+                const target = e.target as HTMLElement;
+                const isDragHandle = target.closest('[data-drag-handle]') || target.classList.contains('cursor-move') || target.closest('.cursor-move');
+                if (!isDragHandle) return;
+
+                // Don't drag if clicking buttons or inputs
+                if (target.tagName === 'BUTTON' || target.tagName === 'INPUT' || target.closest('button') || target.closest('input')) {
+                    return;
+                }
+                handleMouseDown(e);
             }}
         >
-            {/* Drag Handle - Only visible header area is draggable */}
-            <div
-                className="cursor-move"
-                onMouseDown={handleMouseDown}
-            >
-                {children}
-            </div>
+            {children}
         </div>
     );
 }

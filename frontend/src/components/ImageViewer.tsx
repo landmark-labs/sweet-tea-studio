@@ -151,6 +151,14 @@ export function ImageViewer({
     // Keyboard Shortcuts
     React.useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
+            // Skip if user is typing in an input, textarea, or contenteditable element
+            const activeEl = document.activeElement;
+            const tagName = activeEl?.tagName?.toLowerCase();
+            const isEditable = activeEl?.hasAttribute('contenteditable');
+            if (tagName === 'input' || tagName === 'textarea' || isEditable) {
+                return;
+            }
+
             if (e.key === "ArrowLeft") {
                 setSelectedIndex(prev => Math.max(0, prev - 1));
             }

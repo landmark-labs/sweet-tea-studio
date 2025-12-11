@@ -18,6 +18,12 @@ const navItems = [
 import { PerformanceHUD } from "@/components/PerformanceHUD";
 import { StatusBar } from "@/components/StatusBar";
 import { ConnectionBanner } from "@/components/ConnectionBanner";
+import { ComfyUIControl } from "@/components/ComfyUIControl";
+import { DraggablePanel } from "@/components/ui/draggable-panel";
+import { GenerationFeed } from "@/components/GenerationFeed";
+import { PromptLibraryQuickPanel } from "@/components/PromptLibraryQuickPanel";
+import { useGenerationFeedStore, usePromptLibraryStore } from "@/lib/stores/promptDataStore";
+import { useGeneration } from "@/lib/GenerationContext";
 
 export default function Layout() {
   const [collapsed, setCollapsed] = useState(false);
@@ -93,8 +99,11 @@ export default function Layout() {
       <main className="flex-1 overflow-auto bg-gradient-to-b from-surface/50 to-background">
         <div className="w-full h-full flex flex-col">
           <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-3 flex-none border-b border-border/50 bg-surface/50">
-            {/* Left: Connection Indicator */}
-            <ConnectionIndicator />
+            {/* Left: Connection Indicator + ComfyUI Control */}
+            <div className="flex items-center gap-3">
+              <ConnectionIndicator />
+              <ComfyUIControl />
+            </div>
 
             {/* Right: Toggle Buttons & UndoRedo */}
             <div className="flex items-center gap-3">
@@ -137,6 +146,55 @@ export default function Layout() {
       <ConnectionBanner />
       <StatusBar />
       <PerformanceHUD visible={perfHudOpen} />
+
+      {/* Global Floating Panels */}
+      <GlobalFloatingPanels feedOpen={feedOpen} libraryOpen={libraryOpen} />
     </div>
+  );
+}
+
+// Separate component for panels to use hooks
+function GlobalFloatingPanels({ feedOpen, libraryOpen }: { feedOpen: boolean; libraryOpen: boolean }) {
+  const { generationFeed } = useGenerationFeedStore();
+  const { prompts, searchQuery: promptSearch, setSearchQuery: setPromptSearch } = usePromptLibraryStore();
+  const generation = useGeneration();
+
+  return (
+    <>
+      {/* Generation Feed Panel */}
+      <DraggablePanel
+        persistenceKey="ds_feed_pos"
+        defaultPosition={{ x: 20, y: 100 }}
+        className={`z-40 ${feedOpen ? "" : "hidden"}`}
+      >
+        <div className="bg-white rounded-lg shadow-xl border overflow-hidden" style={{ maxWidth: '90vw' }}>
+          <div className="p-2 bg-slate-100 border-b text-xs font-semibold cursor-move">Generation Feed</div>
+          <GenerationFeed
+            items={generationFeed}
+            onSelectPreview={() => { }}
+            onGenerate={generation?.handleGenerate}
+          />
+        </div>
+      </DraggablePanel>
+
+      {/* Prompt Library Panel */}
+      <DraggablePanel
+        persistenceKey="ds_library_pos"
+        defaultPosition={{ x: 100, y: 100 }}
+        className={`z-50 ${libraryOpen ? "" : "hidden"}`}
+      >
+        <div className="h-[600px] w-[400px]">
+          <PromptLibraryQuickPanel
+            open={libraryOpen}
+            prompts={prompts}
+            onApply={generation?.applyPrompt || (() => { })}
+            onSearchChange={setPromptSearch}
+            onSearchSubmit={generation?.loadPromptLibrary || (() => { })}
+            searchValue={promptSearch}
+            onClose={() => { }}
+          />
+        </div>
+      </DraggablePanel>
+    </>
   );
 }

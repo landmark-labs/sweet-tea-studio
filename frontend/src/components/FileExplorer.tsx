@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 interface FileExplorerProps {
     engineId?: string;
     projectId?: string;
+    projectName?: string;
     onFileSelect: (file: FileItem) => void;
 }
 
@@ -113,7 +114,7 @@ const FileNode = ({
     );
 };
 
-export function FileExplorer({ engineId, projectId, onFileSelect }: FileExplorerProps) {
+export function FileExplorer({ engineId, projectId, projectName, onFileSelect }: FileExplorerProps) {
     const [roots, setRoots] = useState<FileItem[]>([]);
     const [customPath, setCustomPath] = useState("");
     const [currentPath, setCurrentPath] = useState(""); // "" means default view (Inputs/Outputs)
@@ -170,17 +171,24 @@ export function FileExplorer({ engineId, projectId, onFileSelect }: FileExplorer
         <div className="h-full flex flex-col border-r bg-slate-50/50">
             <div className="p-2 border-b space-y-2">
                 <div className="flex items-center justify-between text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                    <span>Explorer</span>
+                    <div className="flex items-center gap-2">
+                        <span>Explorer</span>
+                        {projectName && (
+                            <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px] font-semibold lowercase normal-case">
+                                {projectName}
+                            </span>
+                        )}
+                    </div>
                     <div className="flex gap-1">
                         <Button
-                            variant="ghost"
+                            variant={isRoot ? "ghost" : "outline"}
                             size="icon"
-                            className="h-6 w-6"
+                            className={`h-6 w-6 ${isRoot ? "text-slate-300" : "text-blue-600 hover:bg-blue-50 border-blue-200"}`}
                             onClick={goUp}
-                            title="Go Up"
+                            title={isRoot ? "Already at root" : "Go Up One Level"}
                             disabled={isRoot}
                         >
-                            <ArrowRight className="w-3 h-3 rotate-180" />
+                            <ChevronRight className="w-4 h-4 rotate-180" />
                         </Button>
                         <Button variant="ghost" size="icon" className="h-6 w-6" onClick={goHome} title="Reset to Defaults">
                             <Home className="w-3 h-3" />

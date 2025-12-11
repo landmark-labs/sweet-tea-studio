@@ -13,6 +13,7 @@ from app.models.tag import Tag, TagCreate, TagSyncState
 from app.db.engine import engine as db_engine
 from app.models.image import Image
 from app.models.job import Job
+from app.models.project import Project
 import json
 from threading import Thread
 
@@ -53,6 +54,8 @@ class LibraryPrompt(BaseModel):
     image_id: int
     job_id: Optional[int] = None
     workflow_template_id: Optional[int] = None
+    project_id: Optional[int] = None
+    project_name: Optional[str] = None
     created_at: datetime
     preview_path: str
     active_positive: Optional[str] = None
@@ -144,9 +147,10 @@ def read_prompts(
 ):
     with Session(db_engine) as session:
         query = (
-            select(Image, Job, Prompt)
+            select(Image, Job, Prompt, Project)
             .join(Job, Image.job_id == Job.id, isouter=True)
             .join(Prompt, Job.prompt_id == Prompt.id, isouter=True)
+            .join(Project, Job.project_id == Project.id, isouter=True)
             .order_by(Image.created_at.desc())
         )
 
@@ -156,7 +160,7 @@ def read_prompts(
         rows = session.exec(query.offset(skip).limit(limit * 5)).all()
 
         scored_results: List[tuple[float, LibraryPrompt]] = []
-        for image, job, prompt in rows:
+        for image, job, prompt, project in rows:
             raw_params = job.input_params if job and job.input_params else {}
             if isinstance(raw_params, str):
                 try:
@@ -184,11 +188,57 @@ def read_prompts(
                 active_positive = active_prompt.get("positive_text")
                 active_negative = active_prompt.get("negative_text")
 
-            # Fallbacks for older records
+            # Helper to find text from node-prefixed keys (e.g., CLIPTextEncode.text)
+            def find_text_value(params: dict, patterns: list, exclude_patterns: list = None) -> Optional[str]:
+                """Search for the first matching key pattern that contains text."""
+                exclude_patterns = exclude_patterns or []
+                for key, value in params.items():
+                    key_lower = key.lower()
+                    # Skip if any exclude pattern is in the key
+                    if any(ex in key_lower for ex in exclude_patterns):
+                        continue
+                    # Check if any pattern matches
+                    if any(p in key_lower for p in patterns):
+                        if isinstance(value, str) and len(value) > 5:
+                            return value
+                return None
+
+            # Fallbacks for older records - check multiple common field names
             if not active_positive:
-                active_positive = (prompt_history[0].positive_text if prompt_history else None) or raw_params.get("prompt")
+                # First try: direct keys
+                active_positive = (
+                    (prompt_history[0].positive_text if prompt_history else None) or 
+                    raw_params.get("prompt") or
+                    raw_params.get("positive_prompt") or
+                    raw_params.get("positive") or
+                    raw_params.get("text_positive") or
+                    raw_params.get("clip_l") or
+                    raw_params.get("text")
+                )
+                # Second try: node-prefixed keys (e.g., CLIPTextEncode.text)
+                if not active_positive:
+                    # Look for first CLIPTextEncode (usually positive)
+                    active_positive = find_text_value(
+                        raw_params, 
+                        ["cliptextencode.text", "clip_text.text", "positive.text"],
+                        exclude_patterns=["_2.", "_neg", "negative"]
+                    )
+            
             if not active_negative:
-                active_negative = (prompt_history[0].negative_text if prompt_history else None) or raw_params.get("negative_prompt")
+                active_negative = (
+                    (prompt_history[0].negative_text if prompt_history else None) or 
+                    raw_params.get("negative_prompt") or
+                    raw_params.get("negative") or
+                    raw_params.get("text_negative") or
+                    raw_params.get("clip_l_negative")
+                )
+                # Second try: node-prefixed keys (e.g., CLIPTextEncode_2.text)
+                if not active_negative:
+                    active_negative = find_text_value(
+                        raw_params,
+                        ["cliptextencode_2.text", "cliptextencode_neg", "negative.text", "_2.text"],
+                        exclude_patterns=[]
+                    )
 
             tags = []
             if prompt and prompt.tags:
@@ -225,6 +275,8 @@ def read_prompts(
                         image_id=image.id,
                         job_id=job.id if job else None,
                         workflow_template_id=job.workflow_template_id if job else None,
+                        project_id=project.id if project else None,
+                        project_name=project.name if project else None,
                         created_at=image.created_at,
                         preview_path=preview_path,
                         active_positive=active_positive,

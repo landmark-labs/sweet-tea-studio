@@ -50,6 +50,14 @@ export default function Gallery() {
         if (fullscreenIndex === null) return;
 
         const handleKey = (event: KeyboardEvent) => {
+            // Skip if user is typing in an input, textarea, or contenteditable element
+            const activeEl = document.activeElement;
+            const tagName = activeEl?.tagName?.toLowerCase();
+            const isEditable = activeEl?.hasAttribute('contenteditable');
+            if (tagName === 'input' || tagName === 'textarea' || isEditable) {
+                return;
+            }
+
             if (event.key === "Escape") {
                 closeFullscreen();
             } else if (event.key === "ArrowRight") {

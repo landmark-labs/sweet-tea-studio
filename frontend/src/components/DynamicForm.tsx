@@ -660,7 +660,7 @@ export function DynamicForm({
             >
                 <AccordionItem value="settings" className="border rounded-lg px-2 bg-white">
                     <AccordionTrigger className="text-xs font-semibold uppercase text-slate-500 hover:no-underline py-2">
-                        {isStrictSettingsCustomized ? "EXPANDED CONTROLS (CUSTOMIZED)" : "EXPANDED CONTROLS"}
+                        EXPANDED CONTROLS
                     </AccordionTrigger>
                     <AccordionContent className="space-y-4 pt-0 pb-4">
 

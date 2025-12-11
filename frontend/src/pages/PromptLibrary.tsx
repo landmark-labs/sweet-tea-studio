@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { api, PromptSuggestion } from "@/lib/api";
+import { api, PromptSuggestion, WorkflowTemplate } from "@/lib/api";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Trash2, Search, LayoutTemplate, Sparkles, Copy, Loader2, Wand2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,7 @@ export default function PromptLibrary() {
     const [suggestions, setSuggestions] = useState<PromptSuggestion[]>([]);
     const [vlmEnabled, setVlmEnabled] = useState(false);
     const [vlmError, setVlmError] = useState<string | null>(null);
+    const [workflows, setWorkflows] = useState<WorkflowTemplate[]>([]);
 
     useEffect(() => {
         loadPrompts();
@@ -26,6 +27,8 @@ export default function PromptLibrary() {
             setVlmEnabled(false);
             setVlmError("Service unreachable");
         });
+        // Load workflows for pipe name lookup
+        api.getWorkflows().then(setWorkflows).catch(console.error);
     }, []);
 
     const loadPrompts = async (query?: string) => {
@@ -203,94 +206,91 @@ export default function PromptLibrary() {
             </div>
 
             <div className="space-y-4">
-                {filteredPrompts.map((prompt) => (
-                    <div
-                        key={prompt.image_id}
-                        className="flex items-center gap-4 p-4 bg-white rounded-lg border border-slate-200 shadow-sm hover:shadow-md transition-all group"
-                    >
-                        {/* Thumbnail */}
-                        <div className="w-16 h-16 flex-none bg-slate-100 rounded overflow-hidden relative">
-                            {prompt.preview_path ? (
-                                <img
-                                    src={`/api/v1/gallery/image/path?path=${encodeURIComponent(prompt.preview_path)}`}
-                                    className="w-full h-full object-cover"
-                                    alt="Prompt preview"
-                                />
-                            ) : (
-                                <div className="flex items-center justify-center h-full text-slate-300">
-                                    <LayoutTemplate className="w-6 h-6" />
-                                </div>
-                            )}
-                        </div>
+                {filteredPrompts.map((prompt) => {
+                    const pipeName = prompt.workflow_template_id
+                        ? (workflows.find(w => w.id === prompt.workflow_template_id)?.name || `Pipe ${prompt.workflow_template_id}`)
+                        : null;
 
-                        {/* Content */}
-                        <div className="flex-1 min-w-0 space-y-2">
-                            <div className="flex flex-wrap items-center gap-2 text-sm text-slate-800">
-                                <span className="font-semibold truncate">
-                                    {prompt.job_params?.project_name || prompt.prompt_name || `Image #${prompt.image_id}`}
-                                </span>
-                                <span className="text-[11px] text-slate-500">#{prompt.image_id}</span>
-                                {prompt.workflow_template_id && (
-                                    <span className="px-2 py-0.5 rounded-full bg-slate-100 text-[11px] text-slate-600 font-medium">
-                                        Pipe {prompt.workflow_template_id}
-                                    </span>
+                    const handleCopyToConfigurator = () => {
+                        // Store the prompt params in localStorage for the configurator to pick up
+                        if (prompt.job_params && prompt.workflow_template_id) {
+                            const key = `ds_pipe_params_${prompt.workflow_template_id}`;
+                            localStorage.setItem(key, JSON.stringify(prompt.job_params));
+                            localStorage.setItem("ds_selected_workflow", String(prompt.workflow_template_id));
+                            alert("Prompt copied to configurator! Navigate to Generation page to use it.");
+                        }
+                    };
+
+                    return (
+                        <div
+                            key={prompt.image_id}
+                            className="flex items-start gap-3 p-3 bg-white rounded-lg border border-slate-200 shadow-sm hover:shadow-md transition-all group"
+                        >
+                            {/* Thumbnail */}
+                            <div className="w-16 h-16 flex-none bg-slate-100 rounded overflow-hidden relative">
+                                {prompt.preview_path ? (
+                                    <img
+                                        src={`/api/v1/gallery/image/path?path=${encodeURIComponent(prompt.preview_path)}`}
+                                        className="w-full h-full object-cover"
+                                        alt="Prompt preview"
+                                    />
+                                ) : (
+                                    <div className="flex items-center justify-center h-full text-slate-300">
+                                        <LayoutTemplate className="w-5 h-5" />
+                                    </div>
                                 )}
                             </div>
 
-                            {(prompt.active_positive || prompt.active_negative) && (
-                                <div className="grid gap-3 sm:grid-cols-2">
-                                    {prompt.active_positive && (
-                                        <div className="min-w-0">
-                                            <p className="text-[11px] uppercase tracking-wide text-green-600 font-semibold mb-1">Positive</p>
-                                            <p className="text-xs text-slate-700 leading-relaxed line-clamp-3">{prompt.active_positive}</p>
-                                        </div>
-                                    )}
-                                    {prompt.active_negative && (
-                                        <div className="min-w-0">
-                                            <p className="text-[11px] uppercase tracking-wide text-rose-500 font-semibold mb-1">Negative</p>
-                                            <p className="text-xs text-rose-600 leading-relaxed line-clamp-3">{prompt.active_negative}</p>
-                                        </div>
-                                    )}
+                            {/* Project + Pipe Name */}
+                            <div className="flex-none w-24 min-w-0 space-y-0.5">
+                                <div className="text-[11px] font-semibold text-slate-700 truncate" title={prompt.project_name || "No project"}>
+                                    {prompt.project_name || <span className="text-slate-400">No project</span>}
                                 </div>
-                            )}
-                            {prompt.tags && prompt.tags.length > 0 && (
-                                <div className="flex flex-wrap gap-1 mt-2">
-                                    {prompt.tags.map((tag) => (
-                                        <span
-                                            key={tag}
-                                            className="px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded border border-indigo-100 text-[11px]"
-                                        >
-                                            #{tag}
-                                        </span>
-                                    ))}
-                                </div>
-                            )}
-                            {prompt.prompt_history.length > 1 && (
-                                <div className="mt-2 space-y-1">
-                                    <p className="text-[11px] text-slate-500">Prompt history:</p>
-                                    {prompt.prompt_history.slice(0, 3).map((stage) => (
-                                        <p key={`${prompt.image_id}-${stage.stage}`} className="text-[11px] text-slate-600 line-clamp-1">
-                                            #{stage.stage} {stage.positive_text}
-                                        </p>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
+                                {pipeName && (
+                                    <div className="text-[10px] text-blue-600 truncate font-medium" title={pipeName}>
+                                        {pipeName}
+                                    </div>
+                                )}
+                            </div>
 
-                        {/* Actions */}
-                        <div className="flex-none opacity-0 group-hover:opacity-100 transition-opacity">
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => prompt.prompt_id && handleDelete(prompt.prompt_id)}
-                                className="text-red-500 hover:text-red-600 hover:bg-red-50"
-                                disabled={!prompt.prompt_id}
-                            >
-                                <Trash2 className="w-4 h-4" />
-                            </Button>
+                            {/* Prompts Side-by-Side - 75% positive, 25% negative */}
+                            <div className="flex-1 flex gap-2 min-w-0">
+                                <div className="min-w-0 bg-green-50 rounded p-1.5 border border-green-100" style={{ flex: '3 1 0%' }}>
+                                    <p className="text-[10px] text-green-700 leading-relaxed line-clamp-4">
+                                        {prompt.active_positive || <span className="text-slate-400 italic">No positive prompt</span>}
+                                    </p>
+                                </div>
+                                <div className="min-w-0 bg-rose-50 rounded p-1.5 border border-rose-100" style={{ flex: '1 1 0%' }}>
+                                    <p className="text-[10px] text-rose-600 leading-relaxed line-clamp-4">
+                                        {prompt.active_negative || <span className="text-slate-400 italic">No negative prompt</span>}
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Actions - always visible */}
+                            <div className="flex-none flex flex-col gap-1">
+                                <Button
+                                    variant="outline"
+                                    size="icon"
+                                    onClick={handleCopyToConfigurator}
+                                    className="h-7 w-7 text-blue-600 hover:text-blue-700 hover:bg-blue-50 border-blue-200"
+                                    title="Copy to Configurator"
+                                >
+                                    <Copy className="w-3.5 h-3.5" />
+                                </Button>
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => prompt.prompt_id && handleDelete(prompt.prompt_id)}
+                                    className="h-7 w-7 text-red-400 hover:text-red-600 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-opacity"
+                                    disabled={!prompt.prompt_id}
+                                >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                </Button>
+                            </div>
                         </div>
-                    </div>
-                ))}
+                    );
+                })}
 
                 {filteredPrompts.length === 0 && (
                     <div className="text-center py-12 text-slate-500">

@@ -109,6 +109,8 @@ export interface PromptLibraryItem {
     image_id: number;
     job_id?: number;
     workflow_template_id?: number;
+    project_id?: number;
+    project_name?: string;
     created_at: string;
     preview_path: string;
     active_positive?: string;
@@ -204,6 +206,24 @@ export const api = {
     rebootComfyUI: async (): Promise<void> => {
         await fetch(`${API_BASE}/monitoring/reboot`, { method: "POST" });
     },
+
+    // --- ComfyUI Process Control ---
+    getComfyUIStatus: async (): Promise<{ running: boolean; pid?: number; can_launch: boolean; error?: string }> => {
+        const res = await fetch(`${API_BASE}/monitoring/comfyui/status`);
+        if (!res.ok) return { running: false, can_launch: false, error: "Failed to fetch status" };
+        return res.json();
+    },
+
+    startComfyUI: async (): Promise<{ success: boolean; message?: string; error?: string }> => {
+        const res = await fetch(`${API_BASE}/monitoring/comfyui/start`, { method: "POST" });
+        return res.json();
+    },
+
+    stopComfyUI: async (): Promise<{ success: boolean; message?: string; error?: string }> => {
+        const res = await fetch(`${API_BASE}/monitoring/comfyui/stop`, { method: "POST" });
+        return res.json();
+    },
+
 
     // --- Collections ---
     getCollections: async (): Promise<Collection[]> => {
@@ -513,12 +533,8 @@ export const api = {
         return res.json();
     },
 
-    // --- Tags ---
-    getTagSuggestions: async (prefix: string): Promise<TagSuggestion[]> => {
-        const res = await fetch(`${API_BASE}/library/tags/suggest?query=${encodeURIComponent(prefix)}`);
-        if (!res.ok) throw new Error("Failed to fetch tag suggestions");
-        return res.json();
-    },
+
+    // Note: getTagSuggestions is defined earlier in this file (around line 197)
 
     getPromptSuggestions: async (prefix: string): Promise<PromptSuggestion[]> => {
         const res = await fetch(`${API_BASE}/prompts/suggest?prefix=${encodeURIComponent(prefix)}`);

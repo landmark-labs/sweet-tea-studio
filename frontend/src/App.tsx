@@ -8,27 +8,30 @@ import Models from "./pages/Models";
 import Projects from "./pages/Projects";
 
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { GenerationProvider } from "./lib/GenerationContext";
 
 function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route element={
-          <ErrorBoundary>
-            <Layout />
-          </ErrorBoundary>
-        }>
-          <Route path="/" element={<PromptStudio />} />
-          <Route path="/projects" element={<Projects />} />
-          <Route path="/pipes" element={<WorkflowLibrary />} />
-          <Route path="/gallery" element={<Gallery />} />
-          <Route path="/library" element={<PromptLibrary />} />
-          <Route path="/models" element={<Models />} />
-          {/* Legacy route redirect for bookmarks */}
-          <Route path="/workflows" element={<WorkflowLibrary />} />
-        </Route>
-      </Routes>
-    </BrowserRouter>
+    <GenerationProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route element={
+            <ErrorBoundary>
+              <Layout />
+            </ErrorBoundary>
+          }>
+            <Route path="/" element={<PromptStudio />} />
+            <Route path="/projects" element={<Projects />} />
+            <Route path="/pipes" element={<WorkflowLibrary />} />
+            <Route path="/gallery" element={<Gallery />} />
+            <Route path="/library" element={<PromptLibrary />} />
+            <Route path="/models" element={<Models />} />
+            {/* Legacy route redirect for bookmarks */}
+            <Route path="/workflows" element={<WorkflowLibrary />} />
+          </Route>
+        </Routes>
+      </BrowserRouter>
+    </GenerationProvider>
   );
 }
 

@@ -91,10 +91,30 @@ export function ImageUpload({ value, onChange, engineId, options = [] }: ImageUp
         e.preventDefault();
         setIsDragging(false);
 
+        // Priority 1: Check for Sweet Tea internal image path
+        const sweetTeaPath = e.dataTransfer.getData("application/x-sweet-tea-image");
+        if (sweetTeaPath) {
+            // Handle as internal path - fetch and upload to input directory
+            setIsUploading(true);
+            try {
+                const url = `/api/v1/gallery/image/path?path=${encodeURIComponent(sweetTeaPath)}`;
+                const res = await fetch(url);
+                const blob = await res.blob();
+                const filename = sweetTeaPath.split(/[\\/]/).pop() || "dropped_image.png";
+                const file = new File([blob], filename, { type: blob.type });
+                await processFile(file);
+            } catch (err) {
+                console.error("Failed to process dropped Sweet Tea image", err);
+                setIsUploading(false);
+            }
+            return;
+        }
+
+        // Priority 2: Handle dropped files
         if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
             await processFile(e.dataTransfer.files[0]);
         } else {
-            // Try to handle URL drop
+            // Priority 3: Try to handle URL drop
             const url = e.dataTransfer.getData("text/plain");
             if (url) {
                 setIsUploading(true);

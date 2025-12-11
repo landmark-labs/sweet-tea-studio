@@ -1,0 +1,272 @@
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
+import { api, WorkflowTemplate, Project, PromptLibraryItem } from "@/lib/api";
+import { useGenerationFeedStore, usePromptLibraryStore } from "@/lib/stores/promptDataStore";
+
+interface GenerationContextValue {
+    // Selection state
+    selectedEngineId: string;
+    setSelectedEngineId: (id: string) => void;
+    selectedWorkflowId: string;
+    setSelectedWorkflowId: (id: string) => void;
+    selectedProjectId: string | null;
+    setSelectedProjectId: (id: string | null) => void;
+
+    // Data
+    workflows: WorkflowTemplate[];
+    projects: Project[];
+    formData: Record<string, any>;
+    setFormData: (data: Record<string, any>) => void;
+
+    // Prompt library
+    prompts: PromptLibraryItem[];
+    promptSearch: string;
+    setPromptSearch: (value: string) => void;
+    loadPromptLibrary: () => Promise<void>;
+    applyPrompt: (prompt: PromptLibraryItem) => void;
+
+    // Generation
+    handleGenerate: () => Promise<void>;
+    isGenerating: boolean;
+    canGenerate: boolean;
+}
+
+const GenerationContext = createContext<GenerationContextValue | null>(null);
+
+export function useGeneration() {
+    const ctx = useContext(GenerationContext);
+    if (!ctx) {
+        // Return a minimal stub when outside provider (for pages that don't need generation)
+        return null;
+    }
+    return ctx;
+}
+
+interface GenerationProviderProps {
+    children: ReactNode;
+}
+
+export function GenerationProvider({ children }: GenerationProviderProps) {
+    // Selection state (persisted)
+    const [selectedEngineId, setSelectedEngineId] = useState<string>(
+        () => localStorage.getItem("ds_selected_engine") || ""
+    );
+    const [selectedWorkflowId, setSelectedWorkflowId] = useState<string>(
+        () => localStorage.getItem("ds_selected_workflow") || ""
+    );
+    const [selectedProjectId, setSelectedProjectId] = useState<string | null>(
+        () => localStorage.getItem("ds_selected_project") || null
+    );
+
+    // Data
+    const [workflows, setWorkflows] = useState<WorkflowTemplate[]>([]);
+    const [projects, setProjects] = useState<Project[]>([]);
+    const [formData, setFormData] = useState<Record<string, any>>({});
+    const [isGenerating, setIsGenerating] = useState(false);
+
+    // Persisted stores
+    const { trackFeedStart, updateFeed } = useGenerationFeedStore();
+    const { prompts, searchQuery: promptSearch, setSearchQuery: setPromptSearch, setPrompts, shouldRefetch } = usePromptLibraryStore();
+
+    // Persist selections
+    useEffect(() => {
+        if (selectedEngineId) localStorage.setItem("ds_selected_engine", selectedEngineId);
+    }, [selectedEngineId]);
+
+    useEffect(() => {
+        if (selectedWorkflowId) localStorage.setItem("ds_selected_workflow", selectedWorkflowId);
+    }, [selectedWorkflowId]);
+
+    useEffect(() => {
+        if (selectedProjectId) {
+            localStorage.setItem("ds_selected_project", selectedProjectId);
+        } else {
+            localStorage.removeItem("ds_selected_project");
+        }
+    }, [selectedProjectId]);
+
+    // Load initial data
+    useEffect(() => {
+        const loadData = async () => {
+            try {
+                const [enginesRes, workflowsRes, projectsRes] = await Promise.allSettled([
+                    api.getEngines(),
+                    api.getWorkflows(),
+                    api.getProjects(),
+                ]);
+
+                if (enginesRes.status === "fulfilled") {
+                    const enginesData = enginesRes.value;
+                    if (!selectedEngineId && enginesData.length > 0) {
+                        setSelectedEngineId(String(enginesData[0].id));
+                    }
+                }
+
+                if (workflowsRes.status === "fulfilled") {
+                    setWorkflows(workflowsRes.value);
+                    if (!selectedWorkflowId && workflowsRes.value.length > 0) {
+                        setSelectedWorkflowId(String(workflowsRes.value[0].id));
+                    }
+                }
+
+                if (projectsRes.status === "fulfilled") {
+                    setProjects(projectsRes.value);
+                }
+            } catch (err) {
+                console.error("Failed to load generation context data", err);
+            }
+        };
+        loadData();
+    }, []);
+
+    // Load form data when workflow changes
+    useEffect(() => {
+        if (!selectedWorkflowId) return;
+        const workflow = workflows.find(w => String(w.id) === selectedWorkflowId);
+        if (!workflow) return;
+
+        const schema = workflow.input_schema || {};
+        let initialData: Record<string, any> = {};
+
+        // Set defaults from schema
+        Object.keys(schema).forEach(k => {
+            if (schema[k].default !== undefined) initialData[k] = schema[k].default;
+        });
+
+        // Load persisted values
+        try {
+            const key = `ds_pipe_params_${selectedWorkflowId}`;
+            const saved = localStorage.getItem(key);
+            if (saved) {
+                initialData = { ...initialData, ...JSON.parse(saved) };
+            }
+        } catch (e) { /* ignore */ }
+
+        setFormData(initialData);
+    }, [selectedWorkflowId, workflows]);
+
+    // Persist form data
+    const persistFormData = useCallback((data: Record<string, any>) => {
+        setFormData(data);
+        if (selectedWorkflowId) {
+            localStorage.setItem(`ds_pipe_params_${selectedWorkflowId}`, JSON.stringify(data));
+        }
+    }, [selectedWorkflowId]);
+
+    // Load prompt library
+    const loadPromptLibrary = useCallback(async () => {
+        if (!selectedWorkflowId) return;
+
+        if (!shouldRefetch(selectedWorkflowId, promptSearch)) return;
+
+        try {
+            const data = await api.getPrompts(promptSearch, parseInt(selectedWorkflowId));
+            setPrompts(data, selectedWorkflowId, promptSearch);
+        } catch (err) {
+            console.error("Failed to load prompts", err);
+        }
+    }, [selectedWorkflowId, promptSearch, shouldRefetch, setPrompts]);
+
+    // Load prompts when workflow or search changes
+    useEffect(() => {
+        if (selectedWorkflowId) {
+            loadPromptLibrary();
+        }
+    }, [selectedWorkflowId, loadPromptLibrary]);
+
+    // Apply prompt to form
+    const applyPrompt = useCallback((prompt: PromptLibraryItem) => {
+        const params = prompt.job_params || {};
+        persistFormData(params);
+    }, [persistFormData]);
+
+    // Generate
+    const handleGenerate = useCallback(async () => {
+        if (!selectedEngineId || !selectedWorkflowId || isGenerating) return;
+
+        const workflow = workflows.find(w => String(w.id) === selectedWorkflowId);
+        if (!workflow) return;
+
+        setIsGenerating(true);
+        try {
+            const schema = workflow.input_schema || {};
+
+            // Filter to only include params in schema
+            const cleanParams = Object.keys(formData).reduce((acc, key) => {
+                if (key in schema) {
+                    acc[key] = formData[key];
+                }
+                return acc;
+            }, {} as Record<string, any>);
+
+            const job = await api.createJob(
+                parseInt(selectedEngineId),
+                parseInt(selectedWorkflowId),
+                selectedProjectId ? parseInt(selectedProjectId) : null,
+                cleanParams,
+                null
+            );
+
+            trackFeedStart(job.id);
+
+            // Start WebSocket to track progress
+            const ws = new WebSocket(`ws://127.0.0.1:8000/api/v1/jobs/${job.id}/ws`);
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                if (data.type === "status") {
+                    updateFeed(job.id, { status: data.status });
+                } else if (data.type === "progress") {
+                    const pct = (data.data.value / data.data.max) * 100;
+                    updateFeed(job.id, { progress: pct, status: "processing" });
+                } else if (data.type === "completed") {
+                    updateFeed(job.id, {
+                        status: "completed",
+                        progress: 100,
+                        previewPath: data.images?.[0]?.path
+                    });
+                    ws.close();
+                } else if (data.type === "preview") {
+                    updateFeed(job.id, { previewBlob: data.data.blob });
+                } else if (data.type === "error") {
+                    updateFeed(job.id, { status: "failed" });
+                    ws.close();
+                }
+            };
+            ws.onerror = () => {
+                updateFeed(job.id, { status: "failed" });
+            };
+        } catch (err) {
+            console.error("Generation failed", err);
+        } finally {
+            setIsGenerating(false);
+        }
+    }, [selectedEngineId, selectedWorkflowId, selectedProjectId, formData, workflows, isGenerating, trackFeedStart, updateFeed]);
+
+    const canGenerate = Boolean(selectedEngineId && selectedWorkflowId && !isGenerating);
+
+    const value: GenerationContextValue = {
+        selectedEngineId,
+        setSelectedEngineId,
+        selectedWorkflowId,
+        setSelectedWorkflowId,
+        selectedProjectId,
+        setSelectedProjectId,
+        workflows,
+        projects,
+        formData,
+        setFormData: persistFormData,
+        prompts,
+        promptSearch,
+        setPromptSearch,
+        loadPromptLibrary,
+        applyPrompt,
+        handleGenerate,
+        isGenerating,
+        canGenerate,
+    };
+
+    return (
+        <GenerationContext.Provider value={value}>
+            {children}
+        </GenerationContext.Provider>
+    );
+}
