@@ -6,7 +6,19 @@ from app.models.job import Job, JobCreate, JobRead
 from app.models.project import Project
 from app.models.workflow import WorkflowTemplate
 from app.models.engine import Engine
-from app.core.comfy_client import ComfyClient, ComfyConnectionError, ComfyResponseError
+
+# ===== DIAGNOSTIC MODE TOGGLE =====
+# Set to True to enable detailed ComfyUI communication logging
+# Logs go to: backend/logs/comfy_diagnostics.log, sent_graphs/, ws_messages/
+DIAGNOSTIC_MODE = True
+
+if DIAGNOSTIC_MODE:
+    from app.core.comfy_diagnostics import DiagnosticComfyClient as ComfyClient
+    from app.core.comfy_client import ComfyConnectionError, ComfyResponseError
+else:
+    from app.core.comfy_client import ComfyClient, ComfyConnectionError, ComfyResponseError
+# ===================================
+
 from app.services.comfy_watchdog import watchdog
 from datetime import datetime
 from app.core.websockets import manager
@@ -155,6 +167,14 @@ def process_job(job_id: int):
                 except Exception as e:
                     print(f"WebSocket broadcast failed: {e}")
 
+            # Debug: Dump graph to file
+            try:
+                import json
+                with open("debug_last_graph.json", "w") as f:
+                    json.dump(final_graph, f, indent=2)
+            except Exception as e:
+                print(f"Failed to dump debug graph: {e}")
+
             # Race Condition Fix: Connect BEFORE queuing to catch fast/cached execution events
             client.connect()
             prompt_id = client.queue_prompt(final_graph)
@@ -170,36 +190,44 @@ def process_job(job_id: int):
             job.completed_at = datetime.utcnow()
             session.add(job)
 
-            job.completed_at = datetime.utcnow()
-            session.add(job)
-
             # Determine Target Directory for saving images
             target_output_dir = None
             
             # If job has a project, use the project's output folder in ComfyUI/sweet_tea/
             if job.project_id:
+                # Resolve project directory
+                # We need the project slug
                 project = session.get(Project, job.project_id)
                 if project and engine.output_dir:
-                    # Use the new sweet_tea path
-                    project_dir = settings.get_project_dir_in_comfy(engine.output_dir, project.slug)
-                    target_output_dir = str(project_dir / "output")
-                    # Ensure the directory exists
-                    os.makedirs(target_output_dir, exist_ok=True)
-            
-            # If explicit output dir set on job, use that
-            if job.output_dir:
-                if job.project_id and not os.path.isabs(job.output_dir):
-                    project = session.get(Project, job.project_id)
-                    if project and engine.output_dir:
-                        project_dir = settings.get_project_dir_in_comfy(engine.output_dir, project.slug)
-                        target_output_dir = str(project_dir / job.output_dir)
+                    # Construct path: ComfyUI/sweet_tea/{slug}/output
+                    # If engine.output_dir is .../ComfyUI/output, we want .../ComfyUI/sweet_tea/{slug}/output
+                    # But cleaner is to use the engine's root if possible. 
+                    # For now, let's assume engine.output_dir is reliable.
+                    
+                    # We want to step out of 'output' if it ends with it, to find 'sweet_tea' sibling?
+                    # Or just use a standard convention.
+                    # Let's use the logic found earlier or a simple robust path.
+                    
+                    # Robust: Place inside "sweet_tea/{slug}/output" relative to Comfy Root?
+                    # We don't easily know Comfy Root here (only input/output dirs).
+                    # But usually output_dir is "ComfyUI/output".
+                    output_path = Path(engine.output_dir)
+                    if output_path.name == "output":
+                        base = output_path.parent
+                    else:
+                        base = output_path
+                        
+                    target_output_dir = str(base / "sweet_tea" / project.slug / "output")
+
                 else:
+                    # Fallback if no engine output dir configured
                     target_output_dir = job.output_dir
+            else:
+                target_output_dir = job.output_dir
             
             saved_images = []
             for img_data in images:
                 filename = img_data['filename']
-                img_url = img_data.get('url')
                 
                 # Determine where to save this image
                 if target_output_dir:
@@ -210,28 +238,82 @@ def process_job(job_id: int):
                     raise ComfyResponseError("No output directory configured.")
                 
                 os.makedirs(save_dir, exist_ok=True)
-                full_path = os.path.join(save_dir, filename)
                 
-                # Download the image via HTTP from ComfyUI (bypasses all path issues)
+                # Get image bytes - either from WebSocket stream or HTTP download
+                image_bytes = None
+                source = img_data.get('source', 'http')
+                
+                if 'image_bytes' in img_data:
+                    # Image came directly from WebSocket (SaveImageWebsocket node)
+                    image_bytes = img_data['image_bytes']
+                    print(f"Using {len(image_bytes)} bytes from WebSocket stream for {filename}")
+                else:
+                    # Download the image via HTTP (traditional SaveImage node)
+                    img_url = img_data.get('url')
+                    if img_url:
+                        try:
+                            import urllib.request
+                            with urllib.request.urlopen(img_url, timeout=30) as response:
+                                image_bytes = response.read()
+                            print(f"Downloaded {len(image_bytes)} bytes from {img_url}")
+                        except Exception as e:
+                            print(f"Failed to download image from {img_url}: {e}")
+                            # Fallback: try the old filesystem approach
+                            base_dir = engine.output_dir
+                            subfolder = img_data.get('subfolder', '')
+                            src_path = os.path.join(base_dir, subfolder, filename) if subfolder else os.path.join(base_dir, filename)
+                            if os.path.exists(src_path):
+                                with open(src_path, 'rb') as f:
+                                    image_bytes = f.read()
+                                print(f"Read {len(image_bytes)} bytes from fallback path {src_path}")
+                
+                if not image_bytes:
+                    print(f"WARNING: Could not get image data for {filename}, skipping")
+                    continue
+                
+                # Process and save the image
                 try:
-                    import urllib.request
-                    with urllib.request.urlopen(img_url, timeout=30) as response:
-                        image_bytes = response.read()
+                    import io
+                    from PIL import Image as PILImage
+                    
+                    # Auto-convert PNG to JPG if requested (saves space, per user preference)
+                    # Only convert if it's PNG. If it's already JPG/other, keep as is.
+                    if filename.lower().endswith(".png"):
+                        try:
+                            image = PILImage.open(io.BytesIO(image_bytes))
+                            # Convert to RGB (remove alpha) for JPEG
+                            if image.mode in ("RGBA", "P"):
+                                image = image.convert("RGB")
+                            
+                            # Update filename to .jpg
+                            filename = os.path.splitext(filename)[0] + ".jpg"
+                            full_path = os.path.join(save_dir, filename)
+                            
+                            # Save as high-quality JPEG
+                            image.save(full_path, "JPEG", quality=95)
+                            print(f"Converted and saved JPG: {full_path}")
+                            
+                            # Update img_data so DB record is correct
+                            img_data['filename'] = filename
+                            
+                        except Exception as conv_e:
+                            print(f"JPG conversion failed: {conv_e}. Saving original PNG.")
+                            full_path = os.path.join(save_dir, filename)
+                            with open(full_path, 'wb') as f:
+                                f.write(image_bytes)
+                    else:
+                        full_path = os.path.join(save_dir, filename)
+                        with open(full_path, 'wb') as f:
+                            f.write(image_bytes)
+                        print(f"Saved: {full_path}")
+                        
+                except ImportError:
+                    # PIL not available - save raw bytes
+                    print("PIL not available, saving raw image without conversion")
+                    full_path = os.path.join(save_dir, filename)
                     with open(full_path, 'wb') as f:
                         f.write(image_bytes)
-                    print(f"Downloaded and saved: {full_path}")
-                except Exception as e:
-                    print(f"Failed to download image from {img_url}: {e}")
-                    # Fallback: try the old filesystem approach
-                    base_dir = engine.output_dir
-                    subfolder = img_data.get('subfolder', '')
-                    src_path = os.path.join(base_dir, subfolder, filename) if subfolder else os.path.join(base_dir, filename)
-                    try:
-                        if os.path.exists(src_path):
-                            shutil.copy2(src_path, full_path)
-                            print(f"Fallback copy succeeded: {full_path}")
-                    except Exception as copy_err:
-                        print(f"Fallback copy also failed: {copy_err}")
+
 
                 # Build prompt history metadata so the latest prompt is always surfaced while retaining provenance
                 # Normalize any prior history that may have come through the workflow

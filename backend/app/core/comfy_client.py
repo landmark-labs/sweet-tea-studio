@@ -154,6 +154,7 @@ class ComfyClient:
         """
         Wait for job completion and retrieve output images.
         Optional progress_callback(data: dict) called on updates.
+        Also captures images sent via SaveImageWebsocket node.
         """
         if not self.ws:
             self.connect()
@@ -162,6 +163,10 @@ class ComfyClient:
         backoff = self._default_backoff
         reconnect_attempts = 0
         max_reconnect_attempts = 10
+        
+        # Store images captured from WebSocket binary stream (SaveImageWebsocket node)
+        captured_images: List[Dict[str, Any]] = []
+        image_counter = 0
 
         try:
             while True:
@@ -189,59 +194,97 @@ class ComfyClient:
                     backoff = min(backoff * 2, self._max_backoff)
                     continue
 
+                # Handle TEXT messages (JSON)
                 if isinstance(out, str):
                     message = json.loads(out)
                     if progress_callback:
                         progress_callback(message)
 
-                if message['type'] == 'execution_error':
-                    # ComfyUI reports a node execution failure
-                    data = message.get('data', {})
-                    node_id = data.get('node_id', 'unknown')
-                    node_type = data.get('node_type', 'unknown')
-                    exception_message = data.get('exception_message', 'Unknown error')
-                    raise ComfyResponseError(
-                        f"ComfyUI execution failed at node {node_id} ({node_type}): {exception_message}"
-                    )
+                    if message['type'] == 'execution_error':
+                        # ComfyUI reports a node execution failure
+                        data = message.get('data', {})
+                        node_id = data.get('node_id', 'unknown')
+                        node_type = data.get('node_type', 'unknown')
+                        exception_message = data.get('exception_message', 'Unknown error')
+                        raise ComfyResponseError(
+                            f"ComfyUI execution failed at node {node_id} ({node_type}): {exception_message}"
+                        )
 
-                if message['type'] == 'executing':
-                    data = message['data']
-                    if data['node'] is None and data['prompt_id'] == prompt_id:
-                        break # Execution is done
-
-                elif isinstance(out, bytes):
+                    if message['type'] == 'executing':
+                        data = message['data']
+                        if data['node'] is None and data['prompt_id'] == prompt_id:
+                            break  # Execution is done
+                    
+                    continue  # Done processing text message
+                
+                # Handle BINARY messages (images)
+                elif isinstance(out, bytes) and len(out) > 8:
+                    import struct
+                    import base64
+                    
                     # ComfyUI Binary Message Format:
-                    # 4 bytes: Event Type (0=Non-Binary, 1=Preview Image, 2=Latent Preview)
-                    # 4 bytes: Image Type (1=JPEG, 2=PNG)
+                    # 4 bytes: Event Type (1=Preview Image, 2=Final Image from SaveImageWebsocket)
+                    # 4 bytes: Image Format (1=JPEG, 2=PNG)
                     # Remaining: Image Data
                     
-                    if len(out) > 8:
-                        import struct
-                        import base64
+                    event_type = struct.unpack('>I', out[0:4])[0]  # Big-Endian Unsigned Int
+                    image_format = struct.unpack('>I', out[4:8])[0]
+                    image_data = out[8:]
+                    
+                    if event_type == 1:  # PREVIEW_IMAGE (KSampler intermediate)
+                        # Convert to base64 for frontend preview
+                        b64_img = base64.b64encode(image_data).decode('utf-8')
+                        prefix = "data:image/jpeg;base64," if image_format == 1 else "data:image/png;base64,"
                         
-                        event_type = struct.unpack('>I', out[0:4])[0] # Big-Endian Unsigned Int
+                        if progress_callback:
+                            progress_callback({
+                                "type": "preview",
+                                "data": {
+                                    "blob": f"{prefix}{b64_img}"
+                                }
+                            })
+                    
+                    elif event_type == 2:  # FINAL_IMAGE (SaveImageWebsocket)
+                        # This is a final output image - capture it!
+                        image_counter += 1
+                        ext = "jpg" if image_format == 1 else "png"
+                        filename = f"ws_image_{prompt_id[:8]}_{image_counter:03d}.{ext}"
                         
-                        if event_type == 1: # PREVIEW_IMAGE
-                            image_type = struct.unpack('>I', out[4:8])[0]
-                            image_data = out[8:]
-                            
-                            # Convert to base64 for easy transport over existing text-based websocket
-                            b64_img = base64.b64encode(image_data).decode('utf-8')
-                            
-                            if progress_callback:
-                                prefix = "data:image/jpeg;base64," if image_type == 1 else "data:image/png;base64,"
-                                progress_callback({
-                                    "type": "preview",
-                                    "data": {
-                                        "blob": f"{prefix}{b64_img}"
-                                    }
-                                })
-                    continue
-                else:
-                    continue
+                        captured_images.append({
+                            "filename": filename,
+                            "subfolder": "",
+                            "type": "output",
+                            "image_bytes": image_data,  # Raw bytes for direct save
+                            "format": ext,
+                            "source": "websocket"
+                        })
+                        
+                        print(f"Captured image from WebSocket: {filename} ({len(image_data)} bytes)")
+                        
+                        # Also send preview to frontend
+                        b64_img = base64.b64encode(image_data).decode('utf-8')
+                        prefix = "data:image/jpeg;base64," if image_format == 1 else "data:image/png;base64,"
+                        
+                        if progress_callback:
+                            progress_callback({
+                                "type": "preview",
+                                "data": {
+                                    "blob": f"{prefix}{b64_img}",
+                                    "is_final": True
+                                }
+                            })
+                    
+                    continue  # Done processing binary message
+                    
         except (websocket.WebSocketException, ConnectionResetError) as e:
             raise ComfyConnectionError(f"WebSocket connection lost during execution.") from e
 
+        # If we captured images via WebSocket, use those (no HTTP download needed)
+        if captured_images:
+            print(f"Using {len(captured_images)} images captured from WebSocket stream")
+            return captured_images
+
+        # Fallback: Fetch from history API (traditional SaveImage node)
         history = self.get_history(prompt_id)[prompt_id]
         output_images = []
 
@@ -254,3 +297,4 @@ class ComfyClient:
                     output_images.append(image)
 
         return output_images
+
