@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import { FileJson, AlertTriangle, GitBranch, Edit2, Trash2, Save, RotateCw, CheckCircle2, XCircle } from "lucide-react";
 import { api, WorkflowTemplate } from "@/lib/api";
 import { WorkflowGraphViewer } from "@/components/WorkflowGraphViewer";
@@ -19,6 +20,7 @@ export default function WorkflowLibrary() {
     const [error, setError] = useState<string | null>(null);
     const [importFile, setImportFile] = useState<File | null>(null);
     const [importName, setImportName] = useState("");
+    const [importDescription, setImportDescription] = useState("");
     const [isImporting, setIsImporting] = useState(false);
     const [isDialogOpen, setIsDialogOpen] = useState(false);
 
@@ -38,6 +40,9 @@ export default function WorkflowLibrary() {
     // eslint-disable-line @typescript-eslint/no-unused-vars
     const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
+    // Visibility Dialog
+    const [visibilityDialogOpen, setVisibilityDialogOpen] = useState(false);
+
     // Graph Viewer State
     const [viewGraphOpen, setViewGraphOpen] = useState(false);
     const [selectedWorkflowForGraph, setSelectedWorkflowForGraph] = useState<WorkflowTemplate | null>(null);
@@ -47,6 +52,7 @@ export default function WorkflowLibrary() {
     const [composeSource, setComposeSource] = useState<string>("");
     const [composeTarget, setComposeTarget] = useState<string>("");
     const [composeName, setComposeName] = useState("");
+    const [composeDescription, setComposeDescription] = useState("");
 
     useEffect(() => {
         loadWorkflows();
@@ -75,8 +81,22 @@ export default function WorkflowLibrary() {
     // --- Import Logic ---
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
-            setImportFile(e.target.files[0]);
-            setImportName(e.target.files[0].name.replace(".json", ""));
+            const file = e.target.files[0];
+            setImportFile(file);
+            setImportName(file.name.replace(".json", ""));
+
+            file.text().then(text => {
+                try {
+                    const parsed = JSON.parse(text);
+                    if (parsed?._sweet_tea?.name) {
+                        setImportName(parsed._sweet_tea.name);
+                    }
+                } catch (err) {
+                    console.debug("Ignoring filename inference error", err);
+                }
+            }).catch(() => {
+                // ignore background parse errors; manual name entry still works
+            });
         }
     };
 
@@ -87,6 +107,8 @@ export default function WorkflowLibrary() {
             const text = await importFile.text();
             const graph = JSON.parse(text);
 
+            const cleanedDescription = importDescription.trim().slice(0, 500);
+
             if (graph.nodes && Array.isArray(graph.nodes)) {
                 alert("It looks like you uploaded a 'Saved' workflow. Please use 'Save (API Format)' in ComfyUI.");
                 setIsImporting(false);
@@ -95,7 +117,7 @@ export default function WorkflowLibrary() {
 
             const payload = {
                 name: importName,
-                description: "imported pipe",
+                description: cleanedDescription || "imported pipe",
                 graph_json: graph,
                 input_schema: {}
             };
@@ -104,21 +126,40 @@ export default function WorkflowLibrary() {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(payload)
+            const bundleName = importName || graph?._sweet_tea?.name || importFile.name.replace(".json", "");
+            await api.importWorkflow({
+                data: graph,
+                name: bundleName,
+                description: graph?._sweet_tea?.description,
             });
-
-            if (!res.ok) {
-                const body = await res.json();
-                throw new Error(body.detail || "Import failed");
-            }
 
             setImportFile(null);
             setImportName("");
+            setImportDescription("");
             setIsDialogOpen(false);
             loadWorkflows();
         } catch (err) {
             setError(err instanceof Error ? err.message : "Import failed");
         } finally {
             setIsImporting(false);
+        }
+    };
+
+    const handleExport = async (workflow: WorkflowTemplate) => {
+        try {
+            const bundle = await api.exportWorkflow(workflow.id);
+            const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            const safeName = (workflow.name || `workflow_${workflow.id}`).replace(/[^a-z0-9-_]+/gi, "_").toLowerCase();
+            link.download = `${safeName}_pipe.json`;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            URL.revokeObjectURL(url);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "Failed to export workflow");
         }
     };
 
@@ -136,13 +177,15 @@ export default function WorkflowLibrary() {
     const handleCompose = async () => {
         if (!composeSource || !composeTarget || !composeName) return;
         try {
+            const cleanedDescription = composeDescription.trim().slice(0, 500);
             const res = await fetch("/api/v1/workflows/compose", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     source_id: parseInt(composeSource),
                     target_id: parseInt(composeTarget),
-                    name: composeName
+                    name: composeName,
+                    description: cleanedDescription || undefined
                 })
             });
 
@@ -155,6 +198,7 @@ export default function WorkflowLibrary() {
             setComposeName("");
             setComposeSource("");
             setComposeTarget("");
+            setComposeDescription("");
             loadWorkflows();
             alert("pipe created successfully!");
         } catch (err) {
@@ -239,14 +283,30 @@ export default function WorkflowLibrary() {
             const active = allParams.filter(([_, val]: [string, any]) => !val.__hidden);
             const hidden = allParams.filter(([_, val]: [string, any]) => val.__hidden);
 
+            const hiddenInControls = Boolean(node._meta?.hiddenInControls);
+
             return {
                 id: nodeId,
                 title: node._meta?.title || node.title || `Node ${nodeId}`,
                 type: node.class_type,
                 active,
-                hidden
+                hidden,
+                hiddenInControls
             };
         }).filter(n => n && (n.active.length > 0 || n.hidden.length > 0));
+
+        const toggleHidden = (nodeId: string, hidden: boolean) => {
+            const updatedGraph = { ...editingWorkflow.graph_json };
+            const targetNode = updatedGraph[nodeId];
+            if (!targetNode) return;
+
+            updatedGraph[nodeId] = {
+                ...targetNode,
+                _meta: { ...(targetNode._meta || {}), hiddenInControls: hidden }
+            };
+
+            setEditingWorkflow({ ...editingWorkflow, graph_json: updatedGraph });
+        };
 
         return (
             <div className="container mx-auto p-4 h-[calc(100vh-4rem)] flex flex-col">
@@ -331,6 +391,88 @@ export default function WorkflowLibrary() {
                         <Button onClick={handleSaveSchema} disabled={Boolean(nameError) || isSaving}>
                             <Save className="w-4 h-4 mr-2" /> {isSaving ? "Saving..." : "Save Changes"}
                         </Button>
+                        <Dialog open={visibilityDialogOpen} onOpenChange={setVisibilityDialogOpen}>
+                            <DialogTrigger asChild>
+                                <Button variant="secondary" size="sm">
+                                    <GitBranch className="w-4 h-4 mr-2" />
+                                    manage controls visibility
+                                </Button>
+                            </DialogTrigger>
+                            <DialogContent className="max-w-xl">
+                                <DialogHeader>
+                                    <DialogTitle>Hide nodes from configurator</DialogTitle>
+                                    <DialogDescription>
+                                        Hidden nodes stay in the execution graph with their defaults intact; they just don’t show up in the configurator UI.
+                                    </DialogDescription>
+                                </DialogHeader>
+
+                                <div className="space-y-3 max-h-[60vh] overflow-y-auto pt-2">
+                                    {sortedNodeIds.map((id) => {
+                                        const node = editingWorkflow.graph_json[id];
+                                        if (!node) return null;
+                                        const hidden = Boolean(node._meta?.hiddenInControls);
+                                        return (
+                                            <div
+                                                key={id}
+                                                className={cn(
+                                                    "flex items-center justify-between rounded border bg-white px-3 py-2 shadow-sm",
+                                                    hidden && "border-amber-200 bg-amber-50"
+                                                )}
+                                            >
+                                                <div className="flex flex-col gap-0.5">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-xs font-mono text-slate-500">#{id}</span>
+                                                        <span className="text-sm font-semibold text-slate-800">{node._meta?.title || node.title || `Node ${id}`}</span>
+                                                        {hidden && (
+                                                            <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium uppercase text-amber-700">
+                                                                Hidden in controls
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <span className="text-[11px] text-slate-500">{node.class_type}</span>
+                                                </div>
+
+                                                <Switch
+                                                    checked={hidden}
+                                                    onCheckedChange={(checked) => toggleHidden(String(id), checked)}
+                                                    className={cn("h-5 w-9", hidden ? "bg-amber-500" : "bg-slate-200")}
+                                                />
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+
+                                <DialogFooter>
+                                    <Button variant="outline" onClick={() => setVisibilityDialogOpen(false)}>Close</Button>
+                                </DialogFooter>
+                            </DialogContent>
+                        </Dialog>
+                        <Button variant="outline" onClick={() => setEditingWorkflow(null)}>Cancel</Button>
+                        <Button onClick={handleSaveSchema}><Save className="w-4 h-4 mr-2" /> Save Changes</Button>
+                    </div>
+                </div>
+                <div className="bg-white border rounded-md p-4 space-y-4 mb-4">
+                    <div className="grid grid-cols-6 items-center gap-4">
+                        <Label htmlFor="edit-name" className="text-right">pipe name</Label>
+                        <Input
+                            id="edit-name"
+                            className="col-span-5"
+                            value={editingWorkflow.name}
+                            onChange={(e) => setEditingWorkflow({ ...editingWorkflow, name: e.target.value })}
+                        />
+                    </div>
+                    <div className="grid grid-cols-6 items-start gap-4">
+                        <Label htmlFor="edit-description" className="text-right mt-2">description</Label>
+                        <div className="col-span-5 space-y-1">
+                            <Textarea
+                                id="edit-description"
+                                value={editingWorkflow.description || ""}
+                                onChange={(e) => setEditingWorkflow({ ...editingWorkflow, description: e.target.value.slice(0, 500) })}
+                                placeholder="summarize what this pipe generates"
+                                maxLength={500}
+                            />
+                            <div className="text-[11px] text-slate-500 text-right">{(editingWorkflow.description || "").length}/500</div>
+                        </div>
                     </div>
                 </div>
                 <Card className="flex-1 overflow-auto bg-slate-50/50">
@@ -353,7 +495,13 @@ export default function WorkflowLibrary() {
                             };
 
                             return (
-                                <div key={node!.id} className="bg-white border rounded-lg overflow-hidden shadow-sm">
+                                <div
+                                    key={node!.id}
+                                    className={cn(
+                                        "bg-white border rounded-lg overflow-hidden shadow-sm",
+                                        node!.hiddenInControls && "opacity-70 ring-1 ring-amber-100"
+                                    )}
+                                >
                                     <div className="px-4 py-2 bg-slate-100 border-b flex justify-between items-center">
                                         <div className="font-semibold text-sm text-slate-700 flex items-center gap-2">
                                             <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-xs font-mono text-slate-500">{node!.id}</div>
@@ -370,6 +518,19 @@ export default function WorkflowLibrary() {
                                                     className={cn(
                                                         "h-4 w-7",
                                                         isCore ? "bg-blue-500" : "bg-slate-200"
+                                                    )}
+                                                />
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-[10px] text-slate-400 uppercase">
+                                                    {node!.hiddenInControls ? "Hidden" : "Visible"}
+                                                </span>
+                                                <Switch
+                                                    checked={node!.hiddenInControls}
+                                                    onCheckedChange={(checked) => toggleHidden(String(node!.id), checked)}
+                                                    className={cn(
+                                                        "h-4 w-7",
+                                                        node!.hiddenInControls ? "bg-amber-500" : "bg-slate-200"
                                                     )}
                                                 />
                                             </div>
@@ -649,7 +810,15 @@ export default function WorkflowLibrary() {
             <div className="flex justify-between items-center mb-6">
                 <h1 className="text-3xl font-bold">{labels.pageTitle.pipes}</h1>
                 <div className="flex gap-2">
-                    <Dialog open={composeOpen} onOpenChange={setComposeOpen}>
+                    <Dialog open={composeOpen} onOpenChange={(open) => {
+                        setComposeOpen(open);
+                        if (!open) {
+                            setComposeName("");
+                            setComposeSource("");
+                            setComposeTarget("");
+                            setComposeDescription("");
+                        }
+                    }}>
                         <DialogTrigger asChild>
                             <Button variant="outline">compose</Button>
                         </DialogTrigger>
@@ -691,6 +860,19 @@ export default function WorkflowLibrary() {
                                     <Label htmlFor="compose-name" className="text-right">new pipe name</Label>
                                     <Input id="compose-name" value={composeName} onChange={(e) => setComposeName(e.target.value)} className="col-span-3" />
                                 </div>
+                                <div className="grid grid-cols-4 items-start gap-4">
+                                    <Label htmlFor="compose-description" className="text-right mt-2">description</Label>
+                                    <div className="col-span-3 space-y-1">
+                                        <Textarea
+                                            id="compose-description"
+                                            value={composeDescription}
+                                            onChange={(e) => setComposeDescription(e.target.value.slice(0, 500))}
+                                            placeholder="how should this composed pipe be used?"
+                                            maxLength={500}
+                                        />
+                                        <div className="text-[11px] text-slate-500 text-right">{composeDescription.length}/500</div>
+                                    </div>
+                                </div>
                             </div>
                             <DialogFooter>
                                 <Button onClick={handleCompose} disabled={!composeSource || !composeTarget || !composeName}>
@@ -700,7 +882,14 @@ export default function WorkflowLibrary() {
                         </DialogContent>
                     </Dialog>
 
-                    <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                    <Dialog open={isDialogOpen} onOpenChange={(open) => {
+                        setIsDialogOpen(open);
+                        if (!open) {
+                            setImportFile(null);
+                            setImportName("");
+                            setImportDescription("");
+                        }
+                    }}>
                         <DialogTrigger asChild>
                             <Button>import pipe</Button>
                         </DialogTrigger>
@@ -708,13 +897,26 @@ export default function WorkflowLibrary() {
                             <DialogHeader>
                                 <DialogTitle>import pipe from comfyui</DialogTitle>
                                 <DialogDescription>
-                                    Upload a pipe exported as <b>API Format (JSON)</b>.
+                                    Upload a Sweet Tea export bundle (includes integrity metadata) or a ComfyUI <b>Save (API Format)</b> JSON.
                                 </DialogDescription>
                             </DialogHeader>
                             <div className="grid gap-4 py-4">
                                 <div className="grid grid-cols-4 items-center gap-4">
                                     <Label htmlFor="name" className="text-right">pipe name</Label>
                                     <Input id="name" value={importName} onChange={(e) => setImportName(e.target.value)} className="col-span-3" />
+                                </div>
+                                <div className="grid grid-cols-4 items-start gap-4">
+                                    <Label htmlFor="description" className="text-right mt-2">description</Label>
+                                    <div className="col-span-3 space-y-1">
+                                        <Textarea
+                                            id="description"
+                                            value={importDescription}
+                                            onChange={(e) => setImportDescription(e.target.value.slice(0, 500))}
+                                            placeholder="what does this pipe do?"
+                                            maxLength={500}
+                                        />
+                                        <div className="text-[11px] text-slate-500 text-right">{importDescription.length}/500</div>
+                                    </div>
                                 </div>
                                 <div className="grid grid-cols-4 items-center gap-4">
                                     <Label htmlFor="file" className="text-right">file</Label>
@@ -742,13 +944,13 @@ export default function WorkflowLibrary() {
                 {workflows.map((w) => {
                     const missing = getMissingNodes(w);
                     return (
-                        <Card key={w.id} className="relative group hover:shadow-lg transition-shadow">
+                        <Card key={w.id} className="relative group hover:shadow-lg transition-shadow" title={w.description || undefined}>
                             <CardHeader>
                                 <div className="flex justify-between items-start">
-                                    <CardTitle className="truncate pr-4">{w.name}</CardTitle>
+                                    <CardTitle className="truncate pr-4" title={w.name}>{w.name}</CardTitle>
                                     <FileJson className="w-5 h-5 text-slate-400" />
                                 </div>
-                                <CardDescription className="line-clamp-2 h-10">
+                                <CardDescription className="line-clamp-2 h-10" title={w.description || undefined}>
                                     {w.description?.split("[Missing")[0] || "No description"}
                                 </CardDescription>
                             </CardHeader>
@@ -776,6 +978,9 @@ export default function WorkflowLibrary() {
                             <CardFooter className="flex justify-end gap-2 text-slate-400">
                                 <Button variant="ghost" size="sm" onClick={() => handleViewGraph(w)}>
                                     <GitBranch className="w-4 h-4 mr-1" /> View Graph
+                                </Button>
+                                <Button variant="ghost" size="sm" onClick={() => handleExport(w)}>
+                                    <Save className="w-4 h-4 mr-1" /> Export
                                 </Button>
                                 <Button variant="ghost" size="sm" onClick={() => handleEdit(w)}>
                                     <Edit2 className="w-4 h-4 mr-1" /> Edit

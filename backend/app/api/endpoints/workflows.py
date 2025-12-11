@@ -1,7 +1,11 @@
+import hashlib
+import json
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import JSONResponse
 from sqlmodel import Session, select
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.db.engine import engine as db_engine
 from app.models.workflow import WorkflowTemplate, WorkflowTemplateCreate, WorkflowTemplateRead
@@ -10,6 +14,70 @@ from app.core.comfy_client import ComfyClient
 from app.core.workflow_merger import WorkflowMerger
 
 router = APIRouter()
+
+
+def _clean_description(description: Optional[str]) -> Optional[str]:
+    """Normalize optional descriptions by trimming whitespace and empty strings."""
+
+    if description is None:
+        return None
+    cleaned = description.strip()
+    return cleaned or None
+EXPORT_VERSION = 1
+
+
+def _hash_structure(data: Any) -> str:
+    serialized = json.dumps(data, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def _build_export_bundle(workflow: WorkflowTemplate) -> Dict[str, Any]:
+    graph = workflow.graph_json or {}
+    input_schema = workflow.input_schema or {}
+    node_mapping = workflow.node_mapping or {}
+
+    graph_hash = _hash_structure(graph)
+    schema_hash = _hash_structure(input_schema)
+    bundle_hash = _hash_structure({
+        "workflow": graph,
+        "input_schema": input_schema,
+        "node_mapping": node_mapping,
+        "name": workflow.name,
+        "description": workflow.description,
+    })
+
+    metadata = {
+        "version": EXPORT_VERSION,
+        "name": workflow.name,
+        "description": workflow.description,
+        "exported_at": datetime.utcnow().isoformat() + "Z",
+        "input_schema": input_schema,
+        "node_mapping": node_mapping,
+        "integrity": {
+            "graph_sha256": graph_hash,
+            "input_schema_sha256": schema_hash,
+            "bundle_sha256": bundle_hash,
+        },
+        "settings": {
+            "node_count": len(graph.keys()),
+            "input_schema_count": len(input_schema.keys()),
+            "node_mapping_count": len(node_mapping.keys()) if isinstance(node_mapping, dict) else 0,
+        },
+        "source": "sweet-tea-studio",
+        "comfy_format": "api",
+        "notes": "Contains ComfyUI API graph plus Sweet Tea Studio pipe metadata.",
+    }
+
+    return {
+        "workflow": graph,
+        "_sweet_tea": metadata,
+    }
+
+class WorkflowImportRequest(BaseModel):
+    data: Dict[str, Any]
+    name: Optional[str] = None
+    description: Optional[str] = None
+
 
 def generate_schema_from_graph(graph: Dict[str, Any], object_info: Dict[str, Any]) -> Dict[str, Any]:
     schema = {}
@@ -143,6 +211,96 @@ def generate_schema_from_graph(graph: Dict[str, Any], object_info: Dict[str, Any
     return schema
 
 
+def _prepare_import_payload(payload: WorkflowImportRequest) -> WorkflowTemplateCreate:
+    raw_data = payload.data
+
+    # Reject ComfyUI "Saved" format (nodes as an array)
+    if isinstance(raw_data, dict) and isinstance(raw_data.get("nodes"), list):
+        raise HTTPException(
+            status_code=400,
+            detail="Detected ComfyUI save-format with a 'nodes' array. Please export using 'Save (API Format)'.",
+        )
+
+    if not isinstance(raw_data, dict):
+        raise HTTPException(status_code=400, detail="Workflow payload must be a JSON object.")
+
+    metadata = raw_data.get("_sweet_tea") if isinstance(raw_data, dict) else None
+
+    if metadata:
+        version = metadata.get("version")
+        if version != EXPORT_VERSION:
+            raise HTTPException(status_code=400, detail=f"Unsupported workflow export version: {version}")
+
+        workflow_graph = raw_data.get("workflow")
+        if not isinstance(workflow_graph, dict):
+            raise HTTPException(status_code=400, detail="Export bundle is missing the workflow graph")
+
+        input_schema = metadata.get("input_schema") or {}
+        node_mapping = metadata.get("node_mapping") or {}
+        integrity = metadata.get("integrity") or {}
+
+        graph_hash = _hash_structure(workflow_graph)
+        schema_hash = _hash_structure(input_schema)
+        bundle_hash = _hash_structure({
+            "workflow": workflow_graph,
+            "input_schema": input_schema,
+            "node_mapping": node_mapping,
+            "name": metadata.get("name"),
+            "description": metadata.get("description"),
+        })
+
+        if integrity.get("graph_sha256") and integrity["graph_sha256"] != graph_hash:
+            raise HTTPException(status_code=400, detail="Workflow graph integrity check failed")
+
+        if integrity.get("input_schema_sha256") and integrity["input_schema_sha256"] != schema_hash:
+            raise HTTPException(status_code=400, detail="Input schema integrity check failed")
+
+        if integrity.get("bundle_sha256") and integrity["bundle_sha256"] != bundle_hash:
+            raise HTTPException(status_code=400, detail="Bundle integrity check failed")
+
+        name = payload.name or metadata.get("name") or "imported pipe"
+        description = payload.description or metadata.get("description") or "imported pipe bundle"
+
+    else:
+        workflow_graph = raw_data
+        input_schema = {}
+        node_mapping = None
+        name = payload.name or "imported pipe"
+        description = payload.description or "imported from ComfyUI API format"
+
+    if not isinstance(workflow_graph, dict):
+        raise HTTPException(status_code=400, detail="Workflow graph must be an object with node definitions")
+
+    return WorkflowTemplateCreate(
+        name=name,
+        description=description,
+        graph_json=workflow_graph,
+        input_schema=input_schema,
+        node_mapping=node_mapping,
+    )
+
+
+@router.post("/import", response_model=WorkflowTemplate)
+def import_workflow(payload: WorkflowImportRequest):
+    workflow_in = _prepare_import_payload(payload)
+    return create_workflow(workflow_in)
+
+
+@router.get("/{workflow_id}/export")
+def export_workflow(workflow_id: int):
+    with Session(db_engine) as session:
+        workflow = session.get(WorkflowTemplate, workflow_id)
+        if not workflow:
+            raise HTTPException(status_code=404, detail="Workflow not found")
+
+        bundle = _build_export_bundle(workflow)
+        filename = workflow.name.lower().replace(" ", "_") + ".json"
+        return JSONResponse(
+            content=bundle,
+            headers={"Content-Disposition": f"attachment; filename={filename}"},
+        )
+
+
 @router.post("/", response_model=WorkflowTemplate)
 def create_workflow(workflow_in: WorkflowTemplateCreate):
     with Session(db_engine) as session:
@@ -171,7 +329,7 @@ def create_workflow(workflow_in: WorkflowTemplateCreate):
                 missing_nodes.append(ctype)
         
         missing_nodes = list(set(missing_nodes))
-        
+
         # 3. Generate Schema if not provided/empty
         if not workflow_in.input_schema:
             workflow_in.input_schema = generate_schema_from_graph(graph, object_info)
@@ -185,6 +343,8 @@ def create_workflow(workflow_in: WorkflowTemplateCreate):
                         "node_id": field_def["x_node_id"],
                         "field": f"inputs.{field_def.get('mock_field', key.split('.')[-1])}" # fallback logic
                     }
+
+        workflow_in.description = _clean_description(workflow_in.description)
 
         # Create
         db_workflow = WorkflowTemplate.from_orm(workflow_in)
@@ -296,11 +456,12 @@ def update_workflow(workflow_id: int, workflow_in: WorkflowTemplateCreate):
         workflow = session.get(WorkflowTemplate, workflow_id)
         if not workflow:
             raise HTTPException(status_code=404, detail="Workflow not found")
-            
+
+        workflow_in.description = _clean_description(workflow_in.description)
         workflow_data = workflow_in.dict(exclude_unset=True)
         for key, value in workflow_data.items():
             setattr(workflow, key, value)
-            
+
         session.add(workflow)
         session.commit()
         session.refresh(workflow)
@@ -321,6 +482,7 @@ class WorkflowComposeRequest(BaseModel):
     source_id: int
     target_id: int
     name: str
+    description: Optional[str] = Field(default=None, max_length=500)
 
 @router.post("/compose", response_model=WorkflowTemplate)
 def compose_workflows(req: WorkflowComposeRequest):
@@ -348,7 +510,8 @@ def compose_workflows(req: WorkflowComposeRequest):
         # Create Record
         new_workflow = WorkflowTemplate(
             name=req.name,
-            description=f"Composed from '{w_source.name}' + '{w_target.name}'",
+            description=_clean_description(req.description)
+            or f"Composed from '{w_source.name}' + '{w_target.name}'",
             graph_json=merged_graph,
             input_schema=schema
         )

@@ -50,11 +50,40 @@ export interface ComfyLaunchConfig {
 export interface WorkflowTemplate {
     id: number;
     name: string;
-    description: string;
+    description?: string | null;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     graph_json: any;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     input_schema: any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    node_mapping?: any;
+}
+
+export interface WorkflowExportBundle {
+    workflow: Record<string, any>;
+    _sweet_tea: {
+        version: number;
+        name: string;
+        description?: string | null;
+        exported_at: string;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        input_schema: any;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        node_mapping?: any;
+        integrity: {
+            graph_sha256: string;
+            input_schema_sha256: string;
+            bundle_sha256: string;
+        };
+        settings: {
+            node_count: number;
+            input_schema_count: number;
+            node_mapping_count: number;
+        };
+        source: string;
+        comfy_format: string;
+        notes?: string;
+    };
 }
 
 export interface Job {
@@ -346,6 +375,27 @@ export const api = {
         if (!res.ok) {
             const body = await res.json().catch(() => ({}));
             throw new Error(body.detail || "Failed to update workflow");
+    exportWorkflow: async (workflowId: number): Promise<WorkflowExportBundle> => {
+        const res = await fetch(`${API_BASE}/workflows/${workflowId}/export`);
+        if (!res.ok) throw new Error("Failed to export workflow");
+        return res.json();
+    },
+
+    importWorkflow: async (payload: {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        data: any;
+        name?: string;
+        description?: string;
+    }): Promise<WorkflowTemplate> => {
+        const res = await fetch(`${API_BASE}/workflows/import`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+        });
+
+        if (!res.ok) {
+            const errorData = await res.json().catch(() => ({}));
+            throw new Error(errorData.detail || "Failed to import workflow");
         }
 
         return res.json();

@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { useLocation, useNavigate, useOutletContext } from "react-router-dom";
 import { api, Engine, WorkflowTemplate, FileItem, GalleryItem, PromptLibraryItem, EngineHealth, Project } from "@/lib/api";
 import { DynamicForm } from "@/components/DynamicForm";
@@ -258,6 +258,25 @@ export default function PromptStudio() {
   const handlePromptUpdate = (field: string, value: string) => {
     handleFormChange({ ...formData, [field]: value });
   };
+
+  const visibleSchema = useMemo(() => {
+    if (!selectedWorkflow) return null;
+
+    const hiddenNodes = new Set(
+      Object.entries(selectedWorkflow.graph_json || {})
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .filter(([_, node]: [string, any]) => node?._meta?.hiddenInControls)
+        .map(([id]) => String(id))
+    );
+
+    return Object.fromEntries(
+      Object.entries(selectedWorkflow.input_schema || {}).filter(([_, val]: [string, any]) => {
+        if (val.__hidden) return false;
+        if (!val.x_node_id && val.x_node_id !== 0) return true;
+        return !hiddenNodes.has(String(val.x_node_id));
+      })
+    );
+  }, [selectedWorkflow]);
 
   useEffect(() => {
     const state = location.state as { loadParams?: GalleryItem } | null;
@@ -794,11 +813,7 @@ export default function PromptStudio() {
             {selectedWorkflow ? (
               <PromptConstructor
                 // Filter out hidden parameters if the new editor logic flagged them
-                schema={
-                  Object.fromEntries(
-                    Object.entries(selectedWorkflow.input_schema).filter(([_, val]: [string, any]) => !val.__hidden)
-                  )
-                }
+                schema={visibleSchema || {}}
                 currentValues={formData}
                 onUpdate={handlePromptUpdate}
                 targetField={focusedField}
@@ -952,7 +967,12 @@ export default function PromptStudio() {
                   <SelectItem value="__empty" disabled>no pipes found</SelectItem>
                 ) : (
                   workflows.map((w) => (
-                    <SelectItem key={w.id} value={String(w.id)}>{w.name}</SelectItem>
+                    <SelectItem key={w.id} value={String(w.id)} title={w.description || undefined}>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="font-medium">{w.name}</span>
+                        <span className="text-[11px] text-slate-500 line-clamp-2">{w.description || "No description"}</span>
+                      </div>
+                    </SelectItem>
                   ))
                 )}
               </SelectContent>
@@ -984,7 +1004,7 @@ export default function PromptStudio() {
           {/* Dynamic Form ... */}
           {selectedWorkflow && (
             <DynamicForm
-              schema={selectedWorkflow.input_schema}
+              schema={visibleSchema || {}}
               onSubmit={handleGenerate}
               isLoading={isSubmitting || jobStatus === "initiating" || jobStatus === "processing"}
               submitLabel="generate"
