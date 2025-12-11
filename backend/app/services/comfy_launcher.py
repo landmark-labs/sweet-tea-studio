@@ -134,7 +134,35 @@ class ComfyUILauncher:
         """Get current launch configuration."""
         if not self._config:
             return self.detect_comfyui()
+        if self._config.args is None:
+            self._config.args = []
         return self._config
+
+    def set_config(self, path: Optional[str], args: Optional[str]) -> dict:
+        """Set a user-provided ComfyUI path and arguments."""
+        config = LaunchConfig(args=[])
+
+        if path:
+            if not self._is_valid_comfyui_path(path):
+                return {"success": False, "error": "Invalid ComfyUI path"}
+
+            config.path = path
+            config.is_available = True
+            config.detection_method = "user_provided"
+            config.python_path = self._find_python_for_comfyui(path)
+        else:
+            config = self.detect_comfyui()
+
+        if args is not None:
+            config.args = args.split() if args.strip() else []
+
+        self._config = config
+
+        return {
+            "success": True,
+            "config": config,
+            "error": None if config.is_available else "ComfyUI not detected",
+        }
     
     def is_running(self) -> bool:
         """Check if the managed ComfyUI process is running."""
@@ -203,6 +231,9 @@ class ComfyUILauncher:
                 settings_args = getattr(settings, 'COMFYUI_ARGS', '')
                 if settings_args:
                     cmd.extend(settings_args.split())
+
+                if config.args:
+                    cmd.extend(config.args)
 
                 if extra_args:
                     cmd.extend(extra_args)

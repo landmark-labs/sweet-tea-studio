@@ -16,6 +16,15 @@ export interface EngineHealth {
     next_check_in: number;
 }
 
+export interface ComfyLaunchConfig {
+    path?: string | null;
+    python_path?: string | null;
+    args: string[];
+    port: number;
+    is_available: boolean;
+    detection_method: string;
+}
+
 export interface WorkflowTemplate {
     id: number;
     name: string;
@@ -211,6 +220,29 @@ export const api = {
     getComfyUIStatus: async (): Promise<{ running: boolean; pid?: number; can_launch: boolean; error?: string }> => {
         const res = await fetch(`${API_BASE}/monitoring/comfyui/status`);
         if (!res.ok) return { running: false, can_launch: false, error: "Failed to fetch status" };
+        return res.json();
+    },
+
+    getComfyUILaunchConfig: async (): Promise<ComfyLaunchConfig> => {
+        const res = await fetch(`${API_BASE}/engines/comfyui/config`);
+        if (!res.ok) throw new Error("Failed to fetch ComfyUI config");
+        return res.json();
+    },
+
+    saveComfyUILaunchConfig: async (
+        payload: { path?: string | null; args?: string | null },
+    ): Promise<ComfyLaunchConfig> => {
+        const res = await fetch(`${API_BASE}/engines/comfyui/config`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+        });
+
+        if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.detail || data.error || "Unable to save ComfyUI config");
+        }
+
         return res.json();
     },
 
