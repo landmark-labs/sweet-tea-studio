@@ -99,15 +99,21 @@ export default function Layout() {
           ))}
         </nav>
         <div className="p-3 border-t border-border/70">
-          <div
-            className={cn(
-              "flex items-center gap-3 px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted/70 rounded-xl cursor-pointer",
-              collapsed && "justify-center px-2"
-            )}
+          <NavLink
+            to="/settings"
+            className={({ isActive }) =>
+              cn(
+                "flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all border border-transparent",
+                isActive
+                  ? "bg-primary/10 text-primary border-primary/20 shadow-sm"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted/60",
+                collapsed && "justify-center px-2"
+              )
+            }
           >
             <Settings size={20} />
             {!collapsed && <span>{labels.nav.settings}</span>}
-          </div>
+          </NavLink>
         </div>
       </aside>
       {/* Main Content */}

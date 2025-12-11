@@ -4,7 +4,23 @@ export interface Engine {
     id: number;
     name: string;
     base_url: string;
+    output_dir: string;
+    input_dir: string;
+    auth_token?: string | null;
+    max_concurrent_jobs?: number;
+    allow_filesystem_delete?: boolean;
     is_active: boolean;
+}
+
+export interface EngineUpdate {
+    name?: string;
+    base_url?: string;
+    output_dir?: string;
+    input_dir?: string;
+    auth_token?: string | null;
+    max_concurrent_jobs?: number;
+    allow_filesystem_delete?: boolean;
+    is_active?: boolean;
 }
 
 export interface EngineHealth {
@@ -201,6 +217,19 @@ export const api = {
     getEngineObjectInfo: async (engineId: number): Promise<Record<string, any>> => {
         const res = await fetch(`${API_BASE}/engines/${engineId}/object_info`);
         if (!res.ok) throw new Error("Failed to fetch engine object info");
+        return res.json();
+    },
+
+    updateEngine: async (engineId: number, data: EngineUpdate): Promise<Engine> => {
+        const res = await fetch(`${API_BASE}/engines/${engineId}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(data),
+        });
+        if (!res.ok) {
+            const errorData = await res.json().catch(() => ({}));
+            throw new Error(errorData.detail || "Failed to update engine");
+        }
         return res.json();
     },
 

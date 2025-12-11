@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     COMFYUI_ARGS: str = ""
     # Default ComfyUI URL
     COMFYUI_URL: str = "http://127.0.0.1:8188"
+    # ComfyUI output/input directories - can be set per-environment via environment variables
+    # e.g., SWEET_TEA_COMFYUI_OUTPUT_DIR=/opt/ComfyUI/output
+    COMFYUI_OUTPUT_DIR: Optional[str] = None
+    COMFYUI_INPUT_DIR: Optional[str] = None
     
     # BACKEND_CORS_ORIGINS is a JSON-formatted list of origins
     # e.g: '["http://localhost", "http://localhost:4200", "http://localhost:3000"]'

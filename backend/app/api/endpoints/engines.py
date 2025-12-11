@@ -93,6 +93,36 @@ def read_engine(engine_id: int):
         return engine
 
 
+@router.patch("/{engine_id}", response_model=EngineRead)
+def update_engine(engine_id: int, engine_update: EngineUpdate):
+    """
+    Update engine configuration.
+    
+    Allows updating any engine field including output_dir and input_dir.
+    This is how users configure ComfyUI paths after initial setup.
+    """
+    with Session(db_engine) as session:
+        engine = session.get(Engine, engine_id)
+        if not engine:
+            raise HTTPException(status_code=404, detail="Engine not found")
+        
+        # Update only provided fields
+        update_data = engine_update.dict(exclude_unset=True)
+        for field, value in update_data.items():
+            setattr(engine, field, value)
+        
+        session.add(engine)
+        session.commit()
+        session.refresh(engine)
+        return engine
+
+
+# Also support PUT for environments where PATCH might be blocked
+@router.put("/{engine_id}", response_model=EngineRead)
+def update_engine_put(engine_id: int, engine_update: EngineUpdate):
+    """Alternative to PATCH for updating engine configuration."""
+    return update_engine(engine_id, engine_update)
+
 @router.get("/{engine_id}/object_info")
 def read_object_info(engine_id: int):
     with Session(db_engine) as session:
