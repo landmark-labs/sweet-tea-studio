@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ArrowDownCircle, ExternalLink, FolderOpen, Info, Link2, Rocket, Sparkles, Trash2 } from "lucide-react";
+import { ArrowDownCircle, ExternalLink, FolderOpen, Info, Link2, Rocket, Sparkles, Trash2, XCircle } from "lucide-react";
 import { useUndoRedo } from "@/lib/undoRedo";
 
 type ModelCategory = string;
@@ -32,10 +32,14 @@ type DownloadJob = {
   link: string;
   category: ModelCategory;
   target: string;
-  status: "queued" | "downloading" | "completed" | "failed";
+  status: "queued" | "downloading" | "completed" | "failed" | "cancelled";
   progress: number;
   speed?: string;
   eta?: string;
+  filename?: string;
+  downloaded_bytes?: number;
+  total_bytes?: number;
+  error?: string;
 };
 
 type ModelFolder = {
@@ -65,32 +69,38 @@ export default function Models() {
   const { registerStateChange } = useUndoRedo();
 
   // Fetch installed models from API
-  const fetchModels = async () => {
+  const fetchModels = async (refresh = false) => {
     setIsLoading(true);
     try {
-      const res = await fetch("/api/v1/models/installed");
+      const url = refresh ? "/api/v1/models/installed?refresh=true" : "/api/v1/models/installed";
+      const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
+        console.log("[Models] Fetched installed models:", data);
         // Map API response to component format
-        const mapped: InstalledModel[] = data.map((m: any) => ({
-          id: m.id,
-          name: m.name,
-          category: m.kind.charAt(0).toUpperCase() + m.kind.slice(1) as ModelCategory,
+        const mapped: InstalledModel[] = data.map((m: any, index: number) => ({
+          id: m.id || `model-${index}-${Date.now()}`,
+          name: m.name || "Unknown Model",
+          category: (m.kind ? (m.kind.charAt(0).toUpperCase() + m.kind.slice(1)) : "Other") as ModelCategory,
           source: m.source === "civitai" ? "Civitai" : m.source === "huggingface" ? "Hugging Face" : "Manual",
-          size: m.size_display,
-          location: m.path,
+          size: m.size_display || "?",
+          location: m.path || "",
           notes: m.meta?.description,
         }));
+        console.log("[Models] Mapped to:", mapped);
         setModels(mapped);
+      } else {
+        console.error("[Models] Failed response:", res.status, await res.text());
+        // NEVER clear models on error to prevent data loss from stale closures
       }
     } catch (e) {
       console.error("Failed to load models:", e);
-      // Fall back to empty list
-      setModels([]);
+      // NEVER clear models on error
     } finally {
       setIsLoading(false);
     }
   };
+
 
   // Fetch download queue
   const fetchDownloads = async () => {
@@ -100,14 +110,18 @@ export default function Models() {
         const data = await res.json();
         const mapped: DownloadJob[] = data.map((d: any) => ({
           id: d.job_id,
-          source: "Hugging Face" as DownloadSource, // Backend doesn't always send source, but label handles it
+          source: "Hugging Face" as DownloadSource, // Backend doesn't always send source, label handles it
           link: d.url || "",
-          category: selectedCategory, // Note: backend doesn't return category for job status easily yet
+          category: selectedCategory,
           target: d.target_folder || "unknown",
           status: d.status,
-          progress: d.progress,
-          speed: d.speed,
-          eta: d.eta,
+          progress: d.progress ?? 0,
+          speed: d.speed || "",
+          eta: d.eta || "",
+          filename: d.filename || "",
+          downloaded_bytes: d.downloaded_bytes,
+          total_bytes: d.total_bytes,
+          error: d.error || undefined,
         }));
         setDownloadQueue(mapped);
       }
@@ -132,6 +146,21 @@ export default function Models() {
     }
   };
 
+  // Fetch contents of a specific folder (lazy-loaded)
+  const fetchFolderContents = async (folderName: string) => {
+    try {
+      const res = await fetch(`/api/v1/models/directories/${folderName}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      // Update the items for this folder in modelFolders
+      setModelFolders(prev => prev.map(f =>
+        f.name === folderName ? { ...f, items: data.items || [] } : f
+      ));
+    } catch (e) {
+      console.error(`Failed to load folder contents for ${folderName}:`, e);
+    }
+  };
+
   useEffect(() => {
     fetchModels();
     fetchDownloads();
@@ -140,6 +169,13 @@ export default function Models() {
     const interval = setInterval(fetchDownloads, 2000);
     return () => clearInterval(interval);
   }, []);
+
+  // Load folder contents when activeFolder changes
+  useEffect(() => {
+    if (activeFolder) {
+      fetchFolderContents(activeFolder);
+    }
+  }, [activeFolder]);
 
   // Set default target for download rows when folders load
   useEffect(() => {
@@ -165,8 +201,9 @@ export default function Models() {
   };
 
   const filteredModels = useMemo(() => {
+    console.log("[Models] Computing filteredModels. models.length:", models.length, "selectedCategory:", selectedCategory, "search:", search);
     const term = search.toLowerCase();
-    return models.filter((m) => {
+    const result = models.filter((m) => {
       const matchesSearch =
         !term ||
         m.name.toLowerCase().includes(term) ||
@@ -177,6 +214,8 @@ export default function Models() {
       const pathSegments = m.location.toLowerCase().split(/[\\/]/);
       return matchesSearch && pathSegments.includes(selectedCategory.toLowerCase());
     });
+    console.log("[Models] filteredModels result:", result.length);
+    return result;
   }, [models, search, selectedCategory]);
 
   const handleAddRow = () => {
@@ -201,25 +240,40 @@ export default function Models() {
     const validRows = downloadRows.filter(r => r.url.trim().length > 0);
     if (!validRows.length) return;
 
+    let successCount = 0;
+    const errors: string[] = [];
+
     for (const row of validRows) {
       try {
-        await fetch("/api/v1/models/download", {
+        const res = await fetch("/api/v1/models/download", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             url: row.url.trim(),
             target_folder: row.target.toLowerCase(),
-            // Backend will auto-detect Civitai vs Aria2c based on URL
           }),
         });
+
+        if (!res.ok) {
+          const errorData = await res.json().catch(() => ({}));
+          errors.push(`${row.url}: ${errorData.detail || res.statusText}`);
+        } else {
+          successCount++;
+        }
       } catch (e) {
         console.error("Failed to queue download:", e);
-        alert(`Failed to queue: ${row.url}`);
+        errors.push(`${row.url}: Network error - ${e instanceof Error ? e.message : "Unknown error"}`);
       }
     }
 
-    // Clear rows and refresh
-    setDownloadRows([{ target: "checkpoints", url: "", id: Date.now() }]);
+    if (errors.length > 0) {
+      alert(`Failed to queue ${errors.length} download(s):\n${errors.join("\n")}`);
+    }
+
+    // Clear rows and refresh if any succeeded
+    if (successCount > 0) {
+      setDownloadRows([{ target: modelFolders.length > 0 ? modelFolders[0].name : "checkpoints", url: "", id: Date.now() }]);
+    }
     fetchDownloads();
   };
 
@@ -236,6 +290,21 @@ export default function Models() {
           : job
       )
     );
+  };
+
+  const cancelJob = async (id: string) => {
+    try {
+      const res = await fetch(`/api/v1/models/downloads/${id}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        fetchDownloads(); // Refresh the queue
+      } else {
+        console.error("Failed to cancel download");
+      }
+    } catch (e) {
+      console.error("Failed to cancel download:", e);
+    }
   };
 
   const removeJob = (id: string) => {
@@ -427,32 +496,60 @@ export default function Models() {
           </CardHeader>
           <CardContent className="space-y-3 flex-1 overflow-y-auto max-h-[600px]">
             {downloadQueue.map((job) => (
-              <div key={job.id} className="rounded-md border border-slate-200 p-3 bg-white space-y-2">
+              <div key={job.id} className={`rounded-md border p-3 bg-white space-y-2 ${job.status === "failed" ? "border-red-300 bg-red-50" :
+                job.status === "cancelled" ? "border-slate-300 bg-slate-50" :
+                  job.status === "completed" ? "border-green-200 bg-green-50" :
+                    "border-slate-200"
+                }`}>
                 <div className="flex items-center justify-between">
                   <div className="space-y-1 w-full overflow-hidden">
                     <div className="flex items-center gap-2 text-sm font-medium text-slate-800">
-                      <ArrowDownCircle size={16} className="text-blue-500 flex-none" />
-                      <span className="capitalize truncate">{job.target}</span>
+                      <ArrowDownCircle size={16} className={`flex-none ${job.status === "downloading" ? "text-blue-500 animate-pulse" :
+                        job.status === "completed" ? "text-green-500" :
+                          job.status === "failed" ? "text-red-500" :
+                            job.status === "cancelled" ? "text-slate-400" :
+                              "text-slate-500"
+                        }`} />
+                      <span className="truncate">{job.filename || job.target}</span>
                     </div>
                     <p className="text-xs text-slate-500 truncate" title={job.link}>{job.link}</p>
                   </div>
                   <div className="flex gap-1 flex-none">
-                    {job.status !== "completed" && (
-                      <Button size="sm" variant="outline" className="h-7 text-[10px]" onClick={() => markComplete(job.id)}>
-                        Reset
+                    {(job.status === "queued" || job.status === "downloading") && (
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7 text-slate-400 hover:text-red-500"
+                        onClick={() => cancelJob(job.id)}
+                        title="Cancel download"
+                      >
+                        <XCircle size={16} />
                       </Button>
                     )}
-                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => removeJob(job.id)}>
-                      <Trash2 size={14} />
-                    </Button>
+                    {(job.status === "completed" || job.status === "failed" || job.status === "cancelled") && (
+                      <Button size="icon" variant="ghost" className="h-7 w-7 text-slate-400 hover:text-red-500" onClick={() => cancelJob(job.id)} title="Remove from queue">
+                        <Trash2 size={14} />
+                      </Button>
+                    )}
                   </div>
                 </div>
                 <div className="space-y-1">
                   <div className="flex items-center justify-between text-xs text-slate-500">
-                    <span className="capitalize">{job.status}</span>
-                    <span>{job.eta || job.speed}</span>
+                    <span className={`capitalize font-medium ${job.status === "downloading" ? "text-blue-600" :
+                      job.status === "completed" ? "text-green-600" :
+                        job.status === "failed" ? "text-red-600" :
+                          job.status === "cancelled" ? "text-slate-500" :
+                            "text-slate-600"
+                      }`}>{job.status}</span>
+                    <span className="flex items-center gap-2">
+                      {job.speed && <span>{job.speed}</span>}
+                      {job.eta && job.status === "downloading" && <span className="text-slate-400">ETA: {job.eta}</span>}
+                    </span>
                   </div>
                   <Progress value={job.progress} className="h-2" />
+                  {job.error && (
+                    <p className="text-xs text-red-600 truncate" title={job.error}>{job.error}</p>
+                  )}
                 </div>
               </div>
             ))}
@@ -491,14 +588,14 @@ export default function Models() {
                 ))}
               </SelectContent>
             </Select>
-            <Button variant="outline" onClick={fetchModels} disabled={isLoading}>
+            <Button variant="outline" onClick={() => fetchModels(true)} disabled={isLoading}>
               {isLoading ? "loading..." : "refresh inventory"}
             </Button>
           </div>
 
-          <ScrollArea className="max-h-[420px] rounded-md border border-slate-200">
+          <div className="rounded-md border border-slate-200 overflow-auto min-h-[300px] max-h-[500px] bg-white">
             <Table>
-              <TableHeader className="bg-slate-50">
+              <TableHeader className="bg-slate-50 sticky top-0 z-10">
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>Type</TableHead>
@@ -528,7 +625,7 @@ export default function Models() {
                 )}
               </TableBody>
             </Table>
-          </ScrollArea>
+          </div>
         </CardContent>
       </Card>
     </div>

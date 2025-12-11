@@ -5,6 +5,7 @@ Provides ability to detect, configure, and launch ComfyUI from Sweet Tea Studio.
 import asyncio
 import os
 import signal
+import socket
 import subprocess
 import time
 import tempfile
@@ -39,6 +40,9 @@ class ComfyUILauncher:
         self._cooldown_seconds = 3.0
         self._log_file: Optional[Path] = None
         self._log_handle = None
+        # Port check cache for faster is_running() calls
+        self._port_check_cache: dict = {"result": None, "timestamp": 0}
+        self._port_cache_ttl = 2.0  # Cache for 2 seconds
 
     def get_logs(self, lines: int = 100) -> str:
         """Get the tail of the log file."""
@@ -92,18 +96,44 @@ class ComfyUILauncher:
             self._config = config
             return config
     
+    def _is_port_in_use(self, port: int) -> bool:
+        """Fast check if a port is in use via socket (no process iteration)."""
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(0.1)
+                result = s.connect_ex(('127.0.0.1', port))
+                return result == 0  # 0 means connection succeeded (port in use)
+        except Exception:
+            return False
+    
     def _find_process_by_port(self, port: int) -> Optional[psutil.Process]:
-        """Find the process listening on a specific port."""
+        """Find the process listening on a specific port (cached for 2s)."""
+        now = time.time()
+        
+        # Check cache first
+        if now - self._port_check_cache["timestamp"] < self._port_cache_ttl:
+            return self._port_check_cache["result"]
+        
+        # First, do a fast socket check - if port not in use, no need to scan processes
+        if not self._is_port_in_use(port):
+            self._port_check_cache = {"result": None, "timestamp": now}
+            return None
+        
+        # Port is in use - scan processes (slow but only when needed)
         for proc in psutil.process_iter(['pid', 'name']):
             if proc.pid == 0:
                 continue
             try:
                 for conn in proc.connections(kind='inet'):
                     if conn.laddr.port == port and conn.status == psutil.CONN_LISTEN:
+                        self._port_check_cache = {"result": proc, "timestamp": now}
                         return proc
             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                 pass
+        
+        self._port_check_cache = {"result": None, "timestamp": now}
         return None
+
 
     def detect_comfyui(self) -> LaunchConfig:
         """Detect ComfyUI installation paths."""
