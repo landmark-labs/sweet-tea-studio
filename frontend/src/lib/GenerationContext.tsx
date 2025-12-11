@@ -230,7 +230,8 @@ export function GenerationProvider({ children }: GenerationProviderProps) {
             trackFeedStart(job.id);
 
             // Start WebSocket to track progress
-            const ws = new WebSocket(`ws://127.0.0.1:8000/api/v1/jobs/${job.id}/ws`);
+            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const ws = new WebSocket(`${wsProtocol}//${window.location.host}/api/v1/jobs/${job.id}/ws`);
             ws.onmessage = (event) => {
                 const data = JSON.parse(event.data);
                 if (data.type === "status") {

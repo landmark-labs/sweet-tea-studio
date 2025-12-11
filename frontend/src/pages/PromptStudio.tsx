@@ -405,7 +405,8 @@ export default function PromptStudio() {
     if (!jobStartTime) setJobStartTime(Date.now());
 
 
-    const ws = new WebSocket(`ws://127.0.0.1:8000/api/v1/jobs/${lastJobId}/ws`);
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(`${wsProtocol}//${window.location.host}/api/v1/jobs/${lastJobId}/ws`);
 
     ws.onopen = () => {
       // Connected
