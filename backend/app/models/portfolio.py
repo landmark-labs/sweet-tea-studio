@@ -50,7 +50,7 @@ class Pipe(PipeBase, table=True):
     
     id: Optional[int] = Field(default=None, primary_key=True)
     created_at: datetime = Field(default_factory=datetime.utcnow)
-    description: Optional[str] = None
+    description: Optional[str] = Field(default=None, max_length=500)
 
 
 class PipeCreate(SQLModel):
@@ -58,7 +58,7 @@ class PipeCreate(SQLModel):
     slug: Optional[str] = None
     workflow_id: int
     default_params: Optional[str] = "{}"
-    description: Optional[str] = None
+    description: Optional[str] = Field(default=None, max_length=500)
 
 
 class PipeRead(PipeBase):

@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import { FileJson, AlertTriangle, GitBranch, Edit2, Trash2, Save, RotateCw, CheckCircle2, XCircle } from "lucide-react";
 import { api, WorkflowTemplate } from "@/lib/api";
 import { WorkflowGraphViewer } from "@/components/WorkflowGraphViewer";
@@ -18,6 +19,7 @@ export default function WorkflowLibrary() {
     const [error, setError] = useState<string | null>(null);
     const [importFile, setImportFile] = useState<File | null>(null);
     const [importName, setImportName] = useState("");
+    const [importDescription, setImportDescription] = useState("");
     const [isImporting, setIsImporting] = useState(false);
     const [isDialogOpen, setIsDialogOpen] = useState(false);
 
@@ -41,6 +43,7 @@ export default function WorkflowLibrary() {
     const [composeSource, setComposeSource] = useState<string>("");
     const [composeTarget, setComposeTarget] = useState<string>("");
     const [composeName, setComposeName] = useState("");
+    const [composeDescription, setComposeDescription] = useState("");
 
     useEffect(() => {
         loadWorkflows();
@@ -81,6 +84,8 @@ export default function WorkflowLibrary() {
             const text = await importFile.text();
             const graph = JSON.parse(text);
 
+            const cleanedDescription = importDescription.trim().slice(0, 500);
+
             if (graph.nodes && Array.isArray(graph.nodes)) {
                 alert("It looks like you uploaded a 'Saved' workflow. Please use 'Save (API Format)' in ComfyUI.");
                 setIsImporting(false);
@@ -89,7 +94,7 @@ export default function WorkflowLibrary() {
 
             const payload = {
                 name: importName,
-                description: "imported pipe",
+                description: cleanedDescription || "imported pipe",
                 graph_json: graph,
                 input_schema: {}
             };
@@ -107,6 +112,7 @@ export default function WorkflowLibrary() {
 
             setImportFile(null);
             setImportName("");
+            setImportDescription("");
             setIsDialogOpen(false);
             loadWorkflows();
         } catch (err) {
@@ -130,13 +136,15 @@ export default function WorkflowLibrary() {
     const handleCompose = async () => {
         if (!composeSource || !composeTarget || !composeName) return;
         try {
+            const cleanedDescription = composeDescription.trim().slice(0, 500);
             const res = await fetch("/api/v1/workflows/compose", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     source_id: parseInt(composeSource),
                     target_id: parseInt(composeTarget),
-                    name: composeName
+                    name: composeName,
+                    description: cleanedDescription || undefined
                 })
             });
 
@@ -149,6 +157,7 @@ export default function WorkflowLibrary() {
             setComposeName("");
             setComposeSource("");
             setComposeTarget("");
+            setComposeDescription("");
             loadWorkflows();
             alert("pipe created successfully!");
         } catch (err) {
@@ -280,6 +289,30 @@ export default function WorkflowLibrary() {
                         </Dialog>
                         <Button variant="outline" onClick={() => setEditingWorkflow(null)}>Cancel</Button>
                         <Button onClick={handleSaveSchema}><Save className="w-4 h-4 mr-2" /> Save Changes</Button>
+                    </div>
+                </div>
+                <div className="bg-white border rounded-md p-4 space-y-4 mb-4">
+                    <div className="grid grid-cols-6 items-center gap-4">
+                        <Label htmlFor="edit-name" className="text-right">pipe name</Label>
+                        <Input
+                            id="edit-name"
+                            className="col-span-5"
+                            value={editingWorkflow.name}
+                            onChange={(e) => setEditingWorkflow({ ...editingWorkflow, name: e.target.value })}
+                        />
+                    </div>
+                    <div className="grid grid-cols-6 items-start gap-4">
+                        <Label htmlFor="edit-description" className="text-right mt-2">description</Label>
+                        <div className="col-span-5 space-y-1">
+                            <Textarea
+                                id="edit-description"
+                                value={editingWorkflow.description || ""}
+                                onChange={(e) => setEditingWorkflow({ ...editingWorkflow, description: e.target.value.slice(0, 500) })}
+                                placeholder="summarize what this pipe generates"
+                                maxLength={500}
+                            />
+                            <div className="text-[11px] text-slate-500 text-right">{(editingWorkflow.description || "").length}/500</div>
+                        </div>
                     </div>
                 </div>
                 <Card className="flex-1 overflow-auto bg-slate-50/50">
@@ -598,7 +631,15 @@ export default function WorkflowLibrary() {
             <div className="flex justify-between items-center mb-6">
                 <h1 className="text-3xl font-bold">{labels.pageTitle.pipes}</h1>
                 <div className="flex gap-2">
-                    <Dialog open={composeOpen} onOpenChange={setComposeOpen}>
+                    <Dialog open={composeOpen} onOpenChange={(open) => {
+                        setComposeOpen(open);
+                        if (!open) {
+                            setComposeName("");
+                            setComposeSource("");
+                            setComposeTarget("");
+                            setComposeDescription("");
+                        }
+                    }}>
                         <DialogTrigger asChild>
                             <Button variant="outline">compose</Button>
                         </DialogTrigger>
@@ -640,6 +681,19 @@ export default function WorkflowLibrary() {
                                     <Label htmlFor="compose-name" className="text-right">new pipe name</Label>
                                     <Input id="compose-name" value={composeName} onChange={(e) => setComposeName(e.target.value)} className="col-span-3" />
                                 </div>
+                                <div className="grid grid-cols-4 items-start gap-4">
+                                    <Label htmlFor="compose-description" className="text-right mt-2">description</Label>
+                                    <div className="col-span-3 space-y-1">
+                                        <Textarea
+                                            id="compose-description"
+                                            value={composeDescription}
+                                            onChange={(e) => setComposeDescription(e.target.value.slice(0, 500))}
+                                            placeholder="how should this composed pipe be used?"
+                                            maxLength={500}
+                                        />
+                                        <div className="text-[11px] text-slate-500 text-right">{composeDescription.length}/500</div>
+                                    </div>
+                                </div>
                             </div>
                             <DialogFooter>
                                 <Button onClick={handleCompose} disabled={!composeSource || !composeTarget || !composeName}>
@@ -649,7 +703,14 @@ export default function WorkflowLibrary() {
                         </DialogContent>
                     </Dialog>
 
-                    <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                    <Dialog open={isDialogOpen} onOpenChange={(open) => {
+                        setIsDialogOpen(open);
+                        if (!open) {
+                            setImportFile(null);
+                            setImportName("");
+                            setImportDescription("");
+                        }
+                    }}>
                         <DialogTrigger asChild>
                             <Button>import pipe</Button>
                         </DialogTrigger>
@@ -664,6 +725,19 @@ export default function WorkflowLibrary() {
                                 <div className="grid grid-cols-4 items-center gap-4">
                                     <Label htmlFor="name" className="text-right">pipe name</Label>
                                     <Input id="name" value={importName} onChange={(e) => setImportName(e.target.value)} className="col-span-3" />
+                                </div>
+                                <div className="grid grid-cols-4 items-start gap-4">
+                                    <Label htmlFor="description" className="text-right mt-2">description</Label>
+                                    <div className="col-span-3 space-y-1">
+                                        <Textarea
+                                            id="description"
+                                            value={importDescription}
+                                            onChange={(e) => setImportDescription(e.target.value.slice(0, 500))}
+                                            placeholder="what does this pipe do?"
+                                            maxLength={500}
+                                        />
+                                        <div className="text-[11px] text-slate-500 text-right">{importDescription.length}/500</div>
+                                    </div>
                                 </div>
                                 <div className="grid grid-cols-4 items-center gap-4">
                                     <Label htmlFor="file" className="text-right">file</Label>
@@ -691,13 +765,13 @@ export default function WorkflowLibrary() {
                 {workflows.map((w) => {
                     const missing = getMissingNodes(w);
                     return (
-                        <Card key={w.id} className="relative group hover:shadow-lg transition-shadow">
+                        <Card key={w.id} className="relative group hover:shadow-lg transition-shadow" title={w.description || undefined}>
                             <CardHeader>
                                 <div className="flex justify-between items-start">
-                                    <CardTitle className="truncate pr-4">{w.name}</CardTitle>
+                                    <CardTitle className="truncate pr-4" title={w.name}>{w.name}</CardTitle>
                                     <FileJson className="w-5 h-5 text-slate-400" />
                                 </div>
-                                <CardDescription className="line-clamp-2 h-10">
+                                <CardDescription className="line-clamp-2 h-10" title={w.description || undefined}>
                                     {w.description?.split("[Missing")[0] || "No description"}
                                 </CardDescription>
                             </CardHeader>
