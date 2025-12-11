@@ -12,6 +12,7 @@ import { api, WorkflowTemplate } from "@/lib/api";
 import { WorkflowGraphViewer } from "@/components/WorkflowGraphViewer";
 import { cn } from "@/lib/utils";
 import { labels } from "@/ui/labels";
+import { useGeneration } from "@/lib/GenerationContext";
 
 export default function WorkflowLibrary() {
     const [workflows, setWorkflows] = useState<WorkflowTemplate[]>([]);
@@ -24,6 +25,11 @@ export default function WorkflowLibrary() {
     // Edit State
     const [editingWorkflow, setEditingWorkflow] = useState<WorkflowTemplate | null>(null);
     const [schemaEdits, setSchemaEdits] = useState<any>(null);
+    const [editName, setEditName] = useState("");
+    const [nameError, setNameError] = useState("");
+    const [isSaving, setIsSaving] = useState(false);
+
+    const generation = useGeneration();
 
     // Install State
     const [installOpen, setInstallOpen] = useState(false);
@@ -160,21 +166,48 @@ export default function WorkflowLibrary() {
     const handleEdit = (w: WorkflowTemplate) => {
         setEditingWorkflow(w);
         setSchemaEdits(JSON.parse(JSON.stringify(w.input_schema)));
+        setEditName(w.name);
+        setNameError("");
+    };
+
+    const validateName = (value: string, currentId?: number) => {
+        const trimmed = value.trim();
+        if (trimmed.length === 0) return "name is required";
+
+        const duplicate = workflows.some(w => w.id !== currentId && w.name.toLowerCase() === trimmed.toLowerCase());
+        if (duplicate) return "name must be unique";
+
+        return "";
     };
 
     const handleSaveSchema = async () => {
         if (!editingWorkflow || !schemaEdits) return;
+
+        const validationError = validateName(editName, editingWorkflow.id);
+        if (validationError) {
+            setNameError(validationError);
+            return;
+        }
+
+        const payload: WorkflowTemplate = {
+            ...editingWorkflow,
+            name: editName.trim(),
+            input_schema: schemaEdits
+        };
+
+        setIsSaving(true);
+        setWorkflows(prev => prev.map(w => w.id === payload.id ? payload : w));
         try {
-            const res = await fetch(`/api/v1/workflows/${editingWorkflow.id}`, {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ ...editingWorkflow, input_schema: schemaEdits })
-            });
-            if (!res.ok) throw new Error("Failed to update");
+            await api.updateWorkflow(payload.id, payload);
             setEditingWorkflow(null);
-            loadWorkflows();
+            setSchemaEdits(null);
+            await loadWorkflows();
+            await generation?.refreshWorkflows();
         } catch (err) {
             setError("Failed to save schema");
+            await loadWorkflows();
+        } finally {
+            setIsSaving(false);
         }
     };
 
@@ -218,8 +251,24 @@ export default function WorkflowLibrary() {
         return (
             <div className="container mx-auto p-4 h-[calc(100vh-4rem)] flex flex-col">
                 <div className="flex justify-between items-center mb-6">
-                    <h1 className="text-2xl font-bold">edit pipe: {editingWorkflow.name}</h1>
-                    <div className="flex gap-2">
+                    <div className="flex flex-col gap-2 flex-1">
+                        <h1 className="text-2xl font-bold">edit pipe</h1>
+                        <div className="flex flex-col gap-1 max-w-lg">
+                            <Label htmlFor="pipe-name">pipe name</Label>
+                            <Input
+                                id="pipe-name"
+                                value={editName}
+                                onChange={(e) => {
+                                    setEditName(e.target.value);
+                                    if (nameError) setNameError(validateName(e.target.value, editingWorkflow.id));
+                                }}
+                                onBlur={() => setNameError(validateName(editName, editingWorkflow.id))}
+                                placeholder="enter a unique name"
+                            />
+                            {nameError && <span className="text-xs text-red-600">{nameError}</span>}
+                        </div>
+                    </div>
+                    <div className="flex gap-2 items-start">
                         {/* We reuse the Bypass dialog as a generic "Add stuff" entry point for now */}
                         <Dialog>
                             <DialogTrigger asChild>
@@ -278,8 +327,10 @@ export default function WorkflowLibrary() {
                                 </div>
                             </DialogContent>
                         </Dialog>
-                        <Button variant="outline" onClick={() => setEditingWorkflow(null)}>Cancel</Button>
-                        <Button onClick={handleSaveSchema}><Save className="w-4 h-4 mr-2" /> Save Changes</Button>
+                        <Button variant="outline" onClick={() => setEditingWorkflow(null)} disabled={isSaving}>Cancel</Button>
+                        <Button onClick={handleSaveSchema} disabled={Boolean(nameError) || isSaving}>
+                            <Save className="w-4 h-4 mr-2" /> {isSaving ? "Saving..." : "Save Changes"}
+                        </Button>
                     </div>
                 </div>
                 <Card className="flex-1 overflow-auto bg-slate-50/50">
