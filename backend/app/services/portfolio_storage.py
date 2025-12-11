@@ -144,6 +144,7 @@ class PortfolioStorage:
         default_params: Dict[str, Any],
         description: Optional[str] = None,
     ) -> Pipe:
+        clean_description = description[:500] if description else None
         pipe = session.exec(select(Pipe).where(Pipe.slug == slug)).first()
         if pipe:
             return pipe
@@ -152,7 +153,7 @@ class PortfolioStorage:
             slug=slug,
             workflow_id=workflow_id,
             default_params=json.dumps(default_params or {}),
-            description=description,
+            description=clean_description,
         )
         session.add(pipe)
         session.commit()

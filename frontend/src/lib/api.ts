@@ -50,7 +50,7 @@ export interface ComfyLaunchConfig {
 export interface WorkflowTemplate {
     id: number;
     name: string;
-    description: string;
+    description?: string | null;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     graph_json: any;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

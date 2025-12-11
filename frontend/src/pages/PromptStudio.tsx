@@ -967,7 +967,12 @@ export default function PromptStudio() {
                   <SelectItem value="__empty" disabled>no pipes found</SelectItem>
                 ) : (
                   workflows.map((w) => (
-                    <SelectItem key={w.id} value={String(w.id)}>{w.name}</SelectItem>
+                    <SelectItem key={w.id} value={String(w.id)} title={w.description || undefined}>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="font-medium">{w.name}</span>
+                        <span className="text-[11px] text-slate-500 line-clamp-2">{w.description || "No description"}</span>
+                      </div>
+                    </SelectItem>
                   ))
                 )}
               </SelectContent>

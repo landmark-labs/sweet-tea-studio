@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 from sqlmodel import Session, select
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.db.engine import engine as db_engine
 from app.models.workflow import WorkflowTemplate, WorkflowTemplateCreate, WorkflowTemplateRead
@@ -15,6 +15,14 @@ from app.core.workflow_merger import WorkflowMerger
 
 router = APIRouter()
 
+
+def _clean_description(description: Optional[str]) -> Optional[str]:
+    """Normalize optional descriptions by trimming whitespace and empty strings."""
+
+    if description is None:
+        return None
+    cleaned = description.strip()
+    return cleaned or None
 EXPORT_VERSION = 1
 
 
@@ -321,7 +329,7 @@ def create_workflow(workflow_in: WorkflowTemplateCreate):
                 missing_nodes.append(ctype)
         
         missing_nodes = list(set(missing_nodes))
-        
+
         # 3. Generate Schema if not provided/empty
         if not workflow_in.input_schema:
             workflow_in.input_schema = generate_schema_from_graph(graph, object_info)
@@ -335,6 +343,8 @@ def create_workflow(workflow_in: WorkflowTemplateCreate):
                         "node_id": field_def["x_node_id"],
                         "field": f"inputs.{field_def.get('mock_field', key.split('.')[-1])}" # fallback logic
                     }
+
+        workflow_in.description = _clean_description(workflow_in.description)
 
         # Create
         db_workflow = WorkflowTemplate.from_orm(workflow_in)
@@ -446,11 +456,12 @@ def update_workflow(workflow_id: int, workflow_in: WorkflowTemplateCreate):
         workflow = session.get(WorkflowTemplate, workflow_id)
         if not workflow:
             raise HTTPException(status_code=404, detail="Workflow not found")
-            
+
+        workflow_in.description = _clean_description(workflow_in.description)
         workflow_data = workflow_in.dict(exclude_unset=True)
         for key, value in workflow_data.items():
             setattr(workflow, key, value)
-            
+
         session.add(workflow)
         session.commit()
         session.refresh(workflow)
@@ -471,6 +482,7 @@ class WorkflowComposeRequest(BaseModel):
     source_id: int
     target_id: int
     name: str
+    description: Optional[str] = Field(default=None, max_length=500)
 
 @router.post("/compose", response_model=WorkflowTemplate)
 def compose_workflows(req: WorkflowComposeRequest):
@@ -498,7 +510,8 @@ def compose_workflows(req: WorkflowComposeRequest):
         # Create Record
         new_workflow = WorkflowTemplate(
             name=req.name,
-            description=f"Composed from '{w_source.name}' + '{w_target.name}'",
+            description=_clean_description(req.description)
+            or f"Composed from '{w_source.name}' + '{w_target.name}'",
             graph_json=merged_graph,
             input_schema=schema
         )
