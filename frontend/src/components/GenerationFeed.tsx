@@ -23,6 +23,11 @@ interface GenerationFeedProps {
 export function GenerationFeed({ items, onSelectPreview, onGenerate }: GenerationFeedProps) {
   const activeItem = items[0];
 
+  // Debug: Log when component renders with preview blob
+  if (activeItem?.previewBlob) {
+    console.log("[GenerationFeed] Rendering with previewBlob:", activeItem.previewBlob.substring(0, 50) + "...");
+  }
+
   // Get completed items with preview paths (last 4 images from any jobs)
   // We flatten, because one job could have 4 images.
   const completedImages: { jobId: number, path: string, item: GenerationFeedItem }[] = [];

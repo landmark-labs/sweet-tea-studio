@@ -456,6 +456,7 @@ export default function PromptStudio() {
         setGalleryRefresh(prev => prev + 1);
       } else if (data.type === "preview") {
         // Live Preview from KSampler
+        console.log("[Preview] Received preview blob:", data.data.blob?.substring(0, 50) + "...", "length:", data.data.blob?.length);
         updateFeed(lastJobId, { previewBlob: data.data.blob });
       } else if (data.type === "error") {
         setJobStatus("failed");
