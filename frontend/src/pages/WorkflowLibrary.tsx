@@ -151,6 +151,8 @@ export default function WorkflowLibrary() {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(payload)
+            });
+            
             const bundleName = importName || graph?._sweet_tea?.name || importFile.name.replace(".json", "");
             await api.importWorkflow({
                 data: graph,
