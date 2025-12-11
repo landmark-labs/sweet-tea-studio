@@ -233,6 +233,37 @@ def process_job(job_id: int):
             
             saved_images = []
             
+            # Extract positive/negative prompts ONCE before the loop
+            # Check working_params for common prompt keys, then fall back to CLIPTextEncode nodes
+            pos_embed = working_params.get("prompt") or working_params.get("positive") or working_params.get("positive_prompt") or ""
+            neg_embed = working_params.get("negative_prompt") or working_params.get("negative") or ""
+            
+            if not pos_embed or not neg_embed:
+                clip_nodes = []
+                for node_id, node_data in final_graph.items():
+                    if node_data.get("class_type") == "CLIPTextEncode":
+                        text = node_data.get("inputs", {}).get("text", "")
+                        if isinstance(text, str) and text.strip():
+                            clip_nodes.append({
+                                "node_id": node_id,
+                                "text": text,
+                                "title": node_data.get("_meta", {}).get("title", "")
+                            })
+                
+                for cn in clip_nodes:
+                    title_lower = cn["title"].lower()
+                    text = cn["text"]
+                    if ("negative" in title_lower or "neg" in title_lower) and not neg_embed:
+                        neg_embed = text
+                    elif not pos_embed:
+                        pos_embed = text
+                
+                # Fallback: first two CLIPTextEncode nodes
+                if not pos_embed and len(clip_nodes) >= 1:
+                    pos_embed = clip_nodes[0]["text"]
+                if not neg_embed and len(clip_nodes) >= 2:
+                    neg_embed = clip_nodes[1]["text"]
+            
             # Determine the base filename prefix from project slug (if available)
             filename_prefix = project.slug if 'project' in dir() and project else f"gen_{job_id}"
             
@@ -334,46 +365,7 @@ def process_job(job_id: int):
                         print(f"Saved: {full_path}")
                     
                     # Embed provenance metadata into the saved image
-                    # Extract positive/negative prompts - check both working_params AND graph nodes
-                    pos_embed = ""
-                    neg_embed = ""
-                    
-                    # Method 1: Check working_params for common prompt keys
-                    pos_embed = working_params.get("prompt") or working_params.get("positive") or working_params.get("positive_prompt") or ""
-                    neg_embed = working_params.get("negative_prompt") or working_params.get("negative") or ""
-                    
-                    # Method 2: If not found, extract from CLIPTextEncode nodes in the graph
-                    if not pos_embed or not neg_embed:
-                        clip_nodes = []
-                        for node_id, node_data in final_graph.items():
-                            if node_data.get("class_type") == "CLIPTextEncode":
-                                text = node_data.get("inputs", {}).get("text", "")
-                                if isinstance(text, str) and text.strip():
-                                    clip_nodes.append({
-                                        "node_id": node_id,
-                                        "text": text,
-                                        "title": node_data.get("_meta", {}).get("title", "")
-                                    })
-                        
-                        # Heuristic: First CLIPTextEncode is usually positive, second is negative
-                        # Or check title for hints like "positive", "negative"
-                        for cn in clip_nodes:
-                            title_lower = cn["title"].lower()
-                            text = cn["text"]
-                            
-                            if "negative" in title_lower or "neg" in title_lower:
-                                if not neg_embed:
-                                    neg_embed = text
-                            elif "positive" in title_lower or "pos" in title_lower:
-                                if not pos_embed:
-                                    pos_embed = text
-                        
-                        # Fallback: if still no prompts found, use first two CLIPTextEncode nodes
-                        if not pos_embed and len(clip_nodes) >= 1:
-                            pos_embed = clip_nodes[0]["text"]
-                        if not neg_embed and len(clip_nodes) >= 2:
-                            neg_embed = clip_nodes[1]["text"]
-                    
+                    # pos_embed and neg_embed were extracted before the loop
                     provenance_data = {
                         "positive_prompt": pos_embed,
                         "negative_prompt": neg_embed,
@@ -455,8 +447,8 @@ def process_job(job_id: int):
 
                 latest_prompt = {
                     "stage": 0,
-                    "positive_text": working_params.get("prompt"),
-                    "negative_text": working_params.get("negative_prompt"),
+                    "positive_text": pos_embed,  # From CLIPTextEncode extraction above
+                    "negative_text": neg_embed,  # From CLIPTextEncode extraction above
                     "timestamp": datetime.utcnow().isoformat(),
                     "source": "workflow",
                 }
@@ -508,27 +500,9 @@ def process_job(job_id: int):
                 for img in saved_images
             ]
             
-            # Robust extraction of Prompt fields for Metadata/WS
-            # Re-use the pos/neg extracted during image save (same logic as metadata embedding)
-            # These variables should still be in scope from the image save loop above
-            pos = pos_embed if 'pos_embed' in dir() else ""
-            neg = neg_embed if 'neg_embed' in dir() else ""
-            
-            # Fallback if variables not in scope - extract again from CLIPTextEncode nodes
-            if not pos or not neg:
-                pos = working_params.get("prompt") or working_params.get("positive") or working_params.get("positive_prompt") or ""
-                neg = working_params.get("negative_prompt") or working_params.get("negative") or ""
-                
-                if not pos or not neg:
-                    for node_id, node_data in final_graph.items():
-                        if node_data.get("class_type") == "CLIPTextEncode":
-                            text = node_data.get("inputs", {}).get("text", "")
-                            title = node_data.get("_meta", {}).get("title", "").lower()
-                            if isinstance(text, str) and text.strip():
-                                if ("negative" in title or "neg" in title) and not neg:
-                                    neg = text
-                                elif not pos:
-                                    pos = text
+            # pos_embed and neg_embed are already extracted before the loop
+            pos = pos_embed
+            neg = neg_embed
 
             manager.broadcast_sync({
                 "type": "completed", 
