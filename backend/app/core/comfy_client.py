@@ -170,6 +170,7 @@ class ComfyClient:
         preview_images: List[Dict[str, Any]] = []
         image_counter = 0
         preview_counter = 0
+        execution_complete = False  # Track when node execution finishes
 
         try:
             while True:
@@ -183,6 +184,9 @@ class ComfyClient:
                     if not self._ping():
                         self._reconnect_with_backoff(backoff)
                         backoff = min(backoff * 2, self._max_backoff)
+                    # If execution already completed and we timeout, we're done
+                    if execution_complete:
+                        break
                     continue
                 except (websocket.WebSocketException, ConnectionResetError, socket.error):
                     # Hard disconnect; re-establish the connection and back off so we
@@ -216,7 +220,12 @@ class ComfyClient:
                     if message['type'] == 'executing':
                         data = message['data']
                         if data['node'] is None and data['prompt_id'] == prompt_id:
-                            break  # Execution is done
+                            # Execution complete - but DON'T break yet!
+                            # The final PreviewImage output may still arrive as a binary message
+                            execution_complete = True
+                            # Clear earlier preview images - only keep post-completion ones
+                            preview_images.clear()
+                            preview_counter = 0
                     
                     continue  # Done processing text message
                 
@@ -234,29 +243,34 @@ class ComfyClient:
                     image_format = struct.unpack('>I', out[4:8])[0]
                     image_data = out[8:]
                     
-                    if event_type == 1:  # PREVIEW_IMAGE (KSampler intermediate)
+                    if event_type == 1:  # PREVIEW_IMAGE
                         # Convert to base64 for frontend preview
                         b64_img = base64.b64encode(image_data).decode('utf-8')
                         prefix = "data:image/jpeg;base64," if image_format == 1 else "data:image/png;base64,"
                         
-                        # Store preview image bytes for potential use as final output
-                        # (when workflow only has PreviewImage node, no SaveImage)
+                        # Store preview image - will be cleared when execution completes
+                        # Post-completion previews are the FINAL output from PreviewImage node
                         preview_counter += 1
                         ext = "jpg" if image_format == 1 else "png"
                         preview_images.append({
-                            "filename": f"preview_{prompt_id[:8]}_{preview_counter:03d}.{ext}",
+                            "filename": f"gen_{prompt_id[:8]}_{preview_counter:03d}.{ext}",
                             "image_bytes": image_data,
                             "format": ext,
-                            "source": "preview"
+                            "source": "final_preview" if execution_complete else "ksampler_preview"
                         })
                         
                         if progress_callback:
                             progress_callback({
                                 "type": "preview",
                                 "data": {
-                                    "blob": f"{prefix}{b64_img}"
+                                    "blob": f"{prefix}{b64_img}",
+                                    "is_final": execution_complete
                                 }
                             })
+                        
+                        # If this came after execution complete, we got our final image - done!
+                        if execution_complete:
+                            break
                     
                     elif event_type == 2:  # FINAL_IMAGE (SaveImageWebsocket)
                         # This is a final output image - capture it!
