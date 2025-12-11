@@ -232,8 +232,28 @@ def process_job(job_id: int):
                 target_output_dir = job.output_dir
             
             saved_images = []
-            for img_data in images:
-                filename = img_data['filename']
+            
+            # Determine the base filename prefix from project slug (if available)
+            filename_prefix = project.slug if 'project' in dir() and project else f"gen_{job_id}"
+            
+            # Find the next available sequence number by checking existing files
+            next_seq = 1
+            if target_output_dir and os.path.exists(target_output_dir):
+                import re
+                existing_files = os.listdir(target_output_dir)
+                pattern = re.compile(rf"^{re.escape(filename_prefix)}_(\d+)\.(jpg|jpeg|png)$", re.IGNORECASE)
+                for f in existing_files:
+                    match = pattern.match(f)
+                    if match:
+                        num = int(match.group(1))
+                        if num >= next_seq:
+                            next_seq = num + 1
+            
+            for idx, img_data in enumerate(images):
+                # Generate sequential filename: project-slug_0001.jpg
+                seq_num = next_seq + idx
+                original_ext = img_data['filename'].rsplit('.', 1)[-1].lower() if '.' in img_data['filename'] else 'jpg'
+                filename = f"{filename_prefix}_{seq_num:04d}.{original_ext}"
                 
                 # Determine where to save this image
                 if target_output_dir:

@@ -463,7 +463,16 @@ export function ImageViewer({
                                 {currentMetadata.job_params && typeof currentMetadata.job_params === 'object' && Object.keys(currentMetadata.job_params).length > 0 && (
                                     <div className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-x-4 gap-y-2 pt-2 border-t border-slate-100">
                                         {Object.entries(currentMetadata.job_params as Record<string, unknown>)
-                                            .filter(([, v]) => v !== null && v !== undefined && v !== "" && typeof v !== 'object')
+                                            .filter(([k, v]) => {
+                                                // Exclude null/empty values
+                                                if (v === null || v === undefined || v === "" || typeof v === 'object') return false;
+                                                // Exclude CLIPTextEncode prompt params - these show in dedicated boxes
+                                                const keyLower = k.toLowerCase();
+                                                if (keyLower.includes('cliptextencode') || keyLower.includes('cliptext')) return false;
+                                                if (keyLower.includes('positive_prompt') || keyLower.includes('negative_prompt')) return false;
+                                                if (k === 'prompt' || k === 'text') return false;
+                                                return true;
+                                            })
                                             .map(([k, v]) => (
                                                 <div key={k} className="min-w-0">
                                                     <span className="font-medium text-slate-500 capitalize text-[9px] uppercase tracking-wide block truncate">{k.replace(/_/g, ' ')}</span>
