@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from "react";
 import { api, WorkflowTemplate, Project, PromptLibraryItem } from "@/lib/api";
 import { useGenerationFeedStore, usePromptLibraryStore } from "@/lib/stores/promptDataStore";
+import { stripSchemaMeta } from "@/lib/schema";
 
 interface GenerationContextValue {
     // Selection state
@@ -128,7 +129,7 @@ export function GenerationProvider({ children }: GenerationProviderProps) {
         const workflow = workflows.find(w => String(w.id) === selectedWorkflowId);
         if (!workflow) return;
 
-        const schema = workflow.input_schema || {};
+        const schema = stripSchemaMeta(workflow.input_schema || {});
         let initialData: Record<string, any> = {};
 
         // Set defaults from schema
@@ -209,7 +210,7 @@ export function GenerationProvider({ children }: GenerationProviderProps) {
 
         setIsGenerating(true);
         try {
-            const schema = workflow.input_schema || {};
+            const schema = stripSchemaMeta(workflow.input_schema || {});
 
             // Filter to only include params in schema
             const cleanParams = Object.keys(formData).reduce((acc, key) => {
