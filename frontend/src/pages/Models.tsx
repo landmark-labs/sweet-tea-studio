@@ -563,13 +563,13 @@ export default function Models() {
         </Card>
       </div>
 
-      <Card>
+      <Card className="h-full flex flex-col">
         <CardHeader>
           <CardTitle className="text-lg">Installed models</CardTitle>
           <CardDescription>discover what is already available inside comfyui for this sweet tea instance.</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <CardContent className="space-y-4 flex-1 flex flex-col">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             <Input
               placeholder="Search models or paths"
               value={search}
@@ -593,38 +593,40 @@ export default function Models() {
             </Button>
           </div>
 
-          <div className="rounded-md border border-slate-200 overflow-auto min-h-[300px] max-h-[500px] bg-white">
-            <Table>
-              <TableHeader className="bg-slate-50 sticky top-0 z-10">
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Source</TableHead>
-                  <TableHead>Size</TableHead>
-                  <TableHead>Location</TableHead>
-                  <TableHead>Notes</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredModels.map((model) => (
-                  <TableRow key={model.id}>
-                    <TableCell className="font-medium">{model.name}</TableCell>
-                    <TableCell>{model.category}</TableCell>
-                    <TableCell>{model.source}</TableCell>
-                    <TableCell>{model.size}</TableCell>
-                    <TableCell className="text-xs text-slate-600 break-all">{model.location}</TableCell>
-                    <TableCell className="text-xs text-slate-600">{model.notes || "—"}</TableCell>
-                  </TableRow>
-                ))}
-                {!filteredModels.length && (
+          <div className="flex-1 rounded-md border border-slate-200 overflow-hidden min-h-[420px] max-h-[70vh] bg-white">
+            <div className="h-full overflow-auto">
+              <Table className="min-w-[760px]">
+                <TableHeader className="bg-slate-50 sticky top-0 z-10">
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center text-slate-500">
-                      No models match the current filters.
-                    </TableCell>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Source</TableHead>
+                    <TableHead>Size</TableHead>
+                    <TableHead>Location</TableHead>
+                    <TableHead>Notes</TableHead>
                   </TableRow>
-                )}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {filteredModels.map((model) => (
+                    <TableRow key={model.id}>
+                      <TableCell className="font-medium">{model.name}</TableCell>
+                      <TableCell>{model.category}</TableCell>
+                      <TableCell>{model.source}</TableCell>
+                      <TableCell>{model.size}</TableCell>
+                      <TableCell className="text-xs text-slate-600 break-all">{model.location}</TableCell>
+                      <TableCell className="text-xs text-slate-600">{model.notes || "—"}</TableCell>
+                    </TableRow>
+                  ))}
+                  {!filteredModels.length && (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center text-slate-500">
+                        No models match the current filters.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
           </div>
         </CardContent>
       </Card>
