@@ -417,6 +417,26 @@ export function DynamicForm({
         onSubmit(formData);
     };
 
+    const getBypassMeta = (group: { id?: string; keys: string[] }) => {
+        let bypassKey = group.keys.find(k => {
+            const f = schema[k];
+            return f?.widget === "toggle" && (
+                (f.title && f.title.toLowerCase().startsWith("bypass")) ||
+                k.toLowerCase().includes("bypass")
+            );
+        });
+
+        if (!bypassKey && group.id) {
+            const strictKey = `__bypass_${group.id}`;
+            if (schema && strictKey in schema) bypassKey = strictKey;
+        }
+
+        const hasBypass = !!bypassKey;
+        const isBypassed = hasBypass && formData[bypassKey!];
+
+        return { bypassKey, hasBypass, isBypassed };
+    };
+
     const renderField = (key: string) => {
         const field = schema[key];
         const isImageUpload = field.widget === "upload" || field.widget === "image_upload" || (field.title && field.title.includes("LoadImage"));
@@ -607,27 +627,31 @@ export function DynamicForm({
                     </div>
                 ) : (
                     <div className="space-y-4">
-                        {strictCoreGroups.map((group) => {
-                            // Detect bypass field
-                            let bypassKey = group.keys.find(k => {
-                                const f = schema[k];
-                                return f.widget === "toggle" && (
-                                    (f.title && f.title.toLowerCase().startsWith("bypass")) ||
-                                    k.toLowerCase().includes("bypass")
-                                );
-                            });
-
-                            const hasBypass = !!bypassKey;
-                            const isBypassed = hasBypass && formData[bypassKey!];
-                            const fieldsToRender = group.keys.filter(k => k !== bypassKey);
+                        {strictCoreGroups
+                            .map((group) => ({
+                                ...group,
+                                ...getBypassMeta(group),
+                            }))
+                            .sort((a, b) => {
+                                if (a.isBypassed !== b.isBypassed) return a.isBypassed ? 1 : -1;
+                                return a.order - b.order;
+                            })
+                            .map((group) => {
+                                const { bypassKey, hasBypass, isBypassed } = group;
+                                const fieldsToRender = group.keys.filter(k => k !== bypassKey);
 
                             return (
                                 <div key={group.id} className="space-y-2">
                                     {/* Always show header if multiple groups OR if we have a bypass toggle */}
                                     {(strictCoreGroups.length > 1 || hasBypass) && (
                                         <div className="flex items-center justify-between border-b border-slate-100 pb-1">
-                                            <h4 className="text-[11px] font-semibold uppercase text-slate-400 tracking-wide">
-                                                {group.title}
+                                            <h4 className="text-[11px] font-semibold uppercase text-slate-400 tracking-wide flex items-center gap-2">
+                                                <span>{group.title}</span>
+                                                {isBypassed && (
+                                                    <span className="text-[9px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5">
+                                                        Bypassed
+                                                    </span>
+                                                )}
                                             </h4>
                                             {hasBypass && (
                                                 <div className="flex items-center gap-2">
@@ -687,25 +711,16 @@ export function DynamicForm({
                         {strictSettingsFields.nodeEntries.length > 0 && (
                             <Accordion type="multiple" className="w-full space-y-2">
                                 {strictSettingsFields.nodeEntries
-                                    .sort((a, b) => a.order - b.order)
+                                    .map((group) => ({
+                                        ...group,
+                                        ...getBypassMeta(group),
+                                    }))
+                                    .sort((a, b) => {
+                                        if (a.isBypassed !== b.isBypassed) return a.isBypassed ? 1 : -1;
+                                        return a.order - b.order;
+                                    })
                                     .map((group) => {
-                                        // Detect bypass field
-                                        let bypassKey = group.keys.find(k => {
-                                            const f = schema[k];
-                                            return f.widget === "toggle" && (
-                                                (f.title && f.title.toLowerCase().startsWith("bypass")) ||
-                                                k.toLowerCase().includes("bypass")
-                                            );
-                                        });
-
-                                        // Fallback to strict ID check
-                                        if (!bypassKey) {
-                                            const strictKey = `__bypass_${group.id}`;
-                                            if (schema && strictKey in schema) bypassKey = strictKey;
-                                        }
-
-                                        const hasBypass = !!bypassKey;
-                                        const isBypassed = hasBypass && formData[bypassKey!];
+                                        const { bypassKey, hasBypass, isBypassed } = group;
 
                                         // Filter out bypass key from rendered fields
                                         const fieldsToRender = group.keys.filter(k => k !== bypassKey);
@@ -719,9 +734,19 @@ export function DynamicForm({
                                                     isBypassed && "opacity-60"
                                                 )}
                                             >
-                                                <AccordionTrigger className="text-xs font-semibold uppercase text-slate-500 hover:no-underline py-2 [&>svg]:ml-auto">
+                                                <AccordionTrigger
+                                                    className="text-xs font-semibold uppercase text-slate-500 hover:no-underline py-2 [&>svg]:ml-auto"
+                                                    aria-label={`${group.title} controls (${isBypassed ? "bypassed" : "active"})`}
+                                                >
                                                     <div className="flex items-center gap-3">
-                                                        <span>{group.title}</span>
+                                                        <span className="flex items-center gap-2">
+                                                            <span>{group.title}</span>
+                                                            {isBypassed && (
+                                                                <span className="text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5">
+                                                                    Bypassed
+                                                                </span>
+                                                            )}
+                                                        </span>
                                                         {hasBypass && (
                                                             <div
                                                                 className="flex items-center gap-2"

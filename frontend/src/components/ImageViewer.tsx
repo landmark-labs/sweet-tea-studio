@@ -1,8 +1,9 @@
 import React from "react";
-import { Download, ExternalLink, X, Check, Trash2, ArrowLeft, ArrowRight, RotateCcw } from "lucide-react";
+import { Download, ExternalLink, X, Check, Trash2, ArrowLeft, ArrowRight, RotateCcw, Copy } from "lucide-react";
 import { Button } from "./ui/button";
 import { api, Image as ApiImage, GalleryItem } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 
 
 interface ImageViewerProps {
@@ -30,6 +31,7 @@ export function ImageViewer({
     onDelete,
     selectedImagePath
 }: ImageViewerProps) {
+    const [copyState, setCopyState] = React.useState<{ positive: boolean; negative: boolean }>({ positive: false, negative: false });
     const [selectedIndex, setSelectedIndex] = React.useState<number>(0);
     const [contextMenu, setContextMenu] = React.useState<{ x: number, y: number } | null>(null);
     const containerRef = React.useRef<HTMLDivElement>(null);
@@ -256,6 +258,43 @@ export function ImageViewer({
         }
     };
 
+    const copyToClipboard = async (text: string) => {
+        if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+            return navigator.clipboard.writeText(text);
+        }
+
+        return new Promise<void>((resolve, reject) => {
+            try {
+                const textarea = document.createElement("textarea");
+                textarea.value = text;
+                textarea.style.position = "fixed";
+                textarea.style.left = "-9999px";
+                document.body.appendChild(textarea);
+                textarea.focus();
+                textarea.select();
+                const successful = document.execCommand("copy");
+                document.body.removeChild(textarea);
+                if (successful) {
+                    resolve();
+                } else {
+                    reject(new Error("Copy command failed"));
+                }
+            } catch (err) {
+                reject(err as Error);
+            }
+        });
+    };
+
+    const handleCopy = async (text: string, key: "positive" | "negative") => {
+        try {
+            await copyToClipboard(text);
+            setCopyState((prev) => ({ ...prev, [key]: true }));
+            setTimeout(() => setCopyState((prev) => ({ ...prev, [key]: false })), 1600);
+        } catch (err) {
+            console.error("Failed to copy prompt", err);
+        }
+    };
+
 
 
     const handleContextMenu = (e: React.MouseEvent) => {
@@ -438,56 +477,86 @@ export function ImageViewer({
                         </div>
 
                         {currentMetadata && (
-                            <div className="space-y-3">
-                                {/* Positive Prompt - Full width, auto-height */}
-                                {currentMetadata.prompt && (
-                                    <div className="w-full">
-                                        <span className="font-medium text-slate-500 text-[10px] uppercase block mb-1">Positive Prompt</span>
-                                        <p className="text-slate-700 bg-slate-50 p-2 rounded border text-[11px] font-mono whitespace-pre-wrap leading-relaxed w-full">
-                                            {String(currentMetadata.prompt)}
-                                        </p>
-                                    </div>
-                                )}
+                            <TooltipProvider>
+                                <div className="space-y-3">
+                                    {/* Positive Prompt - Full width, auto-height */}
+                                    {currentMetadata.prompt && (
+                                        <div className="w-full relative">
+                                            <span className="font-medium text-slate-500 text-[10px] uppercase block mb-1">Positive Prompt</span>
+                                            <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        aria-label={copyState.positive ? "Copied positive prompt" : "Copy positive prompt"}
+                                                        className="h-7 w-7 absolute top-0 right-0 text-slate-500 hover:text-slate-800"
+                                                        onClick={() => handleCopy(String(currentMetadata.prompt), "positive")}
+                                                    >
+                                                        {copyState.positive ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
+                                                    </Button>
+                                                </TooltipTrigger>
+                                                <TooltipContent>{copyState.positive ? "Copied!" : "Copy positive prompt"}</TooltipContent>
+                                            </Tooltip>
+                                            <p className="text-slate-700 bg-slate-50 p-2 pr-10 rounded border text-[11px] font-mono whitespace-pre-wrap leading-relaxed w-full">
+                                                {String(currentMetadata.prompt)}
+                                            </p>
+                                        </div>
+                                    )}
 
-                                {/* Negative Prompt - Full width, auto-height */}
-                                {currentMetadata.negative_prompt && (
-                                    <div className="w-full">
-                                        <span className="font-medium text-slate-500 text-[10px] uppercase block mb-1">Negative Prompt</span>
-                                        <p className="text-slate-700 bg-red-50/50 p-2 rounded border border-red-100 text-[11px] font-mono whitespace-pre-wrap leading-relaxed w-full">
-                                            {String(currentMetadata.negative_prompt)}
-                                        </p>
-                                    </div>
-                                )}
+                                    {/* Negative Prompt - Full width, auto-height */}
+                                    {currentMetadata.negative_prompt && (
+                                        <div className="w-full relative">
+                                            <span className="font-medium text-slate-500 text-[10px] uppercase block mb-1">Negative Prompt</span>
+                                            <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        aria-label={copyState.negative ? "Copied negative prompt" : "Copy negative prompt"}
+                                                        className="h-7 w-7 absolute top-0 right-0 text-slate-500 hover:text-slate-800"
+                                                        onClick={() => handleCopy(String(currentMetadata.negative_prompt), "negative")}
+                                                    >
+                                                        {copyState.negative ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
+                                                    </Button>
+                                                </TooltipTrigger>
+                                                <TooltipContent>{copyState.negative ? "Copied!" : "Copy negative prompt"}</TooltipContent>
+                                            </Tooltip>
+                                            <p className="text-slate-700 bg-red-50/50 p-2 pr-10 rounded border border-red-100 text-[11px] font-mono whitespace-pre-wrap leading-relaxed w-full">
+                                                {String(currentMetadata.negative_prompt)}
+                                            </p>
+                                        </div>
+                                    )}
 
-                                {/* Parameters Grid */}
-                                {currentMetadata.job_params && typeof currentMetadata.job_params === 'object' && Object.keys(currentMetadata.job_params).length > 0 && (
-                                    <div className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-x-4 gap-y-2 pt-2 border-t border-slate-100">
-                                        {Object.entries(currentMetadata.job_params as Record<string, unknown>)
-                                            .filter(([k, v]) => {
-                                                // Exclude null/empty values
-                                                if (v === null || v === undefined || v === "" || typeof v === 'object') return false;
-                                                // Exclude CLIPTextEncode prompt params - these show in dedicated boxes
-                                                const keyLower = k.toLowerCase();
-                                                if (keyLower.includes('cliptextencode') || keyLower.includes('cliptext')) return false;
-                                                if (keyLower.includes('positive_prompt') || keyLower.includes('negative_prompt')) return false;
-                                                if (k === 'prompt' || k === 'text') return false;
-                                                return true;
-                                            })
-                                            .map(([k, v]) => (
-                                                <div key={k} className="min-w-0">
-                                                    <span className="font-medium text-slate-500 capitalize text-[9px] uppercase tracking-wide block truncate">{k.replace(/_/g, ' ')}</span>
-                                                    <span className="text-slate-800 font-mono text-xs block truncate" title={String(v)}>{String(v)}</span>
-                                                </div>
-                                            ))
-                                        }
-                                    </div>
-                                )}
+                                    {/* Parameters Grid */}
+                                    {currentMetadata.job_params && typeof currentMetadata.job_params === 'object' && Object.keys(currentMetadata.job_params).length > 0 && (
+                                        <div className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-x-4 gap-y-2 pt-2 border-t border-slate-100">
+                                            {Object.entries(currentMetadata.job_params as Record<string, unknown>)
+                                                .filter(([k, v]) => {
+                                                    // Exclude null/empty values
+                                                    if (v === null || v === undefined || v === "" || typeof v === 'object') return false;
+                                                    // Exclude CLIPTextEncode prompt params - these show in dedicated boxes
+                                                    const keyLower = k.toLowerCase();
+                                                    if (keyLower.includes('cliptextencode') || keyLower.includes('cliptext')) return false;
+                                                    if (keyLower.includes('positive_prompt') || keyLower.includes('negative_prompt')) return false;
+                                                    if (k === 'prompt' || k === 'text') return false;
+                                                    return true;
+                                                })
+                                                .map(([k, v]) => (
+                                                    <div key={k} className="min-w-0">
+                                                        <span className="font-medium text-slate-500 capitalize text-[9px] uppercase tracking-wide block truncate">{k.replace(/_/g, ' ')}</span>
+                                                        <span className="text-slate-800 font-mono text-xs block truncate" title={String(v)}>{String(v)}</span>
+                                                    </div>
+                                                ))
+                                            }
+                                        </div>
+                                    )}
 
-                                {/* Loading indicator */}
-                                {metadataLoading && (
-                                    <div className="text-xs text-slate-400 italic">Loading metadata...</div>
-                                )}
-                            </div>
+                                    {/* Loading indicator */}
+                                    {metadataLoading && (
+                                        <div className="text-xs text-slate-400 italic">Loading metadata...</div>
+                                    )}
+                                </div>
+                            </TooltipProvider>
                         )}
                     </div>
                 </div>

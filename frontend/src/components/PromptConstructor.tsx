@@ -51,7 +51,7 @@ const COLORS = [
 
 // --- Sub-Components ---
 
-function SortableItem({ item, index, textIndex, onRemove, onUpdateContent }: { item: PromptItem, index: number, textIndex?: number, onRemove: (id: string, e: React.MouseEvent) => void, onUpdateContent: (id: string, val: string) => void }) {
+function SortableItem({ item, index, textIndex, onRemove, onUpdateContent, onEditTextSnippet }: { item: PromptItem, index: number, textIndex?: number, onRemove: (id: string, e: React.MouseEvent) => void, onUpdateContent: (id: string, val: string) => void, onEditTextSnippet?: (item: PromptItem, textIndex?: number) => void }) {
     const {
         attributes,
         listeners,
@@ -113,6 +113,21 @@ function SortableItem({ item, index, textIndex, onRemove, onUpdateContent }: { i
                         onDoubleClick={() => setIsEditing(true)}
                     >
                         <span className="truncate">{textIndex ? `Text ${textIndex}` : "Text"}</span>
+
+                        {onEditTextSnippet && (
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-4 w-4 rounded-full text-black/20 hover:text-amber-600 hover:bg-amber-50"
+                                onPointerDown={(e) => e.stopPropagation()}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onEditTextSnippet(item, textIndex);
+                                }}
+                            >
+                                <Pencil size={10} />
+                            </Button>
+                        )}
 
                         <Button
                             variant="ghost"
@@ -231,7 +246,11 @@ export function PromptConstructor({ schema, onUpdate, currentValues, targetField
     const [snippetTitle, setSnippetTitle] = useState("");
     const [snippetContent, setSnippetContent] = useState("");
     const [editingSnippetId, setEditingSnippetId] = useState<string | null>(null);
+    const [editingTextId, setEditingTextId] = useState<string | null>(null);
+    const [editingTextField, setEditingTextField] = useState<string | null>(null);
     const longPressRef = useRef<NodeJS.Timeout | null>(null);
+
+    const isEditing = editingSnippetId !== null || editingTextId !== null;
 
     useEffect(() => {
         return () => {
@@ -393,15 +412,24 @@ export function PromptConstructor({ schema, onUpdate, currentValues, targetField
             mergedItems.push(item);
         });
 
+        let textLabelCounter = 0;
+        const labeledItems = mergedItems.map(item => {
+            if (item.type === 'text') {
+                textLabelCounter += 1;
+                return { ...item, label: item.label || `Text ${textLabelCounter}` };
+            }
+            return item;
+        });
+
         // Deep Compare
         const normalize = (list: PromptItem[]) => list.map(i => ({ type: i.type, content: i.content, label: i.label, sourceId: i.sourceId }));
-        const isDifferent = JSON.stringify(normalize(mergedItems)) !== JSON.stringify(normalize(items));
+        const isDifferent = JSON.stringify(normalize(labeledItems)) !== JSON.stringify(normalize(items));
 
         if (isDifferent) {
             if (mergedItems.length === 0 && currentVal === "") {
                 if (items.length > 0) setItems([], "Prompt cleared", false);
             } else {
-                setItems(mergedItems, "Prompt reconstructed", false);
+                setItems(labeledItems, "Prompt reconstructed", false);
             }
         }
 
@@ -440,7 +468,8 @@ export function PromptConstructor({ schema, onUpdate, currentValues, targetField
     const addTextSpacer = () => {
         if (!isTargetValid) return;
         const id = `text-${Date.now()}`;
-        setItems([...items, { id, type: 'text', content: ", ", label: "Text" }]);
+        const nextIndex = items.filter(i => i.type === 'text').length + 1;
+        setItems([...items, { id, type: 'text', content: ", ", label: `Text ${nextIndex}` }]);
     };
 
     const addSnippetToCanvas = (snippet: PromptItem) => {
@@ -451,6 +480,8 @@ export function PromptConstructor({ schema, onUpdate, currentValues, targetField
 
     const cancelEdit = () => {
         setEditingSnippetId(null);
+        setEditingTextId(null);
+        setEditingTextField(null);
         setSnippetTitle("");
         setSnippetContent("");
     };
@@ -460,12 +491,34 @@ export function PromptConstructor({ schema, onUpdate, currentValues, targetField
         setEditingSnippetId(snippet.id);
         setSnippetTitle(snippet.label || "");
         setSnippetContent(snippet.content);
+        setEditingTextId(null);
+        setEditingTextField(null);
+    };
+
+    const editTextSnippet = (item: PromptItem, textIndex?: number) => {
+        if (!targetField || item.type !== 'text') return;
+        setEditingSnippetId(null);
+        setEditingTextId(item.id);
+        setEditingTextField(targetField);
+        setSnippetTitle(item.label || (textIndex ? `Text ${textIndex}` : "Text"));
+        setSnippetContent(item.content);
     };
 
     const saveSnippet = () => {
         if (!snippetContent.trim() || !snippetTitle.trim()) return;
 
-        if (editingSnippetId) {
+        if (editingTextId && editingTextField) {
+            if (!targetField || targetField !== editingTextField) return;
+
+            setItems(prev => prev.map(item =>
+                item.id === editingTextId
+                    ? { ...item, content: snippetContent, label: item.label || snippetTitle }
+                    : item
+            ), "Text snippet updated");
+
+            cancelEdit();
+
+        } else if (editingSnippetId) {
             // UPDATE GLOBAL
             const updatedLibrary = library.map(s =>
                 s.id === editingSnippetId
@@ -556,18 +609,19 @@ export function PromptConstructor({ schema, onUpdate, currentValues, targetField
         <div className="prompt-constructor h-full flex flex-col bg-slate-50 border-t border-slate-200">
 
             {/* 2. Snippet Creator (Standing) */}
-            <div className={cn("p-3 border-b border-dashed border-slate-200 shrink-0 transition-colors", editingSnippetId ? "bg-amber-50" : "bg-slate-50")}>
+            <div className={cn("p-3 border-b border-dashed border-slate-200 shrink-0 transition-colors", isEditing ? "bg-amber-50" : "bg-slate-50")}>
                 <div className="flex gap-2">
                     <div className="flex-1 space-y-2">
                         <div className="flex justify-between items-center">
                             <Input
                                 placeholder="snippet name"
-                                className="h-7 text-xs font-semibold bg-white w-full"
+                                className="h-7 text-xs font-semibold bg-white w-full disabled:opacity-80"
                                 value={snippetTitle}
                                 onChange={e => setSnippetTitle(e.target.value)}
                                 onKeyDown={handleTitleKeyDown}
+                                disabled={!!editingTextId}
                             />
-                            {editingSnippetId && <span className="text-[10px] font-bold text-amber-600 ml-2 whitespace-nowrap">EDITING</span>}
+                            {isEditing && <span className="text-[10px] font-bold text-amber-600 ml-2 whitespace-nowrap">EDITING</span>}
                         </div>
                         <PromptAutocompleteTextarea
                             placeholder="Prompt text... (Ctrl+Enter to save)"
@@ -580,14 +634,14 @@ export function PromptConstructor({ schema, onUpdate, currentValues, targetField
                     <div className="flex flex-col gap-2">
                         <Button
                             variant="default"
-                            className={cn("h-auto flex-1 w-10 p-0 flex flex-col gap-1 items-center justify-center", editingSnippetId ? "bg-amber-600 hover:bg-amber-700" : "bg-slate-800 hover:bg-slate-700")}
+                            className={cn("h-auto flex-1 w-10 p-0 flex flex-col gap-1 items-center justify-center", isEditing ? "bg-amber-600 hover:bg-amber-700" : "bg-slate-800 hover:bg-slate-700")}
                             onClick={saveSnippet}
-                            title={editingSnippetId ? "Save Changes" : "Create Snippet"}
+                            title={isEditing ? "Update Snippet" : "Create Snippet"}
                         >
-                            {editingSnippetId ? <Check size={16} /> : <Plus size={16} />}
-                            <span className="text-[10px] font-bold">{editingSnippetId ? "Save" : "Add"}</span>
+                            {isEditing ? <Check size={16} /> : <Plus size={16} />}
+                            <span className="text-[10px] font-bold">{isEditing ? "Update" : "Add"}</span>
                         </Button>
-                        {editingSnippetId && (
+                        {isEditing && (
                             <Button
                                 variant="ghost"
                                 className="h-auto flex-1 w-10 p-0 flex flex-col gap-1 items-center justify-center text-slate-500 hover:text-red-600 hover:bg-red-50"
@@ -745,6 +799,7 @@ export function PromptConstructor({ schema, onUpdate, currentValues, targetField
                                             item={item}
                                             onRemove={handleRemoveItem}
                                             onUpdateContent={(id, val) => setItems(prev => prev.map(i => i.id === id ? { ...i, content: val } : i))}
+                                            onEditTextSnippet={item.type === 'text' ? editTextSnippet : undefined}
                                         />
                                     );
                                 })}
