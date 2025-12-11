@@ -24,6 +24,9 @@ interface GenerationContextValue {
     loadPromptLibrary: () => Promise<void>;
     applyPrompt: (prompt: PromptLibraryItem) => void;
 
+    // Data refreshers
+    refreshWorkflows: () => Promise<void>;
+
     // Generation
     handleGenerate: () => Promise<void>;
     isGenerating: boolean;
@@ -67,6 +70,20 @@ export function GenerationProvider({ children }: GenerationProviderProps) {
     const [formData, setFormData] = useState<Record<string, any>>({});
     const [isGenerating, setIsGenerating] = useState(false);
 
+    const applyWorkflows = useCallback((items: WorkflowTemplate[]) => {
+        setWorkflows(items);
+
+        if (!selectedWorkflowId && items.length > 0) {
+            setSelectedWorkflowId(String(items[0].id));
+            return;
+        }
+
+        const selectedExists = items.some(w => String(w.id) === selectedWorkflowId);
+        if (!selectedExists && items.length > 0) {
+            setSelectedWorkflowId(String(items[0].id));
+        }
+    }, [selectedWorkflowId]);
+
     // Persisted stores
     const { trackFeedStart, updateFeed } = useGenerationFeedStore();
     const { prompts, searchQuery: promptSearch, setSearchQuery: setPromptSearch, setPrompts, shouldRefetch } = usePromptLibraryStore();
@@ -106,10 +123,7 @@ export function GenerationProvider({ children }: GenerationProviderProps) {
                 }
 
                 if (workflowsRes.status === "fulfilled") {
-                    setWorkflows(workflowsRes.value);
-                    if (!selectedWorkflowId && workflowsRes.value.length > 0) {
-                        setSelectedWorkflowId(String(workflowsRes.value[0].id));
-                    }
+                    applyWorkflows(workflowsRes.value);
                 }
 
                 if (projectsRes.status === "fulfilled") {
@@ -120,7 +134,16 @@ export function GenerationProvider({ children }: GenerationProviderProps) {
             }
         };
         loadData();
-    }, []);
+    }, [applyWorkflows, selectedWorkflowId]);
+
+    const refreshWorkflows = useCallback(async () => {
+        try {
+            const data = await api.getWorkflows();
+            applyWorkflows(data);
+        } catch (err) {
+            console.error("Failed to refresh workflows", err);
+        }
+    }, [applyWorkflows]);
 
     // Load form data when workflow changes
     useEffect(() => {
@@ -284,6 +307,7 @@ export function GenerationProvider({ children }: GenerationProviderProps) {
         setPromptSearch,
         loadPromptLibrary,
         applyPrompt,
+        refreshWorkflows,
         handleGenerate,
         isGenerating,
         canGenerate,

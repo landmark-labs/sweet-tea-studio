@@ -357,6 +357,24 @@ export const api = {
         return res.json();
     },
 
+    updateWorkflow: async (workflowId: number, workflow: WorkflowTemplate): Promise<WorkflowTemplate> => {
+        const res = await fetch(`${API_BASE}/workflows/${workflowId}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                name: workflow.name,
+                description: workflow.description,
+                graph_json: workflow.graph_json,
+                input_schema: workflow.input_schema,
+                // node_mapping is optional, but include it if present to avoid dropping data
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                node_mapping: (workflow as any).node_mapping ?? null,
+            }),
+        });
+
+        if (!res.ok) {
+            const body = await res.json().catch(() => ({}));
+            throw new Error(body.detail || "Failed to update workflow");
     exportWorkflow: async (workflowId: number): Promise<WorkflowExportBundle> => {
         const res = await fetch(`${API_BASE}/workflows/${workflowId}/export`);
         if (!res.ok) throw new Error("Failed to export workflow");
