@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Literal, Optional
 import httpx
 from datetime import datetime
 from difflib import SequenceMatcher
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel, Field
 from sqlmodel import Session, col, select
 
@@ -589,10 +589,112 @@ def fetch_all_e621_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int = TAG
     return collected[:max_tags]
 
 
+def fetch_rule34_tags(query: str, limit: int = 10) -> List[TagSuggestion]:
+    """Fetch tags from Rule34 autocomplete API."""
+    try:
+        with httpx.Client(
+            timeout=5.0,
+            headers={"User-Agent": "sweet-tea-studio/0.1 (autocomplete)"},
+            follow_redirects=True,
+        ) as client:
+            res = client.get(
+                "https://api.rule34.xxx/autocomplete.php",
+                params={"q": query},
+            )
+            res.raise_for_status()
+            
+            data = res.json()
+            tags = []
+            for item in data[:limit]:
+                # Format: {"label": "blue_eyes (1519172)", "value": "blue_eyes"}
+                name = item.get("value", "").strip().lower()
+                # Parse count from label like "blue_eyes (1519172)"
+                label = item.get("label", "")
+                count = 0
+                if "(" in label and ")" in label:
+                    try:
+                        count_str = label.split("(")[-1].rstrip(")")
+                        count = int(count_str)
+                    except ValueError:
+                        pass
+                
+                if name:
+                    tags.append(
+                        TagSuggestion(
+                            name=name,
+                            source="rule34",
+                            frequency=count,
+                            description=None,
+                        )
+                    )
+            return tags
+    except Exception as e:
+        print(f"rule34 fetch error: {e}")
+        return []
+
+
+def fetch_all_rule34_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int = 100) -> List[TagSuggestion]:
+    """Fetch popular tags from Rule34 for caching using autocomplete endpoint."""
+    collected: List[TagSuggestion] = []
+    seen_names: set = set()
+    
+    # Common prefixes for popular tags
+    prefixes = [
+        "1", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m",
+        "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z",
+        "bl", "br", "gr", "lo", "ni", "se", "so", "th"
+    ]
+    
+    with httpx.Client(
+        timeout=10.0,
+        headers={"User-Agent": "sweet-tea-studio/0.1 (preload)"},
+        follow_redirects=True,
+    ) as client:
+        for prefix in prefixes:
+            if len(collected) >= max_tags:
+                break
+            try:
+                res = client.get(
+                    "https://api.rule34.xxx/autocomplete.php",
+                    params={"q": prefix},
+                )
+                res.raise_for_status()
+                data = res.json()
+                
+                for item in data:
+                    name = item.get("value", "").strip().lower()
+                    if name and name not in seen_names:
+                        seen_names.add(name)
+                        # Parse count from label
+                        label = item.get("label", "")
+                        count = 0
+                        if "(" in label and ")" in label:
+                            try:
+                                count_str = label.split("(")[-1].rstrip(")")
+                                count = int(count_str)
+                            except ValueError:
+                                pass
+                        
+                        collected.append(
+                            TagSuggestion(
+                                name=name,
+                                source="rule34",
+                                frequency=count,
+                                description=None,
+                            )
+                        )
+            except Exception:
+                continue
+
+    return collected[:max_tags]
+
+
+
 def refresh_remote_tag_cache_if_stale():
     sources = {
         "danbooru": fetch_all_danbooru_tags,
         "e621": fetch_all_e621_tags,
+        "rule34": fetch_all_rule34_tags,
     }
 
     with Session(db_engine) as session:
@@ -630,12 +732,49 @@ def start_tag_cache_refresh_background():
     Thread(target=refresh_remote_tag_cache_if_stale, daemon=True).start()
 
 
+def save_discovered_tags(tags: List[TagSuggestion]):
+    """Background task to save discovered tags to the database."""
+    if not tags:
+        return
+    try:
+        with Session(db_engine) as session:
+            for tag_data in tags:
+                # Check if exists (case-insensitive)
+                existing = session.exec(select(Tag).where(Tag.name == tag_data.name)).first()
+                if existing:
+                    # Update frequency if the new one is significantly better or source is better?
+                    # For now, only update if frequency is higher
+                    if tag_data.frequency > existing.frequency:
+                        existing.frequency = tag_data.frequency
+                        existing.source = tag_data.source
+                        existing.updated_at = datetime.utcnow()
+                        session.add(existing)
+                else:
+                    new_tag = Tag(
+                        name=tag_data.name,
+                        source=tag_data.source,
+                        frequency=tag_data.frequency,
+                        description=tag_data.description,
+                    )
+                    session.add(new_tag)
+            session.commit()
+    except Exception as e:
+        print(f"Failed to save discovered tags: {e}")
+
+
 @router.get("/tags/suggest", response_model=List[TagSuggestion])
-def suggest_tags(query: str, limit: int = 20):
-    query_like = f"%{query.lower()}%"
+def suggest_tags(query: str, background_tasks: BackgroundTasks, limit: int = 20):
+    # Normalize query: replace spaces with underscores to match tag format
+    normalized_query = query.lower().replace(" ", "_")
+    query_like = f"%{normalized_query}%"
 
     merged: Dict[str, TagSuggestion] = {}
+    priority = {"library": 0, "prompt": 0, "custom": 0, "danbooru": 1, "e621": 2, "rule34": 3}
+    
+    # Track tags needed to be saved/updated
+    tags_to_save: List[TagSuggestion] = []
 
+    # 1. Fetch from local DB (Tags and Prompts)
     with Session(db_engine) as session:
         tag_stmt = (
             select(Tag)
@@ -651,13 +790,97 @@ def suggest_tags(query: str, limit: int = 20):
                 frequency=tag.frequency or 0,
                 description=tag.description,
             )
+            
+        # Search prompts for matching names or content (restored functionality)
+        prompt_stmt = (
+            select(Prompt)
+            .where(
+                (col(Prompt.name).ilike(query_like))
+                | (col(Prompt.positive_text).ilike(query_like))
+            )
+            .order_by(Prompt.updated_at.desc())
+            .limit(limit)
+        )
+        prompts = session.exec(prompt_stmt).all()
+        for p in prompts:
+            ptags = p.tags or []
+            if isinstance(ptags, str):
+                 try: ptags = json.loads(ptags)
+                 except: ptags = []
+            
+            snippet_parts = [p.positive_text or "", p.description or ""]
+            snippet = " ".join([s for s in snippet_parts if s]).strip()
+            
+            # Key prompt suggestions by "prompt:{id}" to avoid collision with tags
+            key = f"prompt:{p.id}"
+            merged[key] = TagSuggestion(
+                name=p.name,
+                source="prompt",
+                frequency=len(ptags),
+                description=snippet[:180] if snippet else None,
+            )
 
-    priority = {"library": 0, "prompt": 0, "custom": 0, "danbooru": 1, "e621": 2}
+    # 2. Fetch from external APIs in parallel
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    
+    # Only fetch if query is long enough to be specific
+    if len(normalized_query) >= 2:
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            future_to_source = {
+                executor.submit(fetch_rule34_tags, normalized_query, limit): "rule34",
+                executor.submit(fetch_danbooru_tags, normalized_query, limit): "danbooru",
+                executor.submit(fetch_e621_tags, normalized_query, limit): "e621",
+            }
+            
+            for future in as_completed(future_to_source):
+                try:
+                    results = future.result()
+                    for tag in results:
+                        name_lower = tag.name.lower()
+                        
+                        # Merge logic: if new, add it. If exists, keep higher frequency/priority
+                        should_replace = False
+                        is_new = False
+                        
+                        if name_lower not in merged:
+                            merged[name_lower] = tag
+                            is_new = True
+                            tags_to_save.append(tag)
+                        else:
+                            existing = merged[name_lower]
+                            if existing.source == "prompt":
+                                continue
+                            
+                            # Prefer higher frequency
+                            if tag.frequency > existing.frequency:
+                                should_replace = True
+                            elif tag.frequency == existing.frequency:
+                                new_prio = priority.get(tag.source, 99)
+                                old_prio = priority.get(existing.source, 99)
+                                if new_prio < old_prio:
+                                    should_replace = True
+                            
+                            if should_replace:
+                                merged[name_lower] = tag
+                                tags_to_save.append(tag)
+                                
+                except Exception as e:
+                    print(f"External API fetch failed: {e}")
+
+    # Schedule background save for new/updated tags
+    if tags_to_save:
+        background_tasks.add_task(save_discovered_tags, tags_to_save)
+
     sorted_tags = sorted(
         merged.values(),
         key=lambda t: (
+            # 1. Exact match gets highest priority
+            0 if t.name.lower() == normalized_query else 1,
+            # 2. Source priority
             priority.get(t.source, 3),
+            # 3. Frequency (descending)
             -t.frequency,
+            # 4. Alphabetical
             t.name,
         ),
     )

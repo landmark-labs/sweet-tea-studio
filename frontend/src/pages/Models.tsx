@@ -56,7 +56,7 @@ export default function Models() {
 
   // New State for Dynamic Download Rows
   const [downloadRows, setDownloadRows] = useState<{ target: string; url: string; id: number }[]>([
-    { target: "checkpoints", url: "", id: Date.now() }
+    { target: "", url: "", id: Date.now() }
   ]);
 
   const [selectedCategory, setSelectedCategory] = useState<ModelCategory>("all");
@@ -141,6 +141,16 @@ export default function Models() {
     return () => clearInterval(interval);
   }, []);
 
+  // Set default target for download rows when folders load
+  useEffect(() => {
+    if (modelFolders.length > 0) {
+      const firstFolder = modelFolders[0].name;
+      setDownloadRows(prev => prev.map(row =>
+        row.target === "" ? { ...row, target: firstFolder } : row
+      ));
+    }
+  }, [modelFolders]);
+
   const applyQueue = (next: DownloadJob[]) => setDownloadQueue(next);
   const updateQueue = (
     label: string,
@@ -170,12 +180,14 @@ export default function Models() {
   }, [models, search, selectedCategory]);
 
   const handleAddRow = () => {
-    setDownloadRows(prev => [...prev, { target: "checkpoints", url: "", id: Date.now() }]);
+    const defaultTarget = modelFolders.length > 0 ? modelFolders[0].name : "checkpoints";
+    setDownloadRows(prev => [...prev, { target: defaultTarget, url: "", id: Date.now() }]);
   };
 
   const handleRemoveRow = (id: number) => {
     if (downloadRows.length === 1) {
-      setDownloadRows([{ target: "checkpoints", url: "", id: Date.now() }]); // Reset if last one
+      const defaultTarget = modelFolders.length > 0 ? modelFolders[0].name : "checkpoints";
+      setDownloadRows([{ target: defaultTarget, url: "", id: Date.now() }]); // Reset if last one
       return;
     }
     setDownloadRows(prev => prev.filter(r => r.id !== id));
@@ -257,8 +269,35 @@ export default function Models() {
             <FolderOpen
               className="text-blue-500 cursor-pointer hover:text-blue-600 active:scale-95 transition-all"
               size={18}
-              onClick={() => {
-                alert(modelsRoot ? `Detected models directory: ${modelsRoot}` : "No models directory detected yet.");
+              title="Click to set a custom models directory"
+              onClick={async () => {
+                const newPath = prompt(
+                  `Current models directory:\n${modelsRoot || "(not detected)"}\n\nEnter a new path to override (leave blank to auto-detect):`,
+                  modelsRoot || ""
+                );
+                if (newPath === null) return; // Cancelled
+
+                try {
+                  const res = await fetch("/api/v1/models/directories", {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ path: newPath || null }),
+                  });
+                  if (!res.ok) {
+                    const err = await res.json();
+                    alert(`Failed to update: ${err.detail || "Unknown error"}`);
+                    return;
+                  }
+                  const data = await res.json();
+                  setModelsRoot(data.root || "");
+                  setModelFolders(data.folders || []);
+                  if (data.folders?.length) {
+                    setActiveFolder(data.folders[0].name);
+                  }
+                } catch (e) {
+                  console.error("Failed to update models directory:", e);
+                  alert("Failed to update models directory. Check console.");
+                }
               }}
             />
           </CardHeader>
@@ -283,13 +322,20 @@ export default function Models() {
             <ScrollArea className="flex-1 border rounded-md max-h-[600px]">
               <div className="p-3 space-y-2">
                 {modelFolders
-                  .find((f) => f.name === activeFolder)?.items.map((item) => (
-                    <div key={item.path} className="flex items-center justify-between rounded border border-slate-200 px-3 py-2 text-sm bg-white">
-                      <span className="flex items-center gap-2">
-                        {item.type === "directory" ? <FolderOpen size={14} className="text-slate-500" /> : <Link2 size={14} className="text-slate-400" />}
-                        {item.name}
-                      </span>
-                      <span className="text-[11px] text-slate-500 break-all">{item.path}</span>
+                  .find((f) => f.name === activeFolder)
+                  ?.items.filter((item) => {
+                    if (item.type === "directory") return true;
+                    // Filter for common model file extensions
+                    return /\.(safetensors|gguf|pth|ckpt|pt|bin|onnx)$/i.test(item.name);
+                  })
+                  .map((item) => (
+                    <div key={item.path} className="flex items-center gap-2 rounded border border-slate-200 px-3 py-2 text-sm bg-white hover:bg-slate-50 transition-colors">
+                      {item.type === "directory" ? (
+                        <FolderOpen size={14} className="text-slate-500 flex-shrink-0" />
+                      ) : (
+                        <Link2 size={14} className="text-slate-400 flex-shrink-0" />
+                      )}
+                      <span className="truncate font-medium">{item.name}</span>
                     </div>
                   ))}
                 {!modelFolders.length && <div className="text-sm text-slate-500">select or add a models directory to explore contents.</div>}
@@ -321,11 +367,14 @@ export default function Models() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="checkpoints">checkpoints</SelectItem>
-                      <SelectItem value="loras">loras</SelectItem>
-                      <SelectItem value="controlnet">controlnet</SelectItem>
-                      <SelectItem value="upscale">upscale</SelectItem>
-                      <SelectItem value="vlm">vlm</SelectItem>
+                      {modelFolders.map((folder) => (
+                        <SelectItem key={folder.name} value={folder.name}>
+                          {folder.name}
+                        </SelectItem>
+                      ))}
+                      {!modelFolders.length && (
+                        <SelectItem value="checkpoints" disabled>checkpoints (loading...)</SelectItem>
+                      )}
                     </SelectContent>
                   </Select>
                   <Input

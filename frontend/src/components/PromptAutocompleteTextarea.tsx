@@ -1,5 +1,5 @@
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { api, TagSuggestion } from "@/lib/api";
@@ -11,8 +11,10 @@ interface PromptAutocompleteTextareaProps extends React.TextareaHTMLAttributes<H
 }
 
 function computeScore(query: string, candidate: string): number {
-    const q = query.toLowerCase();
-    const c = candidate.toLowerCase();
+    // Normalize: treat spaces and underscores as equivalent
+    const normalize = (s: string) => s.toLowerCase().replace(/[\s_]+/g, "_");
+    const q = normalize(query);
+    const c = normalize(candidate);
     if (!q) return 0;
 
     // Prioritize prefix, then substring, then loose subsequence matches.
@@ -27,7 +29,7 @@ function computeScore(query: string, candidate: string): number {
     return qi === q.length ? 2 : 0;
 }
 
-function highlightMatch(label: string, term: string): JSX.Element {
+function highlightMatch(label: string, term: string): React.ReactNode {
     if (!term) return <>{label}</>;
     const lower = label.toLowerCase();
     const t = term.toLowerCase();
@@ -47,6 +49,7 @@ function highlightMatch(label: string, term: string): JSX.Element {
 function sourceBadgeClass(source: string): string {
     if (source === "danbooru") return "bg-pink-50 text-pink-700 border-pink-200";
     if (source === "e621") return "bg-amber-50 text-amber-700 border-amber-200";
+    if (source === "rule34") return "bg-green-50 text-green-700 border-green-200";
     return "bg-indigo-50 text-indigo-700 border-indigo-200";
 }
 
@@ -60,6 +63,7 @@ export function PromptAutocompleteTextarea({
 }: PromptAutocompleteTextareaProps) {
     const textareaRef = useRef<HTMLTextAreaElement | null>(null);
     const cacheRef = useRef<Map<string, TagSuggestion[]>>(new Map());
+    const abortControllerRef = useRef<AbortController | null>(null);
 
     const [cursor, setCursor] = useState(0);
     const [activeToken, setActiveToken] = useState("");
@@ -75,37 +79,55 @@ export function PromptAutocompleteTextarea({
 
     const currentToken = useMemo(() => {
         const before = value.slice(0, cursor);
-        const match = before.match(/([a-zA-Z0-9:_-]+)$/);
-        return match ? match[1] : "";
+        // Match everything from the last comma (or start) to cursor
+        // This allows multi-word tags like "blue sky" to be autocompleted as one unit
+        const lastComma = before.lastIndexOf(",");
+        const segment = lastComma === -1 ? before : before.slice(lastComma + 1);
+        return segment.trim();
     }, [value, cursor]);
 
     useEffect(() => {
         setActiveToken(currentToken);
     }, [currentToken]);
 
+
     useEffect(() => {
         const token = activeToken.trim();
-        if (!isFocused || token.length < 2) {
+        // Normalize: replace spaces with underscores to match booru tag format
+        const normalizedToken = token.replace(/\s+/g, "_");
+
+        if (!isFocused || normalizedToken.length < 2) {
             setIsOpen(false);
             setSuggestions([]);
             return;
         }
 
+        // Cancel previous request
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+        }
+
+        const controller = new AbortController();
+        abortControllerRef.current = controller;
+
         const load = async () => {
-            if (cacheRef.current.has(token)) {
-                setSuggestions(cacheRef.current.get(token) || []);
+            if (cacheRef.current.has(normalizedToken)) {
+                setSuggestions(cacheRef.current.get(normalizedToken) || []);
                 setIsOpen(true);
                 setHighlightIndex(0);
                 return;
             }
 
             try {
-                const data = await api.getTagSuggestions(token, 25);
-                cacheRef.current.set(token, data);
+                const data = await api.getTagSuggestions(normalizedToken, 25, controller.signal);
+                if (controller.signal.aborted) return;
+
+                cacheRef.current.set(normalizedToken, data);
                 setSuggestions(data);
                 setIsOpen(true);
                 setHighlightIndex(0);
             } catch (e) {
+                if (e instanceof Error && e.name === 'AbortError') return;
                 console.error("Failed to load tag suggestions", e);
                 setSuggestions([]);
                 setIsOpen(false);
@@ -141,15 +163,27 @@ export function PromptAutocompleteTextarea({
         const before = value.slice(0, cursor);
         const after = value.slice(cursor);
 
-        // Use activeToken to determine exactly how much to replace
-        // This ensures what we matched against is what gets replaced
-        const start = cursor - activeToken.length;
+        // Find the start of the current segment (after the last comma, or start of string)
+        const lastComma = before.lastIndexOf(",");
+        const segmentStart = lastComma === -1 ? 0 : lastComma + 1;
 
-        // Just insert the word - no comma/space, user controls their own formatting
-        const newValue = `${before.slice(0, start)}${name}${after}`;
+        // Extract the text of the current segment (e.g. "   val")
+        const segmentText = before.slice(segmentStart);
+        // Find leading spaces to preserve them (e.g. "   ")
+        const leadingSpaces = segmentText.match(/^\s*/)?.[0] || "";
+
+        // Use spaces instead of underscores for insertion
+        const displayName = name.replace(/_/g, " ");
+
+        // Construct new value: 
+        // 1. Text before segment (including comma)
+        // 2. Leading spaces (preserved)
+        // 3. Tag name (with spaces)
+        // 4. Text after cursor (preserved)
+        const newValue = `${before.slice(0, segmentStart)}${leadingSpaces}${displayName}${after}`;
         onValueChange(newValue);
 
-        const newPos = start + name.length;
+        const newPos = segmentStart + leadingSpaces.length + displayName.length;
         requestAnimationFrame(() => {
             textareaRef.current?.setSelectionRange(newPos, newPos);
             textareaRef.current?.focus();
@@ -240,7 +274,9 @@ export function PromptAutocompleteTextarea({
                             }}
                         >
                             <div className="flex-1 min-w-0">
-                                <div className="font-semibold text-xs truncate">{highlightMatch(s.name, activeToken)}</div>
+                                <div className="font-semibold text-xs truncate">
+                                    {highlightMatch(s.name.replace(/_/g, " "), activeToken.replace(/_/g, " "))}
+                                </div>
                                 {s.description && (
                                     <div className="text-[11px] text-slate-500 truncate">{s.description}</div>
                                 )}

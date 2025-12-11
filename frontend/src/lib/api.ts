@@ -196,9 +196,9 @@ export const api = {
     },
 
     // --- Tag Suggestions ---
-    getTagSuggestions: async (query: string, limit: number = 20): Promise<TagSuggestion[]> => {
+    getTagSuggestions: async (query: string, limit: number = 20, signal?: AbortSignal): Promise<TagSuggestion[]> => {
         const params = new URLSearchParams({ query, limit: String(limit) });
-        const res = await fetch(`${API_BASE}/library/tags/suggest?${params}`);
+        const res = await fetch(`${API_BASE}/library/tags/suggest?${params}`, { signal });
         if (!res.ok) throw new Error("Failed to fetch tag suggestions");
         return res.json();
     },
