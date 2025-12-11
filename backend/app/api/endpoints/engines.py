@@ -3,7 +3,7 @@ import time
 from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlmodel import Session, select
 
 from app.db.engine import engine as db_engine
@@ -29,9 +29,15 @@ class LaunchConfig(BaseModel):
     """ComfyUI launch configuration."""
     path: Optional[str] = None
     python_path: Optional[str] = None
+    args: List[str] = Field(default_factory=list)
     port: int = 8188
     is_available: bool = False
     detection_method: str = ""
+
+
+class LaunchConfigUpdate(BaseModel):
+    path: Optional[str] = None
+    args: Optional[str] = None
 
 
 @router.post("/", response_model=EngineRead)
@@ -112,6 +118,27 @@ def get_comfyui_config():
     return LaunchConfig(
         path=config.path,
         python_path=config.python_path,
+        args=config.args or [],
+        port=config.port,
+        is_available=config.is_available,
+        detection_method=config.detection_method,
+    )
+
+
+@router.post("/comfyui/config", response_model=LaunchConfig)
+def set_comfyui_config(update: LaunchConfigUpdate):
+    """Set a user-provided ComfyUI path and optional launch arguments."""
+    result = comfy_launcher.set_config(path=update.path, args=update.args)
+
+    if not result.get("success"):
+        raise HTTPException(status_code=400, detail=result.get("error", "Unable to save config"))
+
+    config = result["config"]
+
+    return LaunchConfig(
+        path=config.path,
+        python_path=config.python_path,
+        args=config.args or [],
         port=config.port,
         is_available=config.is_available,
         detection_method=config.detection_method,
