@@ -20,6 +20,7 @@ import { GenerationFeed } from "@/components/GenerationFeed";
 import { PromptLibraryQuickPanel } from "@/components/PromptLibraryQuickPanel";
 import { ProjectGallery } from "@/components/ProjectGallery";
 import { useGenerationFeedStore, usePromptLibraryStore } from "@/lib/stores/promptDataStore";
+import { useGeneration } from "@/lib/GenerationContext";
 
 export default function PromptStudio() {
   const [engines, setEngines] = useState<Engine[]>([]);
@@ -430,6 +431,7 @@ export default function PromptStudio() {
 
         if (data.images && data.images.length > 0) {
           const imagePath = data.images[0].path;
+          const allPaths = data.images.map((img: any) => img.path);
 
           // Use authoritative params from Backend (robust) instead of frontend state
           const params = data.job_params || {};
@@ -439,6 +441,7 @@ export default function PromptStudio() {
             status: "completed",
             progress: 100,
             previewPath: imagePath,
+            previewPaths: allPaths,
           });
 
           handlePreviewSelect(imagePath, {
@@ -643,6 +646,25 @@ export default function PromptStudio() {
       setIsSubmitting(false);
     }
   };
+
+  // Delegate to Context for Global Header button
+  const generation = useGeneration();
+  const handleGenerateRef = useRef(handleGenerate);
+  handleGenerateRef.current = handleGenerate;
+  const formDataRef = useRef(formData);
+  formDataRef.current = formData;
+
+  useEffect(() => {
+    if (!generation) return;
+    const handler = async () => {
+      // Use latest refs to ensure we catch current state without re-binding
+      if (formDataRef.current) {
+        await handleGenerateRef.current(formDataRef.current);
+      }
+    };
+    generation.registerGenerateHandler(handler);
+    return () => generation.unregisterGenerateHandler();
+  }, [generation]);
 
   const handleCancel = async () => {
     if (!lastJobId) return;

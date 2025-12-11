@@ -8,6 +8,7 @@ export interface GenerationFeedItem {
   status: string;
   progress: number;
   previewPath?: string | null;
+  previewPaths?: string[]; // New: support multiple images
   previewBlob?: string | null;
   startedAt: string;
   estimatedTotalSteps?: number;
@@ -15,17 +16,30 @@ export interface GenerationFeedItem {
 
 interface GenerationFeedProps {
   items: GenerationFeedItem[];
-  onSelectPreview?: (item: GenerationFeedItem) => void;
+  onSelectPreview?: (item: GenerationFeedItem & { selectedPath?: string }) => void;
   onGenerate?: () => void;
 }
 
 export function GenerationFeed({ items, onSelectPreview, onGenerate }: GenerationFeedProps) {
   const activeItem = items[0];
 
-  // Get completed items with preview paths (last 4)
-  const completedItems = items
-    .filter(item => item.status === 'completed' && item.previewPath)
-    .slice(0, 4);
+  // Get completed items with preview paths (last 4 images from any jobs)
+  // We flatten, because one job could have 4 images.
+  const completedImages: { jobId: number, path: string, item: GenerationFeedItem }[] = [];
+
+  for (const item of items) {
+    if (item.status === 'completed') {
+      const paths = item.previewPaths && item.previewPaths.length > 0
+        ? item.previewPaths
+        : (item.previewPath ? [item.previewPath] : []);
+
+      for (const path of paths) {
+        completedImages.push({ jobId: item.jobId, path, item });
+        if (completedImages.length >= 4) break;
+      }
+    }
+    if (completedImages.length >= 4) break;
+  }
 
   return (
     <div className="w-full h-full pointer-events-auto">
@@ -56,10 +70,13 @@ export function GenerationFeed({ items, onSelectPreview, onGenerate }: Generatio
                     </div>
                   )}
                 </div>
-              ) : activeItem.previewPath ? (
+              ) : (activeItem.previewPaths?.[0] || activeItem.previewPath) ? (
                 <div
                   className="relative w-full h-48 rounded overflow-hidden bg-black/5 border border-slate-200 cursor-pointer hover:opacity-90 transition-opacity"
-                  onClick={() => activeItem.previewPath && onSelectPreview?.(activeItem)}
+                  onClick={() => {
+                    const path = activeItem.previewPaths?.[0] || activeItem.previewPath;
+                    if (path) onSelectPreview?.({ ...activeItem, selectedPath: path });
+                  }}
                 >
                   <div className="w-full h-full flex flex-col items-center justify-center text-xs text-slate-400">
                     <span className="font-semibold">ready</span>
@@ -81,12 +98,15 @@ export function GenerationFeed({ items, onSelectPreview, onGenerate }: Generatio
 
               {/* Buttons */}
               <div className="space-y-1.5">
-                {activeItem.previewPath && !activeItem.previewBlob && (
+                {(activeItem.previewPaths?.[0] || activeItem.previewPath) && !activeItem.previewBlob && (
                   <Button
                     size="sm"
                     variant="secondary"
                     className="h-7 w-full text-xs"
-                    onClick={() => activeItem.previewPath && onSelectPreview?.(activeItem)}
+                    onClick={() => {
+                      const path = activeItem.previewPaths?.[0] || activeItem.previewPath;
+                      if (path) onSelectPreview?.({ ...activeItem, selectedPath: path });
+                    }}
                   >
                     view result
                   </Button>
@@ -96,7 +116,10 @@ export function GenerationFeed({ items, onSelectPreview, onGenerate }: Generatio
                     size="sm"
                     variant="default"
                     className="h-7 w-full text-xs gap-1.5"
-                    onClick={onGenerate}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onGenerate && onGenerate();
+                    }}
                   >
                     <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
@@ -109,24 +132,23 @@ export function GenerationFeed({ items, onSelectPreview, onGenerate }: Generatio
 
             {/* RIGHT: Last 4 Images (horizontal row, each 256x256 max) */}
             <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '8px', padding: '12px' }}>
-              {completedItems.length > 0 ? (
-                completedItems.map((item) => (
+              {completedImages.length > 0 ? (
+                completedImages.map((imgObj, idx) => (
                   <div
-                    key={item.jobId}
+                    key={`${imgObj.jobId}-${idx}`}
                     style={{ width: '256px', height: '256px', flexShrink: 0 }}
                     className="rounded overflow-hidden bg-slate-100 border border-slate-200 cursor-pointer hover:ring-2 hover:ring-blue-400 transition-all"
-                    onClick={() => item.previewPath && onSelectPreview?.(item)}
+                    onClick={() => onSelectPreview?.({ ...imgObj.item, selectedPath: imgObj.path })}
                     draggable
                     onDragStart={(e) => {
-                      const path = item.previewPath || "";
-                      e.dataTransfer.setData("text/plain", path);
-                      e.dataTransfer.setData("application/x-sweet-tea-image", path);
+                      e.dataTransfer.setData("text/plain", imgObj.path);
+                      e.dataTransfer.setData("application/x-sweet-tea-image", imgObj.path);
                       e.dataTransfer.effectAllowed = "copy";
                     }}
                   >
                     <img
-                      src={`/api/v1/gallery/image/path?path=${encodeURIComponent(item.previewPath || "")}`}
-                      alt={`Job ${item.jobId}`}
+                      src={`/api/v1/gallery/image/path?path=${encodeURIComponent(imgObj.path)}`}
+                      alt={`Job ${imgObj.jobId}`}
                       className="w-full h-full object-cover"
                       draggable={false}
                     />
@@ -139,6 +161,7 @@ export function GenerationFeed({ items, onSelectPreview, onGenerate }: Generatio
               )}
             </div>
           </div>
+
         </div>
       ) : (
         <div className="shadow-lg border border-slate-200 bg-white/95 backdrop-blur overflow-hidden rounded-lg" style={{ width: '256px', height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -153,7 +176,10 @@ export function GenerationFeed({ items, onSelectPreview, onGenerate }: Generatio
                 size="sm"
                 variant="default"
                 className="h-7 text-xs gap-1.5 mt-2"
-                onClick={onGenerate}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onGenerate && onGenerate();
+                }}
               >
                 <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />

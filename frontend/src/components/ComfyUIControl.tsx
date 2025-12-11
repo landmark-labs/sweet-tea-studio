@@ -3,7 +3,7 @@ import { api, ComfyLaunchConfig } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from "@/components/ui/dialog";
-import { Power, Settings2, Loader2, AlertCircle } from "lucide-react";
+import { Power, Settings2, Loader2, AlertCircle, Terminal } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type ConnectionState = "connected" | "starting" | "stopped" | "stopping";
@@ -13,7 +13,10 @@ export function ComfyUIControl() {
     const [canLaunch, setCanLaunch] = useState(false);
     const [lastError, setLastError] = useState<string | null>(null);
     const [settingsOpen, setSettingsOpen] = useState(false);
-    const [hasManagedProcess, setHasManagedProcess] = useState(false); // Track if we started this ComfyUI
+
+    // Logs state
+    const [logsOpen, setLogsOpen] = useState(false);
+    const [logs, setLogs] = useState("");
 
     // Settings form state
     const [config, setConfig] = useState<ComfyLaunchConfig | null>(null);
@@ -26,6 +29,24 @@ export function ComfyUIControl() {
     const isStartingRef = useRef(false); // Prevent checkStatus from overriding during start
     const isStoppingRef = useRef(false); // Prevent checkStatus from overriding during stop
 
+    // Poll logs when dialog is open
+    useEffect(() => {
+        if (!logsOpen) return;
+
+        const fetchLogs = async () => {
+            try {
+                const data = await api.getComfyLogs();
+                setLogs(data.logs);
+            } catch (e) {
+                // ignore
+            }
+        };
+
+        fetchLogs();
+        const interval = setInterval(fetchLogs, 2000);
+        return () => clearInterval(interval);
+    }, [logsOpen]);
+
     // Fetch both managed process status AND actual connection health
     const checkStatus = useCallback(async () => {
         try {
@@ -36,7 +57,6 @@ export function ComfyUIControl() {
             // Check managed process status
             const processStatus = await api.getComfyUIStatus();
             setCanLaunch(processStatus.can_launch);
-            setHasManagedProcess(processStatus.running); // Did Sweet Tea start this process?
             if (!isStoppingRef.current) {
                 setLastError(processStatus.error || null);
             }
@@ -152,11 +172,8 @@ export function ComfyUIControl() {
 
     // Stop ComfyUI
     const handleStop = async () => {
-        // Check if we can actually stop this (only managed processes)
-        if (!hasManagedProcess) {
-            setLastError("Cannot stop: ComfyUI was not started by Sweet Tea");
-            return;
-        }
+        // We allow attempting to stop even if not locally managed, as the backend
+        // now has logic to kill the process on the configured port.
 
         setState("stopping");
         isStoppingRef.current = true;
@@ -182,7 +199,6 @@ export function ComfyUIControl() {
 
                     if (!isConnected) {
                         setState("stopped");
-                        setHasManagedProcess(false);
                         isStoppingRef.current = false;
                         if (pollingRef.current) {
                             clearInterval(pollingRef.current);
@@ -276,18 +292,16 @@ export function ComfyUIControl() {
                         size="icon"
                         className={cn(
                             "h-6 w-6",
-                            hasManagedProcess && !isTransitioning
+                            !isTransitioning
                                 ? "text-red-500 hover:text-red-600 hover:bg-red-50"
                                 : "text-slate-400 cursor-not-allowed"
                         )}
                         onClick={handleStop}
-                        disabled={isTransitioning || !hasManagedProcess}
+                        disabled={isTransitioning}
                         title={
                             isTransitioning
                                 ? statusText
-                                : hasManagedProcess
-                                    ? "Stop ComfyUI"
-                                    : "Cannot stop: ComfyUI was started externally"
+                                : "Stop ComfyUI"
                         }
                     >
                         {isTransitioning && state === "stopping" ? (
@@ -323,6 +337,17 @@ export function ComfyUIControl() {
                         )}
                     </Button>
                 )}
+
+                {/* Logs button */}
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 text-slate-400 hover:text-slate-600 hover:bg-slate-200"
+                    onClick={() => setLogsOpen(true)}
+                    title="View ComfyUI Logs"
+                >
+                    <Terminal className="w-3 h-3" />
+                </Button>
 
                 {/* Settings gear */}
                 <Dialog open={settingsOpen} onOpenChange={(open) => {
@@ -426,6 +451,21 @@ export function ComfyUIControl() {
                                     )}
                                 </Button>
                             </div>
+                        </div>
+                    </DialogContent>
+                </Dialog>
+
+                {/* Logs Dialog */}
+                <Dialog open={logsOpen} onOpenChange={setLogsOpen}>
+                    <DialogContent className="max-w-3xl h-[80vh] flex flex-col">
+                        <DialogHeader>
+                            <DialogTitle className="flex items-center gap-2">
+                                <Terminal className="w-4 h-4" />
+                                ComfyUI Logs
+                            </DialogTitle>
+                        </DialogHeader>
+                        <div className="flex-1 bg-black text-green-400 font-mono text-xs p-4 rounded-md overflow-auto whitespace-pre-wrap border border-slate-800">
+                            {logs || "No logs available (process might not be managed by Sweet Tea)"}
                         </div>
                     </DialogContent>
                 </Dialog>

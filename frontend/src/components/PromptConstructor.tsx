@@ -561,7 +561,7 @@ export function PromptConstructor({ schema, onUpdate, currentValues, targetField
                     <div className="flex-1 space-y-2">
                         <div className="flex justify-between items-center">
                             <Input
-                                placeholder="Snippet Title"
+                                placeholder="snippet name"
                                 className="h-7 text-xs font-semibold bg-white w-full"
                                 value={snippetTitle}
                                 onChange={e => setSnippetTitle(e.target.value)}

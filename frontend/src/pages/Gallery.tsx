@@ -14,6 +14,7 @@ import {
     ContextMenuSeparator,
     ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { ProjectSidebar } from "@/components/ProjectSidebar";
 
 export default function Gallery() {
@@ -503,7 +504,29 @@ export default function Gallery() {
                                                                         <Copy className="h-3 w-3 text-slate-400" />
                                                                     </Button>
                                                                 </div>
-                                                                <p className="line-clamp-3 text-slate-700 leading-relaxed">{positive}</p>
+                                                                <HoverCard openDelay={200}>
+                                                                    <HoverCardTrigger asChild>
+                                                                        <p className="line-clamp-3 text-slate-700 leading-relaxed cursor-help select-text">{positive}</p>
+                                                                    </HoverCardTrigger>
+                                                                    <HoverCardContent className="w-[500px] max-h-[60vh] overflow-y-auto p-4" align="start">
+                                                                        <div className="space-y-4">
+                                                                            <div>
+                                                                                <div className="flex items-center gap-2 mb-1">
+                                                                                    <span className="font-semibold text-green-600 text-xs uppercase">Positive Prompt</span>
+                                                                                </div>
+                                                                                <p className="text-sm text-slate-700 whitespace-pre-wrap font-mono text-[11px] leading-relaxed select-text">{positive}</p>
+                                                                            </div>
+                                                                            {negative && (
+                                                                                <div className="border-t pt-3">
+                                                                                    <div className="flex items-center gap-2 mb-1">
+                                                                                        <span className="font-semibold text-red-500 text-xs uppercase">Negative Prompt</span>
+                                                                                    </div>
+                                                                                    <p className="text-sm text-slate-600 whitespace-pre-wrap font-mono text-[11px] leading-relaxed select-text">{negative}</p>
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                    </HoverCardContent>
+                                                                </HoverCard>
                                                             </div>
                                                         )}
                                                         {!positive && !negative && (
@@ -530,54 +553,56 @@ export default function Gallery() {
                     </div>
                 )}
             </div>
-            {fullscreenItem && (
-                <div className="fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-center p-6 text-white">
-                    <button
-                        className="absolute top-4 right-4 rounded-full bg-white/10 hover:bg-white/20 transition p-2"
-                        onClick={closeFullscreen}
-                        aria-label="Close fullscreen"
-                    >
-                        <X className="w-5 h-5" />
-                    </button>
+            {
+                fullscreenItem && (
+                    <div className="fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-center p-6 text-white">
+                        <button
+                            className="absolute top-4 right-4 rounded-full bg-white/10 hover:bg-white/20 transition p-2"
+                            onClick={closeFullscreen}
+                            aria-label="Close fullscreen"
+                        >
+                            <X className="w-5 h-5" />
+                        </button>
 
-                    <button
-                        className="absolute left-4 top-1/2 -translate-y-1/2 rounded-full bg-white/10 hover:bg-white/20 p-3"
-                        onClick={() => navigateFullscreen(-1)}
-                        aria-label="Previous image"
-                    >
-                        <ChevronLeft className="w-6 h-6" />
-                    </button>
-                    <button
-                        className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full bg-white/10 hover:bg-white/20 p-3"
-                        onClick={() => navigateFullscreen(1)}
-                        aria-label="Next image"
-                    >
-                        <ChevronRight className="w-6 h-6" />
-                    </button>
+                        <button
+                            className="absolute left-4 top-1/2 -translate-y-1/2 rounded-full bg-white/10 hover:bg-white/20 p-3"
+                            onClick={() => navigateFullscreen(-1)}
+                            aria-label="Previous image"
+                        >
+                            <ChevronLeft className="w-6 h-6" />
+                        </button>
+                        <button
+                            className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full bg-white/10 hover:bg-white/20 p-3"
+                            onClick={() => navigateFullscreen(1)}
+                            aria-label="Next image"
+                        >
+                            <ChevronRight className="w-6 h-6" />
+                        </button>
 
-                    <div className="max-w-6xl w-full flex flex-col items-center gap-4">
-                        <div className="relative w-full flex items-center justify-center">
-                            {selectedIds.has(fullscreenItem.image.id) && (
-                                <div className="absolute top-3 left-3 bg-blue-500 text-white rounded-full p-1 shadow-sm flex items-center gap-1 text-xs">
-                                    <Check className="w-3 h-3" /> Selected
-                                </div>
-                            )}
-                            <img
-                                src={`/api/v1/gallery/image/${fullscreenItem.image.id}`}
-                                alt={fullscreenItem.image.filename}
-                                className="max-h-[80vh] w-auto object-contain rounded-lg shadow-2xl"
-                            />
-                        </div>
-                        <div className="bg-white/5 rounded-lg px-4 py-2 text-sm w-full flex items-center justify-between">
-                            <div className="flex items-center gap-2 text-slate-100">
-                                <span className="font-semibold">{fullscreenItem.prompt_name || fullscreenItem.image.filename}</span>
-                                <span className="text-xs text-slate-300">{new Date(fullscreenItem.created_at).toLocaleString()}</span>
+                        <div className="max-w-6xl w-full flex flex-col items-center gap-4">
+                            <div className="relative w-full flex items-center justify-center">
+                                {selectedIds.has(fullscreenItem.image.id) && (
+                                    <div className="absolute top-3 left-3 bg-blue-500 text-white rounded-full p-1 shadow-sm flex items-center gap-1 text-xs">
+                                        <Check className="w-3 h-3" /> Selected
+                                    </div>
+                                )}
+                                <img
+                                    src={`/api/v1/gallery/image/${fullscreenItem.image.id}`}
+                                    alt={fullscreenItem.image.filename}
+                                    className="max-h-[80vh] w-auto object-contain rounded-lg shadow-2xl"
+                                />
                             </div>
-                            <div className="text-xs text-slate-200">Use ← → arrows or on-screen controls to navigate. ESC closes.</div>
+                            <div className="bg-white/5 rounded-lg px-4 py-2 text-sm w-full flex items-center justify-between">
+                                <div className="flex items-center gap-2 text-slate-100">
+                                    <span className="font-semibold">{fullscreenItem.prompt_name || fullscreenItem.image.filename}</span>
+                                    <span className="text-xs text-slate-300">{new Date(fullscreenItem.created_at).toLocaleString()}</span>
+                                </div>
+                                <div className="text-xs text-slate-200">Use ← → arrows or on-screen controls to navigate. ESC closes.</div>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
-        </div>
+                )
+            }
+        </div >
     );
 }

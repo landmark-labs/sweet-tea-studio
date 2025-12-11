@@ -7,6 +7,8 @@ import os
 import signal
 import subprocess
 import time
+import tempfile
+import psutil
 from pathlib import Path
 from typing import Optional, List
 from dataclasses import dataclass
@@ -35,7 +37,74 @@ class ComfyUILauncher:
         self._last_action_at: float = 0.0
         self._last_error: Optional[str] = None
         self._cooldown_seconds = 3.0
+        self._log_file: Optional[Path] = None
+        self._log_handle = None
+
+    def get_logs(self, lines: int = 100) -> str:
+        """Get the tail of the log file."""
+        if not self._log_file or not self._log_file.exists():
+            # Fallback to temp dir guess if not yet launched
+            log_path = Path(tempfile.gettempdir()) / "comfyui_sweet_tea.log"
+            if not log_path.exists():
+                return ""
+            return self._tail_file(log_path, lines)
+        
+        return self._tail_file(self._log_file, lines)
+
+    def _tail_file(self, path: Path, n: int) -> str:
+        """Read last n lines of a file."""
+        try:
+            # Simple implementation for small N
+            with open(path, "r", encoding="utf-8", errors="replace") as f:
+                # Read all lines is expensive if file is huge, but seek is complex with variably sized lines
+                # For a tail of 100-500 lines, reading mostly works unless file is GBs. 
+                # Optimization: seek to end minus X bytes.
+                
+                f.seek(0, 2)
+                fsize = f.tell()
+                f.seek(max(fsize - 100000, 0), 0) # Read last 100KB
+                lines_data = f.readlines()
+                return "".join(lines_data[-n:])
+        except Exception:
+            return "Error reading log file"
     
+    def detect_comfyui(self) -> LaunchConfig:
+        """Detect ComfyUI installation paths."""
+        config = LaunchConfig(args=[])
+        
+        # Check environment variable first
+        env_path = os.environ.get("COMFYUI_PATH")
+        if env_path and self._is_valid_comfyui_path(env_path):
+            config.path = env_path
+            config.is_available = True
+            config.detection_method = "environment_variable"
+            config.python_path = self._find_python_for_comfyui(env_path)
+            self._config = config
+            return config
+        
+        # Check settings
+        settings_path = getattr(settings, 'COMFYUI_PATH', None)
+        if settings_path and self._is_valid_comfyui_path(settings_path):
+            config.path = settings_path
+            config.is_available = True
+            config.detection_method = "settings"
+            config.python_path = self._find_python_for_comfyui(settings_path)
+            self._config = config
+            return config
+    
+    def _find_process_by_port(self, port: int) -> Optional[psutil.Process]:
+        """Find the process listening on a specific port."""
+        for proc in psutil.process_iter(['pid', 'name']):
+            if proc.pid == 0:
+                continue
+            try:
+                for conn in proc.connections(kind='inet'):
+                    if conn.laddr.port == port and conn.status == psutil.CONN_LISTEN:
+                        return proc
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                pass
+        return None
+
     def detect_comfyui(self) -> LaunchConfig:
         """Detect ComfyUI installation paths."""
         config = LaunchConfig(args=[])
@@ -166,9 +235,17 @@ class ComfyUILauncher:
     
     def is_running(self) -> bool:
         """Check if the managed ComfyUI process is running."""
-        if self._process is None:
-            return False
-        return self._process.poll() is None
+        # Check managed child process
+        if self._process is not None:
+            if self._process.poll() is None:
+                return True
+
+        # Check for any process on the configured port
+        if self._config and self._config.port:
+            proc = self._find_process_by_port(self._config.port)
+            if proc:
+                return True
+        return False
 
     def _cooldown_remaining(self) -> float:
         """How much cooldown time is left before we allow another toggle."""
@@ -179,9 +256,19 @@ class ComfyUILauncher:
     def get_status(self) -> dict:
         """Return detailed status for the managed process."""
         config = self.get_config()
+        running = self.is_running()
+        
+        pid = None
+        if self._process and self._process.poll() is None:
+            pid = self._process.pid
+        elif running and config.port:
+             proc = self._find_process_by_port(config.port)
+             if proc:
+                 pid = proc.pid
+
         return {
-            "running": self.is_running(),
-            "pid": self._process.pid if self._process else None,
+            "running": running,
+            "pid": pid,
             "available": config.is_available,
             "path": config.path,
             "detection_method": config.detection_method,
@@ -238,12 +325,20 @@ class ComfyUILauncher:
                 if extra_args:
                     cmd.extend(extra_args)
 
+                # Setup logging
+                log_dir = Path(tempfile.gettempdir())
+                self._log_file = log_dir / "comfyui_sweet_tea.log"
+                
+                # Open log file in append mode
+                self._log_handle = open(self._log_file, "a", encoding="utf-8")
+                self._log_handle.write(f"\n\n--- ComfyUI Launch {datetime.now().isoformat()} ---\n")
+                self._log_handle.flush()
+
                 self._process = subprocess.Popen(
                     cmd,
                     cwd=config.path,
-                    # Use DEVNULL to prevent blocking - PIPE buffers fill up and block the process
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
+                    stdout=self._log_handle,
+                    stderr=subprocess.STDOUT,  # Redirect stderr to stdout
                     creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0,
                 )
 
@@ -293,16 +388,28 @@ class ComfyUILauncher:
                 return {"success": True, "message": "ComfyUI was not running"}
 
             try:
-                if os.name == 'nt':
-                    self._process.terminate()
-                else:
-                    self._process.send_signal(signal.SIGTERM)
-
-                try:
-                    self._process.wait(timeout=10)
-                except subprocess.TimeoutExpired:
-                    self._process.kill()
-                    self._process.wait()
+                # If we have a handle, use it
+                if self._process:
+                    if os.name == 'nt':
+                        self._process.terminate()
+                    else:
+                        self._process.send_signal(signal.SIGTERM)
+                    try:
+                        self._process.wait(timeout=10)
+                    except subprocess.TimeoutExpired:
+                        self._process.kill()
+                        self._process.wait()
+                
+                # Double check if something is still listening on the port (orphaned process)
+                config = self.get_config()
+                if config and config.port:
+                    proc = self._find_process_by_port(config.port)
+                    if proc:
+                        proc.terminate()
+                        try:
+                             proc.wait(timeout=5)
+                        except psutil.TimeoutExpired:
+                             proc.kill()
 
                 self._last_action_at = time.time()
                 self._last_error = None
@@ -314,6 +421,12 @@ class ComfyUILauncher:
                 return {"success": False, "error": self._last_error}
             finally:
                 self._process = None
+                if self._log_handle:
+                    try:
+                        self._log_handle.close()
+                    except:
+                        pass
+                    self._log_handle = None
 
 
 # Global launcher instance

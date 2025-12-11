@@ -37,6 +37,7 @@ export const useGenerationFeedStore = create<GenerationFeedState>()(
           status: "queued",
           progress: 0,
           previewPath: null,
+          previewPaths: [],
           startedAt: new Date().toISOString(),
         };
         set({

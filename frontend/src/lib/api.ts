@@ -263,6 +263,12 @@ export const api = {
         return res.json();
     },
 
+    getComfyLogs: async (lines = 200): Promise<{ logs: string }> => {
+        const res = await fetch(`${API_BASE}/monitoring/comfyui/logs?lines=${lines}`);
+        if (!res.ok) throw new Error("Failed to fetch logs");
+        return res.json();
+    },
+
     exportDatabaseToComfy: async (): Promise<{ path: string; filename: string; sweet_tea_dir: string }> => {
         const res = await fetch(`${API_BASE}/portfolio/export`, { method: "POST" });
         if (!res.ok) {

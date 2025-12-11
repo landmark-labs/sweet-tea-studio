@@ -329,24 +329,7 @@ export function ImageViewer({
                                 <ArrowRight className="w-5 h-5 text-slate-800" />
                             </Button>
 
-                            {/* Thumbnails - Limited to last 12 images */}
-                            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 p-2 bg-black/20 backdrop-blur-sm rounded-lg overflow-x-auto max-w-[80%]">
-                                {displayImages.slice(0, 12).map((img, idx) => {
-                                    // Construct proper thumbnail URL
-                                    const thumbUrl = img.path.startsWith('/api/') || img.path.startsWith('http')
-                                        ? img.path
-                                        : `/api/v1/gallery/image/path?path=${encodeURIComponent(img.path)}`;
-                                    return (
-                                        <div
-                                            key={img.id !== -1 ? img.id : `synth-${idx}`}
-                                            className={`w-12 h-12 rounded overflow-hidden cursor-pointer border-2 transition-all flex-shrink-0 ${idx === selectedIndex ? 'border-primary scale-105' : 'border-transparent opacity-70 hover:opacity-100'}`}
-                                            onClick={(e) => { e.stopPropagation(); setSelectedIndex(idx); }}
-                                        >
-                                            <img src={thumbUrl} className="w-full h-full object-cover" alt="" />
-                                        </div>
-                                    );
-                                })}
-                            </div>
+
                         </>
                     )}
 

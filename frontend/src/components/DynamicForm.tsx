@@ -535,12 +535,16 @@ export function DynamicForm({
                                 <SelectTrigger id={key} className={cn("h-8 text-xs", isActive && "ring-1 ring-blue-400 border-blue-400")}>
                                     {/* Debugging helpers */}
                                     {key.includes("checkpoint") && console.log("[DEBUG] Rendering Checkpoint Select", key, formData[key], field.enum)}
-                                    <SelectValue placeholder="Select..." />
+                                    <div className="truncate text-left pr-4">
+                                        <SelectValue placeholder="Select..." />
+                                    </div>
                                 </SelectTrigger>
-                                <SelectContent position="popper" sideOffset={5} className="max-h-[300px] overflow-y-auto z-50">
+                                <SelectContent position="popper" sideOffset={5} className="max-h-[300px] max-w-[320px] overflow-y-auto z-50">
                                     {options.map((opt: string) => (
                                         <SelectItem key={opt} value={opt} className="text-xs">
-                                            {opt}
+                                            <span className="block truncate max-w-[280px]" title={opt}>
+                                                {opt}
+                                            </span>
                                         </SelectItem>
                                     ))}
                                 </SelectContent>

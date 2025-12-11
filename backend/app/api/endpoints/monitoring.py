@@ -164,3 +164,10 @@ async def stop_comfyui():
     result = await comfy_launcher.stop()
     return result
 
+
+@router.get("/comfyui/logs")
+def get_comfyui_logs(lines: int = 200):
+    """Get console logs from the managed ComfyUI process."""
+    from app.services.comfy_launcher import comfy_launcher
+    return {"logs": comfy_launcher.get_logs(lines)}
+

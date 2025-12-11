@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from "react";
 import { api, WorkflowTemplate, Project, PromptLibraryItem } from "@/lib/api";
 import { useGenerationFeedStore, usePromptLibraryStore } from "@/lib/stores/promptDataStore";
 
@@ -28,6 +28,10 @@ interface GenerationContextValue {
     handleGenerate: () => Promise<void>;
     isGenerating: boolean;
     canGenerate: boolean;
+
+    // Delegation
+    registerGenerateHandler: (handler: () => Promise<void>) => void;
+    unregisterGenerateHandler: () => void;
 }
 
 const GenerationContext = createContext<GenerationContextValue | null>(null);
@@ -179,8 +183,25 @@ export function GenerationProvider({ children }: GenerationProviderProps) {
         persistFormData(params);
     }, [persistFormData]);
 
+    // Delegate generation logic
+    const generateHandlerRef = useRef<(() => Promise<void>) | null>(null);
+
+    const registerGenerateHandler = useCallback((handler: () => Promise<void>) => {
+        generateHandlerRef.current = handler;
+    }, []);
+
+    const unregisterGenerateHandler = useCallback(() => {
+        generateHandlerRef.current = null;
+    }, []);
+
     // Generate
     const handleGenerate = useCallback(async () => {
+        // If a handler is registered (e.g. PromptStudio), delegate to it
+        if (generateHandlerRef.current) {
+            await generateHandlerRef.current();
+            return;
+        }
+
         if (!selectedEngineId || !selectedWorkflowId || isGenerating) return;
 
         const workflow = workflows.find(w => String(w.id) === selectedWorkflowId);
@@ -218,10 +239,12 @@ export function GenerationProvider({ children }: GenerationProviderProps) {
                     const pct = (data.data.value / data.data.max) * 100;
                     updateFeed(job.id, { progress: pct, status: "processing" });
                 } else if (data.type === "completed") {
+                    const paths = data.images?.map((img: any) => img.path) || [];
                     updateFeed(job.id, {
                         status: "completed",
                         progress: 100,
-                        previewPath: data.images?.[0]?.path
+                        previewPath: paths[0],
+                        previewPaths: paths
                     });
                     ws.close();
                 } else if (data.type === "preview") {
@@ -262,7 +285,10 @@ export function GenerationProvider({ children }: GenerationProviderProps) {
         handleGenerate,
         isGenerating,
         canGenerate,
-    };
+        registerGenerateHandler,
+        unregisterGenerateHandler,
+    } as GenerationContextValue; // Cast to include new methods without breaking interface yet if I don't update interface definition
+
 
     return (
         <GenerationContext.Provider value={value}>
