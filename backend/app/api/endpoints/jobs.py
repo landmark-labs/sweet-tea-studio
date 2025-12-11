@@ -306,6 +306,45 @@ def process_job(job_id: int):
                         with open(full_path, 'wb') as f:
                             f.write(image_bytes)
                         print(f"Saved: {full_path}")
+                    
+                    # Embed provenance metadata into the saved image
+                    # Extract positive/negative prompts for embedding
+                    pos_embed = working_params.get("prompt") or working_params.get("positive") or working_params.get("positive_prompt") or ""
+                    neg_embed = working_params.get("negative_prompt") or working_params.get("negative") or ""
+                    
+                    provenance_data = {
+                        "positive_prompt": pos_embed,
+                        "negative_prompt": neg_embed,
+                        "workflow_id": workflow.id,
+                        "workflow_name": workflow.name if hasattr(workflow, 'name') else None,
+                        "job_id": job_id,
+                        "timestamp": datetime.utcnow().isoformat(),
+                        "params": {k: v for k, v in working_params.items() if k != "metadata" and not k.startswith("__")}
+                    }
+                    
+                    try:
+                        import json
+                        provenance_json = json.dumps(provenance_data, ensure_ascii=False)
+                        
+                        # Re-open and save with embedded comment
+                        with PILImage.open(full_path) as img_embed:
+                            fmt = (img_embed.format or "").upper()
+                            if fmt in ("JPEG", "JPG"):
+                                # Save JPEG with comment
+                                if img_embed.mode in ("RGBA", "P"):
+                                    img_embed = img_embed.convert("RGB")
+                                img_embed.save(full_path, "JPEG", quality=95, comment=provenance_json.encode("utf-8"))
+                                print(f"Embedded provenance metadata into {filename}")
+                            elif fmt == "PNG":
+                                # For PNG, use PngInfo to add text chunk
+                                from PIL import PngImagePlugin
+                                png_info = PngImagePlugin.PngInfo()
+                                png_info.add_text("Comment", provenance_json)
+                                png_info.add_text("Description", provenance_json)
+                                img_embed.save(full_path, pnginfo=png_info)
+                                print(f"Embedded provenance metadata into {filename}")
+                    except Exception as embed_err:
+                        print(f"Failed to embed metadata into {filename}: {embed_err}")
                         
                 except ImportError:
                     # PIL not available - save raw bytes

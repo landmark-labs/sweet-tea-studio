@@ -143,7 +143,7 @@ export function StatusBar() {
 
     const fetchStatus = async () => {
         try {
-            const res = await fetch("/api/v1/status/summary");
+            const res = await fetch("/api/v1/monitoring/status/summary");
             if (res.ok) {
                 const data = await res.json();
                 setStatus(data);

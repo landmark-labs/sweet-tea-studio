@@ -166,7 +166,10 @@ class ComfyClient:
         
         # Store images captured from WebSocket binary stream (SaveImageWebsocket node)
         captured_images: List[Dict[str, Any]] = []
+        # Track preview images as fallback when no SaveImage node exists
+        preview_images: List[Dict[str, Any]] = []
         image_counter = 0
+        preview_counter = 0
 
         try:
             while True:
@@ -236,6 +239,17 @@ class ComfyClient:
                         b64_img = base64.b64encode(image_data).decode('utf-8')
                         prefix = "data:image/jpeg;base64," if image_format == 1 else "data:image/png;base64,"
                         
+                        # Store preview image bytes for potential use as final output
+                        # (when workflow only has PreviewImage node, no SaveImage)
+                        preview_counter += 1
+                        ext = "jpg" if image_format == 1 else "png"
+                        preview_images.append({
+                            "filename": f"preview_{prompt_id[:8]}_{preview_counter:03d}.{ext}",
+                            "image_bytes": image_data,
+                            "format": ext,
+                            "source": "preview"
+                        })
+                        
                         if progress_callback:
                             progress_callback({
                                 "type": "preview",
@@ -283,6 +297,21 @@ class ComfyClient:
         if captured_images:
             print(f"Using {len(captured_images)} images captured from WebSocket stream")
             return captured_images
+        
+        # Fallback: Use the last preview image(s) as output when no SaveImage node exists
+        # This handles workflows using only PreviewImage nodes
+        if preview_images:
+            print(f"No SaveImage node detected. Using {len(preview_images)} preview image(s) as final output")
+            # Use the last preview as the final image (it's the completed generation)
+            last_preview = preview_images[-1]
+            return [{
+                "filename": f"gen_{prompt_id[:8]}_{1:03d}.{last_preview['format']}",
+                "subfolder": "",
+                "type": "output",
+                "image_bytes": last_preview["image_bytes"],
+                "format": last_preview["format"],
+                "source": "preview_fallback"
+            }]
 
         # Fallback: Fetch from history API (traditional SaveImage node)
         history = self.get_history(prompt_id)[prompt_id]

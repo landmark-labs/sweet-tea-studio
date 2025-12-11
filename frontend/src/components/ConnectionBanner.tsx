@@ -20,7 +20,7 @@ export function ConnectionBanner({ className }: ConnectionBannerProps) {
 
     const checkConnection = async () => {
         try {
-            const res = await fetch("/api/v1/status/summary");
+            const res = await fetch("/api/v1/monitoring/status/summary");
             if (res.ok) {
                 const data = await res.json();
                 const connected = data.engine?.is_connected ?? data.engine?.state === "ok";
