@@ -287,116 +287,145 @@ export default function WorkflowLibrary() {
                     <CardContent className="space-y-6">
                         {nodesRenderData.length === 0 && <div className="text-center text-slate-400 py-8">No parameters exposed.</div>}
 
-                        {nodesRenderData.map(node => (
-                            <div key={node!.id} className="bg-white border rounded-lg overflow-hidden shadow-sm">
-                                <div className="px-4 py-2 bg-slate-100 border-b flex justify-between items-center">
-                                    <div className="font-semibold text-sm text-slate-700 flex items-center gap-2">
-                                        <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-xs font-mono text-slate-500">{node!.id}</div>
-                                        {node!.title}
-                                    </div>
-                                    <span className="text-[10px] font-mono text-slate-400">{node!.type}</span>
-                                </div>
+                        {nodesRenderData.map(node => {
+                            // Check if any field in this node is marked as core
+                            const isCore = node!.active.some(([_, f]: [string, any]) => f.x_core === true) ||
+                                node!.hidden.some(([_, f]: [string, any]) => f.x_core === true);
 
-                                {/* Active Parameters */}
-                                {node!.active.length > 0 && (
-                                    <Table>
-                                        <TableHeader>
-                                            <TableRow className="border-b-0 hover:bg-transparent">
-                                                <TableHead className="h-8 text-xs w-[30%]">Label</TableHead>
-                                                <TableHead className="h-8 text-xs w-[20%]">Field ID</TableHead>
-                                                <TableHead className="h-8 text-xs w-[15%]">Type</TableHead>
-                                                <TableHead className="h-8 text-xs w-[25%]">Default Value</TableHead>
-                                                <TableHead className="h-8 text-xs text-right w-[10%]">Action</TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {node!.active.map(([key, field]: [string, any]) => (
-                                                <TableRow key={key} className="hover:bg-slate-50/50">
-                                                    <TableCell className="py-2">
-                                                        <Input
-                                                            className="h-7 text-xs"
-                                                            value={field.title || ""}
-                                                            onChange={(e) => {
-                                                                const s = { ...schemaEdits };
-                                                                s[key].title = e.target.value;
-                                                                setSchemaEdits(s);
-                                                            }}
-                                                        />
-                                                    </TableCell>
-                                                    <TableCell className="font-mono text-[10px] text-slate-500 py-2 break-all">{key}</TableCell>
-                                                    <TableCell className="text-xs py-2">{field.type}</TableCell>
-                                                    <TableCell className="py-2">
-                                                        {field.widget === "toggle" || field.type === "boolean" ? (
-                                                            <Switch
-                                                                checked={field.default}
-                                                                onCheckedChange={(checked) => {
-                                                                    const s = { ...schemaEdits };
-                                                                    s[key].default = checked;
-                                                                    setSchemaEdits(s);
-                                                                }}
-                                                            />
-                                                        ) : (
+                            const toggleCore = () => {
+                                const s = { ...schemaEdits };
+                                // Toggle x_core for all fields belonging to this node
+                                [...node!.active, ...node!.hidden].forEach(([key]: [string, any]) => {
+                                    s[key].x_core = !isCore;
+                                });
+                                setSchemaEdits(s);
+                            };
+
+                            return (
+                                <div key={node!.id} className="bg-white border rounded-lg overflow-hidden shadow-sm">
+                                    <div className="px-4 py-2 bg-slate-100 border-b flex justify-between items-center">
+                                        <div className="font-semibold text-sm text-slate-700 flex items-center gap-2">
+                                            <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-xs font-mono text-slate-500">{node!.id}</div>
+                                            {node!.title}
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-[10px] text-slate-400 uppercase">
+                                                    {isCore ? "Core" : "Expanded"}
+                                                </span>
+                                                <Switch
+                                                    checked={isCore}
+                                                    onCheckedChange={toggleCore}
+                                                    className={cn(
+                                                        "h-4 w-7",
+                                                        isCore ? "bg-blue-500" : "bg-slate-200"
+                                                    )}
+                                                />
+                                            </div>
+                                            <span className="text-[10px] font-mono text-slate-400">{node!.type}</span>
+                                        </div>
+                                    </div>
+
+                                    {/* Active Parameters */}
+                                    {node!.active.length > 0 && (
+                                        <Table>
+                                            <TableHeader>
+                                                <TableRow className="border-b-0 hover:bg-transparent">
+                                                    <TableHead className="h-8 text-xs w-[30%]">Label</TableHead>
+                                                    <TableHead className="h-8 text-xs w-[20%]">Field ID</TableHead>
+                                                    <TableHead className="h-8 text-xs w-[15%]">Type</TableHead>
+                                                    <TableHead className="h-8 text-xs w-[25%]">Default Value</TableHead>
+                                                    <TableHead className="h-8 text-xs text-right w-[10%]">Action</TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {node!.active.map(([key, field]: [string, any]) => (
+                                                    <TableRow key={key} className="hover:bg-slate-50/50">
+                                                        <TableCell className="py-2">
                                                             <Input
                                                                 className="h-7 text-xs"
-                                                                value={String(field.default ?? "")}
+                                                                value={field.title || ""}
                                                                 onChange={(e) => {
                                                                     const s = { ...schemaEdits };
-                                                                    // Naive type check
-                                                                    const val = (field.type === "number" || field.type === "integer" || field.type === "float")
-                                                                        ? (Number(e.target.value) || 0)
-                                                                        : e.target.value;
-                                                                    s[key].default = val;
+                                                                    s[key].title = e.target.value;
                                                                     setSchemaEdits(s);
                                                                 }}
                                                             />
-                                                        )}
-                                                    </TableCell>
-                                                    <TableCell className="text-right py-2">
-                                                        <Button variant="ghost" size="sm" className="h-6 text-xs text-slate-500 hover:text-amber-600" onClick={() => {
-                                                            // Soft Hide
-                                                            const s = { ...schemaEdits };
-                                                            s[key].__hidden = true;
-                                                            setSchemaEdits(s);
-                                                        }}>
-                                                            Hide
-                                                        </Button>
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))}
-                                        </TableBody>
-                                    </Table>
-                                )}
+                                                        </TableCell>
+                                                        <TableCell className="font-mono text-[10px] text-slate-500 py-2 break-all">{key}</TableCell>
+                                                        <TableCell className="text-xs py-2">{field.type}</TableCell>
+                                                        <TableCell className="py-2">
+                                                            {field.widget === "toggle" || field.type === "boolean" ? (
+                                                                <Switch
+                                                                    checked={field.default}
+                                                                    onCheckedChange={(checked) => {
+                                                                        const s = { ...schemaEdits };
+                                                                        s[key].default = checked;
+                                                                        setSchemaEdits(s);
+                                                                    }}
+                                                                />
+                                                            ) : (
+                                                                <Input
+                                                                    className="h-7 text-xs"
+                                                                    value={String(field.default ?? "")}
+                                                                    onChange={(e) => {
+                                                                        const s = { ...schemaEdits };
+                                                                        // Store raw value - let backend handle type conversion
+                                                                        // This allows typing -1, decimals, etc without interference
+                                                                        s[key].default = e.target.value;
+                                                                        setSchemaEdits(s);
+                                                                    }}
+                                                                />
 
-                                {/* Hidden Parameters (if any) */}
-                                {node!.hidden.length > 0 && (
-                                    <div className="bg-slate-50/50 border-t">
-                                        <div className="px-4 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Hidden Parameters</div>
-                                        <Table>
-                                            <TableBody>
-                                                {node!.hidden.map(([key, field]: [string, any]) => (
-                                                    <TableRow key={key} className="hover:bg-slate-100/50 opacity-60">
-                                                        <TableCell className="py-2 text-xs text-slate-500 w-[30%]">{field.title || key}</TableCell>
-                                                        <TableCell className="font-mono text-[10px] text-slate-400 py-2 w-[20%] break-all">{key}</TableCell>
-                                                        <TableCell className="text-xs py-2 text-slate-400 w-[15%]">{field.type}</TableCell>
-                                                        <TableCell className="py-2 text-xs text-slate-400 w-[25%]">{String(field.default ?? "-")}</TableCell>
-                                                        <TableCell className="text-right py-2 w-[10%]">
-                                                            <Button variant="ghost" size="sm" className="h-6 text-xs text-blue-500 hover:text-blue-700" onClick={() => {
-                                                                // Restore
+                                                            )}
+                                                        </TableCell>
+                                                        <TableCell className="text-right py-2">
+                                                            <Button variant="ghost" size="sm" className="h-6 text-xs text-slate-500 hover:text-amber-600" onClick={() => {
+                                                                // Soft Hide
                                                                 const s = { ...schemaEdits };
-                                                                delete s[key].__hidden;
+                                                                s[key].__hidden = true;
                                                                 setSchemaEdits(s);
                                                             }}>
-                                                                Restore
+                                                                Hide
                                                             </Button>
                                                         </TableCell>
                                                     </TableRow>
                                                 ))}
                                             </TableBody>
                                         </Table>
-                                    </div>
-                                )}
-                            </div>
-                        ))}
+                                    )}
+
+                                    {/* Hidden Parameters (if any) */}
+                                    {node!.hidden.length > 0 && (
+                                        <div className="bg-slate-50/50 border-t">
+                                            <div className="px-4 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Hidden Parameters</div>
+                                            <Table>
+                                                <TableBody>
+                                                    {node!.hidden.map(([key, field]: [string, any]) => (
+                                                        <TableRow key={key} className="hover:bg-slate-100/50 opacity-60">
+                                                            <TableCell className="py-2 text-xs text-slate-500 w-[30%]">{field.title || key}</TableCell>
+                                                            <TableCell className="font-mono text-[10px] text-slate-400 py-2 w-[20%] break-all">{key}</TableCell>
+                                                            <TableCell className="text-xs py-2 text-slate-400 w-[15%]">{field.type}</TableCell>
+                                                            <TableCell className="py-2 text-xs text-slate-400 w-[25%]">{String(field.default ?? "-")}</TableCell>
+                                                            <TableCell className="text-right py-2 w-[10%]">
+                                                                <Button variant="ghost" size="sm" className="h-6 text-xs text-blue-500 hover:text-blue-700" onClick={() => {
+                                                                    // Restore
+                                                                    const s = { ...schemaEdits };
+                                                                    delete s[key].__hidden;
+                                                                    setSchemaEdits(s);
+                                                                }}>
+                                                                    Restore
+                                                                </Button>
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    ))}
+                                                </TableBody>
+                                            </Table>
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
                     </CardContent>
                 </Card>
             </div>

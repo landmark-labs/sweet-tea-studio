@@ -244,8 +244,8 @@ export function DynamicForm({
                 return {
                     key,
                     section: "loras",
-                    groupId: "loras",
-                    groupTitle: field.title || "LoRA",
+                    groupId: field.x_node_id ? String(field.x_node_id) : "loras",  // Use unique node ID
+                    groupTitle: field.x_title || field.title || "LoRA",
                     order: parseOrder(field.x_node_id, 0),
                     source: "heuristic",
                     reason: "lora_loader"
@@ -286,9 +286,10 @@ export function DynamicForm({
 
             if (placement.section === "loras") {
                 loras.push(key);
-                return;
+                // Fall through to also add to node groups
             }
 
+            // All non-input, non-prompt fields go into node groups (including loras)
             if (!nodes[placement.groupId]) {
                 nodes[placement.groupId] = {
                     title: placement.groupTitle || "Advanced",
@@ -296,7 +297,7 @@ export function DynamicForm({
                     order: placement.order ?? 999
                 };
             } else if (nodes[placement.groupId].title.startsWith("Bypass") && !placement.groupTitle.startsWith("Bypass")) {
-                // Upgrade title if we found a better one (e.g. preventing "Bypass..." from being the group title)
+                // Upgrade title if we found a better one
                 nodes[placement.groupId].title = placement.groupTitle;
             }
             nodes[placement.groupId].keys.push(key);
@@ -333,23 +334,25 @@ export function DynamicForm({
         return { topLevelFields: top, nodeFieldsGroup: [] };
     }, [groups.inputs, schema]);
 
-    // Redefine primaryKeys to ONLY include the strict core ones, so others fall into node groups
+    // User-managed core keys: fields with x_core: true go to Core Controls
+    // All others go to Expanded Controls (accordion)
     const strictCoreKeys = useMemo(() => {
         if (!schema) return new Set<string>();
-        const keywords = [
-            "resolution", "width", "height", "checkpoint", "refiner", "denoise"
-        ];
-        // We do NOT include seed, steps, cfg, sampler, scheduler here, so they appear in node groups
-        const matches = Object.keys(schema).filter((key) => {
+
+        // Find all keys where x_core is true
+        const coreKeys = Object.keys(schema).filter((key) => {
             const field = schema[key];
-            const title = String(field.title || key).toLowerCase();
-            return keywords.some((kw) => title.includes(kw));
+            return field.x_core === true;
         });
 
-        // Add the first 2 prompts to core keys so they appear at the top
-        const corePrompts = groups.prompts.slice(0, 2);
+        // Add the first 2 prompts to core keys so they appear at the top (can be overridden by user)
+        // Only if prompts don't already have x_core defined
+        const corePrompts = groups.prompts.slice(0, 2).filter(key => {
+            const field = schema[key];
+            return field.x_core !== false; // Include if undefined or true
+        });
 
-        return new Set([...matches, ...corePrompts]);
+        return new Set([...coreKeys, ...corePrompts]);
     }, [schema, groups.prompts]);
 
     // Group core keys by node ID for proper visual organization
@@ -583,22 +586,26 @@ export function DynamicForm({
                 </div>
             )}
 
-            {strictCoreGroups.length > 0 && (
-                <div className="space-y-4 p-4 bg-white rounded-lg border border-slate-200">
-                    <div className="flex items-center justify-between">
-                        <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider">core pipe controls</h3>
-                        {onReset && (
-                            <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={onReset}
-                                className="h-6 text-[10px] text-slate-400 hover:text-slate-600 px-2"
-                            >
-                                reset to defaults
-                            </Button>
-                        )}
+            <div className="space-y-4 p-4 bg-white rounded-lg border border-slate-200">
+                <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider">core pipe controls</h3>
+                    {onReset && (
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={onReset}
+                            className="h-6 text-[10px] text-slate-400 hover:text-slate-600 px-2"
+                        >
+                            reset to defaults
+                        </Button>
+                    )}
+                </div>
+                {strictCoreGroups.length === 0 ? (
+                    <div className="text-xs text-slate-400 italic py-2">
+                        No core controls configured. Edit the pipe to add nodes to this section.
                     </div>
+                ) : (
                     <div className="space-y-4">
                         {strictCoreGroups.map((group) => {
                             // Detect bypass field
@@ -651,8 +658,8 @@ export function DynamicForm({
                             );
                         })}
                     </div>
-                </div>
-            )}
+                )}
+            </div>
 
             {/* 3. Settings - Renamed to EXPANDED CONTROLS */}
             <Accordion
@@ -673,15 +680,6 @@ export function DynamicForm({
                                 <h4 className="text-[11px] font-semibold uppercase text-slate-500">additional prompts</h4>
                                 <div className="space-y-4">
                                     {strictSettingsFields.promptExtras.map(renderField)}
-                                </div>
-                            </div>
-                        )}
-
-                        {strictSettingsFields.loraExtras.length > 0 && (
-                            <div className="space-y-2">
-                                <h4 className="text-[11px] font-semibold uppercase text-slate-500">loras</h4>
-                                <div className="space-y-4">
-                                    {strictSettingsFields.loraExtras.map(renderField)}
                                 </div>
                             </div>
                         )}

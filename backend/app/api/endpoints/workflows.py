@@ -75,16 +75,22 @@ def generate_schema_from_graph(graph: Dict[str, Any], object_info: Dict[str, Any
             
             # Simple mapping logic
             if val_type == "INT":
+                # Special case: Allow -1 for seed fields (randomize on each run)
+                min_val = config.get("min")
+                if "seed" in input_name.lower() and min_val is not None and min_val > -1:
+                    min_val = -1
+                
                 schema[field_key] = {
                     "type": "integer", 
                     "title": f"{input_name} ({class_type}{suffix})",
                     "default": current_val if current_val is not None else 0,
-                    "minimum": config.get("min"),
+                    "minimum": min_val,
                     "maximum": config.get("max"),
                     "x_node_id": node_id,
                     "x_class_type": class_type,
                     "x_title": node.get("_meta", {}).get("title", class_type)
                 }
+
             elif val_type == "FLOAT":
                 schema[field_key] = {
                     "type": "number", 

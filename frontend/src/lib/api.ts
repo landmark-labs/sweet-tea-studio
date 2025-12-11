@@ -329,6 +329,12 @@ export const api = {
         return res.json();
     },
 
+    getJob: async (jobId: number): Promise<Job> => {
+        const res = await fetch(`${API_BASE}/jobs/${jobId}`);
+        if (!res.ok) throw new Error("Failed to fetch job");
+        return res.json();
+    },
+
     // --- Extensions (Install) ---
     installMissingNodes: async (missingNodes: string[], allowManualClone = false): Promise<{ job_id: string }> => {
         const res = await fetch(`${API_BASE}/extensions/install`, {

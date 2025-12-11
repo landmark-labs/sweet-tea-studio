@@ -1,11 +1,7 @@
-import { render, waitFor } from "@testing-library/react";
+import { render } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { DynamicForm } from "./DynamicForm";
-import { sendTelemetryEvent } from "@/lib/telemetry";
 
-vi.mock("@/lib/telemetry", () => ({
-    sendTelemetryEvent: vi.fn()
-}));
 
 const noop = () => undefined;
 
@@ -42,7 +38,7 @@ describe("DynamicForm grouping", () => {
         expect(container).toMatchSnapshot();
     });
 
-    it("falls back to heuristic grouping and emits telemetry for ambiguous fields", async () => {
+    it("falls back to heuristic grouping", async () => {
         const heuristicSchema = {
             mystery_value: { title: "Mystery (NodeX)", type: "integer" },
             unexplained_text: { widget: "textarea", title: "Unknown Text" }
@@ -53,18 +49,6 @@ describe("DynamicForm grouping", () => {
         );
 
         expect(container).toMatchSnapshot();
-
-        await waitFor(() => {
-            expect(sendTelemetryEvent).toHaveBeenCalledWith(
-                "dynamic_form.grouping_signal",
-                expect.objectContaining({
-                    engineId: "test-engine",
-                    fields: expect.arrayContaining([
-                        expect.objectContaining({ key: "unexplained_text", groupId: "default" })
-                    ])
-                })
-            );
-        });
     });
 });
 

@@ -160,12 +160,15 @@ class ComfyClient:
 
         print(f"Listening for completion of {prompt_id}...")
         backoff = self._default_backoff
+        reconnect_attempts = 0
+        max_reconnect_attempts = 10
 
         try:
             while True:
                 try:
                     out = self.ws.recv()
                     backoff = self._default_backoff
+                    reconnect_attempts = 0  # Reset on successful receive
                 except websocket.WebSocketTimeoutException:
                     # A timeout is normal while waiting for new frames; if the ping
                     # also fails we proactively reconnect to avoid missing events.
@@ -176,6 +179,12 @@ class ComfyClient:
                 except (websocket.WebSocketException, ConnectionResetError, socket.error):
                     # Hard disconnect; re-establish the connection and back off so we
                     # do not hammer a recovering ComfyUI instance.
+                    reconnect_attempts += 1
+                    if reconnect_attempts > max_reconnect_attempts:
+                        raise ComfyConnectionError(
+                            f"Lost connection to ComfyUI after {max_reconnect_attempts} reconnection attempts."
+                        )
+                    print(f"Connection lost, reconnection attempt {reconnect_attempts}/{max_reconnect_attempts}")
                     self._reconnect_with_backoff(backoff)
                     backoff = min(backoff * 2, self._max_backoff)
                     continue

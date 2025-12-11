@@ -465,9 +465,31 @@ export default function PromptStudio() {
     };
 
     ws.onerror = () => {
-      console.error("Job WebSocket error");
-      setError("Connection lost during generation");
-      setJobStatus("failed");
+      console.error("Job WebSocket error - checking job status via API");
+      // Don't immediately mark as failed - the job may have completed on the backend
+      // Check job status via API before giving up
+      setTimeout(async () => {
+        try {
+          const job = await api.getJob(lastJobId);
+          if (job.status === "completed") {
+            setJobStatus("completed");
+            setProgress(100);
+            setGalleryRefresh(prev => prev + 1);
+          } else if (job.status === "failed" || job.status === "cancelled") {
+            setJobStatus(job.status);
+            setError(job.error || "Job failed");
+            updateFeed(lastJobId, { status: job.status });
+          } else {
+            // Job might still be running, poll again
+            setError("Connection lost - checking status...");
+          }
+        } catch (e) {
+          console.error("Failed to check job status:", e);
+          setError("Connection lost during generation");
+          setJobStatus("failed");
+          updateFeed(lastJobId, { status: "failed" });
+        }
+      }, 1500);
     };
 
     return () => {

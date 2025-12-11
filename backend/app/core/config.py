@@ -89,7 +89,15 @@ class Settings(BaseSettings):
         Get the sweet_tea folder inside ComfyUI directory.
         Derives ComfyUI root from engine's output_dir (e.g., C:/ComfyUI/output -> C:/ComfyUI/sweet_tea)
         """
-        comfy_root = Path(engine_output_dir).parent
+        output_path = Path(engine_output_dir)
+        
+        # Ensure path is absolute - if relative, something is misconfigured
+        if not output_path.is_absolute():
+            print(f"Warning: Engine output_dir is not absolute: {engine_output_dir}")
+            # Fall back to using ROOT_DIR instead of creating in the wrong place
+            return self.ROOT_DIR / "sweet_tea"
+        
+        comfy_root = output_path.parent
         return comfy_root / "sweet_tea"
 
     def get_project_dir_in_comfy(self, engine_output_dir: str, project_slug: str) -> Path:

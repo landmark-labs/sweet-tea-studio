@@ -1,12 +1,12 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`DynamicForm grouping > falls back to heuristic grouping and emits telemetry for ambiguous fields 1`] = `
+exports[`DynamicForm grouping > falls back to heuristic grouping 1`] = `
 <div>
   <form
     class="space-y-6 pb-20"
   >
     <div
-      class="w-full space-y-2"
+      class="w-full"
       data-orientation="vertical"
     >
       <div
@@ -29,7 +29,7 @@ exports[`DynamicForm grouping > falls back to heuristic grouping and emits telem
             id="radix-_r_8_"
             type="button"
           >
-            NodeX
+            EXPANDED CONTROLS
             <svg
               aria-hidden="true"
               class="lucide lucide-chevron-down h-4 w-4 shrink-0 transition-transform duration-200"
@@ -60,27 +60,41 @@ exports[`DynamicForm grouping > falls back to heuristic grouping and emits telem
           style="--radix-accordion-content-height: var(--radix-collapsible-content-height); --radix-accordion-content-width: var(--radix-collapsible-content-width);"
         />
       </div>
+    </div>
+  </form>
+</div>
+`;
+
+exports[`DynamicForm grouping > falls back to heuristic grouping and emits telemetry for ambiguous fields 1`] = `
+<div>
+  <form
+    class="space-y-6 pb-20"
+  >
+    <div
+      class="w-full"
+      data-orientation="vertical"
+    >
       <div
         class="border rounded-lg px-2 bg-white"
         data-orientation="vertical"
-        data-state="open"
+        data-state="closed"
       >
         <h3
           class="flex"
           data-orientation="vertical"
-          data-state="open"
+          data-state="closed"
         >
           <button
-            aria-controls="radix-_r_b_"
-            aria-expanded="true"
+            aria-controls="radix-_r_9_"
+            aria-expanded="false"
             class="flex flex-1 items-center justify-between transition-all [&[data-state=open]>svg]:rotate-180 text-xs font-semibold uppercase text-slate-500 hover:no-underline py-2"
             data-orientation="vertical"
             data-radix-collection-item=""
-            data-state="open"
-            id="radix-_r_a_"
+            data-state="closed"
+            id="radix-_r_8_"
             type="button"
           >
-            Unknown Text
+            EXPANDED CONTROLS
             <svg
               aria-hidden="true"
               class="lucide lucide-chevron-down h-4 w-4 shrink-0 transition-transform duration-200"
@@ -101,43 +115,17 @@ exports[`DynamicForm grouping > falls back to heuristic grouping and emits telem
           </button>
         </h3>
         <div
-          aria-labelledby="radix-_r_a_"
+          aria-labelledby="radix-_r_8_"
           class="overflow-hidden text-sm transition-all data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down"
           data-orientation="vertical"
-          data-state="open"
-          id="radix-_r_b_"
+          data-state="closed"
+          hidden=""
+          id="radix-_r_9_"
           role="region"
-          style="--radix-accordion-content-height: var(--radix-collapsible-content-height); --radix-accordion-content-width: var(--radix-collapsible-content-width); transition-duration: 0s; animation-name: none;"
-        >
-          <div
-            class="space-y-4 pt-0 pb-4"
-          >
-            <div
-              class="space-y-2"
-            >
-              <label
-                class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                for="unexplained_text"
-              >
-                Unknown Text
-              </label>
-              <textarea
-                class="flex w-full rounded-md border border-input bg-background px-3 py-2 ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 text-xs font-mono transition-all min-h-[150px]"
-                id="unexplained_text"
-                placeholder=""
-                rows="6"
-              />
-            </div>
-          </div>
-        </div>
+          style="--radix-accordion-content-height: var(--radix-collapsible-content-height); --radix-accordion-content-width: var(--radix-collapsible-content-width);"
+        />
       </div>
     </div>
-    <button
-      class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 h-10 px-4 py-2 w-full bg-slate-900 hover:bg-slate-800 text-white shadow-lg transition-all hover:scale-[1.02]"
-      type="submit"
-    >
-      Submit
-    </button>
   </form>
 </div>
 `;
@@ -153,7 +141,7 @@ exports[`DynamicForm grouping > respects explicit x_form annotations for custom 
       <h3
         class="text-sm font-bold text-slate-700 uppercase tracking-wider"
       >
-        Input Images
+        input images
       </h3>
       <div
         class="space-y-4"
@@ -266,30 +254,51 @@ exports[`DynamicForm grouping > respects explicit x_form annotations for custom 
       </div>
     </div>
     <div
-      class="space-y-4"
+      class="space-y-4 p-4 bg-white rounded-lg border border-slate-200"
     >
       <div
-        class="space-y-2"
+        class="flex items-center justify-between"
       >
-        <label
-          class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-          for="story_prompt"
+        <h3
+          class="text-sm font-bold text-slate-700 uppercase tracking-wider"
         >
-          Story Prompt
-        </label>
+          core pipe controls
+        </h3>
+      </div>
+      <div
+        class="space-y-4"
+      >
         <div
-          class="relative"
+          class="space-y-2"
         >
-          <textarea
-            class="flex w-full rounded-md border border-input bg-background px-3 py-2 ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 text-xs font-mono transition-all min-h-[150px]"
-            placeholder=""
-            rows="6"
-          />
+          <div
+            class="space-y-3"
+          >
+            <div
+              class="space-y-2"
+            >
+              <label
+                class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                for="story_prompt"
+              >
+                Story Prompt
+              </label>
+              <div
+                class="relative"
+              >
+                <textarea
+                  class="flex w-full rounded-md border border-input bg-background px-3 py-2 ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 text-xs font-mono transition-all min-h-[150px]"
+                  id="story_prompt"
+                  placeholder=""
+                />
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
     <div
-      class="w-full space-y-2"
+      class="w-full"
       data-orientation="vertical"
     >
       <div
@@ -312,7 +321,7 @@ exports[`DynamicForm grouping > respects explicit x_form annotations for custom 
             id="radix-_r_6_"
             type="button"
           >
-            Custom Node
+            EXPANDED CONTROLS
             <svg
               aria-hidden="true"
               class="lucide lucide-chevron-down h-4 w-4 shrink-0 transition-transform duration-200"
@@ -344,12 +353,6 @@ exports[`DynamicForm grouping > respects explicit x_form annotations for custom 
         />
       </div>
     </div>
-    <button
-      class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 h-10 px-4 py-2 w-full bg-slate-900 hover:bg-slate-800 text-white shadow-lg transition-all hover:scale-[1.02]"
-      type="submit"
-    >
-      Submit
-    </button>
   </form>
 </div>
 `;
