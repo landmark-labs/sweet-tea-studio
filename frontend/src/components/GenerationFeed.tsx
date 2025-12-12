@@ -28,24 +28,6 @@ export function GenerationFeed({ items, onSelectPreview, onGenerate }: Generatio
     console.log("[GenerationFeed] Rendering with previewBlob:", activeItem.previewBlob.substring(0, 50) + "...");
   }
 
-  // Get completed items with preview paths (last 4 images from any jobs)
-  // We flatten, because one job could have 4 images.
-  const completedImages: { jobId: number, path: string, item: GenerationFeedItem }[] = [];
-
-  for (const item of items) {
-    if (item.status === 'completed') {
-      const paths = item.previewPaths && item.previewPaths.length > 0
-        ? item.previewPaths
-        : (item.previewPath ? [item.previewPath] : []);
-
-      for (const path of paths) {
-        completedImages.push({ jobId: item.jobId, path, item });
-        if (completedImages.length >= 4) break;
-      }
-    }
-    if (completedImages.length >= 4) break;
-  }
-
   return (
     <div className="w-full h-full pointer-events-auto">
       {activeItem ? (
@@ -61,112 +43,77 @@ export function GenerationFeed({ items, onSelectPreview, onGenerate }: Generatio
             </Badge>
           </div>
 
-          {/* HORIZONTAL LAYOUT - using inline styles to force flex-row */}
-          <div style={{ display: 'flex', flexDirection: 'row' }}>
-            {/* LEFT: Current Preview & Stats (400px fixed) */}
-            <div style={{ width: '400px', flexShrink: 0 }} className="p-3 space-y-2 border-r border-slate-200">
-              {/* Preview Image */}
-              {activeItem.previewBlob ? (
-                <div className="relative w-full h-48 rounded overflow-hidden bg-black/5 border border-slate-200">
-                  <img src={activeItem.previewBlob} alt="Live Preview" className="w-full h-full object-contain" />
-                  {(activeItem.status === 'running' || activeItem.status === 'processing') && (
-                    <div className="absolute top-2 right-2 px-1.5 py-0.5 bg-black/50 text-white text-[10px] rounded backdrop-blur font-medium">
-                      live
-                    </div>
-                  )}
+          {/* Preview & Stats */}
+          <div className="p-3 space-y-2">
+            {/* Preview Image */}
+            {activeItem.previewBlob ? (
+              <div className="relative w-full h-48 rounded overflow-hidden bg-black/5 border border-slate-200">
+                <img src={activeItem.previewBlob} alt="Live Preview" className="w-full h-full object-contain" />
+                {(activeItem.status === 'running' || activeItem.status === 'processing') && (
+                  <div className="absolute top-2 right-2 px-1.5 py-0.5 bg-black/50 text-white text-[10px] rounded backdrop-blur font-medium">
+                    live
+                  </div>
+                )}
+              </div>
+            ) : (activeItem.previewPaths?.[0] || activeItem.previewPath) ? (
+              <div
+                className="relative w-full h-48 rounded overflow-hidden bg-black/5 border border-slate-200 cursor-pointer hover:opacity-90 transition-opacity"
+                onClick={() => {
+                  const path = activeItem.previewPaths?.[0] || activeItem.previewPath;
+                  if (path) onSelectPreview?.({ ...activeItem, selectedPath: path });
+                }}
+              >
+                <div className="w-full h-full flex flex-col items-center justify-center text-xs text-slate-400">
+                  <span className="font-semibold">ready</span>
+                  <span className="text-[10px]">click to view</span>
                 </div>
-              ) : (activeItem.previewPaths?.[0] || activeItem.previewPath) ? (
-                <div
-                  className="relative w-full h-48 rounded overflow-hidden bg-black/5 border border-slate-200 cursor-pointer hover:opacity-90 transition-opacity"
+              </div>
+            ) : (
+              <div className="w-full h-48 rounded bg-slate-100 border border-slate-200" />
+            )}
+
+            {/* Progress */}
+            <div className="space-y-1">
+              <div className="flex justify-between text-[10px] text-slate-500 tracking-wider font-semibold">
+                <span className="lowercase">{activeItem.status}</span>
+                <span>{Math.round(activeItem.progress)}%</span>
+              </div>
+              <Progress value={activeItem.progress} className="h-1.5" />
+            </div>
+
+            {/* Buttons */}
+            <div className="space-y-1.5">
+              {(activeItem.previewPaths?.[0] || activeItem.previewPath) && !activeItem.previewBlob && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="h-7 w-full text-xs"
                   onClick={() => {
                     const path = activeItem.previewPaths?.[0] || activeItem.previewPath;
                     if (path) onSelectPreview?.({ ...activeItem, selectedPath: path });
                   }}
                 >
-                  <div className="w-full h-full flex flex-col items-center justify-center text-xs text-slate-400">
-                    <span className="font-semibold">ready</span>
-                    <span className="text-[10px]">click to view</span>
-                  </div>
-                </div>
-              ) : (
-                <div className="w-full h-48 rounded bg-slate-100 border border-slate-200" />
+                  view result
+                </Button>
               )}
-
-              {/* Progress */}
-              <div className="space-y-1">
-                <div className="flex justify-between text-[10px] text-slate-500 tracking-wider font-semibold">
-                  <span className="lowercase">{activeItem.status}</span>
-                  <span>{Math.round(activeItem.progress)}%</span>
-                </div>
-                <Progress value={activeItem.progress} className="h-1.5" />
-              </div>
-
-              {/* Buttons */}
-              <div className="space-y-1.5">
-                {(activeItem.previewPaths?.[0] || activeItem.previewPath) && !activeItem.previewBlob && (
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    className="h-7 w-full text-xs"
-                    onClick={() => {
-                      const path = activeItem.previewPaths?.[0] || activeItem.previewPath;
-                      if (path) onSelectPreview?.({ ...activeItem, selectedPath: path });
-                    }}
-                  >
-                    view result
-                  </Button>
-                )}
-                {onGenerate && (
-                  <Button
-                    size="sm"
-                    variant="default"
-                    className="h-7 w-full text-xs gap-1.5"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onGenerate && onGenerate();
-                    }}
-                  >
-                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                    </svg>
-                    Generate
-                  </Button>
-                )}
-              </div>
-            </div>
-
-            {/* RIGHT: Last 4 Images (horizontal row, each 256x256 max) */}
-            <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '8px', padding: '12px' }}>
-              {completedImages.length > 0 ? (
-                completedImages.map((imgObj, idx) => (
-                  <div
-                    key={`${imgObj.jobId}-${idx}`}
-                    style={{ width: '256px', height: '256px', flexShrink: 0 }}
-                    className="rounded overflow-hidden bg-slate-100 border border-slate-200 cursor-pointer hover:ring-2 hover:ring-blue-400 transition-all"
-                    onClick={() => onSelectPreview?.({ ...imgObj.item, selectedPath: imgObj.path })}
-                    draggable
-                    onDragStart={(e) => {
-                      e.dataTransfer.setData("text/plain", imgObj.path);
-                      e.dataTransfer.setData("application/x-sweet-tea-image", imgObj.path);
-                      e.dataTransfer.effectAllowed = "copy";
-                    }}
-                  >
-                    <img
-                      src={`/api/v1/gallery/image/path?path=${encodeURIComponent(imgObj.path)}`}
-                      alt={`Job ${imgObj.jobId}`}
-                      className="w-full h-full object-cover"
-                      draggable={false}
-                    />
-                  </div>
-                ))
-              ) : (
-                <div className="flex items-center justify-center text-xs text-slate-400" style={{ minWidth: '256px', height: '256px' }}>
-                  no recent generations
-                </div>
+              {onGenerate && (
+                <Button
+                  size="sm"
+                  variant="default"
+                  className="h-7 w-full text-xs gap-1.5"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onGenerate && onGenerate();
+                  }}
+                >
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  Generate
+                </Button>
               )}
             </div>
           </div>
-
         </div>
       ) : (
         <div className="shadow-lg border border-slate-200 bg-white/95 backdrop-blur overflow-hidden rounded-lg" style={{ width: '256px', height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -198,3 +145,4 @@ export function GenerationFeed({ items, onSelectPreview, onGenerate }: Generatio
     </div>
   );
 }
+
