@@ -47,7 +47,7 @@ export function GenerationFeed({ items, onSelectPreview, onGenerate }: Generatio
           <div className="p-3 space-y-2">
             {/* Preview Image */}
             {activeItem.previewBlob ? (
-              <div className="relative w-full h-48 rounded overflow-hidden bg-black/5 border border-slate-200">
+              <div className="relative w-full h-72 rounded overflow-hidden bg-black/5 border border-slate-200">
                 <img src={activeItem.previewBlob} alt="Live Preview" className="w-full h-full object-contain" />
                 {(activeItem.status === 'running' || activeItem.status === 'processing') && (
                   <div className="absolute top-2 right-2 px-1.5 py-0.5 bg-black/50 text-white text-[10px] rounded backdrop-blur font-medium">
@@ -57,7 +57,7 @@ export function GenerationFeed({ items, onSelectPreview, onGenerate }: Generatio
               </div>
             ) : (activeItem.previewPaths?.[0] || activeItem.previewPath) ? (
               <div
-                className="relative w-full h-48 rounded overflow-hidden bg-black/5 border border-slate-200 cursor-pointer hover:opacity-90 transition-opacity"
+                className="relative w-full h-72 rounded overflow-hidden bg-black/5 border border-slate-200 cursor-pointer hover:opacity-90 transition-opacity"
                 onClick={() => {
                   const path = activeItem.previewPaths?.[0] || activeItem.previewPath;
                   if (path) onSelectPreview?.({ ...activeItem, selectedPath: path });
@@ -69,7 +69,7 @@ export function GenerationFeed({ items, onSelectPreview, onGenerate }: Generatio
                 </div>
               </div>
             ) : (
-              <div className="w-full h-48 rounded bg-slate-100 border border-slate-200" />
+              <div className="w-full h-72 rounded bg-slate-100 border border-slate-200" />
             )}
 
             {/* Progress */}
@@ -116,7 +116,7 @@ export function GenerationFeed({ items, onSelectPreview, onGenerate }: Generatio
           </div>
         </div>
       ) : (
-        <div className="shadow-lg border border-slate-200 bg-white/95 backdrop-blur overflow-hidden rounded-lg" style={{ width: '256px', height: '100%', display: 'flex', flexDirection: 'column' }}>
+        <div className="shadow-lg border border-slate-200 bg-white/95 backdrop-blur overflow-hidden rounded-lg" style={{ width: '384px', height: '100%', display: 'flex', flexDirection: 'column' }}>
           <div className="flex-1 p-4 flex flex-col items-center justify-center text-center space-y-2 text-slate-400">
             <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center mb-1">
               <div className="w-2 h-2 rounded-full bg-slate-300" />
