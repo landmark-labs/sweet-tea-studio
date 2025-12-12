@@ -231,9 +231,7 @@ def process_job(job_id: int):
                     if comfy_root:
                         # Use user-selected folder from job.output_dir, default to "output" if not specified
                         folder_name = job.output_dir if job.output_dir else "output"
-                        print(f"[DEBUG OUTPUT_DIR] job.output_dir={job.output_dir!r}, folder_name={folder_name!r}")
                         target_output_dir = str(comfy_root / "sweet_tea" / project.slug / folder_name)
-                        print(f"[DEBUG OUTPUT_DIR] target_output_dir={target_output_dir}")
                     else:
                         target_output_dir = job.output_dir
                 else:
