@@ -262,6 +262,12 @@ def delete_image(image_id: int, session: Session = Depends(get_session)):
             os.remove(image.path)
             file_deleted = True
             logger.info("Deleted file", extra={"path": image.path, "image_id": image_id})
+            
+            # Also delete associated .json metadata file if it exists
+            json_path = os.path.splitext(image.path)[0] + ".json"
+            if os.path.exists(json_path):
+                os.remove(json_path)
+                logger.info("Deleted associated JSON", extra={"path": json_path, "image_id": image_id})
         except OSError:
             logger.exception("Failed to delete file", extra={"path": image.path, "image_id": image_id})
     
@@ -298,18 +304,20 @@ def cleanup_images(req: CleanupRequest, session: Session = Depends(get_session))
         query = query.where(Image.job_id == req.job_id)
 
     images_to_delete = session.exec(query).all()
-    print(f"[DEBUG CLEANUP] Found {len(images_to_delete)} images with is_kept=False")
 
     count = 0
     deleted_files = 0
     for img in images_to_delete:
         # Delete from disk
-        print(f"[DEBUG CLEANUP] Image {img.id}: path={img.path!r}, exists={os.path.exists(img.path) if img.path else 'N/A'}")
         if img.path and os.path.exists(img.path):
             try:
                 os.remove(img.path)
                 deleted_files += 1
-                print(f"[DEBUG CLEANUP] Deleted file: {img.path}")
+                
+                # Also delete associated .json metadata file if it exists
+                json_path = os.path.splitext(img.path)[0] + ".json"
+                if os.path.exists(json_path):
+                    os.remove(json_path)
             except OSError:
                 logger.exception("Failed to delete file", extra={"path": img.path, "image_id": img.id})
 
@@ -318,7 +326,6 @@ def cleanup_images(req: CleanupRequest, session: Session = Depends(get_session))
         count += 1
 
     session.commit()
-    print(f"[DEBUG CLEANUP] Removed {count} from DB, {deleted_files} from filesystem")
     return {"status": "cleaned", "count": count, "files_deleted": deleted_files}
 
 
