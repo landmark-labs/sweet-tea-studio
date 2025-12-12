@@ -89,12 +89,16 @@ export default function Projects() {
         try {
             console.log("[Projects] Calling api.addProjectFolder", { projectId: managingProject.id, folderName: newFolderName.trim() });
             const updated = await api.addProjectFolder(managingProject.id, newFolderName.trim());
-            console.log("[Projects] API returned", updated);
+            console.log("[Projects] API returned full response:", JSON.stringify(updated, null, 2));
+            console.log("[Projects] Returned config_json:", updated.config_json);
+            console.log("[Projects] Returned folders:", updated.config_json?.folders);
 
             // Update local state
             setProjects(prev => prev.map(p => p.id === updated.id ? updated : p));
             setManagingProject(updated);
             setNewFolderName("");
+
+            console.log("[Projects] State updated with new project data");
         } catch (e) {
             console.error("Failed to add folder:", e);
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
