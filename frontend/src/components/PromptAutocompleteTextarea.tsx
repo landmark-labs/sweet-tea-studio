@@ -205,61 +205,71 @@ export function PromptAutocompleteTextarea({
         onKeyDown?.(e);
     };
 
-    // --- Highlighting Logic ---
+    // --- Highlighting Logic (debounced for performance) ---
+    const [debouncedValue, setDebouncedValue] = useState(value);
+
+    // Debounce value updates for highlighting (doesn't affect typing)
+    useEffect(() => {
+        const timer = setTimeout(() => setDebouncedValue(value), 150);
+        return () => clearTimeout(timer);
+    }, [value]);
+
     const highlightedContent = useMemo(() => {
-        if (!highlightSnippets || !snippets || snippets.length === 0 || !value) return null;
+        if (!highlightSnippets || !snippets || snippets.length === 0 || !debouncedValue) return null;
 
         interface Match { start: number; end: number; color: string; }
         const matches: Match[] = [];
 
-        snippets.forEach(snippet => {
-            if (!snippet.content || snippet.type !== 'block') return;
-            const term = snippet.content;
-            let pos = value.indexOf(term);
+        // Only process block-type snippets with content
+        const blockSnippets = snippets.filter(s => s.type === 'block' && s.content);
+
+        for (const snippet of blockSnippets) {
+            const term = snippet.content!;
+            let pos = debouncedValue.indexOf(term);
             while (pos !== -1) {
                 matches.push({ start: pos, end: pos + term.length, color: snippet.color || "bg-slate-200" });
-                pos = value.indexOf(term, pos + 1);
+                pos = debouncedValue.indexOf(term, pos + 1);
             }
-        });
+        }
 
         if (matches.length === 0) return null;
 
         matches.sort((a, b) => a.start - b.start);
 
-        // Filter overlaps (greedy: first match wins, subsequent overlapping matches are skippped or trimmed)
-        // Simplified: just skip if overlaps
+        // Filter overlaps (greedy: first match wins)
         const uniqueMatches: Match[] = [];
         let lastEnd = 0;
-        matches.forEach(m => {
+        for (const m of matches) {
             if (m.start >= lastEnd) {
                 uniqueMatches.push(m);
                 lastEnd = m.end;
             }
-        });
+        }
 
         const nodes: React.ReactNode[] = [];
         let cursor = 0;
 
-        uniqueMatches.forEach((m, i) => {
+        for (let i = 0; i < uniqueMatches.length; i++) {
+            const m = uniqueMatches[i];
             // Text before
             if (m.start > cursor) {
-                nodes.push(value.slice(cursor, m.start));
+                nodes.push(debouncedValue.slice(cursor, m.start));
             }
             // Highlighted segment
             nodes.push(
                 <span key={`${m.start}-${i}`} className={cn(m.color, "rounded-sm opacity-70 text-transparent select-none")}>
-                    {value.slice(m.start, m.end)}
+                    {debouncedValue.slice(m.start, m.end)}
                 </span>
             );
             cursor = m.end;
-        });
+        }
 
-        if (cursor < value.length) {
-            nodes.push(value.slice(cursor));
+        if (cursor < debouncedValue.length) {
+            nodes.push(debouncedValue.slice(cursor));
         }
 
         return nodes;
-    }, [value, snippets, highlightSnippets]);
+    }, [debouncedValue, snippets, highlightSnippets]);
 
 
     const showDropdown = isOpen && rankedSuggestions.length > 0;
