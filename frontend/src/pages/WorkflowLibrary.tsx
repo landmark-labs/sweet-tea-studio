@@ -149,15 +149,18 @@ const NodeCard = ({ node, schemaEdits, setSchemaEdits }: NodeCardProps) => {
                                     ) : (
                                         <Input
                                             className="h-7 text-xs"
-                                            value={String(field.default ?? "")}
+                                            value={field.default === undefined || field.default === null || (typeof field.default === 'number' && isNaN(field.default)) ? "" : String(field.default)}
                                             onChange={(e) => {
                                                 const s = { ...schemaEdits };
                                                 const val = e.target.value;
                                                 const type = field.type;
                                                 if (type === "number" || type === "float") {
-                                                    s[key].default = parseFloat(val);
+                                                    // Handle empty string - don't parse to NaN
+                                                    s[key].default = val === "" ? undefined : parseFloat(val);
                                                 } else if (type === "integer") {
-                                                    s[key].default = parseInt(val);
+                                                    // Handle empty string - don't parse to NaN
+                                                    const parsed = parseInt(val);
+                                                    s[key].default = val === "" || isNaN(parsed) ? undefined : parsed;
                                                 } else {
                                                     s[key].default = val;
                                                 }
