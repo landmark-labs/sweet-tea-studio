@@ -680,13 +680,21 @@ export default function WorkflowLibrary() {
                 <div className="bg-white border rounded-md p-4 space-y-4 mb-4">
                     <div className="grid grid-cols-6 items-center gap-4">
                         <Label htmlFor="edit-name" className="text-right">pipe name</Label>
-                        <Input
-                            id="edit-name"
-                            className="col-span-5"
-                            value={editingWorkflow.name}
-                            onChange={(e) => setEditingWorkflow({ ...editingWorkflow, name: e.target.value })}
-                        />
+                        <div className="col-span-5 space-y-1">
+                            <Input
+                                id="edit-name"
+                                value={editName}
+                                onChange={(e) => {
+                                    setEditName(e.target.value);
+                                    if (nameError) setNameError(validateName(e.target.value, editingWorkflow.id));
+                                }}
+                                onBlur={() => setNameError(validateName(editName, editingWorkflow.id))}
+                                placeholder="enter a unique name"
+                            />
+                            {nameError && <span className="text-xs text-red-600">{nameError}</span>}
+                        </div>
                     </div>
+
                     <div className="grid grid-cols-6 items-start gap-4">
                         <Label htmlFor="edit-description" className="text-right mt-2">description</Label>
                         <div className="col-span-5 space-y-1">

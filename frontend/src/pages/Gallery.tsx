@@ -408,7 +408,7 @@ export default function Gallery() {
                                 <ContextMenuTrigger>
                                     <Card
                                         className={cn(
-                                            "group overflow-hidden flex flex-col relative transition-all duration-200",
+                                            "group overflow-hidden flex flex-col relative transition-all duration-200 select-none",
                                             selectedIds.has(item.image.id) ? "ring-2 ring-blue-500 shadow-lg scale-[0.98] bg-blue-50/50" : ""
                                         )}
                                         onClick={(e) => handleCardClick(item, e)}

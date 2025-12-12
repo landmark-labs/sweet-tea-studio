@@ -101,7 +101,7 @@ export function RunningGallery({
                     return (
                         <Card
                             key={item.image.id}
-                            className={`cursor-pointer overflow-hidden transition-all group relative border-2 ${isSelected ? 'border-primary ring-2 ring-primary/20' : 'border-transparent hover:border-slate-300'}`}
+                            className={`cursor-pointer overflow-hidden transition-all group relative border-2 select-none ${isSelected ? 'border-primary ring-2 ring-primary/20' : 'border-transparent hover:border-slate-300'}`}
                             onClick={(e) => handleCardClick(e, item)}
                             onContextMenu={(e) => handleContextMenu(e, item)}
                             draggable
