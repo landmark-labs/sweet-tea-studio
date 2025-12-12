@@ -321,6 +321,14 @@ export function PromptAutocompleteTextarea({
                     // DEBUG: Find out who stole focus
                     console.log("[AC Debug] BLUR triggered. Stolen by:", e.relatedTarget, "Active:", document.activeElement);
 
+                    // PHANTOM BLUR FIX:
+                    // If the active element is STILL the textarea (or inside it), ignore the blur.
+                    // This happens sometimes during re-renders or portal updates.
+                    if (document.activeElement === textareaRef.current) {
+                        console.log("[AC Debug] Ignoring phantom blur (focus still on textarea)");
+                        return;
+                    }
+
                     // Don't close immediately to allow click on dropdown items
                     // We check if the new focus is inside our portal
                     // But since portal is in body, we rely on the timeout for now
