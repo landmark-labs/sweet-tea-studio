@@ -376,6 +376,21 @@ export function ImageViewer({
                         src={imageUrl}
                         className="max-w-full max-h-full object-contain shadow-2xl rounded-lg transition-all"
                         alt="Preview"
+                        draggable
+                        onDragStart={(e) => {
+                            // Extract raw file path for drag transfer
+                            // This ensures full-resolution images are used, not browser-cached versions
+                            let rawPath = imagePath || "";
+                            if (rawPath.includes('/api/') && rawPath.includes('?path=')) {
+                                try {
+                                    const url = new URL(rawPath, window.location.origin);
+                                    const pathParam = url.searchParams.get('path');
+                                    if (pathParam) rawPath = pathParam;
+                                } catch { /* use as-is */ }
+                            }
+                            e.dataTransfer.setData("application/x-sweet-tea-image", rawPath);
+                            e.dataTransfer.setData("text/plain", rawPath);
+                        }}
                     />
 
 
