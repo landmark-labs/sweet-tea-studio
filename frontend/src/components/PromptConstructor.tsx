@@ -89,7 +89,7 @@ function SortableItem({ item, index, textIndex, onRemove, onUpdateContent, onEdi
         }
 
         return (
-            <HoverCard openDelay={1000}>
+            <HoverCard openDelay={500}>
                 <HoverCardTrigger asChild>
                     <div
                         ref={setNodeRef}
@@ -150,7 +150,7 @@ function SortableItem({ item, index, textIndex, onRemove, onUpdateContent, onEdi
 
     // Snippet Block
     return (
-        <HoverCard openDelay={1000}>
+        <HoverCard openDelay={500}>
             <HoverCardTrigger asChild>
                 <div
                     ref={setNodeRef}
@@ -650,7 +650,7 @@ export function PromptConstructor({ schema, onUpdate, currentValues, targetField
                     <div className="grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-2 items-start min-h-[40px] p-1">
                         {library.map(snippet => (
                             <ContextMenu key={snippet.id}>
-                                <HoverCard openDelay={1000} closeDelay={80}>
+                                <HoverCard openDelay={500} closeDelay={80}>
                                     <ContextMenuTrigger asChild>
                                         <HoverCardTrigger asChild>
                                             <div
