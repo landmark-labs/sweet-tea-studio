@@ -500,6 +500,7 @@ export default function PromptStudio() {
         const { value, max } = data.data;
         const pct = (value / max) * 100;
         setProgress(pct);
+        setJobStatus("processing");
         updateFeed(lastJobId, { progress: pct, status: "processing" });
       } else if (data.type === "executing") {
         setJobStatus("processing");
