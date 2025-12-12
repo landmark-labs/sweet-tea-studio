@@ -13,19 +13,8 @@ import { Plus, X, Type, Trash2, CornerDownLeft, Eraser, Check, Pencil } from "lu
 import { cn } from "@/lib/utils";
 import { useUndoRedo } from "@/lib/undoRedo";
 import { PromptAutocompleteTextarea } from "./PromptAutocompleteTextarea";
+import { PromptItem, PromptItemType } from "@/lib/types";
 
-// --- Types ---
-
-export type PromptItemType = 'block' | 'text';
-
-export interface PromptItem {
-    id: string;
-    sourceId?: string; // ID of the library snippet this was created from
-    type: PromptItemType;
-    content: string; // The actual prompt text
-    label?: string; // For blocks, a short name
-    color?: string; // For blocks
-}
 
 interface PromptConstructorProps {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -35,11 +24,13 @@ interface PromptConstructorProps {
     targetField?: string;
     onTargetChange?: (field: string) => void;
     onFinish?: () => void;
+    snippets: PromptItem[];
+    onUpdateSnippets: (items: PromptItem[]) => void;
 }
 
 // --- Constants ---
 
-const COLORS = [
+export const COLORS = [
     "bg-blue-100 border-blue-300 text-blue-900",
     "bg-green-100 border-green-300 text-green-900",
     "bg-purple-100 border-purple-300 text-purple-900",
@@ -204,7 +195,7 @@ function SortableItem({ item, index, textIndex, onRemove, onUpdateContent, onEdi
 
 // --- Main Component ---
 
-export function PromptConstructor({ schema, onUpdate, currentValues, targetField: controlledTarget, onTargetChange, onFinish }: PromptConstructorProps) {
+export function PromptConstructor({ schema, onUpdate, currentValues, targetField: controlledTarget, onTargetChange, onFinish, snippets: library, onUpdateSnippets: setLibrary }: PromptConstructorProps) {
     // 1. Identify Target Fields
     const [internalTarget, setInternalTarget] = useState<string>("");
     const targetField = controlledTarget !== undefined ? controlledTarget : internalTarget;
@@ -234,13 +225,8 @@ export function PromptConstructor({ schema, onUpdate, currentValues, targetField
         });
     };
 
-    const [library, setLibrary] = useState<PromptItem[]>(() => {
-        const saved = localStorage.getItem("ds_prompt_snippets");
-        return saved ? JSON.parse(saved) : [
-            { id: "s-1", type: "block", label: "Masterpiece", content: "masterpiece, best quality, highres, 8k", color: COLORS[0] },
-            { id: "s-2", type: "block", label: "Negative Basics", content: "lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry", color: COLORS[4] }
-        ];
-    });
+    // Library now comes from props (aliasing 'snippets' to 'library' in arg destructuring)
+    // Removed internal state initialization
 
     // Creation / Editing State
     const [snippetTitle, setSnippetTitle] = useState("");
@@ -276,9 +262,7 @@ export function PromptConstructor({ schema, onUpdate, currentValues, targetField
     }, [schema]);
 
     // Sync Library
-    useEffect(() => {
-        localStorage.setItem("ds_prompt_snippets", JSON.stringify(library));
-    }, [library]);
+    // Removed internal library sync (handled by parent)
 
     // Ref Pattern: Track currentValues without triggering effects in Output channel
     const valuesRef = useRef(currentValues);

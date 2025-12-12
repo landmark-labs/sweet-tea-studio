@@ -11,7 +11,8 @@ import { Loader2 } from "lucide-react";
 import { ImageViewer } from "@/components/ImageViewer";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { InstallStatusDialog, InstallStatus } from "@/components/InstallStatusDialog";
-import { PromptConstructor } from "@/components/PromptConstructor";
+import { PromptConstructor, COLORS } from "@/components/PromptConstructor";
+import { PromptItem } from "@/lib/types";
 
 import { useUndoRedo } from "@/lib/undoRedo";
 import { ProjectGallery } from "@/components/ProjectGallery";
@@ -85,6 +86,24 @@ export default function PromptStudio() {
   });
   const [projectDraftName, setProjectDraftName] = useState("");
   const [, setIsCreatingProject] = useState(false);
+
+  // Snippet Library (Lifted State)
+  const [library, setLibrary] = useState<PromptItem[]>(() => {
+    try {
+      const saved = localStorage.getItem("ds_prompt_snippets");
+      if (saved) return JSON.parse(saved);
+    } catch (e) { console.error("Failed to parse snippets", e); }
+
+    // Defaults if nothing saved
+    return [
+      { id: "s-1", type: "block", label: "Masterpiece", content: "masterpiece, best quality, highres, 8k", color: COLORS[0] },
+      { id: "s-2", type: "block", label: "Negative Basics", content: "lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry", color: COLORS[4] }
+    ];
+  });
+
+  useEffect(() => {
+    localStorage.setItem("ds_prompt_snippets", JSON.stringify(library));
+  }, [library]);
 
   const loadGallery = async () => {
     try {
@@ -844,6 +863,8 @@ export default function PromptStudio() {
             targetField={focusedField}
             onTargetChange={setFocusedField}
             onFinish={() => setFocusedField("")}
+            snippets={library}
+            onUpdateSnippets={setLibrary}
           />
         ) : (
           <div className="p-4 text-xs text-slate-400">select a prompt pipe to use the constructor</div>
@@ -1039,6 +1060,7 @@ export default function PromptStudio() {
               submitDisabled={engineOffline}
               engineId={selectedEngineId}
               onReset={handleResetDefaults}
+              snippets={library}
             />
           )}
         </div>

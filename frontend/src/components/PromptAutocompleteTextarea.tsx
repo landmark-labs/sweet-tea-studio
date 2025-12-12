@@ -1,13 +1,15 @@
-
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { api, TagSuggestion } from "@/lib/api";
+import { PromptItem } from "@/lib/types";
 
 interface PromptAutocompleteTextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
     value: string;
     onValueChange: (value: string) => void;
     isActive?: boolean;
+    snippets?: PromptItem[];
+    highlightSnippets?: boolean;
 }
 
 function computeScore(query: string, candidate: string): number {
@@ -59,9 +61,12 @@ export function PromptAutocompleteTextarea({
     isActive,
     className,
     onKeyDown,
+    snippets = [],
+    highlightSnippets,
     ...props
 }: PromptAutocompleteTextareaProps) {
     const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+    const backdropRef = useRef<HTMLDivElement | null>(null);
     const cacheRef = useRef<Map<string, TagSuggestion[]>>(new Map());
     const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -77,10 +82,16 @@ export function PromptAutocompleteTextarea({
         setCursor(textareaRef.current.selectionStart || 0);
     };
 
+    // Scroll Sync
+    const handleScroll = (e: React.UIEvent<HTMLTextAreaElement>) => {
+        if (backdropRef.current) {
+            backdropRef.current.scrollTop = e.currentTarget.scrollTop;
+            backdropRef.current.scrollLeft = e.currentTarget.scrollLeft;
+        }
+    };
+
     const currentToken = useMemo(() => {
         const before = value.slice(0, cursor);
-        // Match everything from the last comma (or start) to cursor
-        // This allows multi-word tags like "blue sky" to be autocompleted as one unit
         const lastComma = before.lastIndexOf(",");
         const segment = lastComma === -1 ? before : before.slice(lastComma + 1);
         return segment.trim();
@@ -90,10 +101,8 @@ export function PromptAutocompleteTextarea({
         setActiveToken(currentToken);
     }, [currentToken]);
 
-
     useEffect(() => {
         const token = activeToken.trim();
-        // Normalize: replace spaces with underscores to match booru tag format
         const normalizedToken = token.replace(/\s+/g, "_");
 
         if (!isFocused || normalizedToken.length < 2) {
@@ -102,7 +111,6 @@ export function PromptAutocompleteTextarea({
             return;
         }
 
-        // Cancel previous request
         if (abortControllerRef.current) {
             abortControllerRef.current.abort();
         }
@@ -145,13 +153,8 @@ export function PromptAutocompleteTextarea({
             .map((s) => ({ suggestion: s, score: computeScore(token, s.name) }))
             .filter((item) => item.score > 0)
             .sort((a, b) => {
-                // Sort by score first (descending), then by frequency, then alphabetically
-                if (a.score !== b.score) {
-                    return b.score - a.score;
-                }
-                if (a.suggestion.frequency !== b.suggestion.frequency) {
-                    return b.suggestion.frequency - a.suggestion.frequency;
-                }
+                if (a.score !== b.score) return b.score - a.score;
+                if (a.suggestion.frequency !== b.suggestion.frequency) return b.suggestion.frequency - a.suggestion.frequency;
                 return a.suggestion.name.localeCompare(b.suggestion.name);
             })
             .slice(0, 15)
@@ -163,23 +166,12 @@ export function PromptAutocompleteTextarea({
         const before = value.slice(0, cursor);
         const after = value.slice(cursor);
 
-        // Find the start of the current segment (after the last comma, or start of string)
         const lastComma = before.lastIndexOf(",");
         const segmentStart = lastComma === -1 ? 0 : lastComma + 1;
-
-        // Extract the text of the current segment (e.g. "   val")
         const segmentText = before.slice(segmentStart);
-        // Find leading spaces to preserve them (e.g. "   ")
         const leadingSpaces = segmentText.match(/^\s*/)?.[0] || "";
-
-        // Use spaces instead of underscores for insertion
         const displayName = name.replace(/_/g, " ");
 
-        // Construct new value: 
-        // 1. Text before segment (including comma)
-        // 2. Leading spaces (preserved)
-        // 3. Tag name (with spaces)
-        // 4. Text after cursor (preserved)
         const newValue = `${before.slice(0, segmentStart)}${leadingSpaces}${displayName}${after}`;
         onValueChange(newValue);
 
@@ -210,15 +202,91 @@ export function PromptAutocompleteTextarea({
                 return;
             }
         }
-
-        // Pass through to parent if not consumed
         onKeyDown?.(e);
     };
+
+    // --- Highlighting Logic ---
+    const highlightedContent = useMemo(() => {
+        if (!highlightSnippets || !snippets || snippets.length === 0 || !value) return null;
+
+        interface Match { start: number; end: number; color: string; }
+        const matches: Match[] = [];
+
+        snippets.forEach(snippet => {
+            if (!snippet.content || snippet.type !== 'block') return;
+            const term = snippet.content;
+            let pos = value.indexOf(term);
+            while (pos !== -1) {
+                matches.push({ start: pos, end: pos + term.length, color: snippet.color || "bg-slate-200" });
+                pos = value.indexOf(term, pos + 1);
+            }
+        });
+
+        if (matches.length === 0) return null;
+
+        matches.sort((a, b) => a.start - b.start);
+
+        // Filter overlaps (greedy: first match wins, subsequent overlapping matches are skippped or trimmed)
+        // Simplified: just skip if overlaps
+        const uniqueMatches: Match[] = [];
+        let lastEnd = 0;
+        matches.forEach(m => {
+            if (m.start >= lastEnd) {
+                uniqueMatches.push(m);
+                lastEnd = m.end;
+            }
+        });
+
+        const nodes: React.ReactNode[] = [];
+        let cursor = 0;
+
+        uniqueMatches.forEach((m, i) => {
+            // Text before
+            if (m.start > cursor) {
+                nodes.push(value.slice(cursor, m.start));
+            }
+            // Highlighted segment
+            nodes.push(
+                <span key={`${m.start}-${i}`} className={cn(m.color, "rounded-sm opacity-70 text-transparent select-none")}>
+                    {value.slice(m.start, m.end)}
+                </span>
+            );
+            cursor = m.end;
+        });
+
+        if (cursor < value.length) {
+            nodes.push(value.slice(cursor));
+        }
+
+        return nodes;
+    }, [value, snippets, highlightSnippets]);
+
 
     const showDropdown = isOpen && rankedSuggestions.length > 0;
 
     return (
-        <div className="relative">
+        <div className="relative group/container w-full">
+            {/* Overlay for highlighting */}
+            {highlightSnippets && highlightedContent && (
+                <div
+                    ref={backdropRef}
+                    aria-hidden="true"
+                    className={cn(
+                        // Match Textarea base styles EXACTLY
+                        "absolute inset-0 z-0 p-3 text-xs font-mono whitespace-pre-wrap break-words overflow-auto bg-transparent border border-transparent pointer-events-none text-transparent",
+                        // Must match textarea sizing/resize
+                        className?.includes("h-") ? "" : "h-auto" // If height is fixed in class, it inherits naturally via inset. If auto, we might drift.
+                        // Actually, Scroll Sync handles offset.
+                    )}
+                    style={{
+                        // Match resize behavior if possible, but Textarea resize handles are tricky.
+                        // We rely on standard scroll sync.
+                    }}
+                >
+                    {highlightedContent}
+                </div>
+            )}
+
             <Textarea
                 {...props}
                 ref={textareaRef}
@@ -250,10 +318,15 @@ export function PromptAutocompleteTextarea({
                     updateCursor();
                     props.onSelect?.(e);
                 }}
+                onScroll={handleScroll}
                 className={cn(
-                    "text-xs font-mono transition-all min-h-[150px]",
-                    isActive && "ring-2 ring-blue-400 border-blue-400 bg-blue-50/20",
+                    "text-xs font-mono transition-all min-h-[150px] relative z-10",
+                    isActive && "ring-2 ring-blue-400 border-blue-400",
+                    highlightSnippets ? "bg-transparent focus:bg-transparent" : "",
+                    highlightSnippets && isActive && "bg-blue-50/10", // slight tint if active but transparent
                     className,
+                    // Ensure padding matches overlay
+                    !className?.includes("p-") && "p-3"
                 )}
                 onKeyDown={handleKeyDown}
             />
@@ -299,3 +372,5 @@ export function PromptAutocompleteTextarea({
         </div>
     );
 }
+
+

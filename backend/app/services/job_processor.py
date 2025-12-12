@@ -229,7 +229,9 @@ def process_job(job_id: int):
                             comfy_root = input_path
                     
                     if comfy_root:
-                        target_output_dir = str(comfy_root / "sweet_tea" / project.slug / "output")
+                        # Use user-selected folder from job.output_dir, default to "output" if not specified
+                        folder_name = job.output_dir if job.output_dir else "output"
+                        target_output_dir = str(comfy_root / "sweet_tea" / project.slug / folder_name)
                     else:
                         target_output_dir = job.output_dir
                 else:

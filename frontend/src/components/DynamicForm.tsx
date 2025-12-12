@@ -12,6 +12,7 @@ import { PromptAutocompleteTextarea } from "@/components/PromptAutocompleteTexta
 import { sendTelemetryEvent } from "@/lib/telemetry";
 import { labels } from "@/ui/labels";
 import { api } from "@/lib/api";
+import { PromptItem } from "@/lib/types";
 
 type FormSection = "inputs" | "prompts" | "loras" | "nodes";
 
@@ -51,6 +52,7 @@ interface DynamicFormProps {
     activeField?: string;
     submitDisabled?: boolean;
     onReset?: () => void;
+    snippets?: PromptItem[];
 }
 
 export function DynamicForm({
@@ -66,8 +68,10 @@ export function DynamicForm({
     onFieldFocus,
     onFieldBlur,
     activeField,
+
     submitDisabled,
-    onReset
+    onReset,
+    snippets = []
 }: DynamicFormProps) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const [internalData, setInternalData] = useState<any>({});
@@ -491,6 +495,8 @@ export function DynamicForm({
                             onBlur={(e) => onFieldBlur?.(key, e.relatedTarget as Element)}
                             placeholder=""
                             isActive={isActive}
+                            snippets={snippets}
+                            highlightSnippets={true}
                         />
                     ) : (
                         <Textarea
@@ -661,47 +667,47 @@ export function DynamicForm({
                                 const { bypassKey, hasBypass, isBypassed } = group;
                                 const fieldsToRender = group.keys.filter(k => k !== bypassKey);
 
-                            return (
-                                <div key={group.id} className="space-y-2">
-                                    {/* Always show header if multiple groups OR if we have a bypass toggle */}
-                                    {(strictCoreGroups.length > 1 || hasBypass) && (
-                                        <div className="flex items-center justify-between border-b border-slate-100 pb-1">
-                                            <h4 className="text-[11px] font-semibold uppercase text-slate-400 tracking-wide flex items-center gap-2">
-                                                <span>{group.title}</span>
-                                                {isBypassed && (
-                                                    <span className="text-[9px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5">
-                                                        Bypassed
-                                                    </span>
+                                return (
+                                    <div key={group.id} className="space-y-2">
+                                        {/* Always show header if multiple groups OR if we have a bypass toggle */}
+                                        {(strictCoreGroups.length > 1 || hasBypass) && (
+                                            <div className="flex items-center justify-between border-b border-slate-100 pb-1">
+                                                <h4 className="text-[11px] font-semibold uppercase text-slate-400 tracking-wide flex items-center gap-2">
+                                                    <span>{group.title}</span>
+                                                    {isBypassed && (
+                                                        <span className="text-[9px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5">
+                                                            Bypassed
+                                                        </span>
+                                                    )}
+                                                </h4>
+                                                {hasBypass && (
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-[9px] text-slate-300 uppercase  tracking-wider">
+                                                            {isBypassed ? "bypassed" : "active"}
+                                                        </span>
+                                                        <Switch
+                                                            checked={!!formData[bypassKey!]}
+                                                            onCheckedChange={(c) => handleChange(bypassKey!, c)}
+                                                            className={cn(
+                                                                "h-3.5 w-6 data-[state=checked]:bg-amber-500 data-[state=unchecked]:bg-slate-200"
+                                                            )}
+                                                        />
+                                                    </div>
                                                 )}
-                                            </h4>
-                                            {hasBypass && (
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-[9px] text-slate-300 uppercase  tracking-wider">
-                                                        {isBypassed ? "bypassed" : "active"}
-                                                    </span>
-                                                    <Switch
-                                                        checked={!!formData[bypassKey!]}
-                                                        onCheckedChange={(c) => handleChange(bypassKey!, c)}
-                                                        className={cn(
-                                                            "h-3.5 w-6 data-[state=checked]:bg-amber-500 data-[state=unchecked]:bg-slate-200"
-                                                        )}
-                                                    />
+                                            </div>
+                                        )}
+                                        <div className="space-y-3">
+                                            {!isBypassed ? (
+                                                fieldsToRender.map(renderField)
+                                            ) : (
+                                                <div className="text-[10px] text-slate-400 italic px-1 opacity-60">
+                                                    Node bypassed. Parameters hidden.
                                                 </div>
                                             )}
                                         </div>
-                                    )}
-                                    <div className="space-y-3">
-                                        {!isBypassed ? (
-                                            fieldsToRender.map(renderField)
-                                        ) : (
-                                            <div className="text-[10px] text-slate-400 italic px-1 opacity-60">
-                                                Node bypassed. Parameters hidden.
-                                            </div>
-                                        )}
                                     </div>
-                                </div>
-                            );
-                        })}
+                                );
+                            })}
                     </div>
                 )}
             </div>
