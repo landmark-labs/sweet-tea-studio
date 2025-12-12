@@ -593,7 +593,7 @@ export function PromptConstructor({ schema, onUpdate, currentValues, targetField
         <div className="prompt-constructor h-full flex flex-col bg-slate-50 border-t border-slate-200">
 
             {/* 2. Snippet Creator (Standing) */}
-            <div className={cn("p-3 border-b border-dashed border-slate-200 shrink-0 transition-colors", isEditing ? "bg-amber-50" : "bg-slate-50")}>
+            <div data-snippet-editor="true" className={cn("p-3 border-b border-dashed border-slate-200 shrink-0 transition-colors", isEditing ? "bg-amber-50" : "bg-slate-50")}>
                 <div className="flex gap-2">
                     <div className="flex-1 space-y-2">
                         <div className="flex justify-between items-center">

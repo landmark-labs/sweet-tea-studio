@@ -591,6 +591,12 @@ export default function PromptStudio() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+        // Skip if focus is inside the snippet editor (Ctrl+Enter saves the snippet there)
+        const activeEl = document.activeElement;
+        if (activeEl?.closest('[data-snippet-editor="true"]')) {
+          return;
+        }
+
         if (!selectedWorkflowId || isSubmitting || engineOffline || jobStatus === "initiating") return;
         handleGenerate(formData);
       }
