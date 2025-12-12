@@ -625,7 +625,7 @@ export function PromptConstructor({ schema, onUpdate, currentValues, targetField
                         </div>
                         <PromptAutocompleteTextarea
                             placeholder="Prompt text... (Ctrl+Enter to save)"
-                            className="h-[140px] text-xs font-mono bg-white resize-none"
+                            className="h-[100px] text-xs font-mono bg-white resize-none"
                             value={snippetContent}
                             onValueChange={setSnippetContent}
                             onKeyDown={handleKeyDown}
@@ -662,7 +662,7 @@ export function PromptConstructor({ schema, onUpdate, currentValues, targetField
                 <div className="mb-2">
                     <span className="text-[10px] font-bold text-slate-400 uppercase block">Snippets (Double-click to Add, long-press to Edit)</span>
                 </div>
-                <ScrollArea className="h-32 w-full">
+                <ScrollArea className="h-72 w-full">
                     <div className="grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-2 items-start min-h-[40px] p-1">
                         {library.map(snippet => (
                             <ContextMenu key={snippet.id}>
