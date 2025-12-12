@@ -1,8 +1,34 @@
+"""
+Library API Endpoints
+
+This module provides three main areas of functionality:
+
+1. PROMPTS: CRUD operations and search for prompt library
+   - GET /library/ - List/search prompts with fuzzy matching
+   - POST /library/ - Create new prompt
+   - GET /library/{prompt_id} - Get single prompt
+   - DELETE /library/{prompt_id} - Delete prompt
+
+2. SUGGESTIONS: Autocomplete for prompts and tags
+   - GET /library/suggest - Combined suggestion endpoint
+
+3. TAGS: Tag management and external source caching
+   - GET /library/tags/suggest - Tag autocomplete with external sources
+   - POST /library/tags/import - Bulk import tags
+   - Background workers for Danbooru, e621, Rule34 tag caching
+
+Future considerations:
+- Video generation will use this same prompt/tag infrastructure
+- VLM captions can be stored alongside prompts
+"""
+
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Literal, Optional
+import json
+import time
+from threading import Thread
 
 import httpx
-from datetime import datetime
 from difflib import SequenceMatcher
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel, Field
@@ -10,12 +36,10 @@ from sqlmodel import Session, col, select
 
 from app.models.prompt import Prompt, PromptCreate, PromptRead
 from app.models.tag import Tag, TagCreate, TagSyncState
-from app.db.engine import engine as db_engine
+from app.db.engine import engine as db_engine, tags_engine
 from app.models.image import Image
 from app.models.job import Job
 from app.models.project import Project
-import json
-from threading import Thread
 
 router = APIRouter()
 

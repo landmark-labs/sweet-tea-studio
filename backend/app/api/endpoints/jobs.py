@@ -1,12 +1,60 @@
+"""
+Jobs API Endpoints
+
+This module handles the core generation job lifecycle:
+
+1. JOB CREATION (POST /jobs/):
+   - Validates engine and workflow
+   - Creates job record in DB
+   - Queues background task for execution
+
+2. JOB EXECUTION (process_job function):
+   - Applies parameters to workflow graph
+   - Handles node bypass logic (removes bypassed nodes from graph)
+   - Submits to ComfyUI via WebSocket
+   - Saves output images to project folders
+   - Embeds provenance metadata into images
+   - Auto-saves prompts to library
+
+3. WEBSOCKET (GET /jobs/{job_id}/ws):
+   - Real-time progress updates
+   - Preview images during generation
+   - Final completion notification
+
+4. JOB CONTROL:
+   - POST /jobs/{job_id}/cancel - Interrupt running job
+   - GET /jobs/ - List jobs
+   - GET /jobs/{job_id} - Get single job
+
+Future considerations (VIDEO GENERATION):
+- process_job will need abstraction for image vs video output
+- WebSocket payloads will include frame counts and video URLs
+- Different save logic for video files
+"""
+
 import os
 import shutil
+import copy
+import asyncio
+import random
+import hashlib
 from pathlib import Path
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from datetime import datetime
 from typing import List
+
+from fastapi import APIRouter, HTTPException, BackgroundTasks, WebSocket, WebSocketDisconnect
+from sqlmodel import Session, select
+
 from app.models.job import Job, JobCreate, JobRead
 from app.models.project import Project
 from app.models.workflow import WorkflowTemplate
 from app.models.engine import Engine
+from app.models.image import Image
+from app.models.prompt import Prompt
+from app.db.engine import engine as db_engine
+from app.core.websockets import manager
+from app.core.config import settings
+from app.services.comfy_watchdog import watchdog
 
 # ===== DIAGNOSTIC MODE TOGGLE =====
 # Set to True to enable detailed ComfyUI communication logging
@@ -20,21 +68,8 @@ else:
     from app.core.comfy_client import ComfyClient, ComfyConnectionError, ComfyResponseError
 # ===================================
 
-from app.services.comfy_watchdog import watchdog
-from datetime import datetime
-from app.core.websockets import manager
-from app.core.config import settings
-import copy
-import asyncio
-import random
-import hashlib
-from fastapi import WebSocket, WebSocketDisconnect
-from sqlmodel import Session, select
-from app.db.engine import engine as db_engine
-from app.models.image import Image
-from app.models.prompt import Prompt
-
 router = APIRouter()
+
 
 def apply_params_to_graph(graph: dict, mapping: dict, params: dict):
     for param_name, value in params.items():
