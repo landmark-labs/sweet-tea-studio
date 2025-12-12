@@ -6,22 +6,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Loader2, GripHorizontal } from "lucide-react";
 import { FileExplorer } from "@/components/FileExplorer";
 import { ImageViewer } from "@/components/ImageViewer";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { InstallStatusDialog, InstallStatus } from "@/components/InstallStatusDialog";
 import { PromptConstructor } from "@/components/PromptConstructor";
-import { DraggablePanel } from "@/components/ui/draggable-panel";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { useUndoRedo } from "@/lib/undoRedo";
-import { GenerationFeed } from "@/components/GenerationFeed";
-import { PromptLibraryQuickPanel } from "@/components/PromptLibraryQuickPanel";
 import { ProjectGallery } from "@/components/ProjectGallery";
 import { useGenerationFeedStore, usePromptLibraryStore } from "@/lib/stores/promptDataStore";
 import { useGeneration } from "@/lib/GenerationContext";
-import { stripSchemaMeta } from "@/lib/schema";
 
 export default function PromptStudio() {
   const [engines, setEngines] = useState<Engine[]>([]);
@@ -38,7 +33,7 @@ export default function PromptStudio() {
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(
     localStorage.getItem("ds_selected_project") || null
   );
-  const [galleryScopeAll, setGalleryScopeAll] = useState(
+  const [galleryScopeAll] = useState(
     localStorage.getItem("ds_gallery_scope") === "all"
   );
 
@@ -71,14 +66,14 @@ export default function PromptStudio() {
   const { generationFeed, trackFeedStart, updateFeed } = useGenerationFeedStore();
 
   // Prompt Library State
-  const { prompts, searchQuery: promptSearch, setSearchQuery: setPromptSearch, setPrompts, clearPrompts, shouldRefetch: shouldRefetchPrompts } = usePromptLibraryStore();
-  const [promptLoading, setPromptLoading] = useState(false);
-  const [promptError, setPromptError] = useState<string | null>(null);
+  const { setPrompts, clearPrompts, shouldRefetch: shouldRefetchPrompts } = usePromptLibraryStore();
+  const [, setPromptLoading] = useState(false);
+  const [, setPromptError] = useState<string | null>(null);
 
   // Add a refresh key for gallery
   const [galleryRefresh, setGalleryRefresh] = useState(0);
   const [galleryImages, setGalleryImages] = useState<GalleryItem[]>([]);
-  const [selectedGalleryIds, setSelectedGalleryIds] = useState<Set<number>>(new Set());
+  const [, setSelectedGalleryIds] = useState<Set<number>>(new Set());
   const [unsavedJobIds, setUnsavedJobIds] = useState<number[]>(() => {
     try {
       const saved = localStorage.getItem("ds_unsaved_job_ids");
@@ -89,7 +84,7 @@ export default function PromptStudio() {
     return [];
   });
   const [projectDraftName, setProjectDraftName] = useState("");
-  const [isCreatingProject, setIsCreatingProject] = useState(false);
+  const [, setIsCreatingProject] = useState(false);
 
   const loadGallery = async () => {
     try {

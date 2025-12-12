@@ -21,3 +21,9 @@ backend/database.db
 # Local artifacts
 debug_images.py
 verify_db.py
+
+# Backend logs and debug artifacts
+backend/logs/
+backend/*.log
+backend/*.txt
+backend/debug_*.json
