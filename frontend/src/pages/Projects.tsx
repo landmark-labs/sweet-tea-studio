@@ -80,10 +80,16 @@ export default function Projects() {
     };
 
     const handleAddFolder = async () => {
-        if (!managingProject || !newFolderName.trim()) return;
+        console.log("[Projects] handleAddFolder called", { managingProject, newFolderName, isAddingFolder });
+        if (!managingProject || !newFolderName.trim()) {
+            console.log("[Projects] Bailing early - missing project or folder name");
+            return;
+        }
         setIsAddingFolder(true);
         try {
+            console.log("[Projects] Calling api.addProjectFolder", { projectId: managingProject.id, folderName: newFolderName.trim() });
             const updated = await api.addProjectFolder(managingProject.id, newFolderName.trim());
+            console.log("[Projects] API returned", updated);
 
             // Update local state
             setProjects(prev => prev.map(p => p.id === updated.id ? updated : p));
@@ -206,12 +212,26 @@ export default function Projects() {
                             <Input
                                 placeholder="New folder name..."
                                 value={newFolderName}
-                                onChange={(e) => setNewFolderName(e.target.value)}
+                                onChange={(e) => {
+                                    console.log("[Projects] Input onChange:", e.target.value);
+                                    setNewFolderName(e.target.value);
+                                }}
                                 onKeyDown={(e) => {
-                                    if (e.key === "Enter") handleAddFolder();
+                                    if (e.key === "Enter") {
+                                        console.log("[Projects] Enter key pressed");
+                                        handleAddFolder();
+                                    }
                                 }}
                             />
-                            <Button type="button" size="icon" onClick={handleAddFolder} disabled={isAddingFolder || !newFolderName.trim()}>
+                            <Button
+                                type="button"
+                                size="icon"
+                                onClick={() => {
+                                    console.log("[Projects] Button clicked! Current state:", { newFolderName, isAddingFolder, managingProject: !!managingProject });
+                                    handleAddFolder();
+                                }}
+                                disabled={isAddingFolder || !newFolderName.trim()}
+                            >
                                 <FolderPlus size={16} />
                             </Button>
                         </div>
