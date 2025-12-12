@@ -318,9 +318,16 @@ export function PromptAutocompleteTextarea({
                     props.onFocus?.(e);
                 }}
                 onBlur={(e) => {
-                    console.log("[AC Debug] BLUR triggered, relatedTarget:", e.relatedTarget?.tagName, e.relatedTarget);
-                    setIsFocused(false);
-                    setTimeout(() => setIsOpen(false), 200);
+                    // DEBUG: Find out who stole focus
+                    console.log("[AC Debug] BLUR triggered. Stolen by:", e.relatedTarget, "Active:", document.activeElement);
+
+                    // Don't close immediately to allow click on dropdown items
+                    // We check if the new focus is inside our portal
+                    // But since portal is in body, we rely on the timeout for now
+                    setTimeout(() => {
+                        setIsFocused(false);
+                        setIsOpen(false);
+                    }, 200);
                     props.onBlur?.(e);
                 }}
                 onClick={(e) => {
@@ -348,8 +355,15 @@ export function PromptAutocompleteTextarea({
                 onKeyDown={handleKeyDown}
             />
 
-            {showDropdown && (
-                <div className="absolute left-0 right-0 mt-1 z-[9999] rounded-lg border border-slate-300 bg-white shadow-2xl max-h-60 overflow-y-auto text-sm ring-1 ring-black/5">
+            {showDropdown && textareaRef.current && createPortal(
+                <div
+                    className="fixed z-[9999] rounded-lg border border-slate-300 bg-white shadow-2xl max-h-60 overflow-y-auto text-sm ring-1 ring-black/5"
+                    style={{
+                        top: textareaRef.current.getBoundingClientRect().bottom + window.scrollY + 4,
+                        left: textareaRef.current.getBoundingClientRect().left + window.scrollX,
+                        width: textareaRef.current.getBoundingClientRect().width,
+                    }}
+                >
                     {rankedSuggestions.map((s, idx) => (
                         <button
                             key={`${s.source} -${s.name} `}
@@ -384,7 +398,8 @@ export function PromptAutocompleteTextarea({
                             )}
                         </button>
                     ))}
-                </div>
+                </div>,
+                document.body
             )}
         </div>
     );
