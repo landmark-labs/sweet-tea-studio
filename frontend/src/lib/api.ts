@@ -594,6 +594,14 @@ export const api = {
         return res.json();
     },
 
+    // --- Tag Suggestions (for autocomplete) ---
+    getTagSuggestions: async (query: string, limit = 20, signal?: AbortSignal): Promise<TagSuggestion[]> => {
+        const params = new URLSearchParams({ query, limit: String(limit) });
+        const res = await fetch(`${API_BASE}/library/tags/suggest?${params.toString()}`, { signal });
+        if (!res.ok) throw new Error("Failed to fetch tag suggestions");
+        return res.json();
+    },
+
     // --- Projects ---
     getProjects: async (includeArchived = false): Promise<Project[]> => {
         const params = includeArchived ? "?include_archived=true" : "";
