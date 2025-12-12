@@ -98,7 +98,7 @@ function SortableItem({ item, index, textIndex, onRemove, onUpdateContent, onEdi
         }
 
         return (
-            <HoverCard openDelay={200}>
+            <HoverCard openDelay={600}>
                 <HoverCardTrigger asChild>
                     <div
                         ref={setNodeRef}
@@ -132,7 +132,7 @@ function SortableItem({ item, index, textIndex, onRemove, onUpdateContent, onEdi
                         <Button
                             variant="ghost"
                             size="icon"
-                            className="h-4 w-4 ml-1 -mr-1 rounded-full text-black/20 hover:text-red-600 hover:bg-black/5"
+                            className="h-4 w-4 ml-1 -mr-1 rounded-full text-slate-500 hover:text-red-600 hover:bg-red-50"
                             onPointerDown={(e) => e.stopPropagation()}
                             onClick={(e) => onRemove(item.id, e)}
                         >
@@ -159,7 +159,7 @@ function SortableItem({ item, index, textIndex, onRemove, onUpdateContent, onEdi
 
     // Snippet Block
     return (
-        <HoverCard openDelay={200}>
+        <HoverCard openDelay={600}>
             <HoverCardTrigger asChild>
                 <div
                     ref={setNodeRef}
@@ -177,7 +177,7 @@ function SortableItem({ item, index, textIndex, onRemove, onUpdateContent, onEdi
                     <Button
                         variant="ghost"
                         size="icon"
-                        className="h-4 w-4 ml-1 -mr-1 rounded-full text-black/20 hover:text-red-600 hover:bg-black/5"
+                        className="h-4 w-4 ml-1 -mr-1 rounded-full text-slate-500 hover:text-red-600 hover:bg-red-50"
                         onPointerDown={(e) => e.stopPropagation()}
                         onClick={(e) => onRemove(item.id, e)}
                     >

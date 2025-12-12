@@ -1,18 +1,18 @@
 import { useEffect, useState, useRef, useMemo } from "react";
 import { useLocation, useNavigate, useOutletContext } from "react-router-dom";
-import { api, Engine, WorkflowTemplate, FileItem, GalleryItem, PromptLibraryItem, EngineHealth, Project } from "@/lib/api";
+import { api, Engine, WorkflowTemplate, GalleryItem, PromptLibraryItem, EngineHealth, Project } from "@/lib/api";
 import { DynamicForm } from "@/components/DynamicForm";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
-import { Loader2, GripHorizontal } from "lucide-react";
-import { FileExplorer } from "@/components/FileExplorer";
+import { Loader2 } from "lucide-react";
+
 import { ImageViewer } from "@/components/ImageViewer";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { InstallStatusDialog, InstallStatus } from "@/components/InstallStatusDialog";
 import { PromptConstructor } from "@/components/PromptConstructor";
-import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
+
 import { useUndoRedo } from "@/lib/undoRedo";
 import { ProjectGallery } from "@/components/ProjectGallery";
 import { useGenerationFeedStore, usePromptLibraryStore } from "@/lib/stores/promptDataStore";
@@ -770,12 +770,6 @@ export default function PromptStudio() {
     }
   };
 
-  const handleFileSelect = (file: FileItem) => {
-    handlePreviewSelect(file.path, {
-      created_at: null // External file
-    });
-  };
-
   const handleGallerySelect = (item: GalleryItem) => {
     handlePreviewSelect(item.image.path, {
       prompt: item.prompt,
@@ -833,39 +827,27 @@ export default function PromptStudio() {
   return (
     <div className="h-full w-full bg-slate-100 flex overflow-hidden relative">
 
-      {/* 1. Left Column (Split: Explorer / Constructor) */}
+      {/* 1. Left Column - Prompt Constructor */}
       <div className="w-[480px] flex-none bg-white border-r hidden xl:block overflow-hidden">
-        <PanelGroup direction="vertical">
-          <Panel defaultSize={40} minSize={20}>
-            <FileExplorer engineId={selectedEngineId} projectId={selectedProjectId || undefined} projectName={selectedProject?.name} onFileSelect={handleFileSelect} />
-          </Panel>
-
-          <PanelResizeHandle className="h-2 bg-slate-100 hover:bg-slate-200 transition-colors flex items-center justify-center cursor-row-resize border-y border-slate-200">
-            <GripHorizontal size={14} className="text-slate-400" />
-          </PanelResizeHandle>
-
-          <Panel defaultSize={60} minSize={20}>
-            {selectedWorkflow ? (
-              <PromptConstructor
-                // Filter out hidden parameters if the new editor logic flagged them
-                schema={
-                  Object.fromEntries(
-                    Object.entries(visibleSchema ?? {}).filter(
-                      ([_, val]: [string, any]) => !val.__hidden
-                    )
-                  )
-                }
-                currentValues={formData}
-                onUpdate={handlePromptUpdate}
-                targetField={focusedField}
-                onTargetChange={setFocusedField}
-                onFinish={() => setFocusedField("")}
-              />
-            ) : (
-              <div className="p-4 text-xs text-slate-400">select a prompt pipe to use the constructor</div>
-            )}
-          </Panel>
-        </PanelGroup>
+        {selectedWorkflow ? (
+          <PromptConstructor
+            // Filter out hidden parameters if the new editor logic flagged them
+            schema={
+              Object.fromEntries(
+                Object.entries(visibleSchema ?? {}).filter(
+                  ([_, val]: [string, any]) => !val.__hidden
+                )
+              )
+            }
+            currentValues={formData}
+            onUpdate={handlePromptUpdate}
+            targetField={focusedField}
+            onTargetChange={setFocusedField}
+            onFinish={() => setFocusedField("")}
+          />
+        ) : (
+          <div className="p-4 text-xs text-slate-400">select a prompt pipe to use the constructor</div>
+        )}
       </div>
 
       {/* 2. Configuration (Left) - NEW LAYOUT */}
