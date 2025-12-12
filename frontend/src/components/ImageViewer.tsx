@@ -388,6 +388,9 @@ export function ImageViewer({
                                     if (pathParam) rawPath = pathParam;
                                 } catch { /* use as-is */ }
                             }
+
+                            // Set effect to allow copy operations
+                            e.dataTransfer.effectAllowed = "copy";
                             e.dataTransfer.setData("application/x-sweet-tea-image", rawPath);
                             e.dataTransfer.setData("text/plain", rawPath);
                         }}

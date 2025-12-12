@@ -79,6 +79,7 @@ export function ImageUpload({ value, onChange, engineId, options = [] }: ImageUp
 
     const handleDragOver = (e: React.DragEvent) => {
         e.preventDefault();
+        e.dataTransfer.dropEffect = "copy";
         setIsDragging(true);
     };
 
