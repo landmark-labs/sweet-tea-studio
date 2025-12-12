@@ -193,7 +193,9 @@ export default function PromptStudio() {
   const engineOffline = Boolean(selectedEngineHealth && !selectedEngineHealth.healthy);
 
   const projectFolders = (selectedProject?.config_json as { folders?: string[] })?.folders || ["inputs", "output", "masks"];
-  const [generationTarget, setGenerationTarget] = useState<string>("");
+  const [generationTarget, setGenerationTarget] = useState<string>(
+    localStorage.getItem("ds_generation_target") || ""
+  );
 
   // Persist selections
   useEffect(() => {
@@ -221,13 +223,35 @@ export default function PromptStudio() {
   }, [unsavedJobIds]);
 
   useEffect(() => {
+    localStorage.setItem("ds_generation_target", generationTarget);
+  }, [generationTarget]);
+
+  useEffect(() => {
+    // Only force default if we don't have a valid target for this project
+    // This allows the persisted value to apply, or preserves selection when switching projects
+    // if the folder exists in both.
     if (selectedProject) {
-      // Default to 'output' if available, else first folder
-      setGenerationTarget("output");
+      const validFolders = (selectedProject.config_json as { folders?: string[] })?.folders || ["inputs", "output", "masks"];
+
+      // If current target is empty or not in the new project's folder list (and isn't engine default "")
+      // then we reset to output.
+      // Note: we treat "" as engine-default which is always valid? Actually the UI treats "" as Default.
+      // If custom folders are defined, we might want to ensure we match them.
+
+      // If we have a target but it's not in the new list, switch to output
+      if (generationTarget && generationTarget !== "output" && !validFolders.includes(generationTarget)) {
+        setGenerationTarget("output");
+      } else if (!generationTarget) {
+        // If nothing selected (and no persistent value loaded), default to output
+        setGenerationTarget("output");
+      }
     } else {
-      setGenerationTarget("");
+      // Draft mode - no restrictions, but maybe default to "" (engine default) or keep as is?
+      // existing logic was: setGenerationTarget("");
+      // Let's reset to empty if dropping to draft mode to avoid writing to a random project folder
+      if (!generationTarget) setGenerationTarget("");
     }
-  }, [selectedProject]);
+  }, [selectedProject, generationTarget]);
 
   const previousProjectRef = useRef<string | null>(selectedProjectId);
   useEffect(() => {
