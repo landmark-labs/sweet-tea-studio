@@ -196,15 +196,15 @@ def add_project_folder(
     if not folder_name:
         raise HTTPException(status_code=400, detail="Invalid folder name")
         
-    config = project.config_json or {"folders": ["inputs", "output", "masks"]}
-    folders = config.get("folders", [])
+    config = project.config_json or {"folders": ["input", "output", "masks"]}
+    folders = list(config.get("folders", []))  # Create a new list copy
     
     if folder_name in folders:
         raise HTTPException(status_code=400, detail="Folder already exists")
         
     folders.append(folder_name)
-    config["folders"] = folders
-    project.config_json = config
+    # Create a NEW dict to trigger SQLAlchemy change detection
+    project.config_json = {**config, "folders": folders}
     project.updated_at = datetime.utcnow()
     
     session.add(project)
