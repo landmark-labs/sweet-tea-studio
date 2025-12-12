@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.endpoints import collections, engines, extensions, files, gallery, jobs, library, models, monitoring, projects, workflows, portfolio
-from app.api.endpoints.library import start_tag_cache_refresh_background
+from app.api.endpoints.library_tags import start_tag_cache_refresh_background
 from app.core.config import settings
 from app.core.error_handlers import register_gallery_error_handlers
 from app.core.websockets import manager

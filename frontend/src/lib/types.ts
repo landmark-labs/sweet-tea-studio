@@ -18,6 +18,17 @@
  * - VLMVideoAnalysis for video understanding
  */
 
+export type PromptItemType = 'block' | 'text';
+
+export interface PromptItem {
+    id: string;
+    sourceId?: string; // ID of the library snippet this was created from
+    type: PromptItemType;
+    content: string; // The actual prompt text
+    label?: string; // For blocks, a short name
+    color?: string; // For blocks
+}
+
 // ====================
 // ENGINES
 // ====================
