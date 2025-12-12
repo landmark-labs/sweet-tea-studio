@@ -13,7 +13,7 @@ import { Plus, X, Type, Trash2, CornerDownLeft, Eraser, Check, Pencil } from "lu
 import { cn } from "@/lib/utils";
 import { useUndoRedo } from "@/lib/undoRedo";
 import { PromptAutocompleteTextarea } from "./PromptAutocompleteTextarea";
-import { PromptItem, PromptItemType } from "@/lib/types";
+import { PromptItem } from "@/lib/types";
 
 
 interface PromptConstructorProps {
@@ -25,7 +25,7 @@ interface PromptConstructorProps {
     onTargetChange?: (field: string) => void;
     onFinish?: () => void;
     snippets: PromptItem[];
-    onUpdateSnippets: (items: PromptItem[]) => void;
+    onUpdateSnippets: React.Dispatch<React.SetStateAction<PromptItem[]>>;
 }
 
 // --- Constants ---
@@ -89,7 +89,7 @@ function SortableItem({ item, index, textIndex, onRemove, onUpdateContent, onEdi
         }
 
         return (
-            <HoverCard openDelay={600}>
+            <HoverCard openDelay={1000}>
                 <HoverCardTrigger asChild>
                     <div
                         ref={setNodeRef}
@@ -150,7 +150,7 @@ function SortableItem({ item, index, textIndex, onRemove, onUpdateContent, onEdi
 
     // Snippet Block
     return (
-        <HoverCard openDelay={600}>
+        <HoverCard openDelay={1000}>
             <HoverCardTrigger asChild>
                 <div
                     ref={setNodeRef}
@@ -650,7 +650,7 @@ export function PromptConstructor({ schema, onUpdate, currentValues, targetField
                     <div className="grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-2 items-start min-h-[40px] p-1">
                         {library.map(snippet => (
                             <ContextMenu key={snippet.id}>
-                                <HoverCard openDelay={120} closeDelay={80}>
+                                <HoverCard openDelay={1000} closeDelay={80}>
                                     <ContextMenuTrigger asChild>
                                         <HoverCardTrigger asChild>
                                             <div
