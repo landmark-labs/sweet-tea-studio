@@ -288,7 +288,8 @@ export function ImageUpload({ value, onChange, engineId, options = [] }: ImageUp
                     <img
                         src={currentImageUrl}
                         alt="Input"
-                        className="w-full h-full object-contain"
+                        className="w-full h-full object-contain pointer-events-none"
+                        draggable={false}
                         onError={(e) => {
                             // Fallback if image load fails
                             (e.target as HTMLImageElement).src = "";
