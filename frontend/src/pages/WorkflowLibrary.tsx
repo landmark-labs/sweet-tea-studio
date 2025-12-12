@@ -137,25 +137,34 @@ const NodeCard = ({ node, schemaEdits, setSchemaEdits }: NodeCardProps) => {
                                 <TableCell className="font-mono text-[10px] text-slate-500 py-2">{key}</TableCell>
                                 <TableCell className="text-xs text-slate-500 py-2">{field.type}</TableCell>
                                 <TableCell className="py-2">
-                                    <Input
-                                        className="h-7 text-xs"
-                                        value={String(field.default ?? "")}
-                                        onChange={(e) => {
-                                            const s = { ...schemaEdits };
-                                            const val = e.target.value;
-                                            const type = field.type;
-                                            if (type === "number" || type === "float") {
-                                                s[key].default = parseFloat(val);
-                                            } else if (type === "integer") {
-                                                s[key].default = parseInt(val);
-                                            } else if (type === "boolean") {
-                                                s[key].default = val === "true";
-                                            } else {
-                                                s[key].default = val;
-                                            }
-                                            setSchemaEdits(s);
-                                        }}
-                                    />
+                                    {field.widget === "toggle" || field.type === "boolean" ? (
+                                        <Switch
+                                            checked={Boolean(field.default)}
+                                            onCheckedChange={(checked) => {
+                                                const s = { ...schemaEdits };
+                                                s[key].default = checked;
+                                                setSchemaEdits(s);
+                                            }}
+                                        />
+                                    ) : (
+                                        <Input
+                                            className="h-7 text-xs"
+                                            value={String(field.default ?? "")}
+                                            onChange={(e) => {
+                                                const s = { ...schemaEdits };
+                                                const val = e.target.value;
+                                                const type = field.type;
+                                                if (type === "number" || type === "float") {
+                                                    s[key].default = parseFloat(val);
+                                                } else if (type === "integer") {
+                                                    s[key].default = parseInt(val);
+                                                } else {
+                                                    s[key].default = val;
+                                                }
+                                                setSchemaEdits(s);
+                                            }}
+                                        />
+                                    )}
                                 </TableCell>
                                 <TableCell className="text-right py-2">
                                     <Button variant="ghost" size="sm" className="h-6 text-xs text-red-500 hover:text-red-700" onClick={() => {
@@ -666,8 +675,6 @@ export default function WorkflowLibrary() {
                                 </DialogFooter>
                             </DialogContent>
                         </Dialog>
-                        <Button variant="outline" onClick={() => setEditingWorkflow(null)}>Cancel</Button>
-                        <Button onClick={handleSaveSchema}><Save className="w-4 h-4 mr-2" /> Save Changes</Button>
                     </div>
                 </div>
                 <div className="bg-white border rounded-md p-4 space-y-4 mb-4">
