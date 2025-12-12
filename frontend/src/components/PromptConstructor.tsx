@@ -275,10 +275,6 @@ export function PromptConstructor({ schema, onUpdate, currentValues, targetField
     const isTargetValid = targetField && schema && schema[targetField] && schema[targetField].type === 'string';
 
     // Reconciliation Logic (INPUT Channel: External Text -> Items)
-    // DISABLED: This auto-detection was causing cursor jumping and auto-comma insertion
-    // when typing near snippets. Users can now manually manage snippets via the canvas.
-    // The compilation effect (OUTPUT channel) below still works to update the parent.
-    /*
     useEffect(() => {
         if (!isTargetValid) return;
 
@@ -422,7 +418,6 @@ export function PromptConstructor({ schema, onUpdate, currentValues, targetField
         }
 
     }, [currentValues[targetField], targetField, library, isTargetValid]);
-    */
 
 
     // Compile (OUTPUT Channel: Items -> Parent)
