@@ -254,9 +254,21 @@ def delete_image(image_id: int, session: Session = Depends(get_session)):
     if not image:
         logger.warning("Image not found for deletion", extra={"image_id": image_id})
         raise HTTPException(status_code=404, detail="Image not found")
+    
+    # Delete from filesystem
+    file_deleted = False
+    if image.path and os.path.exists(image.path):
+        try:
+            os.remove(image.path)
+            file_deleted = True
+            logger.info("Deleted file", extra={"path": image.path, "image_id": image_id})
+        except OSError:
+            logger.exception("Failed to delete file", extra={"path": image.path, "image_id": image_id})
+    
+    # Delete from DB
     session.delete(image)
     session.commit()
-    return {"status": "deleted"}
+    return {"status": "deleted", "file_deleted": file_deleted}
 
 # --- Specific Features from Sweet Tea Studio Repo (Preserved) ---
 
@@ -286,13 +298,18 @@ def cleanup_images(req: CleanupRequest, session: Session = Depends(get_session))
         query = query.where(Image.job_id == req.job_id)
 
     images_to_delete = session.exec(query).all()
+    print(f"[DEBUG CLEANUP] Found {len(images_to_delete)} images with is_kept=False")
 
     count = 0
+    deleted_files = 0
     for img in images_to_delete:
         # Delete from disk
+        print(f"[DEBUG CLEANUP] Image {img.id}: path={img.path!r}, exists={os.path.exists(img.path) if img.path else 'N/A'}")
         if img.path and os.path.exists(img.path):
             try:
                 os.remove(img.path)
+                deleted_files += 1
+                print(f"[DEBUG CLEANUP] Deleted file: {img.path}")
             except OSError:
                 logger.exception("Failed to delete file", extra={"path": img.path, "image_id": img.id})
 
@@ -301,7 +318,8 @@ def cleanup_images(req: CleanupRequest, session: Session = Depends(get_session))
         count += 1
 
     session.commit()
-    return {"status": "cleaned", "count": count}
+    print(f"[DEBUG CLEANUP] Removed {count} from DB, {deleted_files} from filesystem")
+    return {"status": "cleaned", "count": count, "files_deleted": deleted_files}
 
 
 # ----------------------------------------------------------------
