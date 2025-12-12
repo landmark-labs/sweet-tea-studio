@@ -160,7 +160,8 @@ export default function PromptStudio() {
 
     return Object.fromEntries(
       Object.entries(selectedWorkflow.input_schema || {}).filter(([key, val]: [string, any]) => {
-        if (key.startsWith("__")) return false; // Hide internal keys like __node_order
+        // Hide internal keys like __node_order, but keep __bypass_ toggles
+        if (key.startsWith("__") && !key.startsWith("__bypass_")) return false;
         if (val.__hidden) return false;
         if (!val.x_node_id && val.x_node_id !== 0) return true;
         return !hiddenNodes.has(String(val.x_node_id));
