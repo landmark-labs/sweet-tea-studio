@@ -501,7 +501,7 @@ export const api = {
     // --- Gallery ---
     getGallery: async (
         searchOrSkip?: string | number,
-        limit = 50,
+        limit?: number,
         projectId?: number | null,
         unassignedOnly = false
     ): Promise<GalleryItem[]> => {
@@ -514,7 +514,10 @@ export const api = {
         } else {
             params.append("skip", String(searchOrSkip ?? 0));
         }
-        params.append("limit", String(limit));
+        // Only send limit if explicitly provided - otherwise backend returns all
+        if (limit !== undefined) {
+            params.append("limit", String(limit));
+        }
 
         if (projectId !== undefined && projectId !== null) {
             params.append("project_id", String(projectId));

@@ -89,7 +89,7 @@ def _log_context(request: Optional[Request], **extra: Any) -> Dict[str, Any]:
 def read_gallery(
     request: Request,
     skip: int = Query(0, ge=0),
-    limit: int = Query(50, ge=1, le=100),
+    limit: Optional[int] = Query(None, ge=1, description="Max items to return. If omitted, returns all."),
     search: Optional[str] = Query(None, description="Search by prompt text, tags, or caption"),
     kept_only: bool = Query(False),
     collection_id: Optional[int] = Query(None),
@@ -97,15 +97,20 @@ def read_gallery(
     unassigned_only: bool = Query(False, description="Return only images with no project assignment"),
     session: Session = Depends(get_session),
 ):
-    fetch_limit = limit * 5 if search else limit
+    # When limit is None, fetch all; when searching, fetch more to allow scoring/filtering
+    fetch_limit = None
+    if limit is not None:
+        fetch_limit = limit * 5 if search else limit
+    
     stmt = (
         select(Image, Job, Prompt)
         .join(Job, Image.job_id == Job.id, isouter=True)
         .join(Prompt, Job.prompt_id == Prompt.id, isouter=True)
         .order_by(Image.created_at.desc())
         .offset(skip)
-        .limit(fetch_limit)
     )
+    if fetch_limit is not None:
+        stmt = stmt.limit(fetch_limit)
 
     if kept_only:
         stmt = stmt.where(Image.is_kept == True)
@@ -243,7 +248,9 @@ def read_gallery(
 
     if search:
         scored_items.sort(key=lambda r: (r[0], r[1].created_at), reverse=True)
-        return [item for _, item in scored_items[:limit]]
+        if limit is not None:
+            return [item for _, item in scored_items[:limit]]
+        return [item for _, item in scored_items]
 
     return [item for _, item in scored_items]
 
