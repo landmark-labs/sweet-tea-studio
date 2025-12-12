@@ -1,3 +1,12 @@
+/**
+ * API Client for Sweet Tea Studio
+ * 
+ * This module provides the HTTP client for all backend API calls.
+ * 
+ * NOTE: Types are also available in ./types.ts which provides a consolidated
+ * reference organized by domain. For new imports, prefer '@/lib/types'.
+ */
+
 // Detect if running behind nginx at /studio/ path - use /sts-api prefix
 // Otherwise (local dev), use /api directly
 export const isStudioPath = typeof window !== 'undefined' && window.location.pathname.startsWith('/studio');
