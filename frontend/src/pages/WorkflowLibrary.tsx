@@ -155,12 +155,21 @@ const NodeCard = ({ node, schemaEdits, setSchemaEdits }: NodeCardProps) => {
                                                 const val = e.target.value;
                                                 const type = field.type;
                                                 if (type === "number" || type === "float") {
-                                                    // Handle empty string - don't parse to NaN
-                                                    s[key].default = val === "" ? undefined : parseFloat(val);
+                                                    // Allow typing incomplete numbers like "-" or "-." or "." 
+                                                    if (val === "" || val === "-" || val === "." || val === "-.") {
+                                                        s[key].default = val === "" ? undefined : val;
+                                                    } else {
+                                                        const parsed = parseFloat(val);
+                                                        s[key].default = isNaN(parsed) ? val : parsed;
+                                                    }
                                                 } else if (type === "integer") {
-                                                    // Handle empty string - don't parse to NaN
-                                                    const parsed = parseInt(val);
-                                                    s[key].default = val === "" || isNaN(parsed) ? undefined : parsed;
+                                                    // Allow typing incomplete numbers like "-"
+                                                    if (val === "" || val === "-") {
+                                                        s[key].default = val === "" ? undefined : val;
+                                                    } else {
+                                                        const parsed = parseInt(val);
+                                                        s[key].default = isNaN(parsed) ? val : parsed;
+                                                    }
                                                 } else {
                                                     s[key].default = val;
                                                 }
