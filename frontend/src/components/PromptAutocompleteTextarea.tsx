@@ -349,7 +349,7 @@ export function PromptAutocompleteTextarea({
             />
 
             {showDropdown && (
-                <div className="absolute left-0 right-0 mt-1 z-20 rounded-lg border border-slate-200 bg-white shadow-xl max-h-60 overflow-y-auto text-sm">
+                <div className="absolute left-0 right-0 mt-1 z-[9999] rounded-lg border border-slate-300 bg-white shadow-2xl max-h-60 overflow-y-auto text-sm ring-1 ring-black/5">
                     {rankedSuggestions.map((s, idx) => (
                         <button
                             key={`${s.source} -${s.name} `}
