@@ -211,7 +211,7 @@ export default function Projects() {
                                     if (e.key === "Enter") handleAddFolder();
                                 }}
                             />
-                            <Button size="icon" onClick={handleAddFolder} disabled={isAddingFolder || !newFolderName.trim()}>
+                            <Button type="button" size="icon" onClick={handleAddFolder} disabled={isAddingFolder || !newFolderName.trim()}>
                                 <FolderPlus size={16} />
                             </Button>
                         </div>
