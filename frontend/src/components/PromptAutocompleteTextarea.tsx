@@ -105,6 +105,9 @@ export function PromptAutocompleteTextarea({
         const token = activeToken.trim();
         const normalizedToken = token.replace(/\s+/g, "_");
 
+        // DEBUG: Log all relevant state on every run
+        console.log("[AC Debug]", { activeToken, isFocused, normalizedLen: normalizedToken.length, cursor });
+
         if (!isFocused || normalizedToken.length < 2) {
             setIsOpen(false);
             setSuggestions([]);
@@ -120,6 +123,7 @@ export function PromptAutocompleteTextarea({
 
         const load = async () => {
             if (cacheRef.current.has(normalizedToken)) {
+                console.log("[AC Debug] Cache hit:", normalizedToken, cacheRef.current.get(normalizedToken)?.length);
                 setSuggestions(cacheRef.current.get(normalizedToken) || []);
                 setIsOpen(true);
                 setHighlightIndex(0);
@@ -127,16 +131,18 @@ export function PromptAutocompleteTextarea({
             }
 
             try {
+                console.log("[AC Debug] Fetching:", normalizedToken);
                 const data = await api.getTagSuggestions(normalizedToken, 25, controller.signal);
                 if (controller.signal.aborted) return;
 
+                console.log("[AC Debug] Got results:", data?.length);
                 cacheRef.current.set(normalizedToken, data);
                 setSuggestions(data);
                 setIsOpen(true);
                 setHighlightIndex(0);
             } catch (e) {
                 if (e instanceof Error && e.name === 'AbortError') return;
-                console.error("Failed to load tag suggestions", e);
+                console.error("[AC Debug] Error:", e);
                 setSuggestions([]);
                 setIsOpen(false);
             }
@@ -312,6 +318,7 @@ export function PromptAutocompleteTextarea({
                     props.onFocus?.(e);
                 }}
                 onBlur={(e) => {
+                    console.log("[AC Debug] BLUR triggered, relatedTarget:", e.relatedTarget?.tagName, e.relatedTarget);
                     setIsFocused(false);
                     setTimeout(() => setIsOpen(false), 200);
                     props.onBlur?.(e);
