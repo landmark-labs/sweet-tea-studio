@@ -80,9 +80,10 @@ interface StatusPillProps {
     onClick?: () => void;
     actionLabel?: string;
     actionLoading?: boolean;
+    collapsed?: boolean;
 }
 
-function StatusPill({ label, status, extraInfo, onClick, actionLabel, actionLoading }: StatusPillProps) {
+function StatusPill({ label, status, extraInfo, onClick, actionLabel, actionLoading, collapsed }: StatusPillProps) {
     const tooltipContent = extraInfo
         ? `${label}: ${status.state} – ${status.detail}\n${extraInfo}`
         : `${label}: ${status.state} – ${status.detail}`;
@@ -93,31 +94,36 @@ function StatusPill({ label, status, extraInfo, onClick, actionLabel, actionLoad
                 <TooltipTrigger asChild>
                     <div
                         className={cn(
-                            "flex items-center gap-1.5 px-2.5 py-1 rounded-full",
-                            "bg-surface/90 backdrop-blur-sm border text-xs cursor-default",
-                            "transition-all duration-200 hover:bg-surface",
-                            stateBorderColors[status.state],
-                            onClick && "cursor-pointer hover:ring-1 hover:ring-primary/30"
+                            "flex items-center gap-3 px-3 py-1.5 rounded-lg text-xs font-medium transition-all w-full",
+                            "text-muted-foreground hover:text-foreground hover:bg-muted/60 cursor-default",
+                            collapsed ? "justify-center px-0 w-8 h-8 rounded-lg" : "",
+                            onClick && "cursor-pointer hover:bg-primary/10 hover:text-primary"
                         )}
                         onClick={onClick}
                     >
                         <span
                             className={cn(
-                                "w-2 h-2 rounded-full transition-colors",
-                                stateColors[status.state],
-                                status.state === "error" && "animate-pulse"
+                                "flex-none w-2.5 h-2.5 rounded-full border-2",
+                                status.state === "ok" && "bg-emerald-500/20 border-emerald-500",
+                                status.state === "warn" && "bg-amber-500/20 border-amber-500",
+                                status.state === "error" && "bg-red-500/20 border-red-500 animate-pulse",
+                                collapsed && "w-3 h-3"
                             )}
                         />
-                        <span className="text-muted-foreground font-medium">{label}</span>
-                        {actionLabel && !actionLoading && (
-                            <Play className="w-3 h-3 text-primary ml-1" />
-                        )}
-                        {actionLoading && (
-                            <Loader2 className="w-3 h-3 text-primary ml-1 animate-spin" />
+                        {!collapsed && (
+                            <div className="flex-1 flex items-center justify-between min-w-0">
+                                <span className="truncate">{label}</span>
+                                {actionLabel && !actionLoading && (
+                                    <Play className="w-3 h-3 text-primary ml-2 flex-none" />
+                                )}
+                                {actionLoading && (
+                                    <Loader2 className="w-3 h-3 text-primary ml-2 animate-spin flex-none" />
+                                )}
+                            </div>
                         )}
                     </div>
                 </TooltipTrigger>
-                <TooltipContent side="top" className="max-w-xs">
+                <TooltipContent side="right" className="max-w-xs">
                     <p className="whitespace-pre-wrap">{tooltipContent}</p>
                     {actionLabel && (
                         <p className="text-primary text-xs mt-1">Click to {actionLabel}</p>
@@ -128,7 +134,7 @@ function StatusPill({ label, status, extraInfo, onClick, actionLabel, actionLoad
     );
 }
 
-export function StatusBar() {
+export function StatusBar({ collapsed }: { collapsed?: boolean }) {
     const [status, setStatus] = useState<StatusSummary | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isLaunching, setIsLaunching] = useState(false);
@@ -334,104 +340,116 @@ export function StatusBar() {
 
     return (
         <>
-            <div className="fixed bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 z-50">
-                <div className="flex items-center gap-1.5">
-                    <StatusPill
-                        label={labels.status.engine}
-                        status={displayEngineStatus}
-                        extraInfo={engineExtraInfo}
-                        onClick={onEngineClick}
-                        actionLabel={actionLabel}
-                        actionLoading={isLaunching}
-                    />
-                    <TooltipProvider delayDuration={200}>
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-8 w-8"
-                                    onClick={() => setConfigDialogOpen(true)}
-                                >
-                                    <Settings2 className="h-4 w-4" />
-                                    <span className="sr-only">Configure ComfyUI</span>
-                                </Button>
-                            </TooltipTrigger>
-                            <TooltipContent side="top">configure ComfyUI path & args</TooltipContent>
-                        </Tooltip>
-                    </TooltipProvider>
-                </div>
-                <StatusPill
-                    label={labels.status.queue}
-                    status={status.queue}
-                    extraInfo={queueExtraInfo}
-                />
-                <StatusPill label={labels.status.io} status={status.io} />
-                <StatusPill
-                    label={labels.status.models}
-                    status={status.models}
-                    extraInfo={modelsExtraInfo}
-                />
-            </div>
+            return (
+            <>
+                <div className={cn("flex flex-col gap-0.5 px-2 py-2", collapsed ? "items-center" : "items-stretch")}>
 
-            <Dialog open={configDialogOpen} onOpenChange={setConfigDialogOpen}>
-                <DialogContent className="sm:max-w-lg">
-                    <DialogHeader>
-                        <DialogTitle>ComfyUI launch settings</DialogTitle>
-                        <DialogDescription>
-                            Point Sweet Tea Studio at your ComfyUI folder and optional launch arguments.
-                            Leave fields blank to fall back to automatic detection and defaults.
-                        </DialogDescription>
-                    </DialogHeader>
-
-                    <div className="space-y-4 py-2">
-                        <div className="space-y-2">
-                            <Label htmlFor="comfy-path">ComfyUI folder</Label>
-                            <Input
-                                id="comfy-path"
-                                placeholder="/path/to/ComfyUI"
-                                value={pathInput}
-                                onChange={(e) => setPathInput(e.target.value)}
-                                disabled={configLoading}
+                    {/* Engine Status & Config */}
+                    <div className="flex items-center gap-1 group">
+                        <div className="flex-1 min-w-0">
+                            <StatusPill
+                                label={labels.status.engine}
+                                status={displayEngineStatus}
+                                extraInfo={engineExtraInfo}
+                                onClick={onEngineClick}
+                                actionLabel={actionLabel}
+                                actionLoading={isLaunching}
+                                collapsed={collapsed}
                             />
-                            <p className="text-xs text-muted-foreground">
-                                Leave blank to let Sweet Tea Studio autodetect ComfyUI.
-                            </p>
                         </div>
-
-                        <div className="space-y-2">
-                            <Label htmlFor="comfy-args">Launch arguments</Label>
-                            <Input
-                                id="comfy-args"
-                                placeholder="--listen --port 8188"
-                                value={argsInput}
-                                onChange={(e) => setArgsInput(e.target.value)}
-                                disabled={configLoading}
-                            />
-                            <p className="text-xs text-muted-foreground">
-                                Optional flags passed to ComfyUI. Leave empty to use defaults.
-                            </p>
-                        </div>
-
-                        {launchConfig && (
-                            <p className="text-xs text-muted-foreground">
-                                Using {launchConfig.detection_method || "unknown method"} • port {launchConfig.port}
-                            </p>
+                        {!collapsed && (
+                            <TooltipProvider delayDuration={200}>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-7 w-7 opacity-50 group-hover:opacity-100 transition-opacity"
+                                            onClick={() => setConfigDialogOpen(true)}
+                                        >
+                                            <Settings2 className="h-3.5 w-3.5 text-muted-foreground" />
+                                            <span className="sr-only">Configure ComfyUI</span>
+                                        </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="right">configure ComfyUI path & args</TooltipContent>
+                                </Tooltip>
+                            </TooltipProvider>
                         )}
-
-                        {configError && <p className="text-sm text-destructive">{configError}</p>}
                     </div>
 
-                    <DialogFooter className="gap-2 sm:gap-0">
-                        <Button variant="ghost" onClick={() => setConfigDialogOpen(false)}>
-                            Cancel
-                        </Button>
-                        <Button onClick={handleSaveLaunchConfig} disabled={configSaving || configLoading}>
-                            {configSaving ? "Saving..." : "Save"}
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
-        </>
-    );
+                    <StatusPill
+                        label={labels.status.queue}
+                        status={status.queue}
+                        extraInfo={queueExtraInfo}
+                        collapsed={collapsed}
+                    />
+                    <StatusPill label={labels.status.io} status={status.io} collapsed={collapsed} />
+                    <StatusPill
+                        label={labels.status.models}
+                        status={status.models}
+                        extraInfo={modelsExtraInfo}
+                        collapsed={collapsed}
+                    />
+                </div>
+
+                <Dialog open={configDialogOpen} onOpenChange={setConfigDialogOpen}>
+                    <DialogContent className="sm:max-w-lg">
+                        <DialogHeader>
+                            <DialogTitle>ComfyUI launch settings</DialogTitle>
+                            <DialogDescription>
+                                Point Sweet Tea Studio at your ComfyUI folder and optional launch arguments.
+                                Leave fields blank to fall back to automatic detection and defaults.
+                            </DialogDescription>
+                        </DialogHeader>
+
+                        <div className="space-y-4 py-2">
+                            <div className="space-y-2">
+                                <Label htmlFor="comfy-path">ComfyUI folder</Label>
+                                <Input
+                                    id="comfy-path"
+                                    placeholder="/path/to/ComfyUI"
+                                    value={pathInput}
+                                    onChange={(e) => setPathInput(e.target.value)}
+                                    disabled={configLoading}
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                    Leave blank to let Sweet Tea Studio autodetect ComfyUI.
+                                </p>
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label htmlFor="comfy-args">Launch arguments</Label>
+                                <Input
+                                    id="comfy-args"
+                                    placeholder="--listen --port 8188"
+                                    value={argsInput}
+                                    onChange={(e) => setArgsInput(e.target.value)}
+                                    disabled={configLoading}
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                    Optional flags passed to ComfyUI. Leave empty to use defaults.
+                                </p>
+                            </div>
+
+                            {launchConfig && (
+                                <p className="text-xs text-muted-foreground">
+                                    Using {launchConfig.detection_method || "unknown method"} • port {launchConfig.port}
+                                </p>
+                            )}
+
+                            {configError && <p className="text-sm text-destructive">{configError}</p>}
+                        </div>
+
+                        <DialogFooter className="gap-2 sm:gap-0">
+                            <Button variant="ghost" onClick={() => setConfigDialogOpen(false)}>
+                                Cancel
+                            </Button>
+                            <Button onClick={handleSaveLaunchConfig} disabled={configSaving || configLoading}>
+                                {configSaving ? "Saving..." : "Save"}
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+            </>
+            );
 }
