@@ -98,7 +98,10 @@ export default function Layout() {
             </NavLink>
           ))}
         </nav>
-        <div className="p-3 border-t border-border/70">
+        <div className="border-t border-border/70">
+          <StatusBar collapsed={collapsed} />
+        </div>
+        <div className="p-3 border-t-0 border-border/70">
           <NavLink
             to="/settings"
             className={({ isActive }) =>
@@ -181,7 +184,6 @@ export default function Layout() {
         </div>
       </main>
       <ConnectionBanner />
-      <StatusBar />
       <PerformanceHUD visible={perfHudOpen} />
 
       {/* Global Floating Panels */}

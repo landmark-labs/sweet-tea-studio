@@ -35,7 +35,7 @@ from app.core.websockets import manager
 from app.services.comfy_watchdog import watchdog
 
 # ===== DIAGNOSTIC MODE TOGGLE =====
-DIAGNOSTIC_MODE = True
+DIAGNOSTIC_MODE = False
 
 if DIAGNOSTIC_MODE:
     from app.core.comfy_diagnostics import DiagnosticComfyClient as ComfyClient
