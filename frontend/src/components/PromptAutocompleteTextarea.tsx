@@ -107,9 +107,10 @@ export function PromptAutocompleteTextarea({
         const normalizedToken = token.replace(/\s+/g, "_");
 
         // DEBUG: Log all relevant state on every run
-        console.log("[AC Debug]", { activeToken, isFocused, normalizedLen: normalizedToken.length, cursor });
+        console.log("[AC Debug]", { activeToken, normalizedLen: normalizedToken.length, cursor });
 
-        if (!isFocused || normalizedToken.length < 2) {
+        // Only check token length, NOT isFocused - blur shouldn't stop autocomplete
+        if (normalizedToken.length < 2) {
             setIsOpen(false);
             setSuggestions([]);
             return;
@@ -151,7 +152,7 @@ export function PromptAutocompleteTextarea({
 
         const handle = setTimeout(load, 50);
         return () => clearTimeout(handle);
-    }, [activeToken, isFocused]);
+    }, [activeToken]); // Removed isFocused dependency
 
     const rankedSuggestions = useMemo(() => {
         const token = activeToken.trim();
@@ -319,24 +320,16 @@ export function PromptAutocompleteTextarea({
                     props.onFocus?.(e);
                 }}
                 onBlur={(e) => {
-                    // DEBUG: Find out who stole focus
-                    console.log("[AC Debug] BLUR triggered. Stolen by:", e.relatedTarget, "Active:", document.activeElement);
-
-                    // PHANTOM BLUR FIX:
-                    // If the active element is STILL the textarea (or inside it), ignore the blur.
-                    // This happens sometimes during re-renders or portal updates.
-                    if (document.activeElement === textareaRef.current) {
-                        console.log("[AC Debug] Ignoring phantom blur (focus still on textarea)");
-                        return;
-                    }
-
-                    // Don't close immediately to allow click on dropdown items
-                    // We check if the new focus is inside our portal
-                    // But since portal is in body, we rely on the timeout for now
+                    // Close dropdown after delay to allow clicking on dropdown items
+                    // We use a longer delay and only close if user truly left the component
                     setTimeout(() => {
-                        setIsFocused(false);
-                        setIsOpen(false);
-                    }, 200);
+                        // Only close if focus is truly outside (not on dropdown buttons either)
+                        const active = document.activeElement;
+                        if (active !== textareaRef.current) {
+                            setIsFocused(false);
+                            setIsOpen(false);
+                        }
+                    }, 300);
                     props.onBlur?.(e);
                 }}
                 onClick={(e) => {
