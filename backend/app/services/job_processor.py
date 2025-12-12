@@ -272,15 +272,19 @@ def process_job(job_id: int):
                 if not neg_embed and len(clip_nodes) >= 2:
                     neg_embed = clip_nodes[1]["text"]
             
-            # Determine the base filename prefix from project slug (if available)
-            filename_prefix = project.slug if 'project' in dir() and project else f"gen_{job_id}"
+            # Determine the base filename prefix from project slug and folder name
+            folder_name = job.output_dir if job.output_dir else "output"
+            if 'project' in dir() and project:
+                filename_prefix = f"{project.slug}-{folder_name}"
+            else:
+                filename_prefix = f"gen_{job_id}"
             
-            # Find the next available sequence number by checking existing files
-            next_seq = 1
+            # Find the next available sequence number by checking existing files (0-based)
+            next_seq = 0
             if target_output_dir and os.path.exists(target_output_dir):
                 import re
                 existing_files = os.listdir(target_output_dir)
-                pattern = re.compile(rf"^{re.escape(filename_prefix)}_(\d+)\.(jpg|jpeg|png)$", re.IGNORECASE)
+                pattern = re.compile(rf"^{re.escape(filename_prefix)}-(\d+)\.(jpg|jpeg|png)$", re.IGNORECASE)
                 for f in existing_files:
                     match = pattern.match(f)
                     if match:
@@ -289,10 +293,10 @@ def process_job(job_id: int):
                             next_seq = num + 1
             
             for idx, img_data in enumerate(images):
-                # Generate sequential filename: project-slug_0001.jpg
+                # Generate sequential filename: project-folder-0000.jpg
                 seq_num = next_seq + idx
                 original_ext = img_data['filename'].rsplit('.', 1)[-1].lower() if '.' in img_data['filename'] else 'jpg'
-                filename = f"{filename_prefix}_{seq_num:04d}.{original_ext}"
+                filename = f"{filename_prefix}-{seq_num:04d}.{original_ext}"
                 
                 # Determine where to save this image
                 if target_output_dir:
