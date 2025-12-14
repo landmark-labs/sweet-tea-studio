@@ -47,8 +47,10 @@ def upload_file(
         target_dir = engine.input_dir
         os.makedirs(target_dir, exist_ok=True)
 
-    # Generate filename with UUID prefix to avoid collisions
-    filename = f"{uuid.uuid4().hex[:8]}_{file.filename}"
+    # Generate filename with timestamp prefix for temporal sorting
+    from datetime import datetime
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    filename = f"{timestamp}_{file.filename}"
     file_path = os.path.join(target_dir, filename)
 
     try:
