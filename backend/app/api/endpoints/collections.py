@@ -28,7 +28,7 @@ def read_collections(session: Session = Depends(get_session)):
     # Inefficient N+1 query but simple for SQLite/low volume. 
     # Can optimize with a group_by query later if needed.
     for col in collections:
-        count = session.exec(select(func.count(Image.id)).where(Image.collection_id == col.id)).one()
+        count = session.exec(select(func.count(Image.id)).where(Image.collection_id == col.id).where(Image.is_deleted == False)).one()
         results.append(CollectionRead(
             id=col.id, 
             name=col.name, 
@@ -49,7 +49,7 @@ def delete_collection(
         raise HTTPException(status_code=404, detail="Collection not found")
     
     # Handle images
-    images = session.exec(select(Image).where(Image.collection_id == collection_id)).all()
+    images = session.exec(select(Image).where(Image.collection_id == collection_id).where(Image.is_deleted == False)).all()
     for img in images:
         if keep_images:
             img.collection_id = None
@@ -76,7 +76,7 @@ def add_images_to_collection(
     if not collection:
         raise HTTPException(status_code=404, detail="Collection not found")
         
-    images = session.exec(select(Image).where(Image.id.in_(image_ids))).all()
+    images = session.exec(select(Image).where(Image.id.in_(image_ids)).where(Image.is_deleted == False)).all()
     for img in images:
         img.collection_id = collection_id
         session.add(img)
@@ -89,7 +89,7 @@ def remove_images_from_collection(
     image_ids: List[int], 
     session: Session = Depends(get_session)
 ):
-    images = session.exec(select(Image).where(Image.id.in_(image_ids))).all()
+    images = session.exec(select(Image).where(Image.id.in_(image_ids)).where(Image.is_deleted == False)).all()
     for img in images:
         img.collection_id = None
         session.add(img)

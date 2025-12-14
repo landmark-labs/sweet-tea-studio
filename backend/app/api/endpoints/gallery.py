@@ -295,7 +295,7 @@ class KeepRequest(BaseModel):
 
 @router.post("/keep")
 def keep_images(req: KeepRequest, session: Session = Depends(get_session)):
-    images = session.exec(select(Image).where(Image.id.in_(req.image_ids))).all()
+    images = session.exec(select(Image).where(Image.id.in_(req.image_ids)).where(Image.is_deleted == False)).all()
     for img in images:
         img.is_kept = req.keep
         session.add(img)
@@ -309,7 +309,7 @@ class CleanupRequest(BaseModel):
 
 @router.post("/cleanup")
 def cleanup_images(req: CleanupRequest, session: Session = Depends(get_session)):
-    query = select(Image).where(Image.is_kept == False)
+    query = select(Image).where(Image.is_kept == False).where(Image.is_deleted == False)
     if req.job_id:
         query = query.where(Image.job_id == req.job_id)
 

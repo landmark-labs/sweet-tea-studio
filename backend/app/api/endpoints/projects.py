@@ -72,6 +72,7 @@ def list_projects(
     stats_query = (
         select(Job.project_id, func.count(Image.id), func.max(Job.created_at))
         .join(Image, Job.id == Image.job_id)
+        .where(Image.is_deleted == False)  # Exclude soft-deleted
         .group_by(Job.project_id)
     )
     results = session.exec(stats_query).all()
@@ -109,6 +110,7 @@ def get_project(project_id: int, session: Session = Depends(get_session)):
         select(func.count(Image.id))
         .join(Job, Image.job_id == Job.id)
         .where(Job.project_id == project_id)
+        .where(Image.is_deleted == False)  # Exclude soft-deleted
     ).one()
     
     last = session.exec(
@@ -228,6 +230,7 @@ def add_project_folder(
         select(func.count(Image.id))
         .join(Job, Image.job_id == Job.id)
         .where(Job.project_id == project_id)
+        .where(Image.is_deleted == False)  # Exclude soft-deleted
     ).one()
     
     return ProjectRead(
@@ -417,12 +420,22 @@ def list_project_folder_images(
     # Supported image extensions
     image_extensions = {".png", ".jpg", ".jpeg", ".webp"}
     
+    # Get paths of soft-deleted images to exclude from results
+    deleted_paths = set(
+        row[0] for row in session.exec(
+            select(Image.path).where(Image.is_deleted == True)
+        ).all() if row
+    )
+    
     images = []
     try:
         for entry in os.scandir(folder_path):
             if entry.is_file():
                 ext = os.path.splitext(entry.name)[1].lower()
                 if ext in image_extensions:
+                    # Skip soft-deleted images
+                    if entry.path in deleted_paths:
+                        continue
                     stat = entry.stat()
                     images.append({
                         "path": entry.path,

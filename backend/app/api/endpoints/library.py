@@ -138,6 +138,7 @@ def read_prompts(
             .join(Job, Image.job_id == Job.id, isouter=True)
             .join(Prompt, Job.prompt_id == Prompt.id, isouter=True)
             .join(Project, Job.project_id == Project.id, isouter=True)
+            .where(Image.is_deleted == False)  # Exclude soft-deleted
             .order_by(Image.created_at.desc())
         )
 
