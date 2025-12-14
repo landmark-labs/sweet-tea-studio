@@ -26,7 +26,7 @@ from app.models.job import Job
 from app.core.config import settings
 
 
-def embed_metadata_to_file(image_path: str, metadata: dict) -> bool:
+def embed_metadata_to_file(image_path: str, metadata: dict, project_name: str | None = None, folder_name: str | None = None) -> bool:
     """Embed metadata into image file's EXIF XPComment field."""
     try:
         from PIL import Image as PILImage
@@ -63,11 +63,19 @@ def embed_metadata_to_file(image_path: str, metadata: dict) -> bool:
                     raise AttributeError("piexif.helper not available")
                 
                 exif_dict = {"0th": {}, "Exif": {}, "GPS": {}, "1st": {}}
-                user_comment = piexif.helper.UserComment.dump(provenance_json, encoding="unicode")
-                exif_dict["Exif"][piexif.ExifIFD.UserComment] = user_comment
-                exif_dict["0th"][piexif.ImageIFD.ImageDescription] = provenance_json.encode("utf-8")
                 
-                # XPComment (Windows Comments field) - UTF-16LE with null terminator
+                # XPTitle (0x9C9B) - Project name
+                if project_name:
+                    title_bytes = project_name.encode("utf-16le") + b"\x00\x00"
+                    exif_dict["0th"][0x9C9B] = title_bytes
+                
+                # XPSubject (0x9C9F) - Destination folder
+                if folder_name:
+                    subject_bytes = folder_name.encode("utf-16le") + b"\x00\x00"
+                    exif_dict["0th"][0x9C9F] = subject_bytes
+                
+                # Only write to XPComment (Windows Comments field)
+                # Do NOT write to ImageDescription/UserComment as they show in Title/Subject
                 xp_comment_bytes = provenance_json.encode("utf-16le") + b"\x00\x00"
                 exif_dict["0th"][0x9C9C] = xp_comment_bytes
                 
@@ -78,13 +86,18 @@ def embed_metadata_to_file(image_path: str, metadata: dict) -> bool:
                 # piexif not available or incompatible - use Pillow's native EXIF support
                 exif_data = img.getexif()
                 
-                # XPComment tag for Windows (0x9C9C = 40092)
+                # XPTitle (0x9C9B) - Project name
+                if project_name:
+                    exif_data[0x9C9B] = project_name.encode("utf-16le") + b"\x00\x00"
+                
+                # XPSubject (0x9C9F) - Destination folder
+                if folder_name:
+                    exif_data[0x9C9F] = folder_name.encode("utf-16le") + b"\x00\x00"
+                
+                # XPComment tag for Windows (0x9C9C = 40092) - ONLY this field
                 XP_COMMENT_TAG = 0x9C9C
                 xp_comment_bytes = provenance_json.encode("utf-16le") + b"\x00\x00"
                 exif_data[XP_COMMENT_TAG] = xp_comment_bytes
-                
-                # ImageDescription (0x010E = 270) 
-                exif_data[270] = provenance_json
                 
                 img.save(str(path), "JPEG", quality=95, exif=exif_data)
         
@@ -139,12 +152,24 @@ def main():
         for img in images:
             print(f"Processing: {img.filename} (path: {img.path})")
             
+            # Fetch context
+            job = session.get(Job, img.job_id)
+            project_name = None
+            folder_name = None
+            
+            if job:
+                folder_name = job.output_dir if job.output_dir else "output"
+                if job.project_id:
+                    project = session.get(Project, job.project_id)
+                    if project:
+                        project_name = project.name
+
             if args.dry_run:
-                print(f"  [DRY RUN] Would embed metadata")
+                print(f"  [DRY RUN] Project: {project_name}, Folder: {folder_name}")
                 success_count += 1
                 continue
             
-            if embed_metadata_to_file(img.path, img.extra_metadata):
+            if embed_metadata_to_file(img.path, img.extra_metadata, project_name, folder_name):
                 print(f"  ✓ Embedded metadata")
                 success_count += 1
             else:

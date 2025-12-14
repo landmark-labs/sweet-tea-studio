@@ -65,7 +65,9 @@ def _process_single_image(
     save_dir: str,
     filename: str,
     provenance_data: dict,
-    engine_output_dir: str | None
+    engine_output_dir: str | None,
+    project_name: str | None = None,
+    folder_name: str | None = None
 ) -> tuple[str, str, int] | None:
     """
     Process a single image: download, convert PNG->JPG, save, embed metadata.
@@ -144,13 +146,21 @@ def _process_single_image(
                             if not hasattr(piexif, 'helper'):
                                 raise AttributeError("piexif.helper not available")
                             exif_dict = {"0th": {}, "Exif": {}, "GPS": {}, "1st": {}}
-                            user_comment = piexif.helper.UserComment.dump(provenance_json, encoding="unicode")
-                            exif_dict["Exif"][piexif.ExifIFD.UserComment] = user_comment
-                            exif_dict["0th"][piexif.ImageIFD.ImageDescription] = provenance_json.encode("utf-8")
-                            # Write to XPComment (0x9C9C) - this is what Windows Explorer shows as "Comments"
-                            # XPComment must be UTF-16LE encoded with null terminator
+                            
+                            # XPTitle (0x9C9B) - Project name
+                            if project_name:
+                                title_bytes = project_name.encode("utf-16le") + b"\x00\x00"
+                                exif_dict["0th"][0x9C9B] = title_bytes
+                            
+                            # XPSubject (0x9C9F) - Destination folder
+                            if folder_name:
+                                subject_bytes = folder_name.encode("utf-16le") + b"\x00\x00"
+                                exif_dict["0th"][0x9C9F] = subject_bytes
+                            
+                            # XPComment (0x9C9C) - Full generation params
                             xp_comment_bytes = provenance_json.encode("utf-16le") + b"\x00\x00"
                             exif_dict["0th"][0x9C9C] = xp_comment_bytes
+                            
                             exif_bytes = piexif.dump(exif_dict)
                             img_embed.save(full_path, "JPEG", quality=95, exif=exif_bytes)
                         except (ImportError, AttributeError):
@@ -162,13 +172,16 @@ def _process_single_image(
                                 # Get or create EXIF data
                                 exif_data = img_embed.getexif()
                                 
-                                # XPComment tag for Windows (0x9C9C = 40092)
-                                XP_COMMENT_TAG = 0x9C9C
-                                xp_comment_bytes = provenance_json.encode("utf-16le") + b"\x00\x00"
-                                exif_data[XP_COMMENT_TAG] = xp_comment_bytes
+                                # XPTitle (0x9C9B) - Project name
+                                if project_name:
+                                    exif_data[0x9C9B] = project_name.encode("utf-16le") + b"\x00\x00"
                                 
-                                # ImageDescription (0x010E = 270) 
-                                exif_data[270] = provenance_json
+                                # XPSubject (0x9C9F) - Destination folder
+                                if folder_name:
+                                    exif_data[0x9C9F] = folder_name.encode("utf-16le") + b"\x00\x00"
+                                
+                                # XPComment (0x9C9C) - Full generation params
+                                exif_data[0x9C9C] = provenance_json.encode("utf-16le") + b"\x00\x00"
                                 
                                 img_embed.save(full_path, "JPEG", quality=95, exif=exif_data)
                             except Exception as pillow_exif_err:
@@ -458,7 +471,16 @@ def process_job(job_id: int):
                 seq_num = next_seq + idx
                 original_ext = img_data['filename'].rsplit('.', 1)[-1].lower() if '.' in img_data['filename'] else 'jpg'
                 filename = f"{filename_prefix}-{seq_num:04d}.{original_ext}"
-                image_tasks.append((img_data, idx, save_dir, filename, provenance_data, engine.output_dir))
+                image_tasks.append((
+                    img_data, 
+                    idx, 
+                    save_dir, 
+                    filename, 
+                    provenance_data, 
+                    engine.output_dir,
+                    project.name if 'project' in locals() and project else None,
+                    folder_name
+                ))
             
             # Process images in parallel using ThreadPoolExecutor
             processed_results = []
