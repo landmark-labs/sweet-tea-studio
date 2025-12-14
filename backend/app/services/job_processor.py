@@ -356,38 +356,44 @@ def process_job(job_id: int):
             # Determine Target Directory for saving images
             target_output_dir = None
             
-            # If job has a project, use the project's output folder in ComfyUI/sweet_tea/
+            # If job has a project, route to the appropriate folder based on destination
             if job.project_id:
-                # Resolve project directory
-                # We need the project slug
                 project = session.get(Project, job.project_id)
                 if project:
-                    # Construct path: ComfyUI/sweet_tea/{slug}/output
-                    # Find ComfyUI root from either output_dir or input_dir
-                    comfy_root = None
+                    # User-selected folder, default to "output"
+                    folder_name = job.output_dir if job.output_dir else "output"
                     
-                    # Try output_dir first
-                    if engine.output_dir:
-                        output_path = Path(engine.output_dir)
-                        if output_path.name in ("output", "input"):
-                            comfy_root = output_path.parent
+                    # Determine routing:
+                    # - "output" → /ComfyUI/sweet_tea/<project>/output/ (final products)
+                    # - other folders → /ComfyUI/input/<project>/<folder>/ (usable as inputs)
+                    
+                    if folder_name == "output":
+                        # Final outputs go to sweet_tea
+                        if engine.output_dir:
+                            output_path = Path(engine.output_dir)
+                            if output_path.name in ("output", "input"):
+                                comfy_root = output_path.parent
+                            else:
+                                comfy_root = output_path
+                            target_output_dir = str(comfy_root / "sweet_tea" / project.slug / "output")
                         else:
-                            comfy_root = output_path
-                    
-                    # Fallback to input_dir if output_dir didn't work
-                    if not comfy_root and engine.input_dir:
-                        input_path = Path(engine.input_dir)
-                        if input_path.name in ("output", "input"):
-                            comfy_root = input_path.parent
-                        else:
-                            comfy_root = input_path
-                    
-                    if comfy_root:
-                        # Use user-selected folder from job.output_dir, default to "output" if not specified
-                        folder_name = job.output_dir if job.output_dir else "output"
-                        target_output_dir = str(comfy_root / "sweet_tea" / project.slug / folder_name)
+                            target_output_dir = job.output_dir
                     else:
-                        target_output_dir = job.output_dir
+                        # Non-output folders go to /ComfyUI/input/<project>/<folder>/
+                        # so they can be used directly by LoadImage nodes
+                        if engine.input_dir:
+                            target_output_dir = str(Path(engine.input_dir) / project.slug / folder_name)
+                        else:
+                            # Fallback to sweet_tea if no input_dir configured
+                            if engine.output_dir:
+                                output_path = Path(engine.output_dir)
+                                if output_path.name in ("output", "input"):
+                                    comfy_root = output_path.parent
+                                else:
+                                    comfy_root = output_path
+                                target_output_dir = str(comfy_root / "sweet_tea" / project.slug / folder_name)
+                            else:
+                                target_output_dir = job.output_dir
                 else:
                     target_output_dir = job.output_dir
             else:
