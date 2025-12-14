@@ -535,8 +535,26 @@ export default function PromptStudio() {
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
-    ws.onopen = () => {
+    ws.onopen = async () => {
       console.log(`[WS] Connected to job ${lastJobId}`);
+
+      // Check if job already failed (race condition: error broadcast before WS connected)
+      try {
+        const job = await api.getJob(lastJobId);
+        if (job.status === "failed" && job.error) {
+          console.log(`[WS] Job already failed before connection: ${job.error}`);
+          setJobStatus("failed");
+          setError(job.error);
+          updateFeed(lastJobId, { status: "failed" });
+        } else if (job.status === "completed") {
+          console.log(`[WS] Job already completed before connection`);
+          setJobStatus("completed");
+          setProgress(100);
+          setGalleryRefresh(prev => prev + 1);
+        }
+      } catch (err) {
+        console.error("Failed to check initial job status:", err);
+      }
     };
 
     ws.onmessage = (event) => {
