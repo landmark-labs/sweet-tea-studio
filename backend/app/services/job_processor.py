@@ -151,10 +151,29 @@ def _process_single_image(
                             exif_bytes = piexif.dump(exif_dict)
                             img_embed.save(full_path, "JPEG", quality=95, exif=exif_bytes)
                         except ImportError:
-                            img_embed.save(full_path, "JPEG", quality=95, comment=provenance_json.encode("utf-8"))
-                            sidecar_path = full_path.rsplit(".", 1)[0] + ".json"
-                            with open(sidecar_path, "w", encoding="utf-8") as sf:
-                                sf.write(provenance_json)
+                            # piexif not available - use Pillow's native EXIF support
+                            try:
+                                from PIL import Image as PILImg
+                                from PIL.ExifTags import Base
+                                
+                                # Get or create EXIF data
+                                exif_data = img_embed.getexif()
+                                
+                                # XPComment tag for Windows (0x9C9C = 40092)
+                                XP_COMMENT_TAG = 0x9C9C
+                                xp_comment_bytes = provenance_json.encode("utf-16le") + b"\x00\x00"
+                                exif_data[XP_COMMENT_TAG] = xp_comment_bytes
+                                
+                                # ImageDescription (0x010E = 270) 
+                                exif_data[270] = provenance_json
+                                
+                                img_embed.save(full_path, "JPEG", quality=95, exif=exif_data)
+                            except Exception as pillow_exif_err:
+                                print(f"Pillow EXIF failed: {pillow_exif_err}, falling back to sidecar")
+                                img_embed.save(full_path, "JPEG", quality=95, comment=provenance_json.encode("utf-8"))
+                                sidecar_path = full_path.rsplit(".", 1)[0] + ".json"
+                                with open(sidecar_path, "w", encoding="utf-8") as sf:
+                                    sf.write(provenance_json)
                     elif fmt == "PNG":
                         from PIL import PngImagePlugin
                         png_info = PngImagePlugin.PngInfo()

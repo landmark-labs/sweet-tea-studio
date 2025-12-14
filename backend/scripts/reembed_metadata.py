@@ -29,7 +29,6 @@ def embed_metadata_to_file(image_path: str, metadata: dict) -> bool:
     """Embed metadata into image file's EXIF XPComment field."""
     try:
         from PIL import Image as PILImage
-        import piexif
         
         path = Path(image_path)
         if not path.exists():
@@ -51,28 +50,38 @@ def embed_metadata_to_file(image_path: str, metadata: dict) -> bool:
                 print(f"  Skipping non-JPEG: {path.name}")
                 return False
             
-            # Build EXIF dict
-            exif_dict = {"0th": {}, "Exif": {}, "GPS": {}, "1st": {}}
-            
-            # UserComment
-            user_comment = piexif.helper.UserComment.dump(provenance_json, encoding="unicode")
-            exif_dict["Exif"][piexif.ExifIFD.UserComment] = user_comment
-            
-            # ImageDescription
-            exif_dict["0th"][piexif.ImageIFD.ImageDescription] = provenance_json.encode("utf-8")
-            
-            # XPComment (Windows Comments field) - UTF-16LE with null terminator
-            xp_comment_bytes = provenance_json.encode("utf-16le") + b"\x00\x00"
-            exif_dict["0th"][0x9C9C] = xp_comment_bytes
-            
-            exif_bytes = piexif.dump(exif_dict)
-            img.save(str(path), "JPEG", quality=95, exif=exif_bytes)
+            # Try piexif first, fall back to Pillow native EXIF
+            try:
+                import piexif
+                
+                exif_dict = {"0th": {}, "Exif": {}, "GPS": {}, "1st": {}}
+                user_comment = piexif.helper.UserComment.dump(provenance_json, encoding="unicode")
+                exif_dict["Exif"][piexif.ExifIFD.UserComment] = user_comment
+                exif_dict["0th"][piexif.ImageIFD.ImageDescription] = provenance_json.encode("utf-8")
+                
+                # XPComment (Windows Comments field) - UTF-16LE with null terminator
+                xp_comment_bytes = provenance_json.encode("utf-16le") + b"\x00\x00"
+                exif_dict["0th"][0x9C9C] = xp_comment_bytes
+                
+                exif_bytes = piexif.dump(exif_dict)
+                img.save(str(path), "JPEG", quality=95, exif=exif_bytes)
+                
+            except ImportError:
+                # piexif not available - use Pillow's native EXIF support
+                exif_data = img.getexif()
+                
+                # XPComment tag for Windows (0x9C9C = 40092)
+                XP_COMMENT_TAG = 0x9C9C
+                xp_comment_bytes = provenance_json.encode("utf-16le") + b"\x00\x00"
+                exif_data[XP_COMMENT_TAG] = xp_comment_bytes
+                
+                # ImageDescription (0x010E = 270) 
+                exif_data[270] = provenance_json
+                
+                img.save(str(path), "JPEG", quality=95, exif=exif_data)
         
         return True
         
-    except ImportError as e:
-        print(f"  Missing dependency: {e}")
-        return False
     except Exception as e:
         print(f"  Error embedding metadata: {e}")
         return False
