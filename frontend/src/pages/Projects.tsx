@@ -24,8 +24,10 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 
 import { api, Project } from "@/lib/api";
+import { useGeneration } from "@/lib/GenerationContext";
 
 export default function Projects() {
+    const generation = useGeneration();
     const [projects, setProjects] = useState<Project[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -61,6 +63,10 @@ export default function Projects() {
             setNewProjectName("");
             setIsCreateOpen(false);
             fetchProjects();
+            // Refresh global context so Prompt Studio sees it
+            if (generation?.refreshProjects) {
+                generation.refreshProjects();
+            }
         } catch (e) {
             console.error("Failed to create project:", e);
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -99,6 +105,11 @@ export default function Projects() {
             setNewFolderName("");
 
             console.log("[Projects] State updated with new project data");
+
+            // Refresh global context so Prompt Studio sees the new folder
+            if (generation?.refreshProjects) {
+                generation.refreshProjects();
+            }
         } catch (e) {
             console.error("Failed to add folder:", e);
             // eslint-disable-next-line @typescript-eslint/no-explicit-any

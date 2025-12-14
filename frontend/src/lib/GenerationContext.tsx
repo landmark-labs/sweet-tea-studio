@@ -27,6 +27,7 @@ interface GenerationContextValue {
 
     // Data refreshers
     refreshWorkflows: () => Promise<void>;
+    refreshProjects: () => Promise<void>;
 
     // Generation
     handleGenerate: () => Promise<void>;
@@ -146,6 +147,15 @@ export function GenerationProvider({ children }: GenerationProviderProps) {
             console.error("Failed to refresh workflows", err);
         }
     }, [applyWorkflows]);
+
+    const refreshProjects = useCallback(async () => {
+        try {
+            const data = await api.getProjects();
+            setProjects(data);
+        } catch (err) {
+            console.error("Failed to refresh projects", err);
+        }
+    }, []);
 
     // Load form data when workflow changes
     useEffect(() => {
@@ -310,6 +320,7 @@ export function GenerationProvider({ children }: GenerationProviderProps) {
         loadPromptLibrary,
         applyPrompt,
         refreshWorkflows,
+        refreshProjects,
         handleGenerate,
         isGenerating,
         canGenerate,

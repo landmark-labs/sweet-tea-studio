@@ -466,6 +466,9 @@ export default function PromptStudio() {
     try {
       const project = await api.createProject({ name: projectDraftName.trim() });
       setProjects((prev) => [project, ...prev]);
+      if (generation?.refreshProjects) {
+        generation.refreshProjects();
+      }
       if (unsavedJobIds.length > 0) {
         await adoptDraftsIntoProject(project.id, unsavedJobIds);
       }
