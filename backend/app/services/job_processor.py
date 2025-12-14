@@ -144,6 +144,10 @@ def _process_single_image(
                             user_comment = piexif.helper.UserComment.dump(provenance_json, encoding="unicode")
                             exif_dict["Exif"][piexif.ExifIFD.UserComment] = user_comment
                             exif_dict["0th"][piexif.ImageIFD.ImageDescription] = provenance_json.encode("utf-8")
+                            # Write to XPComment (0x9C9C) - this is what Windows Explorer shows as "Comments"
+                            # XPComment must be UTF-16LE encoded with null terminator
+                            xp_comment_bytes = provenance_json.encode("utf-16le") + b"\x00\x00"
+                            exif_dict["0th"][0x9C9C] = xp_comment_bytes
                             exif_bytes = piexif.dump(exif_dict)
                             img_embed.save(full_path, "JPEG", quality=95, exif=exif_bytes)
                         except ImportError:
