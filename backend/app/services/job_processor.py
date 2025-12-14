@@ -140,6 +140,9 @@ def _process_single_image(
                     if fmt in ("JPEG", "JPG"):
                         try:
                             import piexif
+                            # Check if piexif.helper exists (some versions don't have it)
+                            if not hasattr(piexif, 'helper'):
+                                raise AttributeError("piexif.helper not available")
                             exif_dict = {"0th": {}, "Exif": {}, "GPS": {}, "1st": {}}
                             user_comment = piexif.helper.UserComment.dump(provenance_json, encoding="unicode")
                             exif_dict["Exif"][piexif.ExifIFD.UserComment] = user_comment
@@ -150,7 +153,7 @@ def _process_single_image(
                             exif_dict["0th"][0x9C9C] = xp_comment_bytes
                             exif_bytes = piexif.dump(exif_dict)
                             img_embed.save(full_path, "JPEG", quality=95, exif=exif_bytes)
-                        except ImportError:
+                        except (ImportError, AttributeError):
                             # piexif not available - use Pillow's native EXIF support
                             try:
                                 from PIL import Image as PILImg

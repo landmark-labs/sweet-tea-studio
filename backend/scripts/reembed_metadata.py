@@ -23,6 +23,7 @@ from app.db.engine import engine
 from app.models.image import Image
 from app.models.project import Project
 from app.models.job import Job
+from app.core.config import settings
 
 
 def embed_metadata_to_file(image_path: str, metadata: dict) -> bool:
@@ -30,9 +31,13 @@ def embed_metadata_to_file(image_path: str, metadata: dict) -> bool:
     try:
         from PIL import Image as PILImage
         
+        # Resolve relative paths against ROOT_DIR
         path = Path(image_path)
+        if not path.is_absolute():
+            path = settings.ROOT_DIR / path
+        
         if not path.exists():
-            print(f"  File not found: {image_path}")
+            print(f"  File not found: {path}")
             return False
         
         # Build provenance JSON from stored metadata
@@ -53,6 +58,9 @@ def embed_metadata_to_file(image_path: str, metadata: dict) -> bool:
             # Try piexif first, fall back to Pillow native EXIF
             try:
                 import piexif
+                # Check if piexif.helper exists (some versions don't have it)
+                if not hasattr(piexif, 'helper'):
+                    raise AttributeError("piexif.helper not available")
                 
                 exif_dict = {"0th": {}, "Exif": {}, "GPS": {}, "1st": {}}
                 user_comment = piexif.helper.UserComment.dump(provenance_json, encoding="unicode")
@@ -66,8 +74,8 @@ def embed_metadata_to_file(image_path: str, metadata: dict) -> bool:
                 exif_bytes = piexif.dump(exif_dict)
                 img.save(str(path), "JPEG", quality=95, exif=exif_bytes)
                 
-            except ImportError:
-                # piexif not available - use Pillow's native EXIF support
+            except (ImportError, AttributeError):
+                # piexif not available or incompatible - use Pillow's native EXIF support
                 exif_data = img.getexif()
                 
                 # XPComment tag for Windows (0x9C9C = 40092)
@@ -92,6 +100,8 @@ def main():
     parser.add_argument("--dry-run", action="store_true", help="Show what would be done without making changes")
     parser.add_argument("--project", type=str, help="Only process images from this project slug")
     args = parser.parse_args()
+    
+    print(f"ROOT_DIR: {settings.ROOT_DIR}")
     
     with Session(engine) as session:
         # Build query
@@ -127,7 +137,7 @@ def main():
         error_count = 0
         
         for img in images:
-            print(f"Processing: {img.filename}")
+            print(f"Processing: {img.filename} (path: {img.path})")
             
             if args.dry_run:
                 print(f"  [DRY RUN] Would embed metadata")
@@ -148,3 +158,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
