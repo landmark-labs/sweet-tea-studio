@@ -55,7 +55,7 @@ interface DynamicFormProps {
     snippets?: PromptItem[];
 }
 
-export function DynamicForm({
+export const DynamicForm = React.memo(function DynamicForm({
     schema,
     onSubmit,
     nodeOrder,
@@ -813,4 +813,4 @@ export function DynamicForm({
             </Accordion>
         </form>
     );
-}
+});

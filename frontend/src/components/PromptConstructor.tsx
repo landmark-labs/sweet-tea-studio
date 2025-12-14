@@ -195,7 +195,7 @@ function SortableItem({ item, index, textIndex, onRemove, onUpdateContent, onEdi
 
 // --- Main Component ---
 
-export function PromptConstructor({ schema, onUpdate, currentValues, targetField: controlledTarget, onTargetChange, onFinish, snippets: library, onUpdateSnippets: setLibrary }: PromptConstructorProps) {
+export const PromptConstructor = React.memo(function PromptConstructor({ schema, onUpdate, currentValues, targetField: controlledTarget, onTargetChange, onFinish, snippets: library, onUpdateSnippets: setLibrary }: PromptConstructorProps) {
     // 1. Identify Target Fields
     const [internalTarget, setInternalTarget] = useState<string>("");
     const targetField = controlledTarget !== undefined ? controlledTarget : internalTarget;
@@ -801,4 +801,4 @@ export function PromptConstructor({ schema, onUpdate, currentValues, targetField
             </div>
         </div>
     );
-}
+});

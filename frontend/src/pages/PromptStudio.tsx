@@ -688,8 +688,14 @@ export default function PromptStudio() {
     healthIntervalRef.current = setInterval(pollHealth, 2500);
 
     return () => {
-      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
-      if (healthIntervalRef.current) clearInterval(healthIntervalRef.current);
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
+      if (healthIntervalRef.current) {
+        clearInterval(healthIntervalRef.current);
+        healthIntervalRef.current = null;
+      }
     };
   }, [contextWorkflows, contextProjects]);
 

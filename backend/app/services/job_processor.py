@@ -22,6 +22,7 @@ import json
 from pathlib import Path
 from datetime import datetime
 from typing import List, Optional
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from sqlmodel import Session, select
 from app.models.job import Job
@@ -56,6 +57,120 @@ def apply_params_to_graph(graph: dict, mapping: dict, params: dict):
                 for part in field_path[:-1]:
                     current = current.get(part, {})
                 current[field_path[-1]] = value
+
+
+def _process_single_image(
+    img_data: dict,
+    idx: int,
+    save_dir: str,
+    filename: str,
+    provenance_data: dict,
+    engine_output_dir: str | None
+) -> tuple[str, str, int] | None:
+    """
+    Process a single image: download, convert PNG->JPG, save, embed metadata.
+    Returns (full_path, final_filename, idx) on success, None on failure.
+    This function is thread-safe and designed for parallel execution.
+    """
+    import io
+    import urllib.request
+    
+    try:
+        from PIL import Image as PILImage
+        pil_available = True
+    except ImportError:
+        pil_available = False
+    
+    # Get image bytes
+    image_bytes = None
+    if 'image_bytes' in img_data:
+        image_bytes = img_data['image_bytes']
+    else:
+        img_url = img_data.get('url')
+        if img_url:
+            try:
+                with urllib.request.urlopen(img_url, timeout=30) as response:
+                    image_bytes = response.read()
+            except Exception as e:
+                print(f"Failed to download image from {img_url}: {e}")
+                # Fallback to filesystem
+                if engine_output_dir:
+                    subfolder = img_data.get('subfolder', '')
+                    orig_filename = img_data.get('filename', filename)
+                    src_path = os.path.join(engine_output_dir, subfolder, orig_filename) if subfolder else os.path.join(engine_output_dir, orig_filename)
+                    if os.path.exists(src_path):
+                        with open(src_path, 'rb') as f:
+                            image_bytes = f.read()
+    
+    if not image_bytes:
+        return None
+    
+    os.makedirs(save_dir, exist_ok=True)
+    final_filename = filename
+    
+    # Process and save
+    if pil_available:
+        try:
+            # Auto-convert PNG to JPG
+            if filename.lower().endswith(".png"):
+                try:
+                    image = PILImage.open(io.BytesIO(image_bytes))
+                    if image.mode in ("RGBA", "P"):
+                        image = image.convert("RGB")
+                    final_filename = os.path.splitext(filename)[0] + ".jpg"
+                    full_path = os.path.join(save_dir, final_filename)
+                    image.save(full_path, "JPEG", quality=95)
+                except Exception:
+                    full_path = os.path.join(save_dir, filename)
+                    with open(full_path, 'wb') as f:
+                        f.write(image_bytes)
+                    final_filename = filename
+            else:
+                full_path = os.path.join(save_dir, filename)
+                with open(full_path, 'wb') as f:
+                    f.write(image_bytes)
+            
+            # Embed provenance metadata
+            try:
+                import json
+                provenance_json = json.dumps(provenance_data, ensure_ascii=False)
+                
+                with PILImage.open(full_path) as img_embed:
+                    fmt = (img_embed.format or "").upper()
+                    if fmt in ("JPEG", "JPG"):
+                        try:
+                            import piexif
+                            exif_dict = {"0th": {}, "Exif": {}, "GPS": {}, "1st": {}}
+                            user_comment = piexif.helper.UserComment.dump(provenance_json, encoding="unicode")
+                            exif_dict["Exif"][piexif.ExifIFD.UserComment] = user_comment
+                            exif_dict["0th"][piexif.ImageIFD.ImageDescription] = provenance_json.encode("utf-8")
+                            exif_bytes = piexif.dump(exif_dict)
+                            img_embed.save(full_path, "JPEG", quality=95, exif=exif_bytes)
+                        except ImportError:
+                            img_embed.save(full_path, "JPEG", quality=95, comment=provenance_json.encode("utf-8"))
+                            sidecar_path = full_path.rsplit(".", 1)[0] + ".json"
+                            with open(sidecar_path, "w", encoding="utf-8") as sf:
+                                sf.write(provenance_json)
+                    elif fmt == "PNG":
+                        from PIL import PngImagePlugin
+                        png_info = PngImagePlugin.PngInfo()
+                        png_info.add_text("Comment", provenance_json)
+                        png_info.add_text("Description", provenance_json)
+                        img_embed.save(full_path, pnginfo=png_info)
+            except Exception as embed_err:
+                print(f"Failed to embed metadata: {embed_err}")
+                
+        except Exception as e:
+            print(f"PIL processing failed: {e}")
+            full_path = os.path.join(save_dir, filename)
+            with open(full_path, 'wb') as f:
+                f.write(image_bytes)
+    else:
+        full_path = os.path.join(save_dir, filename)
+        with open(full_path, 'wb') as f:
+            f.write(image_bytes)
+    
+    return (full_path, final_filename, idx)
 
 def process_job(job_id: int):
     with Session(db_engine) as session:
@@ -292,166 +407,88 @@ def process_job(job_id: int):
                         if num >= next_seq:
                             next_seq = num + 1
             
+            # Build provenance data once (shared across all images)
+            provenance_data = {
+                "positive_prompt": pos_embed,
+                "negative_prompt": neg_embed,
+                "workflow_id": workflow.id,
+                "workflow_name": workflow.name if hasattr(workflow, 'name') else None,
+                "job_id": job_id,
+                "timestamp": datetime.utcnow().isoformat(),
+                "params": {k: v for k, v in working_params.items() if k != "metadata" and not k.startswith("__")}
+            }
+            
+            # Determine save_dir once
+            if target_output_dir:
+                save_dir = target_output_dir
+            elif engine.output_dir:
+                save_dir = engine.output_dir
+            else:
+                raise ComfyResponseError("No output directory configured.")
+            
+            # Prepare tasks for parallel processing
+            image_tasks = []
             for idx, img_data in enumerate(images):
-                # Generate sequential filename: project-folder-0000.jpg
                 seq_num = next_seq + idx
                 original_ext = img_data['filename'].rsplit('.', 1)[-1].lower() if '.' in img_data['filename'] else 'jpg'
                 filename = f"{filename_prefix}-{seq_num:04d}.{original_ext}"
-                
-                # Determine where to save this image
-                if target_output_dir:
-                    save_dir = target_output_dir
-                elif engine.output_dir:
-                    save_dir = engine.output_dir
-                else:
-                    raise ComfyResponseError("No output directory configured.")
-                
-                os.makedirs(save_dir, exist_ok=True)
-                
-                # Get image bytes - either from WebSocket stream or HTTP download
-                image_bytes = None
-                source = img_data.get('source', 'http')
-                
-                if 'image_bytes' in img_data:
-                    # Image came directly from WebSocket
-                    image_bytes = img_data['image_bytes']
-                else:
-                    # Download via HTTP
-                    img_url = img_data.get('url')
-                    if img_url:
-                        try:
-                            import urllib.request
-                            with urllib.request.urlopen(img_url, timeout=30) as response:
-                                image_bytes = response.read()
-                        except Exception as e:
-                            print(f"Failed to download image from {img_url}: {e}")
-                            # Fallback: try the old filesystem approach
-                            base_dir = engine.output_dir
-                            subfolder = img_data.get('subfolder', '')
-                            src_path = os.path.join(base_dir, subfolder, filename) if subfolder else os.path.join(base_dir, filename)
-                            if os.path.exists(src_path):
-                                with open(src_path, 'rb') as f:
-                                    image_bytes = f.read()
-                
-                if not image_bytes:
-                    continue
-                
-                # Process and save the image
+                image_tasks.append((img_data, idx, save_dir, filename, provenance_data, engine.output_dir))
+            
+            # Process images in parallel using ThreadPoolExecutor
+            processed_results = []
+            with ThreadPoolExecutor(max_workers=min(4, len(image_tasks) or 1)) as executor:
+                futures = {
+                    executor.submit(_process_single_image, *task): task[1]  # task[1] = idx
+                    for task in image_tasks
+                }
+                for future in as_completed(futures):
+                    result = future.result()
+                    if result:
+                        processed_results.append(result)
+            
+            # Sort by original index to maintain order
+            processed_results.sort(key=lambda x: x[2])
+            
+            # Build prompt history metadata (shared)
+            incoming_metadata = working_params.get("metadata", {})
+            if isinstance(incoming_metadata, str):
                 try:
-                    import io
-                    from PIL import Image as PILImage
-                    
-                    # Auto-convert PNG to JPG if requested
-                    if filename.lower().endswith(".png"):
-                        try:
-                            image = PILImage.open(io.BytesIO(image_bytes))
-                            if image.mode in ("RGBA", "P"):
-                                image = image.convert("RGB")
-                            
-                            filename = os.path.splitext(filename)[0] + ".jpg"
-                            full_path = os.path.join(save_dir, filename)
-                            image.save(full_path, "JPEG", quality=95)
-                            
-                            img_data['filename'] = filename
-                            
-                        except Exception as conv_e:
-                            full_path = os.path.join(save_dir, filename)
-                            with open(full_path, 'wb') as f:
-                                f.write(image_bytes)
-                    else:
-                        full_path = os.path.join(save_dir, filename)
-                        with open(full_path, 'wb') as f:
-                            f.write(image_bytes)
-                    
-                    # Embed provenance metadata
-                    provenance_data = {
-                        "positive_prompt": pos_embed,
-                        "negative_prompt": neg_embed,
-                        "workflow_id": workflow.id,
-                        "workflow_name": workflow.name if hasattr(workflow, 'name') else None,
-                        "job_id": job_id,
-                        "timestamp": datetime.utcnow().isoformat(),
-                        "params": {k: v for k, v in working_params.items() if k != "metadata" and not k.startswith("__")}
-                    }
-                    
-                    try:
-                        import json
-                        provenance_json = json.dumps(provenance_data, ensure_ascii=False)
-                        
-                        with PILImage.open(full_path) as img_embed:
-                            fmt = (img_embed.format or "").upper()
-                            if fmt in ("JPEG", "JPG"):
-                                # Try EXIF UserComment
-                                try:
-                                    import piexif
-                                    exif_dict = {"0th": {}, "Exif": {}, "GPS": {}, "1st": {}}
-                                    user_comment = piexif.helper.UserComment.dump(provenance_json, encoding="unicode")
-                                    exif_dict["Exif"][piexif.ExifIFD.UserComment] = user_comment
-                                    exif_dict["0th"][piexif.ImageIFD.ImageDescription] = provenance_json.encode("utf-8")
-                                    exif_bytes = piexif.dump(exif_dict)
-                                    img_embed.save(full_path, "JPEG", quality=95, exif=exif_bytes)
-                                except ImportError:
-                                    img_embed.save(full_path, "JPEG", quality=95, comment=provenance_json.encode("utf-8"))
-                                    
-                                    # Also save a sidecar JSON file
-                                    sidecar_path = full_path.rsplit(".", 1)[0] + ".json"
-                                    with open(sidecar_path, "w", encoding="utf-8") as sf:
-                                        sf.write(provenance_json)
-                                    
-                            elif fmt == "PNG":
-                                from PIL import PngImagePlugin
-                                png_info = PngImagePlugin.PngInfo()
-                                png_info.add_text("Comment", provenance_json)
-                                png_info.add_text("Description", provenance_json)
-                                img_embed.save(full_path, pnginfo=png_info)
-                    except Exception as embed_err:
-                        print(f"Failed to embed metadata: {embed_err}")
-                        
-                except ImportError:
-                    # PIL not available
-                    full_path = os.path.join(save_dir, filename)
-                    with open(full_path, 'wb') as f:
-                        f.write(image_bytes)
+                    incoming_metadata = json.loads(incoming_metadata)
+                except Exception:
+                    incoming_metadata = {}
 
+            raw_history = incoming_metadata.get("prompt_history", [])
+            prompt_history = raw_history if isinstance(raw_history, list) else []
 
-                # Build prompt history metadata
-                incoming_metadata = working_params.get("metadata", {})
-                if isinstance(incoming_metadata, str):
-                    try:
-                        incoming_metadata = json.loads(incoming_metadata)
-                    except Exception:
-                        incoming_metadata = {}
+            latest_prompt = {
+                "stage": 0,
+                "positive_text": pos_embed,
+                "negative_text": neg_embed,
+                "timestamp": datetime.utcnow().isoformat(),
+                "source": "workflow",
+            }
 
-                raw_history = incoming_metadata.get("prompt_history", [])
-                prompt_history = raw_history if isinstance(raw_history, list) else []
+            stacked_history = [latest_prompt]
+            for hist_idx, entry in enumerate(prompt_history):
+                if isinstance(entry, dict):
+                    stacked = entry.copy()
+                    stacked.setdefault("stage", hist_idx + 1)
+                    stacked_history.append(stacked)
 
-                latest_prompt = {
-                    "stage": 0,
-                    "positive_text": pos_embed,
-                    "negative_text": neg_embed,
-                    "timestamp": datetime.utcnow().isoformat(),
-                    "source": "workflow",
-                }
-
-                stacked_history = [latest_prompt]
-                for idx, entry in enumerate(prompt_history):
-                    if isinstance(entry, dict):
-                        stacked = entry.copy()
-                        stacked.setdefault("stage", idx + 1)
-                        stacked_history.append(stacked)
-
-                image_metadata = incoming_metadata.copy()
-                image_metadata["active_prompt"] = latest_prompt
-                image_metadata["prompt_history"] = stacked_history
-                image_metadata["generation_params"] = {
-                    k: v for k, v in working_params.items() 
-                    if k != "metadata" and not k.startswith("__")
-                }
-
+            image_metadata = incoming_metadata.copy()
+            image_metadata["active_prompt"] = latest_prompt
+            image_metadata["prompt_history"] = stacked_history
+            image_metadata["generation_params"] = {
+                k: v for k, v in working_params.items() 
+                if k != "metadata" and not k.startswith("__")
+            }
+            
+            # Create database records for each successfully processed image
+            for full_path, final_filename, idx in processed_results:
                 new_image = Image(
                     job_id=job_id,
                     path=full_path,
-                    filename=img_data['filename'],
+                    filename=final_filename,
                     format="png",
                     extra_metadata=image_metadata,
                     is_kept=False

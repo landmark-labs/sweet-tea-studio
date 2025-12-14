@@ -150,8 +150,13 @@ export function PromptAutocompleteTextarea({
             }
         };
 
-        const handle = setTimeout(load, 50);
-        return () => clearTimeout(handle);
+        const handle = setTimeout(load, 250);
+        return () => {
+            clearTimeout(handle);
+            if (abortControllerRef.current) {
+                abortControllerRef.current.abort();
+            }
+        };
     }, [activeToken]); // Removed isFocused dependency
 
     const rankedSuggestions = useMemo(() => {
