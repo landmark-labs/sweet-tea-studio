@@ -793,3 +793,75 @@ export interface FolderImage {
     mtime: string;
 }
 
+// --- Snippets (Backend-persisted prompt blocks) ---
+export interface Snippet {
+    id: number;
+    label: string;
+    content: string;
+    color?: string;
+    sort_order: number;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface SnippetCreate {
+    label: string;
+    content: string;
+    color?: string;
+    sort_order?: number;
+}
+
+export const snippetApi = {
+    getSnippets: async (): Promise<Snippet[]> => {
+        const res = await fetch(`${API_BASE}/snippets`);
+        if (!res.ok) throw new Error("Failed to fetch snippets");
+        return res.json();
+    },
+
+    createSnippet: async (data: SnippetCreate): Promise<Snippet> => {
+        const res = await fetch(`${API_BASE}/snippets`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(data),
+        });
+        if (!res.ok) throw new Error("Failed to create snippet");
+        return res.json();
+    },
+
+    updateSnippet: async (id: number, data: Partial<SnippetCreate>): Promise<Snippet> => {
+        const res = await fetch(`${API_BASE}/snippets/${id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(data),
+        });
+        if (!res.ok) throw new Error("Failed to update snippet");
+        return res.json();
+    },
+
+    deleteSnippet: async (id: number): Promise<void> => {
+        const res = await fetch(`${API_BASE}/snippets/${id}`, {
+            method: "DELETE",
+        });
+        if (!res.ok) throw new Error("Failed to delete snippet");
+    },
+
+    reorderSnippets: async (snippetIds: number[]): Promise<Snippet[]> => {
+        const res = await fetch(`${API_BASE}/snippets/reorder`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(snippetIds),
+        });
+        if (!res.ok) throw new Error("Failed to reorder snippets");
+        return res.json();
+    },
+
+    bulkUpsert: async (snippets: SnippetCreate[]): Promise<Snippet[]> => {
+        const res = await fetch(`${API_BASE}/snippets/bulk`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(snippets),
+        });
+        if (!res.ok) throw new Error("Failed to bulk update snippets");
+        return res.json();
+    },
+};

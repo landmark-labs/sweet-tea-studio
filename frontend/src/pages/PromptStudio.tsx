@@ -87,23 +87,70 @@ export default function PromptStudio() {
   const [projectDraftName, setProjectDraftName] = useState("");
   const [, setIsCreatingProject] = useState(false);
 
-  // Snippet Library (Lifted State)
-  const [library, setLibrary] = useState<PromptItem[]>(() => {
-    try {
-      const saved = localStorage.getItem("ds_prompt_snippets");
-      if (saved) return JSON.parse(saved);
-    } catch (e) { console.error("Failed to parse snippets", e); }
+  // Snippet Library (Backend-persisted)
+  const [library, setLibrary] = useState<PromptItem[]>([]);
+  const [snippetsLoaded, setSnippetsLoaded] = useState(false);
+  const pendingSaveRef = useRef<NodeJS.Timeout | null>(null);
 
-    // Defaults if nothing saved
-    return [
-      { id: "s-1", type: "block", label: "Masterpiece", content: "masterpiece, best quality, highres, 8k", color: COLORS[0] },
-      { id: "s-2", type: "block", label: "Negative Basics", content: "lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry", color: COLORS[4] }
-    ];
-  });
-
+  // Load snippets from backend on mount
   useEffect(() => {
-    localStorage.setItem("ds_prompt_snippets", JSON.stringify(library));
-  }, [library]);
+    const loadSnippets = async () => {
+      try {
+        const { snippetApi } = await import("@/lib/api");
+        const snippets = await snippetApi.getSnippets();
+        // Map backend Snippet to PromptItem format
+        const items: PromptItem[] = snippets.map(s => ({
+          id: String(s.id),
+          type: "block" as const,
+          label: s.label,
+          content: s.content,
+          color: s.color || COLORS[0],
+        }));
+        setLibrary(items);
+        setSnippetsLoaded(true);
+      } catch (e) {
+        console.error("Failed to load snippets from backend", e);
+        // Fallback to localStorage migration
+        try {
+          const saved = localStorage.getItem("ds_prompt_snippets");
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            setLibrary(parsed);
+          }
+        } catch (e2) { console.error("Failed to parse local snippets", e2); }
+        setSnippetsLoaded(true);
+      }
+    };
+    loadSnippets();
+  }, []);
+
+  // Save snippets to backend when library changes (debounced)
+  useEffect(() => {
+    if (!snippetsLoaded) return; // Don't save until initial load complete
+
+    // Debounce saves to avoid hammering the API
+    if (pendingSaveRef.current) clearTimeout(pendingSaveRef.current);
+    pendingSaveRef.current = setTimeout(async () => {
+      try {
+        const { snippetApi } = await import("@/lib/api");
+        await snippetApi.bulkUpsert(library.map(item => ({
+          label: item.label || "Untitled",
+          content: item.content,
+          color: item.color,
+        })));
+        // Clear localStorage after successful save to backend
+        localStorage.removeItem("ds_prompt_snippets");
+      } catch (e) {
+        console.error("Failed to save snippets to backend", e);
+        // Fallback: save to localStorage
+        localStorage.setItem("ds_prompt_snippets", JSON.stringify(library));
+      }
+    }, 1000);
+
+    return () => {
+      if (pendingSaveRef.current) clearTimeout(pendingSaveRef.current);
+    };
+  }, [library, snippetsLoaded]);
 
   const loadGallery = async () => {
     try {

@@ -8,6 +8,7 @@ from app.models.image import Image
 from app.models.prompt import Prompt
 from app.models.tag import Tag, TagSyncState
 from app.models.project import Project
+from app.models.snippet import Snippet
 # Portfolio models for generation tracking
 from app.models.portfolio import (
     ComfyWorkflow, Pipe, ModelCatalog, Run, RunModelLink, Output
