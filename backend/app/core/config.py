@@ -109,6 +109,62 @@ class Settings(BaseSettings):
         sweet_tea_dir = self.get_sweet_tea_dir_from_engine_path(engine_output_dir)
         return sweet_tea_dir / project_slug
 
+    def get_project_input_dir_in_comfy(self, engine_input_dir: str, project_slug: str) -> Path:
+        """
+        Get the project's input folder inside ComfyUI/input/<project>.
+        This is where LoadImage nodes can access files.
+        """
+        input_path = Path(engine_input_dir)
+        if not input_path.is_absolute():
+            print(f"Warning: Engine input_dir is not absolute: {engine_input_dir}")
+            return self.ROOT_DIR / "input" / project_slug
+        return input_path / project_slug
+
+    def get_project_output_dir_in_comfy(self, engine_output_dir: str, project_slug: str) -> Path:
+        """
+        Get the project's output folder inside ComfyUI/sweet_tea/<project>/output.
+        This is where generated images are saved.
+        """
+        return self.get_project_dir_in_comfy(engine_output_dir, project_slug) / "output"
+
+    def ensure_project_dirs_new_structure(
+        self,
+        engine_input_dir: str,
+        engine_output_dir: str,
+        project_slug: str,
+        input_subfolders: Optional[List[str]] = None
+    ) -> dict:
+        """
+        Create project directories in the NEW structure:
+        - Input folders: /ComfyUI/input/<project>/<subfolder>/ (for LoadImage access)
+        - Output folder: /ComfyUI/sweet_tea/<project>/output/ (for generated images)
+        
+        Returns dict with 'input_dir' and 'output_dir' paths.
+        """
+        # Default input subfolders (everything except output)
+        folders_in_input = input_subfolders if input_subfolders is not None else ["input", "masks"]
+        
+        # Create input structure: /ComfyUI/input/<project>/
+        project_input_base = self.get_project_input_dir_in_comfy(engine_input_dir, project_slug)
+        project_input_base.mkdir(parents=True, exist_ok=True)
+        
+        for folder in folders_in_input:
+            if folder != "output":  # Never create output in input dir
+                (project_input_base / folder).mkdir(exist_ok=True)
+        
+        # Create output structure: /ComfyUI/sweet_tea/<project>/output/
+        sweet_tea_dir = self.get_sweet_tea_dir_from_engine_path(engine_output_dir)
+        sweet_tea_dir.mkdir(exist_ok=True)
+        project_sweet_tea = sweet_tea_dir / project_slug
+        project_sweet_tea.mkdir(exist_ok=True)
+        output_dir = project_sweet_tea / "output"
+        output_dir.mkdir(exist_ok=True)
+        
+        return {
+            "input_dir": project_input_base,
+            "output_dir": output_dir
+        }
+
     def ensure_sweet_tea_project_dirs(
         self, 
         engine_output_dir: str, 
@@ -116,8 +172,10 @@ class Settings(BaseSettings):
         subfolders: Optional[List[str]] = None
     ) -> Path:
         """
-        Create project directories inside ComfyUI/sweet_tea/ and return the project path.
+        LEGACY: Create project directories inside ComfyUI/sweet_tea/.
         Creates: sweet_tea/{project_slug}/input, output, masks, etc.
+        
+        NOTE: New projects should use ensure_project_dirs_new_structure() instead.
         """
         sweet_tea_dir = self.get_sweet_tea_dir_from_engine_path(engine_output_dir)
         sweet_tea_dir.mkdir(exist_ok=True)

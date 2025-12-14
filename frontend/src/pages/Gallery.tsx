@@ -23,12 +23,14 @@ export default function Gallery() {
     const [error, setError] = useState<string | null>(null);
     const [search, setSearch] = useState("");
     const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
+    const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
     const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
     const [lastSelectedId, setLastSelectedId] = useState<number | null>(null);
     const [projects, setProjects] = useState<Project[]>([]);
     const [cleanupMode, setCleanupMode] = useState(false);
     const [selectionMode, setSelectionMode] = useState(false);
     const [fullscreenIndex, setFullscreenIndex] = useState<number | null>(null);
+    const [folderImages, setFolderImages] = useState<{ path: string; filename: string; mtime: string }[]>([]);
 
     const clickTimeout = useRef<NodeJS.Timeout | null>(null);
 
@@ -231,8 +233,33 @@ export default function Gallery() {
 
     const handleSelectProject = (id: number | null) => {
         setSelectedProjectId(id);
+        setSelectedFolder(null); // Reset folder when project changes
+        setFolderImages([]);
         loadGallery(search, id);
     };
+
+    const handleSelectFolder = async (folder: string | null) => {
+        setSelectedFolder(folder);
+        if (folder && selectedProjectId) {
+            setIsLoading(true);
+            try {
+                const images = await api.getProjectFolderImages(selectedProjectId, folder);
+                setFolderImages(images);
+            } catch (err) {
+                console.error("Failed to load folder images", err);
+                setFolderImages([]);
+            } finally {
+                setIsLoading(false);
+            }
+        } else {
+            setFolderImages([]);
+            loadGallery(search, selectedProjectId);
+        }
+    };
+
+    // Get folders for the selected project
+    const selectedProject = selectedProjectId ? projects.find(p => p.id === selectedProjectId) : null;
+    const projectFolders = selectedProject?.config_json?.folders || [];
 
     const handleDelete = async (id: number) => {
         if (!confirm("Are you sure you want to delete this image?")) return;
@@ -332,7 +359,28 @@ export default function Gallery() {
                         <h1 className="text-3xl font-bold tracking-tight text-slate-900">Generated Gallery</h1>
                         <div className="text-sm text-slate-600 bg-slate-100 border border-slate-200 px-3 py-1 rounded-full">
                             Viewing {selectedProjectId ? projects.find(p => p.id === selectedProjectId)?.name || "project" : "all projects"}
+                            {selectedFolder && ` / ${selectedFolder}`}
                         </div>
+                        {/* Folder Pills */}
+                        {selectedProjectId && projectFolders.length > 0 && (
+                            <div className="flex items-center gap-1">
+                                <button
+                                    onClick={() => handleSelectFolder(null)}
+                                    className={`px-2 py-0.5 rounded text-xs transition ${!selectedFolder ? 'bg-blue-500 text-white' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'}`}
+                                >
+                                    All
+                                </button>
+                                {projectFolders.map((folder) => (
+                                    <button
+                                        key={folder}
+                                        onClick={() => handleSelectFolder(folder)}
+                                        className={`px-2 py-0.5 rounded text-xs transition ${selectedFolder === folder ? 'bg-blue-500 text-white' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'}`}
+                                    >
+                                        {folder}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
                         {selectionMode && (
                             <div className="flex items-center gap-2 bg-amber-50 text-amber-700 px-3 py-1 rounded-full text-sm font-medium border border-amber-100 animate-in fade-in slide-in-from-left-4">
                                 Selection mode

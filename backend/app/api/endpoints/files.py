@@ -15,29 +15,39 @@ router = APIRouter()
 def upload_file(
     file: UploadFile = File(...),
     engine_id: Optional[int] = Form(None),
+    project_slug: Optional[str] = Form(None),
     session: Session = Depends(get_session)
 ):
-    # Determine target directory
-    target_dir = ""
+    """
+    Upload a file to ComfyUI's input directory.
+    
+    If project_slug is provided, saves to /ComfyUI/input/<project>/ for organization.
+    Returns the filename suitable for LoadImage nodes (uses relative path for project uploads).
+    """
+    # Get engine
+    engine = None
     if engine_id:
         engine = session.get(Engine, engine_id)
-        if engine and engine.input_dir:
-            target_dir = engine.input_dir
     
-    if not target_dir:
-        # Fallback to default engine if exists
+    if not engine:
+        # Fallback to default engine
         engine = session.exec(select(Engine).where(Engine.name == "Local ComfyUI")).first()
-        if engine and engine.input_dir:
-            target_dir = engine.input_dir
-            
-    if not target_dir:
+    
+    if not engine or not engine.input_dir:
         raise HTTPException(status_code=400, detail="No valid input directory found for engine")
 
-    # Create directory if not exists
-    os.makedirs(target_dir, exist_ok=True)
+    # Determine target directory based on project
+    if project_slug:
+        # New structure: /ComfyUI/input/<project>/
+        target_dir = settings.get_project_input_dir_in_comfy(engine.input_dir, project_slug)
+        # Ensure the project input directory exists
+        target_dir.mkdir(parents=True, exist_ok=True)
+    else:
+        # Legacy: root input directory
+        target_dir = engine.input_dir
+        os.makedirs(target_dir, exist_ok=True)
 
-    # Generate filename
-    # Prefix with uuid to avoid collisions
+    # Generate filename with UUID prefix to avoid collisions
     filename = f"{uuid.uuid4().hex[:8]}_{file.filename}"
     file_path = os.path.join(target_dir, filename)
 
@@ -47,7 +57,14 @@ def upload_file(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to save file: {str(e)}")
 
-    return {"filename": filename, "path": file_path}
+    # Return ComfyUI-compatible filename
+    # For project uploads, LoadImage needs: "<project>/<filename>"
+    if project_slug:
+        comfy_filename = f"{project_slug}/{filename}"
+    else:
+        comfy_filename = filename
+
+    return {"filename": comfy_filename, "path": file_path}
 
 @router.get("/tree")
 def get_file_tree(

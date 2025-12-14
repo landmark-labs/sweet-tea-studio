@@ -1148,6 +1148,7 @@ export default function PromptStudio() {
               engineId={selectedEngineId}
               onReset={handleResetDefaults}
               snippets={library}
+              projectSlug={selectedProject?.slug}
             />
           )}
         </div>

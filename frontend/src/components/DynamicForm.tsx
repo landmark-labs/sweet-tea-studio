@@ -53,6 +53,7 @@ interface DynamicFormProps {
     submitDisabled?: boolean;
     onReset?: () => void;
     snippets?: PromptItem[];
+    projectSlug?: string; // If set, uploads go to project-specific input folder
 }
 
 export const DynamicForm = React.memo(function DynamicForm({
@@ -71,7 +72,8 @@ export const DynamicForm = React.memo(function DynamicForm({
 
     submitDisabled,
     onReset,
-    snippets = []
+    snippets = [],
+    projectSlug
 }: DynamicFormProps) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const [internalData, setInternalData] = useState<any>({});
@@ -477,6 +479,7 @@ export const DynamicForm = React.memo(function DynamicForm({
                         onChange={(val) => handleChange(key, val)}
                         engineId={engineId}
                         options={field.enum}
+                        projectSlug={projectSlug}
                     />
                 </div>
             );

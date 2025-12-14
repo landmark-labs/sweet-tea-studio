@@ -131,7 +131,10 @@ def create_project(data: ProjectCreate, session: Session = Depends(get_session))
     Create a new project.
     
     If slug is not provided, it will be auto-generated from the name.
-    Project directories are created inside ComfyUI/sweet_tea/{project_slug}/.
+    
+    Directory structure:
+    - Input folders (input, masks, custom): /ComfyUI/input/<project>/
+    - Output folder: /ComfyUI/sweet_tea/<project>/output/
     """
     # Generate slug if not provided
     slug = data.slug if data.slug else slugify(data.name)
@@ -145,6 +148,7 @@ def create_project(data: ProjectCreate, session: Session = Depends(get_session))
         )
     
     # Default config with folders
+    # "output" is special - stored separately in sweet_tea, but listed here for UI
     default_folders = ["input", "output", "masks"]
     config = {
         "folders": default_folders
@@ -162,18 +166,27 @@ def create_project(data: ProjectCreate, session: Session = Depends(get_session))
     session.commit()
     session.refresh(project)
     
-    # Get active engine to find ComfyUI path
+    # Get active engine to find ComfyUI paths
     active_engine = session.exec(select(Engine).where(Engine.is_active == True)).first()
     
-    if active_engine and active_engine.output_dir:
-        # Create project directories inside ComfyUI/sweet_tea/
+    if active_engine and active_engine.output_dir and active_engine.input_dir:
+        # Use NEW structure: inputs in /ComfyUI/input/, outputs in /ComfyUI/sweet_tea/
+        input_subfolders = [f for f in default_folders if f != "output"]
+        settings.ensure_project_dirs_new_structure(
+            active_engine.input_dir,
+            active_engine.output_dir, 
+            slug, 
+            input_subfolders=input_subfolders
+        )
+    elif active_engine and active_engine.output_dir:
+        # Fallback to legacy structure if input_dir not configured
         settings.ensure_sweet_tea_project_dirs(
             active_engine.output_dir, 
             slug, 
             subfolders=default_folders
         )
     else:
-        # Fallback to legacy location if no engine configured
+        # Fallback to local storage if no engine configured
         settings.ensure_project_dirs(slug, subfolders=default_folders)
     
     return ProjectRead(**project.dict(), image_count=0, last_activity=project.updated_at)
@@ -189,7 +202,11 @@ def add_project_folder(
     data: FolderCreate,
     session: Session = Depends(get_session)
 ):
-    """Add a new output folder to the project."""
+    """
+    Add a new folder to the project.
+    
+    Non-output folders are created in /ComfyUI/input/<project>/.
+    """
     project = session.get(Project, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -213,9 +230,18 @@ def add_project_folder(
     session.commit()
     session.refresh(project)
     
-    # Create directory in ComfyUI/sweet_tea/ if engine available
+    # Create directory using new structure
     active_engine = session.exec(select(Engine).where(Engine.is_active == True)).first()
-    if active_engine and active_engine.output_dir:
+    
+    if active_engine and active_engine.input_dir and folder_name != "output":
+        # New folders (except output) go in /ComfyUI/input/<project>/
+        project_input_dir = settings.get_project_input_dir_in_comfy(
+            active_engine.input_dir, project.slug
+        )
+        project_input_dir.mkdir(parents=True, exist_ok=True)
+        (project_input_dir / folder_name).mkdir(exist_ok=True)
+    elif active_engine and active_engine.output_dir:
+        # Fallback to legacy sweet_tea location
         settings.ensure_sweet_tea_project_dirs(
             active_engine.output_dir, 
             project.slug, 
@@ -404,17 +430,39 @@ def list_project_folder_images(
     if folder_name not in folders:
         raise HTTPException(status_code=404, detail=f"Folder '{folder_name}' not found in project")
     
-    # Resolve path: Check active engine first
+    # Resolve path based on folder type and engine configuration
     active_engine = session.exec(select(Engine).where(Engine.is_active == True)).first()
+    folder_path = None
     
-    if active_engine and active_engine.output_dir:
-        # Use ComfyUI/sweet_tea location
-        folder_path = settings.get_project_dir_in_comfy(active_engine.output_dir, project.slug) / folder_name
-    else:
-        # Fallback to local storage
-        folder_path = settings.get_project_dir(project.slug) / folder_name
+    if active_engine:
+        if folder_name == "output":
+            # Output folder: /ComfyUI/sweet_tea/<project>/output/
+            if active_engine.output_dir:
+                folder_path = settings.get_project_output_dir_in_comfy(
+                    active_engine.output_dir, project.slug
+                )
+        else:
+            # Input/masks/custom folders: /ComfyUI/input/<project>/<folder>/
+            if active_engine.input_dir:
+                folder_path = settings.get_project_input_dir_in_comfy(
+                    active_engine.input_dir, project.slug
+                ) / folder_name
+            
+        # Fallback to legacy sweet_tea structure if new path doesn't exist
+        if folder_path and not folder_path.exists() and active_engine.output_dir:
+            legacy_path = settings.get_project_dir_in_comfy(
+                active_engine.output_dir, project.slug
+            ) / folder_name
+            if legacy_path.exists():
+                folder_path = legacy_path
     
-    if not folder_path.exists():
+    # Final fallback to local storage
+    if not folder_path or not folder_path.exists():
+        local_path = settings.get_project_dir(project.slug) / folder_name
+        if local_path.exists():
+            folder_path = local_path
+    
+    if not folder_path or not folder_path.exists():
         return []
     
     # Supported image extensions
