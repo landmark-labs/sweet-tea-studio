@@ -13,7 +13,7 @@ from app.core.config import settings
 
 
 def migrate():
-    db_path = settings.DATABASE_PATH
+    db_path = settings.database_path
     
     if not os.path.exists(db_path):
         print(f"Database not found at {db_path} - will be created on first run")
