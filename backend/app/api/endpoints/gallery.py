@@ -106,6 +106,7 @@ def read_gallery(
         select(Image, Job, Prompt)
         .join(Job, Image.job_id == Job.id, isouter=True)
         .join(Prompt, Job.prompt_id == Prompt.id, isouter=True)
+        .where(Image.is_deleted == False)  # Exclude soft-deleted images
         .order_by(Image.created_at.desc())
         .offset(skip)
     )
@@ -278,10 +279,12 @@ def delete_image(image_id: int, session: Session = Depends(get_session)):
         except OSError:
             logger.exception("Failed to delete file", extra={"path": image.path, "image_id": image_id})
     
-    # Delete from DB
-    session.delete(image)
+    # Soft delete: set flag instead of removing from DB
+    image.is_deleted = True
+    image.deleted_at = datetime.utcnow()
+    session.add(image)
     session.commit()
-    return {"status": "deleted", "file_deleted": file_deleted}
+    return {"status": "deleted", "file_deleted": file_deleted, "soft_delete": True}
 
 # --- Specific Features from Sweet Tea Studio Repo (Preserved) ---
 
@@ -328,12 +331,14 @@ def cleanup_images(req: CleanupRequest, session: Session = Depends(get_session))
             except OSError:
                 logger.exception("Failed to delete file", extra={"path": img.path, "image_id": img.id})
 
-        # Delete from DB
-        session.delete(img)
+        # Soft delete: set flag instead of removing from DB
+        img.is_deleted = True
+        img.deleted_at = datetime.utcnow()
+        session.add(img)
         count += 1
 
     session.commit()
-    return {"status": "cleaned", "count": count, "files_deleted": deleted_files}
+    return {"status": "cleaned", "count": count, "files_deleted": deleted_files, "soft_delete": True}
 
 
 # ----------------------------------------------------------------

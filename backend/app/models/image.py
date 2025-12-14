@@ -10,6 +10,8 @@ class ImageBase(SQLModel):
     format: str = "png"
     thumbnail_path: Optional[str] = None
     is_kept: bool = Field(default=False)
+    is_deleted: bool = Field(default=False, index=True)  # Soft delete flag
+    deleted_at: Optional[datetime] = Field(default=None)  # When soft-deleted
     caption: Optional[str] = None
     collection_id: Optional[int] = Field(default=None, index=True)
     extra_metadata: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))

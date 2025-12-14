@@ -22,6 +22,10 @@ def init_db():
     # Create tag tables in dedicated tags.db (auto-creates file if missing)
     SQLModel.metadata.create_all(tags_engine, tables=[Tag.__table__, TagSyncState.__table__])
     
+    # Run migrations to add any new columns to existing databases
+    from app.db.migrations.add_soft_delete_to_images import migrate as migrate_soft_delete
+    migrate_soft_delete()
+    
     # Ensure directory structure exists
     settings.ensure_dirs()
     
