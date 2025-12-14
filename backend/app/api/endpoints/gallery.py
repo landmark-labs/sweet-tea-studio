@@ -505,8 +505,10 @@ def get_image_metadata_by_path(path: str, session: Session = Depends(get_session
     except Exception as e:
         logger.warning("Failed to read PNG metadata", extra={"path": path, "error": str(e)})
     
-    # Fallback: try to find in database by path
-    image = session.exec(select(Image).where(Image.path == path)).first()
+    # Fallback: try to find in database by path (most recent first)
+    image = session.exec(
+        select(Image).where(Image.path == path).order_by(Image.created_at.desc())
+    ).first()
     if image and image.extra_metadata:
         metadata = image.extra_metadata if isinstance(image.extra_metadata, dict) else {}
         if isinstance(image.extra_metadata, str):
