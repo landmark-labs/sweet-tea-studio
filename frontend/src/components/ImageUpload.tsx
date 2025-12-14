@@ -97,7 +97,25 @@ export function ImageUpload({ value, onChange, engineId, options = [], projectSl
         // Priority 1: Check for Sweet Tea internal image path
         const sweetTeaPath = e.dataTransfer.getData("application/x-sweet-tea-image");
         if (sweetTeaPath) {
-            // Handle as internal path - fetch and upload to input directory
+            // Check if the image is already in ComfyUI's input directory
+            // If so, use the relative path directly without re-uploading
+            const inputDirMatch = sweetTeaPath.match(/[/\\]input[/\\](.+)$/);
+            if (inputDirMatch) {
+                // Extract the relative path after /input/
+                // This works for paths like /opt/ComfyUI/input/project/folder/file.jpg
+                const relativePath = inputDirMatch[1].replace(/\\/g, '/'); // Normalize to forward slashes
+                console.log(`[ImageUpload] Using existing input path: ${relativePath}`);
+                onChange(relativePath);
+                addToRecent(relativePath);
+
+                // Set preview from the original path
+                const previewUrl = `/api/v1/gallery/image/path?path=${encodeURIComponent(sweetTeaPath)}`;
+                setPreview(previewUrl);
+                return;
+            }
+
+            // Image is NOT in input dir (e.g., from /sweet_tea/project/output/)
+            // Need to copy it to input dir for LoadImage access
             setIsUploading(true);
             try {
                 const url = `/api/v1/gallery/image/path?path=${encodeURIComponent(sweetTeaPath)}`;
