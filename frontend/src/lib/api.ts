@@ -485,11 +485,12 @@ export const api = {
         return res.json();
     },
 
-    uploadFile: async (file: File, engineId?: number, projectSlug?: string): Promise<{ filename: string; path: string }> => {
+    uploadFile: async (file: File, engineId?: number, projectSlug?: string, subfolder?: string): Promise<{ filename: string; path: string }> => {
         const formData = new FormData();
         formData.append("file", file);
         if (engineId) formData.append("engine_id", String(engineId));
         if (projectSlug) formData.append("project_slug", projectSlug);
+        if (subfolder) formData.append("subfolder", subfolder);
 
         const res = await fetch(`${API_BASE}/files/upload`, {
             method: "POST",

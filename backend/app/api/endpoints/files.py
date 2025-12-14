@@ -16,12 +16,15 @@ def upload_file(
     file: UploadFile = File(...),
     engine_id: Optional[int] = Form(None),
     project_slug: Optional[str] = Form(None),
+    subfolder: Optional[str] = Form(None),  # e.g., "input", "masks", "transform"
     session: Session = Depends(get_session)
 ):
     """
     Upload a file to ComfyUI's input directory.
     
     If project_slug is provided, saves to /ComfyUI/input/<project>/ for organization.
+    If subfolder is also provided, saves to /ComfyUI/input/<project>/<subfolder>/.
+    
     Returns the filename suitable for LoadImage nodes (uses relative path for project uploads).
     """
     # Get engine
@@ -36,11 +39,19 @@ def upload_file(
     if not engine or not engine.input_dir:
         raise HTTPException(status_code=400, detail="No valid input directory found for engine")
 
-    # Determine target directory based on project
+    # Determine target directory based on project and subfolder
     if project_slug:
         # New structure: /ComfyUI/input/<project>/
-        target_dir = settings.get_project_input_dir_in_comfy(engine.input_dir, project_slug)
-        # Ensure the project input directory exists
+        project_input_dir = settings.get_project_input_dir_in_comfy(engine.input_dir, project_slug)
+        
+        if subfolder:
+            # With subfolder: /ComfyUI/input/<project>/<subfolder>/
+            target_dir = project_input_dir / subfolder
+        else:
+            # No subfolder: /ComfyUI/input/<project>/
+            target_dir = project_input_dir
+            
+        # Ensure the directory exists
         target_dir.mkdir(parents=True, exist_ok=True)
     else:
         # Legacy: root input directory
@@ -60,9 +71,12 @@ def upload_file(
         raise HTTPException(status_code=500, detail=f"Failed to save file: {str(e)}")
 
     # Return ComfyUI-compatible filename
-    # For project uploads, LoadImage needs: "<project>/<filename>"
+    # For project uploads, LoadImage needs: "<project>/<subfolder>/<filename>" or "<project>/<filename>"
     if project_slug:
-        comfy_filename = f"{project_slug}/{filename}"
+        if subfolder:
+            comfy_filename = f"{project_slug}/{subfolder}/{filename}"
+        else:
+            comfy_filename = f"{project_slug}/{filename}"
     else:
         comfy_filename = filename
 

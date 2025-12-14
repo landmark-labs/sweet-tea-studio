@@ -14,9 +14,10 @@ interface ImageUploadProps {
     engineId?: string;
     options?: string[]; // List of available files from ComfyUI
     projectSlug?: string; // If provided, uploads go to /ComfyUI/input/<project>/
+    destinationFolder?: string; // If provided with projectSlug, uploads go to /ComfyUI/input/<project>/<folder>/
 }
 
-export function ImageUpload({ value, onChange, engineId, options = [], projectSlug }: ImageUploadProps) {
+export function ImageUpload({ value, onChange, engineId, options = [], projectSlug, destinationFolder }: ImageUploadProps) {
     const [isUploading, setIsUploading] = useState(false);
     const [preview, setPreview] = useState<string | null>(null);
     const [isDragging, setIsDragging] = useState(false);
@@ -61,7 +62,7 @@ export function ImageUpload({ value, onChange, engineId, options = [], projectSl
         setIsUploading(true);
         try {
             const id = engineId ? parseInt(engineId) : undefined;
-            const result = await api.uploadFile(file, id, projectSlug);
+            const result = await api.uploadFile(file, id, projectSlug, destinationFolder);
             onChange(result.filename);
             addToRecent(result.filename);
         } catch (error) {

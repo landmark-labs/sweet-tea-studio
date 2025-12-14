@@ -54,6 +54,7 @@ interface DynamicFormProps {
     onReset?: () => void;
     snippets?: PromptItem[];
     projectSlug?: string; // If set, uploads go to project-specific input folder
+    destinationFolder?: string; // If set with projectSlug, uploads go to /input/<project>/<folder>/
 }
 
 export const DynamicForm = React.memo(function DynamicForm({
@@ -73,7 +74,8 @@ export const DynamicForm = React.memo(function DynamicForm({
     submitDisabled,
     onReset,
     snippets = [],
-    projectSlug
+    projectSlug,
+    destinationFolder
 }: DynamicFormProps) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const [internalData, setInternalData] = useState<any>({});
@@ -480,6 +482,7 @@ export const DynamicForm = React.memo(function DynamicForm({
                         engineId={engineId}
                         options={field.enum}
                         projectSlug={projectSlug}
+                        destinationFolder={destinationFolder}
                     />
                 </div>
             );

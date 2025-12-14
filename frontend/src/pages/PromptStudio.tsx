@@ -1167,6 +1167,7 @@ export default function PromptStudio() {
               onReset={handleResetDefaults}
               snippets={library}
               projectSlug={selectedProject?.slug}
+              destinationFolder={generationTarget || undefined}
             />
           )}
         </div>
