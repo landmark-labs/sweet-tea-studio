@@ -1,4 +1,4 @@
-import React, { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import React, { useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
@@ -94,14 +94,11 @@ export function PromptAutocompleteTextarea({
     };
 
     // Restore cursor position after external value changes (e.g., when delimiters are auto-inserted)
-    useEffect(() => {
-        if (intendedCursorRef.current !== null && textareaRef.current) {
+    // Use useLayoutEffect to run synchronously before paint, preventing visible cursor flash
+    useLayoutEffect(() => {
+        if (intendedCursorRef.current !== null && textareaRef.current && document.activeElement === textareaRef.current) {
             const pos = Math.min(intendedCursorRef.current, value.length);
-            requestAnimationFrame(() => {
-                if (textareaRef.current && document.activeElement === textareaRef.current) {
-                    textareaRef.current.setSelectionRange(pos, pos);
-                }
-            });
+            textareaRef.current.setSelectionRange(pos, pos);
         }
     }, [value]);
 
