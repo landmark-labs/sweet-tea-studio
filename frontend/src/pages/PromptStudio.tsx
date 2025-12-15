@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useMemo } from "react";
 import { useLocation, useNavigate, useOutletContext } from "react-router-dom";
-import { api, Engine, WorkflowTemplate, GalleryItem, PromptLibraryItem, EngineHealth, Project } from "@/lib/api";
+import { api, Engine, WorkflowTemplate, GalleryItem, EngineHealth, Project } from "@/lib/api";
 import { DynamicForm } from "@/components/DynamicForm";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -70,6 +70,7 @@ export default function PromptStudio() {
   const { setPrompts, clearPrompts, shouldRefetch: shouldRefetchPrompts } = usePromptLibraryStore();
   const [, setPromptLoading] = useState(false);
   const [, setPromptError] = useState<string | null>(null);
+  const [promptSearch, setPromptSearch] = useState("");
 
   // Add a refresh key for gallery
   const [galleryRefresh, setGalleryRefresh] = useState(0);
@@ -84,8 +85,6 @@ export default function PromptStudio() {
     }
     return [];
   });
-  const [projectDraftName, setProjectDraftName] = useState("");
-  const [, setIsCreatingProject] = useState(false);
 
   // Snippet Library (Backend-persisted)
   const [library, setLibrary] = useState<PromptItem[]>([]);
@@ -214,7 +213,7 @@ export default function PromptStudio() {
       : [],
     [selectedWorkflowSchema]
   );
-  const visibleSchema = useMemo(() => {
+  const visibleSchema = useMemo<Record<string, any>>(() => {
     if (!selectedWorkflow) return {};
 
     const hiddenNodes = new Set(
@@ -443,55 +442,6 @@ export default function PromptStudio() {
 
   const handlePromptSearchChange = (value: string) => {
     setPromptSearch(value);
-  };
-
-  const adoptDraftsIntoProject = async (projectId: number, jobIds: number[] = unsavedJobIds) => {
-    if (jobIds.length === 0) return;
-    try {
-      await api.adoptJobsIntoProject(projectId, jobIds);
-      setUnsavedJobIds((prev) => prev.filter((id) => !jobIds.includes(id)));
-      setGalleryRefresh((prev) => prev + 1);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to move drafts into project");
-    }
-  };
-
-  const handleCreateProjectFromDrafts = async () => {
-    if (!projectDraftName.trim()) {
-      setError("Project name is required to capture your drafts.");
-      return;
-    }
-
-    setIsCreatingProject(true);
-    try {
-      const project = await api.createProject({ name: projectDraftName.trim() });
-      setProjects((prev) => [project, ...prev]);
-      if (generation?.refreshProjects) {
-        generation.refreshProjects();
-      }
-      if (unsavedJobIds.length > 0) {
-        await adoptDraftsIntoProject(project.id, unsavedJobIds);
-      }
-      setSelectedProjectId(String(project.id));
-      setProjectDraftName("");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create project");
-    } finally {
-      setIsCreatingProject(false);
-    }
-  };
-
-  const applyPrompt = (prompt: PromptLibraryItem) => {
-    const params = prompt.job_params || {};
-    handleFormChange(params);
-    setFocusedField("");
-
-    if (prompt.preview_path) {
-      handlePreviewSelect(prompt.preview_path, {
-        prompt: prompt.active_positive,
-        created_at: prompt.created_at,
-      });
-    }
   };
 
 
@@ -767,32 +717,6 @@ export default function PromptStudio() {
     };
   }, [contextWorkflows, contextProjects]);
 
-  // --- Install Logic ---
-  const startInstall = async (missing: string[]) => {
-    setInstallOpen(true);
-    setInstallStatus({ status: "pending", progress_text: "Initializing..." });
-    try {
-      const res = await api.installMissingNodes(missing, allowManualClone);
-      startPolling(res.job_id);
-    } catch (err) {
-      setInstallStatus({ status: "failed", error: `Start failed: ${(err as Error).message}`, progress_text: "" });
-    }
-  };
-
-  const startPolling = (jobId: string) => {
-    if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
-    pollIntervalRef.current = setInterval(async () => {
-      try {
-        const status = await api.getInstallStatus(jobId);
-        setInstallStatus(status);
-        if (status.status === "completed" || status.status === "failed") {
-          if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
-        }
-      } catch (err) {
-        console.error("Poll error", err);
-      }
-    }, 1000);
-  };
 
   const handleReboot = async () => {
     if (!confirm("Reboot ComfyUI now? This will disconnect the interface momentarily.")) return;
