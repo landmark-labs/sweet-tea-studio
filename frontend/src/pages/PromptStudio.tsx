@@ -571,6 +571,9 @@ export default function PromptStudio() {
           updateFeed(lastJobId, { status: "completed", progress: 100 });
         }
         setGalleryRefresh(prev => prev + 1);
+        // Reset button to idle immediately - Sweet Tea will process in background
+        setIsSubmitting(false);
+        setLastJobId(null);
       } else if (data.type === "preview") {
         // Live Preview from KSampler
         console.log("[Preview] Received preview blob:", data.data.blob?.substring(0, 50) + "...", "length:", data.data.blob?.length);
@@ -579,6 +582,9 @@ export default function PromptStudio() {
         setJobStatus("failed");
         setError(data.message);
         updateFeed(lastJobId, { status: "failed" });
+        // Reset button to idle on error
+        setIsSubmitting(false);
+        setLastJobId(null);
       }
     };
 
