@@ -3,7 +3,7 @@ import asyncio
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.endpoints import collections, engines, extensions, files, gallery, jobs, library, models, monitoring, projects, workflows, portfolio
+from app.api.endpoints import collections, engines, extensions, files, gallery, jobs, library, models, monitoring, projects, workflows, portfolio, snippets
 from app.api.endpoints.library_tags import start_tag_cache_refresh_background
 from app.core.config import settings
 from app.core.error_handlers import register_gallery_error_handlers
@@ -51,6 +51,7 @@ app.include_router(collections.router, prefix="/api/v1/collections", tags=["coll
 app.include_router(monitoring.router, prefix="/api/v1/monitoring", tags=["monitoring"])
 app.include_router(models.router, prefix="/api/v1/models", tags=["models"])
 app.include_router(portfolio.router, prefix="/api/v1/portfolio", tags=["portfolio"])
+app.include_router(snippets.router, prefix="/api/v1/snippets", tags=["snippets"])
 
 @app.get("/")
 def root():
