@@ -876,7 +876,7 @@ export default function PromptStudio() {
     <div className="h-full w-full bg-slate-100 flex overflow-hidden relative">
 
       {/* 1. Left Column - Prompt Constructor */}
-      <div className="w-[480px] flex-none bg-white border-r hidden xl:block overflow-hidden">
+      <div className="w-[380px] flex-none bg-white border-r hidden xl:block overflow-hidden">
         {selectedWorkflow ? (
           <PromptConstructor
             // Filter out hidden parameters if the new editor logic flagged them
@@ -901,7 +901,7 @@ export default function PromptStudio() {
       </div>
 
       {/* 2. Configuration (Left) - NEW LAYOUT */}
-      <div className="w-[340px] flex-none bg-blue-50 border-r border-blue-100 flex flex-col h-full overflow-hidden">
+      <div className="w-[420px] flex-none bg-blue-50 border-r border-blue-100 flex flex-col h-full overflow-hidden">
 
         {/* Sticky Header Section */}
         <div className="flex-none p-4 space-y-4 border-b bg-slate-50/50 backdrop-blur z-10">
