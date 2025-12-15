@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef, useMemo } from "react";
+import { addProgressEntry, calculateProgressStats, type ProgressHistoryEntry } from "@/lib/generationState";
 import { useLocation, useNavigate, useOutletContext } from "react-router-dom";
 import { api, Engine, WorkflowTemplate, GalleryItem, EngineHealth, Project } from "@/lib/api";
 import { DynamicForm } from "@/components/DynamicForm";
@@ -49,6 +50,7 @@ export default function PromptStudio() {
   const [jobStatus, setJobStatus] = useState<string>("");
   const [progress, setProgress] = useState<number>(0);
   const [jobStartTime, setJobStartTime] = useState<number | null>(null);
+  const progressHistoryRef = useRef<ProgressHistoryEntry[]>([]);
 
 
   // Selection State
@@ -519,7 +521,24 @@ export default function PromptStudio() {
         const pct = (value / max) * 100;
         setProgress(pct);
         setJobStatus("processing");
-        updateFeed(lastJobId, { progress: pct, status: "processing" });
+
+        // Track progress history for time estimation
+        progressHistoryRef.current = addProgressEntry(progressHistoryRef.current, value);
+        const stats = calculateProgressStats(
+          progressHistoryRef.current,
+          max,
+          jobStartTime || Date.now()
+        );
+
+        updateFeed(lastJobId, {
+          progress: pct,
+          status: "processing",
+          currentStep: value,
+          totalSteps: max,
+          elapsedMs: stats?.elapsedMs,
+          estimatedRemainingMs: stats?.estimatedRemainingMs,
+          iterationsPerSecond: stats?.iterationsPerSecond,
+        });
       } else if (data.type === "executing") {
         setJobStatus("processing");
         updateFeed(lastJobId, { status: "processing" });
@@ -779,6 +798,9 @@ export default function PromptStudio() {
       if (!selectedProjectId) {
         setUnsavedJobIds((prev) => (prev.includes(job.id) ? prev : [...prev, job.id]));
       }
+      // Reset progress history for new job
+      progressHistoryRef.current = [];
+      setJobStartTime(Date.now());
       lastSubmittedParamsRef.current = cleanParams; // Persist for preview
       setLastJobId(job.id);
       trackFeedStart(job.id);

@@ -2,16 +2,22 @@ import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { formatDuration, formatSpeed, type GenerationState } from "@/lib/generationState";
 
 export interface GenerationFeedItem {
   jobId: number;
-  status: string;
+  status: GenerationState | string;
   progress: number;
   previewPath?: string | null;
-  previewPaths?: string[]; // New: support multiple images
+  previewPaths?: string[]; // Support multiple images
   previewBlob?: string | null;
   startedAt: string;
-  estimatedTotalSteps?: number;
+  // Progress statistics
+  currentStep?: number;
+  totalSteps?: number;
+  elapsedMs?: number;
+  estimatedRemainingMs?: number;
+  iterationsPerSecond?: number;
 }
 
 interface GenerationFeedProps {
@@ -28,6 +34,10 @@ export function GenerationFeed({ items, onSelectPreview, onGenerate }: Generatio
     console.log("[GenerationFeed] Rendering with previewBlob:", activeItem.previewBlob.substring(0, 50) + "...");
   }
 
+  // Format stats for display
+  const isRunning = activeItem?.status === 'running' || activeItem?.status === 'processing';
+  const hasStats = activeItem && (activeItem.elapsedMs || activeItem.iterationsPerSecond);
+
   return (
     <div className="w-full h-full pointer-events-auto">
       {activeItem ? (
@@ -35,7 +45,7 @@ export function GenerationFeed({ items, onSelectPreview, onGenerate }: Generatio
           {/* Header */}
           <div className="flex items-center justify-between px-3 py-2 border-b border-slate-200 bg-slate-50/50">
             <div className="text-xs font-semibold text-slate-700 flex items-center gap-2">
-              <span className={cn("w-2 h-2 rounded-full", activeItem.status === 'running' || activeItem.status === 'processing' ? "bg-green-500 animate-pulse" : "bg-slate-300")} />
+              <span className={cn("w-2 h-2 rounded-full", isRunning ? "bg-green-500 animate-pulse" : "bg-slate-300")} />
               generation status
             </div>
             <Badge variant="outline" className="text-[10px] text-slate-500 h-5 px-1.5 font-normal">
@@ -49,7 +59,7 @@ export function GenerationFeed({ items, onSelectPreview, onGenerate }: Generatio
             {activeItem.previewBlob ? (
               <div className="relative w-full h-72 rounded overflow-hidden bg-black/5 border border-slate-200">
                 <img src={activeItem.previewBlob} alt="Live Preview" className="w-full h-full object-contain" />
-                {(activeItem.status === 'running' || activeItem.status === 'processing') && (
+                {isRunning && (
                   <div className="absolute top-2 right-2 px-1.5 py-0.5 bg-black/50 text-white text-[10px] rounded backdrop-blur font-medium">
                     live
                   </div>
@@ -79,6 +89,22 @@ export function GenerationFeed({ items, onSelectPreview, onGenerate }: Generatio
                 <span>{Math.round(activeItem.progress)}%</span>
               </div>
               <Progress value={activeItem.progress} className="h-1.5" />
+
+              {/* Stats row - only show when running or has data */}
+              {(isRunning || hasStats) && (
+                <div className="flex justify-between text-[9px] text-slate-400 pt-0.5">
+                  <span>
+                    {activeItem.elapsedMs ? formatDuration(activeItem.elapsedMs) : ""}
+                    {activeItem.currentStep && activeItem.totalSteps ? ` • ${activeItem.currentStep}/${activeItem.totalSteps}` : ""}
+                  </span>
+                  <span className="flex gap-2">
+                    {activeItem.iterationsPerSecond ? formatSpeed(activeItem.iterationsPerSecond) : ""}
+                    {activeItem.estimatedRemainingMs && activeItem.estimatedRemainingMs > 0 ? (
+                      <span>~{formatDuration(activeItem.estimatedRemainingMs)}</span>
+                    ) : null}
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* Buttons */}
