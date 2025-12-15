@@ -1,37 +1,40 @@
+import { Suspense, lazy } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Layout from "./components/Layout";
-import PromptStudio from "./pages/PromptStudio";
-import Gallery from "./pages/Gallery";
-import PromptLibrary from "./pages/PromptLibrary";
-import WorkflowLibrary from "./pages/WorkflowLibrary"; // Will be renamed to PipesLibrary
-import Models from "./pages/Models";
-import Projects from "./pages/Projects";
-import Settings from "./pages/Settings";
-
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { GenerationProvider } from "./lib/GenerationContext";
+
+const PromptStudio = lazy(() => import("./pages/PromptStudio"));
+const Gallery = lazy(() => import("./pages/Gallery"));
+const PromptLibrary = lazy(() => import("./pages/PromptLibrary"));
+const WorkflowLibrary = lazy(() => import("./pages/WorkflowLibrary")); // Will be renamed to PipesLibrary
+const Models = lazy(() => import("./pages/Models"));
+const Projects = lazy(() => import("./pages/Projects"));
+const Settings = lazy(() => import("./pages/Settings"));
 
 function App() {
   return (
     <GenerationProvider>
       <BrowserRouter>
-        <Routes>
-          <Route element={
-            <ErrorBoundary>
-              <Layout />
-            </ErrorBoundary>
-          }>
-            <Route path="/" element={<PromptStudio />} />
-            <Route path="/projects" element={<Projects />} />
-            <Route path="/pipes" element={<WorkflowLibrary />} />
-            <Route path="/gallery" element={<Gallery />} />
-            <Route path="/library" element={<PromptLibrary />} />
-            <Route path="/models" element={<Models />} />
-            <Route path="/settings" element={<Settings />} />
-            {/* Legacy route redirect for bookmarks */}
-            <Route path="/workflows" element={<WorkflowLibrary />} />
-          </Route>
-        </Routes>
+        <Suspense fallback={<div className="p-4 text-sm text-slate-500">Loading Sweet Tea Studio…</div>}>
+          <Routes>
+            <Route element={
+              <ErrorBoundary>
+                <Layout />
+              </ErrorBoundary>
+            }>
+              <Route path="/" element={<PromptStudio />} />
+              <Route path="/projects" element={<Projects />} />
+              <Route path="/pipes" element={<WorkflowLibrary />} />
+              <Route path="/gallery" element={<Gallery />} />
+              <Route path="/library" element={<PromptLibrary />} />
+              <Route path="/models" element={<Models />} />
+              <Route path="/settings" element={<Settings />} />
+              {/* Legacy route redirect for bookmarks */}
+              <Route path="/workflows" element={<WorkflowLibrary />} />
+            </Route>
+          </Routes>
+        </Suspense>
       </BrowserRouter>
     </GenerationProvider>
   );

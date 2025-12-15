@@ -359,6 +359,32 @@ export const api = {
         return res.json();
     },
 
+    createCollection: async (payload: { name: string }): Promise<Collection> => {
+        const res = await fetch(`${API_BASE}/collections/`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+        });
+
+        if (!res.ok) {
+            const error = await res.json().catch(() => ({}));
+            throw new Error(error.detail || "Failed to create collection");
+        }
+
+        return res.json();
+    },
+
+    deleteCollection: async (collectionId: number, keepImages = false): Promise<void> => {
+        const res = await fetch(`${API_BASE}/collections/${collectionId}?keep_images=${keepImages}`, {
+            method: "DELETE",
+        });
+
+        if (!res.ok) {
+            const error = await res.json().catch(() => ({}));
+            throw new Error(error.detail || "Failed to delete collection");
+        }
+    },
+
     // --- Workflows ---
     getWorkflows: async (): Promise<WorkflowTemplate[]> => {
         const res = await fetch(`${API_BASE}/workflows/`);

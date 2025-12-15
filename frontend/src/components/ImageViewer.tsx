@@ -1,8 +1,7 @@
 import React from "react";
-import { Download, ExternalLink, X, Check, Trash2, ArrowLeft, ArrowRight, RotateCcw, Copy } from "lucide-react";
+import { Download, ExternalLink, X, Check, ArrowLeft, ArrowRight, RotateCcw, Copy } from "lucide-react";
 import { Button } from "./ui/button";
 import { api, Image as ApiImage, GalleryItem } from "@/lib/api";
-import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 
 

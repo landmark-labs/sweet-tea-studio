@@ -106,106 +106,111 @@ def _process_single_image(
     
     if not image_bytes:
         return None
-    
+
     os.makedirs(save_dir, exist_ok=True)
     final_filename = filename
-    
-    # Process and save
+    full_path = os.path.join(save_dir, final_filename)
+    provenance_json = json.dumps(provenance_data, ensure_ascii=False)
+
+    # Process and save (single write path)
     if pil_available:
         try:
-            # Auto-convert PNG to JPG
+            image = PILImage.open(io.BytesIO(image_bytes))
+            target_format = (image.format or "").upper() or "PNG"
+
+            # Auto-convert PNG to JPG for faster writes and smaller files
             if filename.lower().endswith(".png"):
-                try:
-                    image = PILImage.open(io.BytesIO(image_bytes))
-                    if image.mode in ("RGBA", "P"):
-                        image = image.convert("RGB")
-                    final_filename = os.path.splitext(filename)[0] + ".jpg"
-                    full_path = os.path.join(save_dir, final_filename)
-                    image.save(full_path, "JPEG", quality=95)
-                except Exception:
-                    full_path = os.path.join(save_dir, filename)
-                    with open(full_path, 'wb') as f:
-                        f.write(image_bytes)
-                    final_filename = filename
+                if image.mode in ("RGBA", "P"):
+                    image = image.convert("RGB")
+                final_filename = os.path.splitext(filename)[0] + ".jpg"
+                target_format = "JPEG"
+                full_path = os.path.join(save_dir, final_filename)
             else:
-                full_path = os.path.join(save_dir, filename)
-                with open(full_path, 'wb') as f:
-                    f.write(image_bytes)
-            
-            # Embed provenance metadata
-            try:
-                import json
-                provenance_json = json.dumps(provenance_data, ensure_ascii=False)
-                
-                with PILImage.open(full_path) as img_embed:
-                    fmt = (img_embed.format or "").upper()
-                    if fmt in ("JPEG", "JPG"):
-                        try:
-                            import piexif
-                            # Check if piexif.helper exists (some versions don't have it)
-                            if not hasattr(piexif, 'helper'):
-                                raise AttributeError("piexif.helper not available")
-                            exif_dict = {"0th": {}, "Exif": {}, "GPS": {}, "1st": {}}
-                            
-                            # XPTitle (0x9C9B) - Project name
-                            if project_name:
-                                title_bytes = project_name.encode("utf-16le") + b"\x00\x00"
-                                exif_dict["0th"][0x9C9B] = title_bytes
-                            
-                            # XPSubject (0x9C9F) - Destination folder
-                            if folder_name:
-                                subject_bytes = folder_name.encode("utf-16le") + b"\x00\x00"
-                                exif_dict["0th"][0x9C9F] = subject_bytes
-                            
-                            # XPComment (0x9C9C) - Full generation params
-                            xp_comment_bytes = provenance_json.encode("utf-16le") + b"\x00\x00"
-                            exif_dict["0th"][0x9C9C] = xp_comment_bytes
-                            
-                            exif_bytes = piexif.dump(exif_dict)
-                            img_embed.save(full_path, "JPEG", quality=95, exif=exif_bytes)
-                        except (ImportError, AttributeError):
-                            # piexif not available - use Pillow's native EXIF support
-                            try:
-                                from PIL import Image as PILImg
-                                from PIL.ExifTags import Base
-                                
-                                # Get or create EXIF data
-                                exif_data = img_embed.getexif()
-                                
-                                # XPTitle (0x9C9B) - Project name
-                                if project_name:
-                                    exif_data[0x9C9B] = project_name.encode("utf-16le") + b"\x00\x00"
-                                
-                                # XPSubject (0x9C9F) - Destination folder
-                                if folder_name:
-                                    exif_data[0x9C9F] = folder_name.encode("utf-16le") + b"\x00\x00"
-                                
-                                # XPComment (0x9C9C) - Full generation params
-                                exif_data[0x9C9C] = provenance_json.encode("utf-16le") + b"\x00\x00"
-                                
-                                img_embed.save(full_path, "JPEG", quality=95, exif=exif_data)
-                            except Exception as pillow_exif_err:
-                                print(f"Pillow EXIF failed: {pillow_exif_err}, falling back to sidecar")
-                                img_embed.save(full_path, "JPEG", quality=95, comment=provenance_json.encode("utf-8"))
-                                sidecar_path = full_path.rsplit(".", 1)[0] + ".json"
-                                with open(sidecar_path, "w", encoding="utf-8") as sf:
-                                    sf.write(provenance_json)
-                    elif fmt == "PNG":
-                        from PIL import PngImagePlugin
-                        png_info = PngImagePlugin.PngInfo()
-                        png_info.add_text("Comment", provenance_json)
-                        png_info.add_text("Description", provenance_json)
-                        img_embed.save(full_path, pnginfo=png_info)
-            except Exception as embed_err:
-                print(f"Failed to embed metadata: {embed_err}")
-                
+                full_path = os.path.join(save_dir, final_filename)
+
+            exif_bytes = None
+            png_info = None
+            sidecar_json: str | None = None
+
+            if target_format in ("JPEG", "JPG"):
+                try:
+                    import piexif
+                    # Check if piexif.helper exists (some versions don't have it)
+                    if not hasattr(piexif, 'helper'):
+                        raise AttributeError("piexif.helper not available")
+                    exif_dict = {"0th": {}, "Exif": {}, "GPS": {}, "1st": {}}
+
+                    # XPTitle (0x9C9B) - Project name
+                    if project_name:
+                        title_bytes = project_name.encode("utf-16le") + b"\x00\x00"
+                        exif_dict["0th"][0x9C9B] = title_bytes
+
+                    # XPSubject (0x9C9F) - Destination folder
+                    if folder_name:
+                        subject_bytes = folder_name.encode("utf-16le") + b"\x00\x00"
+                        exif_dict["0th"][0x9C9F] = subject_bytes
+
+                    # XPComment (0x9C9C) - Full generation params
+                    xp_comment_bytes = provenance_json.encode("utf-16le") + b"\x00\x00"
+                    exif_dict["0th"][0x9C9C] = xp_comment_bytes
+
+                    exif_bytes = piexif.dump(exif_dict)
+                except (ImportError, AttributeError):
+                    # piexif not available - use Pillow's native EXIF support
+                    try:
+                        exif_data = image.getexif()
+
+                        # XPTitle (0x9C9B) - Project name
+                        if project_name:
+                            exif_data[0x9C9B] = project_name.encode("utf-16le") + b"\x00\x00"
+
+                        # XPSubject (0x9C9F) - Destination folder
+                        if folder_name:
+                            exif_data[0x9C9F] = folder_name.encode("utf-16le") + b"\x00\x00"
+
+                        # XPComment (0x9C9C) - Full generation params
+                        exif_data[0x9C9C] = provenance_json.encode("utf-16le") + b"\x00\x00"
+
+                        exif_bytes = exif_data.tobytes()
+                    except Exception as pillow_exif_err:
+                        print(f"Pillow EXIF failed: {pillow_exif_err}, falling back to sidecar")
+                        sidecar_json = provenance_json
+                except Exception as embed_err:
+                    print(f"Failed to build EXIF: {embed_err}")
+            elif target_format == "PNG":
+                try:
+                    from PIL import PngImagePlugin
+                    png_info = PngImagePlugin.PngInfo()
+                    png_info.add_text("Comment", provenance_json)
+                    png_info.add_text("Description", provenance_json)
+                except Exception as embed_err:
+                    print(f"Failed to prepare PNG metadata: {embed_err}")
+            else:
+                # Unsupported formats still get a sidecar to preserve provenance
+                sidecar_json = provenance_json
+
+            save_kwargs = {}
+            if exif_bytes:
+                save_kwargs["exif"] = exif_bytes
+            if png_info:
+                save_kwargs["pnginfo"] = png_info
+            if target_format in ("JPEG", "JPG"):
+                save_kwargs["quality"] = 95
+
+            image.save(full_path, target_format, **save_kwargs)
+
+            if sidecar_json:
+                sidecar_path = full_path.rsplit(".", 1)[0] + ".json"
+                with open(sidecar_path, "w", encoding="utf-8") as sf:
+                    sf.write(sidecar_json)
+
         except Exception as e:
             print(f"PIL processing failed: {e}")
-            full_path = os.path.join(save_dir, filename)
+            full_path = os.path.join(save_dir, final_filename)
             with open(full_path, 'wb') as f:
                 f.write(image_bytes)
     else:
-        full_path = os.path.join(save_dir, filename)
+        full_path = os.path.join(save_dir, final_filename)
         with open(full_path, 'wb') as f:
             f.write(image_bytes)
     

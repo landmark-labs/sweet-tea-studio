@@ -9,8 +9,6 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { PromptAutocompleteTextarea } from "@/components/PromptAutocompleteTextarea";
-import { sendTelemetryEvent } from "@/lib/telemetry";
-import { labels } from "@/ui/labels";
 import { api } from "@/lib/api";
 import { PromptItem } from "@/lib/types";
 
@@ -38,10 +36,8 @@ interface DynamicFormProps {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     onSubmit: (data: any) => void;
     nodeOrder?: string[];
-    isLoading?: boolean;
     persistenceKey?: string;
     engineId?: string;
-    submitLabel?: string;
     // specific controlled props
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     formData?: any;
@@ -50,7 +46,6 @@ interface DynamicFormProps {
     onFieldFocus?: (key: string) => void;
     onFieldBlur?: (key: string, relatedTarget: Element | null) => void;
     activeField?: string;
-    submitDisabled?: boolean;
     onReset?: () => void;
     snippets?: PromptItem[];
     projectSlug?: string; // If set, uploads go to project-specific input folder
@@ -61,17 +56,13 @@ export const DynamicForm = React.memo(function DynamicForm({
     schema,
     onSubmit,
     nodeOrder,
-    isLoading,
     persistenceKey,
     engineId,
-    submitLabel = "run pipe",
     formData: externalData,
     onChange: externalOnChange,
     onFieldFocus,
     onFieldBlur,
     activeField,
-
-    submitDisabled,
     onReset,
     snippets = [],
     projectSlug,
@@ -335,32 +326,6 @@ export const DynamicForm = React.memo(function DynamicForm({
         return titleA.localeCompare(titleB);
     };
 
-    const { topLevelFields, nodeFieldsGroup } = useMemo(() => {
-        const top = [] as string[];
-        if (!schema) return { topLevelFields: [], nodeFieldsGroup: [] };
-
-        // Define STRICT core fields that should stay at the top
-        const coreKeywords = ["resolution", "width", "height", "checkpoint", "denoise", "refiner"];
-
-        // Helper to check if a field is "core"
-        const isCore = (key: string) => {
-            const lower = key.toLowerCase();
-            const title = (schema[key]?.title || "").toLowerCase();
-            return coreKeywords.some(kw => lower.includes(kw) || title.includes(kw));
-        };
-
-        const allKeys = Object.keys(schema);
-        const core = allKeys.filter((key) => !groups.inputs.includes(key));
-
-        core.forEach(key => {
-            if (isCore(key)) {
-                top.push(key);
-            }
-        });
-
-        return { topLevelFields: top, nodeFieldsGroup: [] };
-    }, [groups.inputs, schema]);
-
     // User-managed core keys: fields with x_core: true go to Core Controls
     // All others go to Expanded Controls (accordion)
     const strictCoreKeys = useMemo(() => {
@@ -423,21 +388,6 @@ export const DynamicForm = React.memo(function DynamicForm({
             .sort(compareGroups);
         return { promptExtras, loraExtras, nodeEntries };
     }, [compareGroups, groups.loras, groups.nodes, groups.prompts, strictCoreKeys]);
-
-    // Check customization based on strict fields
-    const isStrictSettingsCustomized = useMemo(() => {
-        const fieldsToCheck = [
-            ...strictSettingsFields.promptExtras,
-            ...strictSettingsFields.loraExtras,
-            ...strictSettingsFields.nodeEntries.flatMap((g) => g.keys),
-        ];
-
-        return fieldsToCheck.some((key) => {
-            if (!(key in formData)) return false;
-            return formData[key] !== defaults[key];
-        });
-    }, [defaults, formData, strictSettingsFields]);
-
 
     const [settingsOpen, setSettingsOpen] = useState(false);
 
@@ -589,8 +539,6 @@ export const DynamicForm = React.memo(function DynamicForm({
                                 }}
                             >
                                 <SelectTrigger id={key} className={cn("h-8 text-xs", isActive && "ring-1 ring-blue-400 border-blue-400")}>
-                                    {/* Debugging helpers */}
-                                    {key.includes("checkpoint") && console.log("[DEBUG] Rendering Checkpoint Select", key, formData[key], field.enum)}
                                     <div className="truncate text-left pr-4">
                                         <SelectValue placeholder="Select..." />
                                     </div>

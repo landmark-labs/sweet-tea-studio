@@ -5,7 +5,7 @@ import { ImageViewer } from "./ImageViewer";
 import { api, Image as ApiImage } from "@/lib/api";
 
 describe("ImageViewer prompt copy", () => {
-    let metadataSpy: ReturnType<typeof vi.spyOn>;
+    let metadataSpy: ReturnType<typeof vi.spyOn<typeof api, "getImageMetadata">>;
     const sampleImage: ApiImage = {
         id: 1,
         job_id: 1,
@@ -16,10 +16,11 @@ describe("ImageViewer prompt copy", () => {
 
     beforeEach(() => {
         metadataSpy = vi.spyOn(api, "getImageMetadata").mockResolvedValue({
+            path: sampleImage.path,
             prompt: "positive from png",
             negative_prompt: "negative from png",
             parameters: {},
-            source: "png"
+            source: "database"
         });
     });
 
@@ -32,10 +33,11 @@ describe("ImageViewer prompt copy", () => {
 
     it("copies the positive prompt with the Clipboard API and shows confirmation", async () => {
         metadataSpy.mockResolvedValueOnce({
+            path: sampleImage.path,
             prompt: "A scenic positive",
             negative_prompt: "A cautious negative",
             parameters: {},
-            source: "png"
+            source: "database"
         });
         const writeText = vi.fn().mockResolvedValue(undefined);
         Object.defineProperty(navigator, "clipboard", { value: { writeText }, writable: true, configurable: true });
@@ -56,10 +58,11 @@ describe("ImageViewer prompt copy", () => {
 
     it("falls back to execCommand when Clipboard API is unavailable", async () => {
         metadataSpy.mockResolvedValueOnce({
+            path: sampleImage.path,
             prompt: "Another positive",
             negative_prompt: "Another negative",
             parameters: {},
-            source: "png"
+            source: "database"
         });
         Object.defineProperty(navigator, "clipboard", { value: undefined, writable: true, configurable: true });
         const execSpy = vi.fn().mockReturnValue(true);
