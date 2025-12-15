@@ -429,7 +429,19 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
         const compiled = items.map(i => i.content).join(", ");
         const currentVal = valuesRef.current[targetField] || "";
 
-        if (compiled !== currentVal) {
+        // NEW: Compare semantic content, not exact strings
+        // This prevents cursor jump when the only difference is delimiter formatting
+        // e.g., "a,b" vs "a, b" should be considered equivalent
+        const normalizeForComparison = (str: string) => {
+            // Split by comma (with or without surrounding spaces), filter empty, trim each
+            return str.split(/\s*,\s*/).filter(s => s.trim()).map(s => s.trim()).join("|");
+        };
+
+        const compiledNormalized = normalizeForComparison(compiled);
+        const currentNormalized = normalizeForComparison(currentVal);
+
+        // Only update if semantic content differs
+        if (compiledNormalized !== currentNormalized) {
             // MARK: We record this output so Reconcile knows to ignore it on echo
             lastCompiledRef.current = { field: targetField, value: compiled };
             onUpdate(targetField, compiled);
