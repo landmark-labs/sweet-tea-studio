@@ -659,7 +659,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
                     <span className="text-[10px] font-bold text-slate-400 uppercase block">Snippets (Double-click to Add, long-press to Edit)</span>
                 </div>
                 <ScrollArea className="h-72 w-full">
-                    <div className="grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-2 items-start min-h-[40px] p-1">
+                    <div className="grid grid-cols-2 gap-2 items-start min-h-[40px] p-1">
                         {library.map(snippet => (
                             <ContextMenu key={snippet.id}>
                                 <HoverCard openDelay={500} closeDelay={80}>
@@ -754,8 +754,8 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
                             items={items.map(i => i.id)}
                             strategy={rectSortingStrategy}
                         >
-                            {/* Canvas grid mirrors library spacing so blocks tessellate cleanly when rearranged. */}
-                            <div className="grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] auto-rows-[minmax(32px,auto)] items-start gap-2 min-h-[100px] p-2 rounded-xl border-2 border-dashed border-slate-300 bg-white/80 transition-colors hover:bg-white/100 relative group/canvas">
+                            {/* Canvas grid uses 2-column layout to match snippet bank. */}
+                            <div className="grid grid-cols-2 auto-rows-[minmax(32px,auto)] items-start gap-2 min-h-[100px] p-2 rounded-xl border-2 border-dashed border-slate-300 bg-white/80 transition-colors hover:bg-white/100 relative group/canvas">
 
                                 {/* Floating Controls */}
                                 {targetField && (
