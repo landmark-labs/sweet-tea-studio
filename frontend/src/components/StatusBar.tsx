@@ -4,7 +4,7 @@
  * Includes ComfyUI connection state and launch button
  */
 import { useEffect, useState } from "react";
-import { api, getApiBase, ComfyLaunchConfig } from "@/lib/api";
+import { getApiBase } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { labels } from "@/ui/labels";
 import {
@@ -13,19 +13,7 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Button } from "@/components/ui/button";
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-    DialogTrigger,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Play, Loader2, Settings2 } from "lucide-react";
+import { Play, Loader2 } from "lucide-react";
 
 interface StatusItem {
     state: "ok" | "warn" | "error";
@@ -60,18 +48,6 @@ interface StatusSummary {
     io: StatusItem;
     models: ModelsStatus;
 }
-
-const stateColors: Record<StatusItem["state"], string> = {
-    ok: "bg-emerald-500",
-    warn: "bg-amber-500",
-    error: "bg-red-500",
-};
-
-const stateBorderColors: Record<StatusItem["state"], string> = {
-    ok: "border-emerald-500/30",
-    warn: "border-amber-500/30",
-    error: "border-red-500/30",
-};
 
 interface StatusPillProps {
     label: string;
@@ -140,13 +116,6 @@ export function StatusBar({ collapsed }: { collapsed?: boolean }) {
     const [isLaunching, setIsLaunching] = useState(false);
     const [actionFeedback, setActionFeedback] = useState<string | null>(null);
     const [engineAction, setEngineAction] = useState<"starting" | "stopping" | null>(null);
-    const [configDialogOpen, setConfigDialogOpen] = useState(false);
-    const [launchConfig, setLaunchConfig] = useState<ComfyLaunchConfig | null>(null);
-    const [pathInput, setPathInput] = useState("");
-    const [argsInput, setArgsInput] = useState("");
-    const [configError, setConfigError] = useState<string | null>(null);
-    const [configLoading, setConfigLoading] = useState(false);
-    const [configSaving, setConfigSaving] = useState(false);
 
     const fetchStatus = async () => {
         try {
@@ -155,7 +124,6 @@ export function StatusBar({ collapsed }: { collapsed?: boolean }) {
                 const data = await res.json();
                 setStatus(data);
 
-                // Clear transient action states once the backend reflects the target state
                 if (data?.engine) {
                     if (engineAction === "starting" && data.engine.is_connected) {
                         setEngineAction(null);
@@ -168,7 +136,6 @@ export function StatusBar({ collapsed }: { collapsed?: boolean }) {
             }
         } catch (e) {
             console.error("Failed to fetch status:", e);
-            // Set error state if we can't reach the backend
             setStatus({
                 engine: { state: "error", detail: "cannot reach backend", is_connected: false, can_launch: false },
                 queue: { state: "error", detail: "unknown", pending_jobs: 0, oldest_job_age_s: 0 },
@@ -199,7 +166,6 @@ export function StatusBar({ collapsed }: { collapsed?: boolean }) {
                 setActionFeedback(data.message || `${action}ed ComfyUI`);
             }
 
-            // Refresh status regardless to update UI
             setTimeout(fetchStatus, 500);
             setTimeout(fetchStatus, 2500);
         } catch (e) {
@@ -211,57 +177,12 @@ export function StatusBar({ collapsed }: { collapsed?: boolean }) {
         }
     };
 
-    const loadLaunchConfig = async () => {
-        setConfigLoading(true);
-        setConfigError(null);
-        try {
-            const config = await api.getComfyUILaunchConfig();
-            setLaunchConfig(config);
-            setPathInput(config.path || "");
-            setArgsInput((config.args || []).join(" "));
-        } catch (e) {
-            const message = e instanceof Error ? e.message : "Failed to load ComfyUI settings";
-            setConfigError(message);
-        } finally {
-            setConfigLoading(false);
-        }
-    };
-
-    const handleSaveLaunchConfig = async () => {
-        setConfigSaving(true);
-        setConfigError(null);
-        try {
-            const payload = {
-                path: pathInput.trim() === "" ? null : pathInput.trim(),
-                args: argsInput.trim() === "" ? null : argsInput.trim(),
-            };
-
-            const updated = await api.saveComfyUILaunchConfig(payload);
-            setLaunchConfig(updated);
-            setConfigDialogOpen(false);
-            fetchStatus();
-        } catch (e) {
-            const message = e instanceof Error ? e.message : "Failed to save ComfyUI settings";
-            setConfigError(message);
-        } finally {
-            setConfigSaving(false);
-        }
-    };
-
-    useEffect(() => {
-        if (configDialogOpen) {
-            loadLaunchConfig();
-        }
-    }, [configDialogOpen]);
-
     useEffect(() => {
         fetchStatus();
-        // Poll every 5 seconds
         const interval = setInterval(fetchStatus, 5000);
         return () => clearInterval(interval);
     }, []);
 
-    // Don't render anything while loading initially
     if (isLoading && !status) {
         return null;
     }
@@ -273,13 +194,12 @@ export function StatusBar({ collapsed }: { collapsed?: boolean }) {
     const isProcessRunning = status.engine.is_process_running ?? status.engine.is_connected;
     const cooldownSeconds = status.engine.launcher_cooldown ?? 0;
 
-    // Build extra info for engine
     const engineExtraInfoParts = [] as string[];
     if (!status.engine.is_connected) {
         if (status.engine.can_launch) {
             engineExtraInfoParts.push("click to start comfyui");
         } else {
-            engineExtraInfoParts.push("comfyui not detected");
+            engineExtraInfoParts.push("comfyui not detected - configure in settings");
         }
     }
     if (status.engine.launcher_error) {
@@ -293,19 +213,16 @@ export function StatusBar({ collapsed }: { collapsed?: boolean }) {
     }
     const engineExtraInfo = engineExtraInfoParts.length ? engineExtraInfoParts.join("\n") : undefined;
 
-    // Build extra info for queue
     const queueExtraInfo =
         status.queue.pending_jobs > 0
             ? `${status.queue.pending_jobs} job(s) queued`
             : undefined;
 
-    // Build extra info for models
     const modelsExtraInfo =
         status.models.missing_models > 0
             ? `${status.models.missing_models} model(s) missing`
             : undefined;
 
-    // Determine if engine pill should be clickable
     const canStart = !isProcessRunning && status.engine.can_launch && (cooldownSeconds ?? 0) <= 0;
     const canStop = isProcessRunning && (cooldownSeconds ?? 0) <= 0;
     const actionLabel = canStart ? "start" : canStop ? "stop" : undefined;
@@ -318,7 +235,6 @@ export function StatusBar({ collapsed }: { collapsed?: boolean }) {
     const displayEngineStatus: EngineStatusItem = (() => {
         if (!status) return { state: "error", detail: "unknown" } as EngineStatusItem;
 
-        // Show transitional colors while the launch/stop command is in flight
         if (engineAction === "starting" && !status.engine.is_connected) {
             return {
                 ...status.engine,
@@ -339,116 +255,29 @@ export function StatusBar({ collapsed }: { collapsed?: boolean }) {
     })();
 
     return (
-        <>
-
-            <div className={cn("flex flex-col gap-0.5 px-2 py-2", collapsed ? "items-center" : "items-stretch")}>
-
-                {/* Engine Status & Config */}
-                <div className="flex items-center gap-1 group">
-                    <div className="flex-1 min-w-0">
-                        <StatusPill
-                            label={labels.status.engine}
-                            status={displayEngineStatus}
-                            extraInfo={engineExtraInfo}
-                            onClick={onEngineClick}
-                            actionLabel={actionLabel}
-                            actionLoading={isLaunching}
-                            collapsed={collapsed}
-                        />
-                    </div>
-                    {!collapsed && (
-                        <TooltipProvider delayDuration={200}>
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-7 w-7 opacity-50 group-hover:opacity-100 transition-opacity"
-                                        onClick={() => setConfigDialogOpen(true)}
-                                    >
-                                        <Settings2 className="h-3.5 w-3.5 text-muted-foreground" />
-                                        <span className="sr-only">Configure ComfyUI</span>
-                                    </Button>
-                                </TooltipTrigger>
-                                <TooltipContent side="right">configure ComfyUI path & args</TooltipContent>
-                            </Tooltip>
-                        </TooltipProvider>
-                    )}
-                </div>
-
-                <StatusPill
-                    label={labels.status.queue}
-                    status={status.queue}
-                    extraInfo={queueExtraInfo}
-                    collapsed={collapsed}
-                />
-                <StatusPill label={labels.status.io} status={status.io} collapsed={collapsed} />
-                <StatusPill
-                    label={labels.status.models}
-                    status={status.models}
-                    extraInfo={modelsExtraInfo}
-                    collapsed={collapsed}
-                />
-            </div>
-
-            <Dialog open={configDialogOpen} onOpenChange={setConfigDialogOpen}>
-                <DialogContent className="sm:max-w-lg">
-                    <DialogHeader>
-                        <DialogTitle>ComfyUI launch settings</DialogTitle>
-                        <DialogDescription>
-                            Point Sweet Tea Studio at your ComfyUI folder and optional launch arguments.
-                            Leave fields blank to fall back to automatic detection and defaults.
-                        </DialogDescription>
-                    </DialogHeader>
-
-                    <div className="space-y-4 py-2">
-                        <div className="space-y-2">
-                            <Label htmlFor="comfy-path">ComfyUI folder</Label>
-                            <Input
-                                id="comfy-path"
-                                placeholder="/path/to/ComfyUI"
-                                value={pathInput}
-                                onChange={(e) => setPathInput(e.target.value)}
-                                disabled={configLoading}
-                            />
-                            <p className="text-xs text-muted-foreground">
-                                Leave blank to let Sweet Tea Studio autodetect ComfyUI.
-                            </p>
-                        </div>
-
-                        <div className="space-y-2">
-                            <Label htmlFor="comfy-args">Launch arguments</Label>
-                            <Input
-                                id="comfy-args"
-                                placeholder="--listen --port 8188"
-                                value={argsInput}
-                                onChange={(e) => setArgsInput(e.target.value)}
-                                disabled={configLoading}
-                            />
-                            <p className="text-xs text-muted-foreground">
-                                Optional flags passed to ComfyUI. Leave empty to use defaults.
-                            </p>
-                        </div>
-
-                        {launchConfig && (
-                            <p className="text-xs text-muted-foreground">
-                                Using {launchConfig.detection_method || "unknown method"} • port {launchConfig.port}
-                            </p>
-                        )}
-
-                        {configError && <p className="text-sm text-destructive">{configError}</p>}
-                    </div>
-
-                    <DialogFooter className="gap-2 sm:gap-0">
-                        <Button variant="ghost" onClick={() => setConfigDialogOpen(false)}>
-                            Cancel
-                        </Button>
-                        <Button onClick={handleSaveLaunchConfig} disabled={configSaving || configLoading}>
-                            {configSaving ? "Saving..." : "Save"}
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
-        </>
+        <div className={cn("flex flex-col gap-0.5 px-2 py-2", collapsed ? "items-center" : "items-stretch")}>
+            <StatusPill
+                label={labels.status.engine}
+                status={displayEngineStatus}
+                extraInfo={engineExtraInfo}
+                onClick={onEngineClick}
+                actionLabel={actionLabel}
+                actionLoading={isLaunching}
+                collapsed={collapsed}
+            />
+            <StatusPill
+                label={labels.status.queue}
+                status={status.queue}
+                extraInfo={queueExtraInfo}
+                collapsed={collapsed}
+            />
+            <StatusPill label={labels.status.io} status={status.io} collapsed={collapsed} />
+            <StatusPill
+                label={labels.status.models}
+                status={status.models}
+                extraInfo={modelsExtraInfo}
+                collapsed={collapsed}
+            />
+        </div>
     );
 }
