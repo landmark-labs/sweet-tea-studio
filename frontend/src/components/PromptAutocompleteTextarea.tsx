@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
@@ -72,15 +72,15 @@ export function PromptAutocompleteTextarea({
     const abortControllerRef = useRef<AbortController | null>(null);
 
     const [cursor, setCursor] = useState(0);
-    const [activeToken, setActiveToken] = useState("");
     const [suggestions, setSuggestions] = useState<TagSuggestion[]>([]);
     const [highlightIndex, setHighlightIndex] = useState(0);
     const [isOpen, setIsOpen] = useState(false);
-    const [isFocused, setIsFocused] = useState(false);
+    const [dropdownRect, setDropdownRect] = useState<{ top: number; left: number; width: number } | null>(null);
 
     const updateCursor = () => {
         if (!textareaRef.current) return;
-        setCursor(textareaRef.current.selectionStart || 0);
+        const next = textareaRef.current.selectionStart || 0;
+        setCursor((prev) => (prev === next ? prev : next));
     };
 
     // Scroll Sync
@@ -98,18 +98,14 @@ export function PromptAutocompleteTextarea({
         return segment.trim();
     }, [value, cursor]);
 
-    useEffect(() => {
-        setActiveToken(currentToken);
-    }, [currentToken]);
+    // Defer token resolution to keep typing smooth under heavy render load
+    const deferredToken = useDeferredValue(currentToken);
 
     useEffect(() => {
-        const token = activeToken.trim();
+        const token = deferredToken.trim();
         const normalizedToken = token.replace(/\s+/g, "_");
 
-        // DEBUG: Log all relevant state on every run
-        console.log("[AC Debug]", { activeToken, normalizedLen: normalizedToken.length, cursor });
-
-        // Only check token length, NOT isFocused - blur shouldn't stop autocomplete
+        // Only check token length, NOT focus state - blur shouldn't stop autocomplete
         if (normalizedToken.length < 2) {
             setIsOpen(false);
             setSuggestions([]);
@@ -125,7 +121,6 @@ export function PromptAutocompleteTextarea({
 
         const load = async () => {
             if (cacheRef.current.has(normalizedToken)) {
-                console.log("[AC Debug] Cache hit:", normalizedToken, cacheRef.current.get(normalizedToken)?.length);
                 setSuggestions(cacheRef.current.get(normalizedToken) || []);
                 setIsOpen(true);
                 setHighlightIndex(0);
@@ -133,18 +128,16 @@ export function PromptAutocompleteTextarea({
             }
 
             try {
-                console.log("[AC Debug] Fetching:", normalizedToken);
                 const data = await api.getTagSuggestions(normalizedToken, 25, controller.signal);
                 if (controller.signal.aborted) return;
 
-                console.log("[AC Debug] Got results:", data?.length);
                 cacheRef.current.set(normalizedToken, data);
                 setSuggestions(data);
                 setIsOpen(true);
                 setHighlightIndex(0);
             } catch (e) {
                 if (e instanceof Error && e.name === 'AbortError') return;
-                console.error("[AC Debug] Error:", e);
+                console.error("Autocomplete suggestion fetch failed", e);
                 setSuggestions([]);
                 setIsOpen(false);
             }
@@ -157,10 +150,31 @@ export function PromptAutocompleteTextarea({
                 abortControllerRef.current.abort();
             }
         };
-    }, [activeToken]); // Removed isFocused dependency
+    }, [deferredToken]); // Removed isFocused dependency
+
+    // Keep dropdown aligned without forcing layout thrash on every render
+    useEffect(() => {
+        const updateRect = () => {
+            if (!textareaRef.current) return;
+            const rect = textareaRef.current.getBoundingClientRect();
+            setDropdownRect({
+                top: rect.bottom + window.scrollY + 4,
+                left: rect.left + window.scrollX,
+                width: rect.width,
+            });
+        };
+
+        updateRect();
+        window.addEventListener("resize", updateRect);
+        window.addEventListener("scroll", updateRect, true);
+        return () => {
+            window.removeEventListener("resize", updateRect);
+            window.removeEventListener("scroll", updateRect, true);
+        };
+    }, []);
 
     const rankedSuggestions = useMemo(() => {
-        const token = activeToken.trim();
+        const token = deferredToken.trim();
         if (!token) return [];
         return suggestions
             .map((s) => ({ suggestion: s, score: computeScore(token, s.name) }))
@@ -172,7 +186,22 @@ export function PromptAutocompleteTextarea({
             })
             .slice(0, 15)
             .map((item) => item.suggestion);
-    }, [suggestions, activeToken]);
+    }, [suggestions, deferredToken]);
+
+    const showDropdown = isOpen && rankedSuggestions.length > 0;
+
+    useEffect(() => {
+        if (!showDropdown || !textareaRef.current) return;
+        const rect = textareaRef.current.getBoundingClientRect();
+        setDropdownRect((prev) => {
+            const next = {
+                top: rect.bottom + window.scrollY + 4,
+                left: rect.left + window.scrollX,
+                width: rect.width,
+            };
+            return prev && prev.top === next.top && prev.left === next.left && prev.width === next.width ? prev : next;
+        });
+    }, [showDropdown, value, cursor]);
 
     const insertSuggestion = (name: string) => {
         if (!textareaRef.current) return;
@@ -285,8 +314,6 @@ export function PromptAutocompleteTextarea({
     }, [debouncedValue, snippets, highlightSnippets]);
 
 
-    const showDropdown = isOpen && rankedSuggestions.length > 0;
-
     return (
         <div className="relative group/container w-full">
             {/* Overlay for highlighting */}
@@ -316,11 +343,11 @@ export function PromptAutocompleteTextarea({
                 value={value}
                 onChange={(e) => {
                     onValueChange(e.target.value);
-                    setCursor(e.target.selectionStart || 0);
+                    const next = e.target.selectionStart || 0;
+                    setCursor((prev) => (prev === next ? prev : next));
                     props.onChange?.(e);
                 }}
                 onFocus={(e) => {
-                    setIsFocused(true);
                     updateCursor();
                     props.onFocus?.(e);
                 }}
@@ -331,7 +358,6 @@ export function PromptAutocompleteTextarea({
                         // Only close if focus is truly outside (not on dropdown buttons either)
                         const active = document.activeElement;
                         if (active !== textareaRef.current) {
-                            setIsFocused(false);
                             setIsOpen(false);
                         }
                     }, 300);
@@ -362,13 +388,13 @@ export function PromptAutocompleteTextarea({
                 onKeyDown={handleKeyDown}
             />
 
-            {showDropdown && textareaRef.current && createPortal(
+            {showDropdown && textareaRef.current && dropdownRect && createPortal(
                 <div
                     className="fixed z-[9999] rounded-lg border border-slate-300 bg-white shadow-2xl max-h-60 overflow-y-auto text-sm ring-1 ring-black/5"
                     style={{
-                        top: textareaRef.current.getBoundingClientRect().bottom + window.scrollY + 4,
-                        left: textareaRef.current.getBoundingClientRect().left + window.scrollX,
-                        width: textareaRef.current.getBoundingClientRect().width,
+                        top: dropdownRect.top,
+                        left: dropdownRect.left,
+                        width: dropdownRect.width,
                     }}
                 >
                     {rankedSuggestions.map((s, idx) => (
@@ -383,13 +409,13 @@ export function PromptAutocompleteTextarea({
                                 e.preventDefault();
                                 insertSuggestion(s.name);
                             }}
-                        >
-                            <div className="flex-1 min-w-0">
-                                <div className="font-semibold text-xs truncate">
-                                    {highlightMatch(s.name.replace(/_/g, " "), activeToken.replace(/_/g, " "))}
-                                </div>
-                                {s.description && (
-                                    <div className="text-[11px] text-slate-500 truncate">{s.description}</div>
+                            >
+                                <div className="flex-1 min-w-0">
+                                    <div className="font-semibold text-xs truncate">
+                                        {highlightMatch(s.name.replace(/_/g, " "), deferredToken.replace(/_/g, " "))}
+                                    </div>
+                                    {s.description && (
+                                        <div className="text-[11px] text-slate-500 truncate">{s.description}</div>
                                 )}
                             </div>
                             <div
