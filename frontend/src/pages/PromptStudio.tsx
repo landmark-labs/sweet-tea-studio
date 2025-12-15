@@ -539,6 +539,12 @@ export default function PromptStudio() {
           estimatedRemainingMs: stats?.estimatedRemainingMs,
           iterationsPerSecond: stats?.iterationsPerSecond,
         });
+      } else if (data.type === "generation_done") {
+        // ComfyUI finished - reset button immediately, don't wait for post-processing
+        setJobStatus("saving");
+        setProgress(100);
+        setIsSubmitting(false);
+        // Keep lastJobId so we can receive the final "completed" message with image paths
       } else if (data.type === "executing") {
         setJobStatus("processing");
         updateFeed(lastJobId, { status: "processing" });
@@ -571,8 +577,7 @@ export default function PromptStudio() {
           updateFeed(lastJobId, { status: "completed", progress: 100 });
         }
         setGalleryRefresh(prev => prev + 1);
-        // Reset button to idle immediately - Sweet Tea will process in background
-        setIsSubmitting(false);
+        // Cleanup - button was already reset by generation_done
         setLastJobId(null);
       } else if (data.type === "preview") {
         // Live Preview from KSampler

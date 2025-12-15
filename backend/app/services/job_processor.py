@@ -354,6 +354,10 @@ def process_job(job_id: int):
             
             images = client.get_images(prompt_id, progress_callback=on_progress)
             
+            # Immediately signal that ComfyUI is done - frontend can reset button now
+            # Post-processing (image saving, metadata embedding) happens below in background
+            manager.broadcast_sync({"type": "generation_done", "job_id": job_id, "image_count": len(images)}, str(job_id))
+            
             job.status = "completed"
             job.completed_at = datetime.utcnow()
             session.add(job)
