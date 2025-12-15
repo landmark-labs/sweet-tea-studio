@@ -70,6 +70,8 @@ export function PromptAutocompleteTextarea({
     const backdropRef = useRef<HTMLDivElement | null>(null);
     const cacheRef = useRef<Map<string, TagSuggestion[]>>(new Map());
     const abortControllerRef = useRef<AbortController | null>(null);
+    // Track intended cursor position to restore after external value changes add delimiters
+    const intendedCursorRef = useRef<number | null>(null);
 
     const [cursor, setCursor] = useState(0);
     const [suggestions, setSuggestions] = useState<TagSuggestion[]>([]);
@@ -90,6 +92,18 @@ export function PromptAutocompleteTextarea({
             backdropRef.current.scrollLeft = e.currentTarget.scrollLeft;
         }
     };
+
+    // Restore cursor position after external value changes (e.g., when delimiters are auto-inserted)
+    useEffect(() => {
+        if (intendedCursorRef.current !== null && textareaRef.current) {
+            const pos = Math.min(intendedCursorRef.current, value.length);
+            requestAnimationFrame(() => {
+                if (textareaRef.current && document.activeElement === textareaRef.current) {
+                    textareaRef.current.setSelectionRange(pos, pos);
+                }
+            });
+        }
+    }, [value]);
 
     const currentToken = useMemo(() => {
         const before = value.slice(0, cursor);
@@ -342,9 +356,10 @@ export function PromptAutocompleteTextarea({
                 ref={textareaRef}
                 value={value}
                 onChange={(e) => {
+                    const newCursor = e.target.selectionStart || 0;
+                    intendedCursorRef.current = newCursor;
                     onValueChange(e.target.value);
-                    const next = e.target.selectionStart || 0;
-                    setCursor((prev) => (prev === next ? prev : next));
+                    setCursor((prev) => (prev === newCursor ? prev : newCursor));
                     props.onChange?.(e);
                 }}
                 onFocus={(e) => {
@@ -409,13 +424,13 @@ export function PromptAutocompleteTextarea({
                                 e.preventDefault();
                                 insertSuggestion(s.name);
                             }}
-                            >
-                                <div className="flex-1 min-w-0">
-                                    <div className="font-semibold text-xs truncate">
-                                        {highlightMatch(s.name.replace(/_/g, " "), deferredToken.replace(/_/g, " "))}
-                                    </div>
-                                    {s.description && (
-                                        <div className="text-[11px] text-slate-500 truncate">{s.description}</div>
+                        >
+                            <div className="flex-1 min-w-0">
+                                <div className="font-semibold text-xs truncate">
+                                    {highlightMatch(s.name.replace(/_/g, " "), deferredToken.replace(/_/g, " "))}
+                                </div>
+                                {s.description && (
+                                    <div className="text-[11px] text-slate-500 truncate">{s.description}</div>
                                 )}
                             </div>
                             <div
