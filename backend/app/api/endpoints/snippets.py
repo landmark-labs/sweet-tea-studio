@@ -115,23 +115,48 @@ def reorder_snippets(snippet_ids: List[int]):
 
 @router.post("/bulk", response_model=List[SnippetRead])
 def bulk_upsert_snippets(snippets_data: List[SnippetCreate]):
-    """Bulk create/update snippets (used for migration from localStorage)."""
+    """
+    Bulk upsert snippets - true upsert pattern to prevent data loss.
+    - Matches existing snippets by label
+    - Updates content/color if label exists
+    - Inserts new snippets if label doesn't exist
+    - Deletes snippets whose labels are NOT in the incoming list
+    """
     with Session(engine) as session:
-        # Clear existing snippets and replace with new ones
+        # Get existing snippets indexed by label
         existing = session.exec(select(Snippet)).all()
-        for s in existing:
-            session.delete(s)
-        session.commit()
+        existing_by_label = {s.label: s for s in existing}
         
-        # Add new snippets
+        # Track which existing labels are still present
+        incoming_labels = set()
+        
+        # Upsert each incoming snippet
         for idx, data in enumerate(snippets_data):
-            snippet = Snippet(
-                label=data.label,
-                content=data.content,
-                color=data.color,
-                sort_order=idx
-            )
-            session.add(snippet)
+            incoming_labels.add(data.label)
+            
+            if data.label in existing_by_label:
+                # UPDATE existing snippet
+                snippet = existing_by_label[data.label]
+                snippet.content = data.content
+                snippet.color = data.color
+                snippet.sort_order = idx
+                snippet.updated_at = datetime.utcnow()
+                session.add(snippet)
+            else:
+                # INSERT new snippet
+                snippet = Snippet(
+                    label=data.label,
+                    content=data.content,
+                    color=data.color,
+                    sort_order=idx
+                )
+                session.add(snippet)
+        
+        # DELETE snippets that are no longer in the incoming list
+        for label, snippet in existing_by_label.items():
+            if label not in incoming_labels:
+                session.delete(snippet)
+        
         session.commit()
         
         snippets = session.exec(
