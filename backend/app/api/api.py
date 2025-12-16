@@ -13,7 +13,7 @@ api_router.include_router(projects.router, prefix="/projects", tags=["projects"]
 api_router.include_router(status.router, tags=["status"])
 api_router.include_router(models.router, tags=["models"])
 api_router.include_router(portfolio.router, prefix="/portfolio", tags=["portfolio"])
-api_router.include_router(snippets.router, tags=["snippets"])
+api_router.include_router(snippets.router, prefix="/snippets", tags=["snippets"])
 
 
 
