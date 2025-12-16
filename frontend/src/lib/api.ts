@@ -917,6 +917,21 @@ const parseSnippetJson = async <T>(res: Response): Promise<T> => {
         throw new Error(`Unexpected response from snippets API (${res.status}): ${body.slice(0, 200)}`);
     }
     return res.json();
+// served under the /sts-api prefix even when the app is not mounted at /studio.
+// To avoid silent 404s, we retry snippet calls against the studio base once and
+// remember the working base for the rest of the session.
+let snippetApiBase = API_BASE;
+const fetchSnippet = async (path: string, init?: RequestInit) => {
+    const primary = await fetch(`${snippetApiBase}${path}`, init);
+    if (primary.ok || primary.status !== 404 || snippetApiBase === STUDIO_API_BASE) {
+        return primary;
+    }
+
+    const fallback = await fetch(`${STUDIO_API_BASE}${path}`, init);
+    if (fallback.ok) {
+        snippetApiBase = STUDIO_API_BASE;
+    }
+    return fallback;
 };
 
 export const snippetApi = {
