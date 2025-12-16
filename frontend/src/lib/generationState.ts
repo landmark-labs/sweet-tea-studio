@@ -134,3 +134,28 @@ export function formatSpeed(iterationsPerSecond: number): string {
     }
     return "";
 }
+
+/**
+ * Normalizes ComfyUI job status strings into our finite GenerationState
+ */
+export function mapStatusToGenerationState(status?: string): GenerationState {
+    switch (status) {
+        case "queued":
+        case "initiating":
+            return "queued";
+        case "processing":
+        case "executing":
+        case "running":
+            return "running";
+        case "completed":
+        case "success":
+            return "completed";
+        case "failed":
+        case "error":
+            return "failed";
+        case "cancelled":
+            return "cancelled";
+        default:
+            return "idle";
+    }
+}

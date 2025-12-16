@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useMemo } from "react";
-import { addProgressEntry, calculateProgressStats, type ProgressHistoryEntry } from "@/lib/generationState";
+import { addProgressEntry, calculateProgressStats, mapStatusToGenerationState, type GenerationState, type ProgressHistoryEntry } from "@/lib/generationState";
 import { useLocation, useNavigate, useOutletContext } from "react-router-dom";
 import { api, Engine, WorkflowTemplate, GalleryItem, EngineHealth, Project } from "@/lib/api";
 import { DynamicForm } from "@/components/DynamicForm";
@@ -43,14 +43,17 @@ export default function PromptStudio() {
   const navigate = useNavigate();
 
   const [isLoading, setIsLoading] = useState(true);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [generationState, setGenerationState] = useState<GenerationState>("idle");
+  const [statusLabel, setStatusLabel] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [lastJobId, setLastJobId] = useState<number | null>(null);
   const lastSubmittedParamsRef = useRef<any>(null); // Track params for preview
-  const [jobStatus, setJobStatus] = useState<string>("");
   const [progress, setProgress] = useState<number>(0);
   const [jobStartTime, setJobStartTime] = useState<number | null>(null);
   const progressHistoryRef = useRef<ProgressHistoryEntry[]>([]);
+  const isQueuing = generationState === "queued";
+  const isRunning = generationState === "running";
+  const isBusy = isQueuing || isRunning;
 
 
   // Selection State
@@ -460,7 +463,8 @@ export default function PromptStudio() {
     if (active && (active.status === "queued" || active.status === "processing" || active.status === "initiating")) {
       console.log("Resuming WebSocket for job", active.jobId);
       setLastJobId(active.jobId);
-      setJobStatus(active.status);
+      setGenerationState(mapStatusToGenerationState(active.status));
+      setStatusLabel(active.status);
       setProgress(active.progress);
     }
   }, []); // Empty dependency array intentionally to run only on mount
@@ -475,7 +479,8 @@ export default function PromptStudio() {
       wsRef.current.close();
     }
 
-    setJobStatus(prev => prev || "initiating");
+    setGenerationState(prev => (prev === "running" ? prev : "queued"));
+    setStatusLabel(prev => prev || "queued");
     setProgress(prev => prev > 0 ? prev : 0);
     if (!jobStartTime) setJobStartTime(Date.now());
 
@@ -495,12 +500,14 @@ export default function PromptStudio() {
         const job = await api.getJob(lastJobId);
         if (job.status === "failed" && job.error) {
           console.log(`[WS] Job already failed before connection: ${job.error}`);
-          setJobStatus("failed");
+          setGenerationState("failed");
+          setStatusLabel("failed");
           setError(job.error);
           updateFeed(lastJobId, { status: "failed" });
         } else if (job.status === "completed") {
           console.log(`[WS] Job already completed before connection`);
-          setJobStatus("completed");
+          setGenerationState("completed");
+          setStatusLabel("");
           setProgress(100);
           setGalleryRefresh(prev => prev + 1);
         }
@@ -514,13 +521,16 @@ export default function PromptStudio() {
       console.log(`[WS] Message received:`, data.type);
 
       if (data.type === "status") {
-        setJobStatus(data.status);
+        const nextState = mapStatusToGenerationState(data.status);
+        setGenerationState(nextState);
+        setStatusLabel(data.status || "");
         updateFeed(lastJobId, { status: data.status });
       } else if (data.type === "progress") {
         const { value, max } = data.data;
         const pct = (value / max) * 100;
         setProgress(pct);
-        setJobStatus("processing");
+        setGenerationState("running");
+        setStatusLabel("processing");
 
         // Track progress history for time estimation
         progressHistoryRef.current = addProgressEntry(progressHistoryRef.current, value);
@@ -540,21 +550,23 @@ export default function PromptStudio() {
           iterationsPerSecond: stats?.iterationsPerSecond,
         });
       } else if (data.type === "execution_complete" || data.type === "generation_done") {
-        // ComfyUI finished rendering - reset button immediately 
+        // ComfyUI finished rendering - reset button immediately
         // Don't wait for image download/saving (5-7s)
         console.log(`[WS] Received ${data.type} - resetting button and clearing job state`);
-        setJobStatus("");  // Clear status to show "generate" button
+        setGenerationState("completed");  // Clear status to show "generate" button
+        setStatusLabel("");
         setProgress(0);    // Reset progress
-        setIsSubmitting(false);
         // Update feed to prevent sync effects from re-setting status
         updateFeed(lastJobId, { status: "completed", progress: 100 });
         // Note: Keep lastJobId so the 'completed' message can still update gallery
         // but the button is already reset
       } else if (data.type === "executing") {
-        setJobStatus("processing");
+        setGenerationState("running");
+        setStatusLabel("processing");
         updateFeed(lastJobId, { status: "processing" });
       } else if (data.type === "completed") {
-        setJobStatus("completed");
+        setGenerationState("completed");
+        setStatusLabel("");
         setProgress(100);
 
         if (data.images && data.images.length > 0) {
@@ -589,11 +601,11 @@ export default function PromptStudio() {
         console.log("[Preview] Received preview blob:", data.data.blob?.substring(0, 50) + "...", "length:", data.data.blob?.length);
         updateFeed(lastJobId, { previewBlob: data.data.blob });
       } else if (data.type === "error") {
-        setJobStatus("failed");
+        setGenerationState("failed");
+        setStatusLabel("failed");
         setError(data.message);
         updateFeed(lastJobId, { status: "failed" });
         // Reset button to idle on error
-        setIsSubmitting(false);
         setLastJobId(null);
       }
     };
@@ -610,11 +622,13 @@ export default function PromptStudio() {
         try {
           const job = await api.getJob(lastJobId);
           if (job.status === "completed") {
-            setJobStatus("completed");
+            setGenerationState("completed");
+            setStatusLabel("");
             setProgress(100);
             setGalleryRefresh(prev => prev + 1);
           } else if (job.status === "failed" || job.status === "cancelled") {
-            setJobStatus(job.status);
+            setGenerationState(mapStatusToGenerationState(job.status));
+            setStatusLabel(job.status);
             setError(job.error || "Job failed");
             updateFeed(lastJobId, { status: job.status });
           } else {
@@ -624,7 +638,8 @@ export default function PromptStudio() {
         } catch (e) {
           console.error("Failed to check job status:", e);
           setError("Connection lost during generation");
-          setJobStatus("failed");
+          setGenerationState("failed");
+          setStatusLabel("failed");
           updateFeed(lastJobId, { status: "failed" });
         }
       }, 1500);
@@ -650,13 +665,13 @@ export default function PromptStudio() {
           return;
         }
 
-        if (!selectedWorkflowId || isSubmitting || engineOffline || jobStatus === "initiating") return;
+        if (!selectedWorkflowId || isBusy || engineOffline) return;
         handleGenerate(formData);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectedWorkflowId, isSubmitting, engineOffline, jobStatus, formData]);
+  }, [selectedWorkflowId, isBusy, engineOffline, formData]);
 
   // Use data from GenerationContext if available to avoid duplicate API calls
   const generation = useGeneration();
@@ -769,8 +784,10 @@ export default function PromptStudio() {
       return;
     }
 
-    setIsSubmitting(true);
     setError(null);
+    setGenerationState("queued");
+    setStatusLabel("queued");
+    setProgress(0);
     try {
       // Filter params to only include those in the current schema
       // This prevents "pollution" from previous workflows or uncleaned state
@@ -822,8 +839,8 @@ export default function PromptStudio() {
       trackFeedStart(job.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create job");
-    } finally {
-      setIsSubmitting(false);
+      setGenerationState("failed");
+      setStatusLabel("failed");
     }
   };
 
@@ -850,7 +867,9 @@ export default function PromptStudio() {
     if (!lastJobId) return;
     try {
       await api.cancelJob(lastJobId);
-      setJobStatus("cancelled");
+      setGenerationState("cancelled");
+      setStatusLabel("cancelled");
+      setLastJobId(null);
     } catch (err) {
       console.error("Failed to cancel", err);
     }
@@ -1017,21 +1036,21 @@ export default function PromptStudio() {
             <Button
               size="lg"
               className="w-full relative overflow-hidden transition-all active:scale-[0.98] shadow-sm hover:shadow-md"
-              disabled={!selectedWorkflowId || isSubmitting || engineOffline || jobStatus === "initiating"}
+              disabled={!selectedWorkflowId || engineOffline || isBusy}
               onClick={() => handleGenerate(formData)}
               style={{
-                background: (jobStatus === "processing" || jobStatus === "initiating")
+                background: isBusy
                   ? `linear-gradient(90deg, #3b82f6 ${progress}%, #1e40af ${progress}%)`
                   : undefined
               }}
             >
               <div className="relative z-10 flex items-center justify-center gap-2">
-                {isSubmitting || jobStatus === "initiating" ? (
+                {generationState === "queued" ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
                     <span>queuing...</span>
                   </>
-                ) : jobStatus === "processing" ? (
+                ) : generationState === "running" ? (
                   (() => {
                     const elapsed = jobStartTime ? (Date.now() - jobStartTime) / 1000 : 0;
                     const estimatedTotal = progress > 0 ? elapsed / (progress / 100) : 0;
@@ -1118,7 +1137,7 @@ export default function PromptStudio() {
               schema={visibleSchema ?? {}}
               onSubmit={handleGenerate}
               nodeOrder={nodeOrder}
-              isLoading={isSubmitting || jobStatus === "initiating" || jobStatus === "processing"}
+              isLoading={isBusy}
               submitLabel="generate"
               formData={formData}
               onChange={handleFormChange}
@@ -1135,10 +1154,10 @@ export default function PromptStudio() {
         </div>
 
         {/* Progress Status Footer */}
-        {lastJobId && jobStatus !== "completed" && jobStatus !== "failed" && jobStatus && (
+        {lastJobId && isBusy && (
           <div className="flex-none p-4 border-t bg-slate-50">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-medium text-blue-600 capitalize">{jobStatus}</span>
+              <span className="text-xs font-medium text-blue-600 capitalize">{statusLabel || (generationState === "queued" ? "queued" : "processing")}</span>
               <span className="text-xs text-slate-500">{Math.round(progress)}%</span>
             </div>
             <Progress value={progress} className="h-1 mb-2" />
