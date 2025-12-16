@@ -542,11 +542,14 @@ export default function PromptStudio() {
       } else if (data.type === "execution_complete" || data.type === "generation_done") {
         // ComfyUI finished rendering - reset button immediately 
         // Don't wait for image download/saving (5-7s)
-        console.log(`[WS] Received ${data.type} - resetting button`);
+        console.log(`[WS] Received ${data.type} - resetting button and clearing job state`);
         setJobStatus("");  // Clear status to show "generate" button
         setProgress(0);    // Reset progress
         setIsSubmitting(false);
-        // Keep lastJobId so we can receive the final "completed" message with image paths
+        // Update feed to prevent sync effects from re-setting status
+        updateFeed(lastJobId, { status: "completed", progress: 100 });
+        // Note: Keep lastJobId so the 'completed' message can still update gallery
+        // but the button is already reset
       } else if (data.type === "executing") {
         setJobStatus("processing");
         updateFeed(lastJobId, { status: "processing" });
