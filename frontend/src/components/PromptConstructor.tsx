@@ -193,6 +193,113 @@ function SortableItem({ item, index, textIndex, onRemove, onUpdateContent, onEdi
     );
 }
 
+// Sortable library snippet for drag-to-reorder
+interface SortableLibrarySnippetProps {
+    snippet: PromptItem;
+    isEditing: boolean;
+    onStartLongPress: (e: React.PointerEvent) => void;
+    onCancelLongPress: () => void;
+    onDoubleClick: () => void;
+    onEdit: (e: React.MouseEvent) => void;
+    onDelete: (e: React.MouseEvent) => void;
+    onAddToCanvas: () => void;
+}
+
+function SortableLibrarySnippet({ snippet, isEditing, onStartLongPress, onCancelLongPress, onDoubleClick, onEdit, onDelete, onAddToCanvas }: SortableLibrarySnippetProps) {
+    const {
+        attributes,
+        listeners,
+        setNodeRef,
+        transform,
+        transition,
+        isDragging
+    } = useSortable({ id: snippet.id });
+
+    const style = {
+        transform: CSS.Transform.toString(transform),
+        transition,
+        zIndex: isDragging ? 50 : "auto",
+        opacity: isDragging ? 0.7 : 1,
+    };
+
+    return (
+        <ContextMenu>
+            <HoverCard openDelay={500} closeDelay={80}>
+                <ContextMenuTrigger asChild>
+                    <HoverCardTrigger asChild>
+                        <div
+                            ref={setNodeRef}
+                            style={style}
+                            className={cn(
+                                "flex items-center gap-2 px-2 py-1.5 rounded-md border shadow-sm cursor-grab active:cursor-grabbing select-none group relative text-[11px] font-medium min-h-[32px] transition-all hover:-translate-y-0.5 hover:shadow-md",
+                                snippet.color,
+                                isEditing ? "ring-2 ring-amber-400 ring-offset-1" : "",
+                                isDragging && "ring-2 ring-blue-200 shadow-lg"
+                            )}
+                            onPointerDown={onStartLongPress}
+                            onPointerUp={onCancelLongPress}
+                            onPointerLeave={onCancelLongPress}
+                            onPointerCancel={onCancelLongPress}
+                            onDoubleClick={(e) => {
+                                onCancelLongPress();
+                                onDoubleClick();
+                            }}
+                            {...attributes}
+                            {...listeners}
+                        >
+                            <span className="truncate flex-1">{snippet.label}</span>
+
+                            {/* Pencil edit button */}
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-4 w-4 -mr-0.5 ml-1 rounded-full opacity-0 hover:opacity-100 group-hover:opacity-100 bg-white/30 hover:bg-white/60"
+                                onPointerDown={(e) => e.stopPropagation()}
+                                onClick={onEdit}
+                                title="Edit Snippet"
+                            >
+                                <Pencil size={10} className="text-slate-700" />
+                            </Button>
+
+                            {/* Delete button */}
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-4 w-4 -mr-1 rounded-full opacity-0 hover:opacity-100 group-hover:opacity-100 bg-white/20 hover:bg-red-100/80"
+                                onPointerDown={(e) => e.stopPropagation()}
+                                onClick={onDelete}
+                                title="Delete Snippet"
+                            >
+                                <Trash2 size={10} className="text-slate-700 hover:text-red-600" />
+                            </Button>
+                        </div>
+                    </HoverCardTrigger>
+                </ContextMenuTrigger>
+                <HoverCardContent className="w-80 shadow-xl border-slate-200">
+                    <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                            <p className="text-xs font-semibold text-slate-700">{snippet.label}</p>
+                            <span className="text-[10px] font-mono text-slate-400">{snippet.content.length} chars</span>
+                        </div>
+                        <ScrollArea className="h-32 rounded-lg border border-slate-100 bg-slate-50">
+                            <p className="p-3 text-[11px] leading-relaxed font-mono whitespace-pre-wrap text-slate-700">
+                                {snippet.content}
+                            </p>
+                        </ScrollArea>
+                    </div>
+                </HoverCardContent>
+            </HoverCard>
+            <ContextMenuContent>
+                <ContextMenuItem onSelect={onAddToCanvas}>Add to canvas</ContextMenuItem>
+                <ContextMenuItem onSelect={(e) => onEdit(e as unknown as React.MouseEvent)}>Edit snippet</ContextMenuItem>
+                <ContextMenuItem onSelect={(e) => onDelete(e as unknown as React.MouseEvent)} className="text-red-600 focus:text-red-700">
+                    Delete snippet
+                </ContextMenuItem>
+            </ContextMenuContent>
+        </ContextMenu>
+    );
+}
+
 // --- Main Component ---
 
 export const PromptConstructor = React.memo(function PromptConstructor({ schema, onUpdate, currentValues, targetField: controlledTarget, onTargetChange, onFinish, snippets: library, onUpdateSnippets: setLibrary }: PromptConstructorProps) {
@@ -508,8 +615,22 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
 
     const addSnippetToCanvas = (snippet: PromptItem) => {
         if (!isTargetValid) return;
+        // Prevent duplicate: Check if this snippet (by sourceId) is already in items
+        const alreadyExists = items.some(item => item.sourceId === snippet.id);
+        if (alreadyExists) return;
         const id = `instance-${Date.now()}`;
         setItems([...items, { ...snippet, id, sourceId: snippet.id }]);
+    };
+
+    // Handle library snippet reordering
+    const handleLibraryDragEnd = (event: any) => {
+        const { active, over } = event;
+        if (!over || active.id === over.id) return;
+        const oldIndex = library.findIndex((s) => s.id === active.id);
+        const newIndex = library.findIndex((s) => s.id === over.id);
+        if (oldIndex !== -1 && newIndex !== -1) {
+            setLibrary(arrayMove(library, oldIndex, newIndex));
+        }
     };
 
     const cancelEdit = () => {
@@ -694,83 +815,32 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
                 Grid layout keeps snippet chips aligned for tessellation and consistent sizing. */}
             <div className="bg-white px-3 py-2 border-b shadow-sm shrink-0">
                 <div className="mb-2">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase block">Snippets (Double-click to Add, long-press to Edit)</span>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase block">Snippets (Double-click to Add, Drag to Reorder, Long-press to Edit)</span>
                 </div>
                 <ScrollArea className="h-72 w-full">
-                    <div className="grid grid-cols-2 gap-2 items-start min-h-[40px] p-1">
-                        {library.map(snippet => (
-                            <ContextMenu key={snippet.id}>
-                                <HoverCard openDelay={500} closeDelay={80}>
-                                    <ContextMenuTrigger asChild>
-                                        <HoverCardTrigger asChild>
-                                            <div
-                                                className={cn(
-                                                    "flex items-center gap-2 px-2 py-1.5 rounded-md border shadow-sm cursor-pointer select-none group relative text-[11px] font-medium min-h-[32px] transition-all hover:-translate-y-0.5 hover:shadow-md",
-                                                    snippet.color,
-                                                    editingSnippetId === snippet.id ? "ring-2 ring-amber-400 ring-offset-1" : "",
-                                                )}
-                                                onPointerDown={(e) => startLongPress(snippet, e)}
-                                                onPointerUp={cancelLongPress}
-                                                onPointerLeave={cancelLongPress}
-                                                onPointerCancel={cancelLongPress}
-                                                onClick={(e) => {
-                                                    if (e.detail === 1) addSnippetToCanvas(snippet);
-                                                }}
-                                                onDoubleClick={(e) => {
-                                                    cancelLongPress();
-                                                    addSnippetToCanvas(snippet);
-                                                }}
-                                            >
-                                                <span className="truncate flex-1">{snippet.label}</span>
-
-                                                {/* Explicit Edit Action (Pencil) remains as an accessible fallback. */}
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    className="h-4 w-4 -mr-0.5 ml-1 rounded-full opacity-0 hover:opacity-100 group-hover:opacity-100 bg-white/30 hover:bg-white/60"
-                                                    onClick={(e) => editSnippet(snippet, e)}
-                                                    title="Edit Snippet"
-                                                >
-                                                    <Pencil size={10} className="text-slate-700" />
-                                                </Button>
-
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    className="h-4 w-4 -mr-1 rounded-full opacity-0 hover:opacity-100 group-hover:opacity-100 bg-white/20 hover:bg-red-100/80"
-                                                    onClick={(e) => deleteFromLibrary(snippet.id, e)}
-                                                    title="Delete Snippet"
-                                                >
-                                                    <Trash2 size={10} className="text-slate-700 hover:text-red-600" />
-                                                </Button>
-                                            </div>
-                                        </HoverCardTrigger>
-                                    </ContextMenuTrigger>
-                                    {/* Rich hover preview replaces the plain title tooltip and supports long text via ScrollArea. */}
-                                    <HoverCardContent className="w-80 shadow-xl border-slate-200">
-                                        <div className="space-y-2">
-                                            <div className="flex items-center justify-between">
-                                                <p className="text-xs font-semibold text-slate-700">{snippet.label}</p>
-                                                <span className="text-[10px] font-mono text-slate-400">{snippet.content.length} chars</span>
-                                            </div>
-                                            <ScrollArea className="h-32 rounded-lg border border-slate-100 bg-slate-50">
-                                                <p className="p-3 text-[11px] leading-relaxed font-mono whitespace-pre-wrap text-slate-700">
-                                                    {snippet.content}
-                                                </p>
-                                            </ScrollArea>
-                                        </div>
-                                    </HoverCardContent>
-                                </HoverCard>
-                                <ContextMenuContent>
-                                    <ContextMenuItem onSelect={() => addSnippetToCanvas(snippet)}>Add to canvas</ContextMenuItem>
-                                    <ContextMenuItem onSelect={(e) => editSnippet(snippet, e as unknown as React.MouseEvent)}>Edit snippet</ContextMenuItem>
-                                    <ContextMenuItem onSelect={(e) => deleteFromLibrary(snippet.id, e as unknown as React.MouseEvent)} className="text-red-600 focus:text-red-700">
-                                        Delete snippet
-                                    </ContextMenuItem>
-                                </ContextMenuContent>
-                            </ContextMenu>
-                        ))}
-                    </div>
+                    <DndContext
+                        sensors={sensors}
+                        collisionDetection={closestCenter}
+                        onDragEnd={handleLibraryDragEnd}
+                    >
+                        <SortableContext items={library.map(s => s.id)} strategy={rectSortingStrategy}>
+                            <div className="grid grid-cols-2 gap-2 items-start min-h-[40px] p-1">
+                                {library.map(snippet => (
+                                    <SortableLibrarySnippet
+                                        key={snippet.id}
+                                        snippet={snippet}
+                                        isEditing={editingSnippetId === snippet.id}
+                                        onStartLongPress={(e) => startLongPress(snippet, e)}
+                                        onCancelLongPress={cancelLongPress}
+                                        onDoubleClick={() => addSnippetToCanvas(snippet)}
+                                        onEdit={(e) => editSnippet(snippet, e)}
+                                        onDelete={(e) => deleteFromLibrary(snippet.id, e)}
+                                        onAddToCanvas={() => addSnippetToCanvas(snippet)}
+                                    />
+                                ))}
+                            </div>
+                        </SortableContext>
+                    </DndContext>
                 </ScrollArea>
             </div>
 
