@@ -561,9 +561,20 @@ export default function PromptStudio() {
         // Note: Keep lastJobId so the 'completed' message can still update gallery
         // but the button is already reset
       } else if (data.type === "executing") {
-        setGenerationState("running");
-        setStatusLabel("processing");
-        updateFeed(lastJobId, { status: "processing" });
+        // Check if this is the final "executing" message with node=null (ComfyUI finished)
+        if (data.data?.node === null) {
+          // ComfyUI finished rendering - reset button immediately!
+          console.log(`[WS] Received executing with node=null - ComfyUI done, resetting button`);
+          setGenerationState("completed");
+          setStatusLabel("");
+          setProgress(0);
+          updateFeed(lastJobId, { status: "completed", progress: 100 });
+        } else {
+          // Still processing a node
+          setGenerationState("running");
+          setStatusLabel("processing");
+          updateFeed(lastJobId, { status: "processing" });
+        }
       } else if (data.type === "completed") {
         setGenerationState("completed");
         setStatusLabel("");
