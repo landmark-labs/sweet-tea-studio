@@ -10,9 +10,21 @@ interface ProjectSidebarProps {
   onSelectProject: (id: number | null) => void;
   projects?: Project[];
   className?: string;
+  // Folder selection props for file-explorer style navigation
+  selectedFolder?: string | null;
+  onSelectFolder?: (folder: string | null) => void;
+  projectFolders?: string[];
 }
 
-export function ProjectSidebar({ selectedProjectId, onSelectProject, projects: providedProjects, className }: ProjectSidebarProps) {
+export function ProjectSidebar({
+  selectedProjectId,
+  onSelectProject,
+  projects: providedProjects,
+  className,
+  selectedFolder,
+  onSelectFolder,
+  projectFolders = []
+}: ProjectSidebarProps) {
   const [collapsed, setCollapsed] = useState(() => {
     const saved = localStorage.getItem("project_sidebar_collapsed");
     return saved !== null ? saved === "true" : true;
@@ -98,16 +110,50 @@ export function ProjectSidebar({ selectedProjectId, onSelectProject, projects: p
           )}
 
           {otherProjects.map((project) => (
-            <Button
-              key={project.id}
-              variant={selectedProjectId === project.id ? "secondary" : "ghost"}
-              className={cn("w-full justify-start truncate", collapsed ? "px-2" : "px-4")}
-              onClick={() => onSelectProject(project.id)}
-              title={project.name}
-            >
-              <Folder className={cn("h-4 w-4 mr-2", selectedProjectId === project.id ? "text-blue-600" : "text-slate-500")} />
-              {!collapsed && <span className="truncate">{project.name}</span>}
-            </Button>
+            <div key={project.id}>
+              <Button
+                variant={selectedProjectId === project.id ? "secondary" : "ghost"}
+                className={cn("w-full justify-start truncate", collapsed ? "px-2" : "px-4")}
+                onClick={() => onSelectProject(project.id)}
+                title={project.name}
+              >
+                <Folder className={cn("h-4 w-4 mr-2", selectedProjectId === project.id ? "text-blue-600" : "text-slate-500")} />
+                {!collapsed && <span className="truncate">{project.name}</span>}
+              </Button>
+              {/* Subfolders shown under selected project */}
+              {selectedProjectId === project.id && projectFolders.length > 0 && !collapsed && onSelectFolder && (
+                <div className="ml-6 mt-1 space-y-0.5 mb-2">
+                  <button
+                    onClick={() => onSelectFolder(null)}
+                    className={cn(
+                      "w-full text-left px-2 py-1 rounded text-xs transition flex items-center gap-1.5",
+                      !selectedFolder
+                        ? "bg-blue-100 text-blue-700 font-medium"
+                        : "text-slate-600 hover:bg-slate-100"
+                    )}
+                  >
+                    <Layers className="h-3 w-3" />
+                    All
+                  </button>
+                  {projectFolders.map((folder) => (
+                    <button
+                      key={folder}
+                      onClick={() => onSelectFolder(folder)}
+                      className={cn(
+                        "w-full text-left px-2 py-1 rounded text-xs transition flex items-center gap-1.5 truncate",
+                        selectedFolder === folder
+                          ? "bg-blue-100 text-blue-700 font-medium"
+                          : "text-slate-600 hover:bg-slate-100"
+                      )}
+                      title={folder}
+                    >
+                      <FolderOpen className="h-3 w-3 flex-shrink-0" />
+                      <span className="truncate">{folder}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           ))}
         </div>
       </ScrollArea>

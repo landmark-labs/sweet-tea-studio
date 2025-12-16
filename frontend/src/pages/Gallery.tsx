@@ -352,6 +352,9 @@ export default function Gallery() {
                 onSelectProject={handleSelectProject}
                 projects={projects}
                 className="h-full border-r bg-white"
+                selectedFolder={selectedFolder}
+                onSelectFolder={handleSelectFolder}
+                projectFolders={projectFolders}
             />
             <div className="flex-1 overflow-auto p-8 relative">
                 <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
@@ -361,26 +364,6 @@ export default function Gallery() {
                             Viewing {selectedProjectId ? projects.find(p => p.id === selectedProjectId)?.name || "project" : "all projects"}
                             {selectedFolder && ` / ${selectedFolder}`}
                         </div>
-                        {/* Folder Pills */}
-                        {selectedProjectId && projectFolders.length > 0 && (
-                            <div className="flex items-center gap-1">
-                                <button
-                                    onClick={() => handleSelectFolder(null)}
-                                    className={`px-2 py-0.5 rounded text-xs transition ${!selectedFolder ? 'bg-blue-500 text-white' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'}`}
-                                >
-                                    All
-                                </button>
-                                {projectFolders.map((folder) => (
-                                    <button
-                                        key={folder}
-                                        onClick={() => handleSelectFolder(folder)}
-                                        className={`px-2 py-0.5 rounded text-xs transition ${selectedFolder === folder ? 'bg-blue-500 text-white' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'}`}
-                                    >
-                                        {folder}
-                                    </button>
-                                ))}
-                            </div>
-                        )}
 
                         {selectedIds.size > 0 && (
                             <div className="flex items-center gap-2 bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-sm font-medium border border-blue-100 animate-in fade-in slide-in-from-left-4">
