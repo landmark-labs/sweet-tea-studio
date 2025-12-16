@@ -539,8 +539,10 @@ export default function PromptStudio() {
           estimatedRemainingMs: stats?.estimatedRemainingMs,
           iterationsPerSecond: stats?.iterationsPerSecond,
         });
-      } else if (data.type === "generation_done") {
-        // ComfyUI finished - reset button immediately, don't wait for post-processing
+      } else if (data.type === "execution_complete" || data.type === "generation_done") {
+        // ComfyUI finished rendering - reset button immediately 
+        // Don't wait for image download/saving (5-7s)
+        console.log(`[WS] Received ${data.type} - resetting button`);
         setJobStatus("saving");
         setProgress(100);
         setIsSubmitting(false);

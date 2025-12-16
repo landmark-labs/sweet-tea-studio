@@ -220,9 +220,10 @@ class ComfyClient:
                     if message['type'] == 'executing':
                         data = message['data']
                         if data['node'] is None and data['prompt_id'] == prompt_id:
-                            # Execution complete - but DON'T break yet!
-                            # The final PreviewImage output may still arrive as a binary message
+                            # Execution complete - signal frontend immediately!
                             execution_complete = True
+                            if progress_callback:
+                                progress_callback({"type": "execution_complete", "prompt_id": prompt_id})
                             # Clear earlier preview images - only keep post-completion ones
                             preview_images.clear()
                             preview_counter = 0
