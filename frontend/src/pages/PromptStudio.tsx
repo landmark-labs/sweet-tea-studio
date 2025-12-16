@@ -392,6 +392,29 @@ export default function PromptStudio() {
     };
   }, [selectedWorkflowId]);
 
+  // Ensure in-flight form persistence is flushed on tab close/refresh
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      flushPendingPersist();
+      if (selectedWorkflowId) {
+        try {
+          localStorage.setItem(`ds_pipe_params_${selectedWorkflowId}`, JSON.stringify(formData));
+        } catch (e) {
+          console.warn("Failed to persist form data on unload", e);
+        }
+      }
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") handleBeforeUnload();
+    });
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      document.removeEventListener("visibilitychange", handleBeforeUnload);
+    };
+  }, [formData, selectedWorkflowId]);
+
   const handleResetDefaults = () => {
     if (!selectedWorkflow) return;
     const schema = visibleSchema;
