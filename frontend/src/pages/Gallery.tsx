@@ -381,13 +381,7 @@ export default function Gallery() {
                                 ))}
                             </div>
                         )}
-                        {selectionMode && (
-                            <div className="flex items-center gap-2 bg-amber-50 text-amber-700 px-3 py-1 rounded-full text-sm font-medium border border-amber-100 animate-in fade-in slide-in-from-left-4">
-                                Selection mode
-                                <div className="h-4 w-px bg-amber-200 mx-1" />
-                                <button onClick={() => setSelectionMode(false)} className="hover:underline text-amber-600">Exit</button>
-                            </div>
-                        )}
+
                         {selectedIds.size > 0 && (
                             <div className="flex items-center gap-2 bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-sm font-medium border border-blue-100 animate-in fade-in slide-in-from-left-4">
                                 <Check className="w-4 h-4" />
