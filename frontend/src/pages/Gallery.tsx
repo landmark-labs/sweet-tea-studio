@@ -30,7 +30,7 @@ export default function Gallery() {
     const [cleanupMode, setCleanupMode] = useState(false);
     const [selectionMode, setSelectionMode] = useState(false);
     const [fullscreenIndex, setFullscreenIndex] = useState<number | null>(null);
-    const [folderImages, setFolderImages] = useState<{ path: string; filename: string; mtime: string }[]>([]);
+
 
     const clickTimeout = useRef<NodeJS.Timeout | null>(null);
 
@@ -234,27 +234,12 @@ export default function Gallery() {
     const handleSelectProject = (id: number | null) => {
         setSelectedProjectId(id);
         setSelectedFolder(null); // Reset folder when project changes
-        setFolderImages([]);
         loadGallery(search, id);
     };
 
-    const handleSelectFolder = async (folder: string | null) => {
+    const handleSelectFolder = (folder: string | null) => {
         setSelectedFolder(folder);
-        if (folder && selectedProjectId) {
-            setIsLoading(true);
-            try {
-                const images = await api.getProjectFolderImages(selectedProjectId, folder);
-                setFolderImages(images);
-            } catch (err) {
-                console.error("Failed to load folder images", err);
-                setFolderImages([]);
-            } finally {
-                setIsLoading(false);
-            }
-        } else {
-            setFolderImages([]);
-            loadGallery(search, selectedProjectId);
-        }
+        // Folder filtering now happens client-side via displayItems
     };
 
     // Get folders for the selected project
@@ -341,7 +326,18 @@ export default function Gallery() {
     };
 
     const cleanupDeleteCount = Math.max(items.length - selectedIds.size, 0);
-    const fullscreenItem = fullscreenIndex !== null ? items[fullscreenIndex] : null;
+
+    // Filter items by selected folder - match folder name in image path
+    const displayItems = selectedFolder
+        ? items.filter(item => {
+            const path = item.image.path || '';
+            // Check if the path contains the folder name as a directory segment
+            const pathSegments = path.replace(/\\/g, '/').split('/');
+            return pathSegments.includes(selectedFolder);
+        })
+        : items;
+
+    const fullscreenItem = fullscreenIndex !== null ? displayItems[fullscreenIndex] : null;
 
     // Note: We no longer return early for loading - this keeps the sidebar visible for smoother transitions
 
@@ -423,7 +419,7 @@ export default function Gallery() {
                 )}
 
                 {/* Subtle loading overlay - keeps existing content visible */}
-                {isLoading && items.length > 0 && (
+                {isLoading && displayItems.length > 0 && (
                     <div className="absolute inset-0 bg-white/50 flex items-center justify-center z-10 pointer-events-none">
                         <div className="text-sm text-slate-500 bg-white/90 px-4 py-2 rounded-full shadow-sm border">
                             Loading...
@@ -431,17 +427,17 @@ export default function Gallery() {
                     </div>
                 )}
 
-                {items.length === 0 && isLoading ? (
+                {displayItems.length === 0 && isLoading ? (
                     <div className="text-center text-slate-500 py-20">
                         Loading gallery...
                     </div>
-                ) : items.length === 0 ? (
+                ) : displayItems.length === 0 ? (
                     <div className="text-center text-slate-500 py-20">
-                        No images generated yet. Go to New Generation to create some!
+                        {selectedFolder ? `No images in folder "${selectedFolder}"` : "No images generated yet. Go to New Generation to create some!"}
                     </div>
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                        {items.map((item) => (
+                        {displayItems.map((item) => (
                             <ContextMenu key={item.image.id}>
                                 <ContextMenuTrigger>
                                     <Card
@@ -540,7 +536,7 @@ export default function Gallery() {
                                                                     <HoverCardTrigger asChild>
                                                                         <p className="line-clamp-3 text-slate-700 leading-relaxed cursor-help select-text">{positive}</p>
                                                                     </HoverCardTrigger>
-                                                                    <HoverCardContent className="w-[500px] max-h-[60vh] overflow-y-auto p-4" align="start">
+                                                                    <HoverCardContent className="w-[500px] max-h-[60vh] overflow-y-auto p-4 z-[100]" align="start">
                                                                         <div className="space-y-4">
                                                                             <div>
                                                                                 <div className="flex items-center gap-2 mb-1">
