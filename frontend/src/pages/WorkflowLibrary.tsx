@@ -225,9 +225,9 @@ const NodeCard = ({ node, schemaEdits, setSchemaEdits }: NodeCardProps) => {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const getNodeDisplayOrder = (graph: any, schema: any) => {
     const ids = Object.keys(graph);
-    const storedOrder = Array.isArray(schema?.__node_order) ? schema.__node_order.map(String) : [];
-    const validStored = storedOrder.filter(id => ids.includes(id));
-    const remaining = ids.filter(id => !validStored.includes(id)).sort((a, b) => parseInt(a) - parseInt(b));
+    const storedOrder: string[] = Array.isArray(schema?.__node_order) ? schema.__node_order.map(String) : [];
+    const validStored = storedOrder.filter((id: string) => ids.includes(id));
+    const remaining = ids.filter((id: string) => !validStored.includes(id)).sort((a, b) => parseInt(a) - parseInt(b));
     return [...validStored, ...remaining];
 };
 
@@ -277,8 +277,58 @@ export default function WorkflowLibrary() {
     );
     const [composeDescription, setComposeDescription] = useState("");
 
+    // --- Polling & Install Logic (Moved up to avoid initialization errors) ---
+    const stopPolling = () => {
+        if (pollIntervalRef.current) {
+            clearInterval(pollIntervalRef.current);
+            pollIntervalRef.current = null;
+        }
+    };
+
+    const startPolling = (jobId: string) => {
+        stopPolling();
+        pollIntervalRef.current = setInterval(async () => {
+            try {
+                const status = await api.getInstallStatus(jobId);
+                setInstallStatus(status);
+                if (status.status === "completed" || status.status === "failed") {
+                    stopPolling();
+                }
+            } catch (err) {
+                console.error("Poll error", err);
+            }
+        }, 1000);
+    };
+
+    const startInstall = async (missing: string[]) => {
+        setInstallOpen(true);
+        setInstallStatus({ status: "pending", progress_text: "Initializing..." });
+        try {
+            const res = await api.installMissingNodes(missing, allowManualClone);
+            startPolling(res.job_id);
+        } catch (err) {
+            setInstallStatus({ status: "failed", error: `Start failed: ${(err as Error).message}`, progress_text: "" });
+        }
+    };
+
+    const handleReboot = async () => {
+        if (!confirm("Reboot ComfyUI now? This will disconnect the interface momentarily.")) return;
+        await api.rebootComfyUI();
+        alert("Reboot triggered. Please wait a few moments for ComfyUI to restart.");
+        setInstallOpen(false);
+    };
+
     // Use workflows from context if available (faster on navigation)
     const contextWorkflows = generation?.workflows;
+
+    const loadWorkflows = async () => {
+        try {
+            const data = await api.getWorkflows();
+            setWorkflows(data);
+        } catch (err) {
+            setError("Failed to load workflows");
+        }
+    };
 
     useEffect(() => {
         // If context already has workflows, use them initially
@@ -290,14 +340,7 @@ export default function WorkflowLibrary() {
         return () => stopPolling();
     }, [contextWorkflows]);
 
-    const loadWorkflows = async () => {
-        try {
-            const data = await api.getWorkflows();
-            setWorkflows(data);
-        } catch (err) {
-            setError("Failed to load workflows");
-        }
-    };
+
 
     const getMissingNodes = (workflow: WorkflowTemplate): string[] => {
         if (workflow.description && workflow.description.includes("[Missing Nodes:")) {
@@ -739,46 +782,7 @@ export default function WorkflowLibrary() {
             </div>
         );
     }
-    const startInstall = async (missing: string[]) => {
-        setInstallOpen(true);
-        setInstallStatus({ status: "pending", progress_text: "Initializing..." });
-        try {
-            const res = await api.installMissingNodes(missing, allowManualClone);
 
-            startPolling(res.job_id);
-        } catch (err) {
-            setInstallStatus({ status: "failed", error: `Start failed: ${(err as Error).message}`, progress_text: "" });
-        }
-    };
-
-    const startPolling = (jobId: string) => {
-        stopPolling();
-        pollIntervalRef.current = setInterval(async () => {
-            try {
-                const status = await api.getInstallStatus(jobId);
-                setInstallStatus(status);
-                if (status.status === "completed" || status.status === "failed") {
-                    stopPolling();
-                }
-            } catch (err) {
-                console.error("Poll error", err);
-            }
-        }, 1000);
-    };
-
-    const stopPolling = () => {
-        if (pollIntervalRef.current) {
-            clearInterval(pollIntervalRef.current);
-            pollIntervalRef.current = null;
-        }
-    };
-
-    const handleReboot = async () => {
-        if (!confirm("Reboot ComfyUI now? This will disconnect the interface momentarily.")) return;
-        await api.rebootComfyUI();
-        alert("Reboot triggered. Please wait a few moments for ComfyUI to restart.");
-        setInstallOpen(false);
-    };
 
     // --- Graph Viewer Logic ---
     const handleViewGraph = (w: WorkflowTemplate) => {
@@ -786,120 +790,7 @@ export default function WorkflowLibrary() {
         setViewGraphOpen(true);
     };
 
-    if (editingWorkflow) {
-        return (
-            <div className="container mx-auto p-4 h-[calc(100vh-4rem)] flex flex-col">
-                <div className="flex justify-between items-center mb-6">
-                    <h1 className="text-2xl font-bold">edit pipe: {editingWorkflow.name}</h1>
-                    <div className="flex gap-2">
-                        <Dialog>
-                            <DialogTrigger asChild>
-                                <Button variant="secondary" size="sm">
-                                    <AlertTriangle className="w-4 h-4 mr-2" />
-                                    add bypass
-                                </Button>
-                            </DialogTrigger>
-                            <DialogContent>
-                                <DialogHeader>
-                                    <DialogTitle>add node bypass toggle</DialogTitle>
-                                    <DialogDescription>
-                                        Select a node to allow bypassing (disabling) in the configurator.
-                                    </DialogDescription>
-                                </DialogHeader>
-                                <div className="space-y-4 max-h-[60vh] overflow-y-auto">
-                                    {Object.entries(editingWorkflow.graph_json)
-                                        .map(([id, node]: [string, any]) => {
-                                            const bypassKey = `__bypass_${id}`;
-                                            const hasBypass = !!schemaEdits[bypassKey];
 
-                                            return (
-                                                <div key={id} className={cn("flex justify-between items-center p-2 border rounded hover:bg-slate-50 transition-colors", hasBypass && "bg-blue-50 border-blue-200")}>
-                                                    <div>
-                                                        <div className="font-bold text-sm flex items-center gap-2">
-                                                            {node._meta?.title || node.title || `Node ${id}`}
-                                                            {hasBypass && <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-mono">BYPASSABLE</span>}
-                                                        </div>
-                                                        <div className="text-xs text-slate-500">{node.class_type}</div>
-                                                    </div>
-                                                    <Button
-                                                        size="sm"
-                                                        variant={hasBypass ? "destructive" : "outline"}
-                                                        onClick={() => {
-                                                            const s = { ...schemaEdits };
-                                                            if (hasBypass) {
-                                                                delete s[bypassKey];
-                                                            } else {
-                                                                s[bypassKey] = {
-                                                                    title: `Bypass ${node._meta?.title || node.title || id}`,
-                                                                    widget: "toggle",
-                                                                    x_node_id: id,
-                                                                    type: "boolean",
-                                                                    default: false
-                                                                };
-                                                            }
-                                                            setSchemaEdits(s);
-                                                        }}
-                                                    >
-                                                        {hasBypass ? "Remove" : "Enable"}
-                                                    </Button>
-                                                </div>
-                                            );
-                                        })
-                                    }
-                                </div>
-                            </DialogContent>
-                        </Dialog>
-                        <Button variant="outline" onClick={() => setEditingWorkflow(null)}>Cancel</Button>
-                        <Button onClick={handleSaveSchema}><Save className="w-4 h-4 mr-2" /> Save Changes</Button>
-                    </div>
-                </div>
-                <Card className="flex-1 overflow-auto">
-                    <CardHeader><CardTitle>exposed parameters</CardTitle></CardHeader>
-                    <CardContent>
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Field ID</TableHead>
-                                    <TableHead>Label</TableHead>
-                                    <TableHead>Type</TableHead>
-                                    <TableHead>Default</TableHead>
-                                    <TableHead className="text-right">Actions</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {Object.entries(schemaEdits).map(([key, field]: [string, any]) => (
-                                    <TableRow key={key}>
-                                        <TableCell className="font-mono text-xs">{key}</TableCell>
-                                        <TableCell>
-                                            <Input
-                                                value={field.title || ""}
-                                                onChange={(e) => {
-                                                    const s = { ...schemaEdits };
-                                                    s[key].title = e.target.value;
-                                                    setSchemaEdits(s);
-                                                }}
-                                            />
-                                        </TableCell>
-                                        <TableCell>{field.type}</TableCell>
-                                        <TableCell>{String(field.default)}</TableCell>
-                                        <TableCell className="text-right">
-                                            <Button variant="ghost" size="icon" className="text-red-500" onClick={() => {
-                                                const s = { ...schemaEdits };
-                                                delete s[key];
-                                                setSchemaEdits(s);
-                                            }}>
-                                                <Trash2 className="w-4 h-4" />
-                                            </Button>
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    </CardContent>
-                </Card>
-            </div>
-        );
-    }
 
     return (
         <div className="container mx-auto p-4">
