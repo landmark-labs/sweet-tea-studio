@@ -7,7 +7,7 @@ from sqlmodel import Session, select
 from app.db.engine import engine
 from app.models.snippet import Snippet, SnippetCreate, SnippetUpdate, SnippetRead
 
-router = APIRouter(prefix="/snippets", tags=["snippets"])
+router = APIRouter()
 
 # Default snippets to seed if database is empty
 DEFAULT_SNIPPETS = [
