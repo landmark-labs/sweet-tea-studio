@@ -4,6 +4,7 @@ import { GenerationFeedItem } from "@/components/GenerationFeed";
 import { PromptLibraryItem } from "@/lib/api";
 
 export const PROMPT_LIBRARY_STALE_MS = 5 * 60 * 1000;
+const PROGRESS_UPDATE_STEP = 2; // minimum percent change before persisting progress
 
 interface GenerationFeedState {
   generationFeed: GenerationFeedItem[];
@@ -24,6 +25,15 @@ interface PromptLibraryState {
   clearPrompts: () => void;
   shouldRefetch: (workflowId?: string | null, query?: string, staleMs?: number) => boolean;
 }
+
+const shallowEqual = (a: GenerationFeedItem, b: GenerationFeedItem) => {
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+  for (const key of keys) {
+    // @ts-expect-error index access
+    if (a[key] !== b[key]) return false;
+  }
+  return true;
+};
 
 export const useGenerationFeedStore = create<GenerationFeedState>()(
   persist(
@@ -48,17 +58,42 @@ export const useGenerationFeedStore = create<GenerationFeedState>()(
         });
       },
       updateFeed: (jobId, updates) => {
-        set(({ generationFeed }) => ({
-          generationFeed: generationFeed.map((item) =>
-            item.jobId === jobId ? { ...item, ...updates } : item
-          ),
-        }));
+        set((state) => {
+          let mutated = false;
+
+          const nextFeed = state.generationFeed.map((item) => {
+            if (item.jobId !== jobId) return item;
+
+            const nextUpdates = { ...updates };
+            if (
+              typeof nextUpdates.progress === "number" &&
+              typeof item.progress === "number" &&
+              Math.abs(nextUpdates.progress - item.progress) < PROGRESS_UPDATE_STEP &&
+              (!nextUpdates.status || nextUpdates.status === item.status)
+            ) {
+              delete nextUpdates.progress;
+            }
+
+            const merged = { ...item, ...nextUpdates };
+            if (shallowEqual(item, merged)) {
+              return item;
+            }
+            mutated = true;
+            return merged;
+          });
+
+          if (!mutated) return state;
+          return { generationFeed: nextFeed };
+        });
       },
       clearFeed: () => set({ generationFeed: [] }),
     }),
     {
       name: "ds_generation_feed",
       storage: createJSONStorage(() => localStorage),
+      partialize: (state) => ({
+        generationFeed: state.generationFeed.map(({ previewBlob, ...rest }) => rest),
+      }),
     }
   )
 );

@@ -18,6 +18,7 @@ type UndoRedoContextValue = {
 };
 
 const UndoRedoContext = createContext<UndoRedoContextValue | undefined>(undefined);
+const MAX_HISTORY = 50;
 
 export function UndoRedoProvider({ children }: { children: ReactNode }) {
   const [undoStack, setUndoStack] = useState<UndoRedoAction[]>([]);
@@ -26,7 +27,14 @@ export function UndoRedoProvider({ children }: { children: ReactNode }) {
 
   const recordChange = useCallback((action: UndoRedoAction) => {
     if (restoringRef.current) return;
-    setUndoStack((prev) => [...prev, action]);
+    setUndoStack((prev) => {
+      const next = [...prev, action];
+      // Prevent unbounded growth when users edit large prompt payloads
+      if (next.length > MAX_HISTORY) {
+        return next.slice(next.length - MAX_HISTORY);
+      }
+      return next;
+    });
     setRedoStack([]);
   }, []);
 
@@ -111,4 +119,3 @@ export function useUndoRedo() {
   }
   return ctx;
 }
-

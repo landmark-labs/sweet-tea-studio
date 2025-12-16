@@ -95,6 +95,8 @@ export default function PromptStudio() {
   const [library, setLibrary] = useState<PromptItem[]>([]);
   const [snippetsLoaded, setSnippetsLoaded] = useState(false);
   const pendingSaveRef = useRef<NodeJS.Timeout | null>(null);
+  const persistTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const pendingPersistRef = useRef<{ workflowId: string; data: any } | null>(null);
 
   // Load snippets from backend on mount
   useEffect(() => {
@@ -337,6 +339,21 @@ export default function PromptStudio() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { registerStateChange } = useUndoRedo();
 
+  const flushPendingPersist = () => {
+    const pending = pendingPersistRef.current;
+    if (!pending) return;
+    try {
+      localStorage.setItem(`ds_pipe_params_${pending.workflowId}`, JSON.stringify(pending.data));
+    } catch (e) {
+      console.warn("Failed to persist form data", e);
+    }
+    pendingPersistRef.current = null;
+    if (persistTimerRef.current) {
+      clearTimeout(persistTimerRef.current);
+      persistTimerRef.current = null;
+    }
+  };
+
   const persistForm = (data: any) => {
     // Safety: Don't persist if checkpoint got wiped (common init race condition)
     if (data['CheckpointLoaderSimple.ckpt_name'] === "" && formData['CheckpointLoaderSimple.ckpt_name']) {
@@ -347,9 +364,28 @@ export default function PromptStudio() {
 
     setFormData(data);
     if (selectedWorkflowId) {
-      localStorage.setItem(`ds_pipe_params_${selectedWorkflowId}`, JSON.stringify(data));
+      const workflowId = selectedWorkflowId;
+      pendingPersistRef.current = { workflowId, data };
+      if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
+      persistTimerRef.current = setTimeout(() => {
+        const pending = pendingPersistRef.current;
+        if (!pending) return;
+        try {
+          localStorage.setItem(`ds_pipe_params_${pending.workflowId}`, JSON.stringify(pending.data));
+        } catch (e) {
+          console.warn("Failed to persist form data", e);
+        }
+        pendingPersistRef.current = null;
+        persistTimerRef.current = null;
+      }, 150);
     }
   };
+
+  useEffect(() => {
+    return () => {
+      flushPendingPersist();
+    };
+  }, [selectedWorkflowId]);
 
   const handleResetDefaults = () => {
     if (!selectedWorkflow) return;

@@ -19,6 +19,8 @@ import asyncio
 import random
 import hashlib
 import json
+import re
+import threading
 from pathlib import Path
 from datetime import datetime
 from typing import List, Optional
@@ -44,6 +46,50 @@ if DIAGNOSTIC_MODE:
 else:
     from app.core.comfy_client import ComfyClient, ComfyConnectionError, ComfyResponseError
 # ===================================
+
+_sequence_cache: dict[str, int] = {}
+_sequence_lock = threading.Lock()
+_sequence_pattern_cache: dict[str, re.Pattern[str]] = {}
+
+
+def _get_next_sequence_start(session: Session, filename_prefix: str, reserve: int) -> int:
+    """
+    Quickly determine the next sequence number for a filename prefix.
+    Uses the Image table (latest 100 rows) and an in-memory cache to avoid
+    slow directory scans when folders contain thousands of files.
+    """
+    if reserve <= 0:
+        return 0
+
+    with _sequence_lock:
+        cached = _sequence_cache.get(filename_prefix)
+        if cached is not None:
+            start = cached
+            _sequence_cache[filename_prefix] = cached + reserve
+            return start
+
+        pattern = _sequence_pattern_cache.get(filename_prefix)
+        if pattern is None:
+            pattern = re.compile(rf"^{re.escape(filename_prefix)}-(\d+)\.(jpg|jpeg|png)$", re.IGNORECASE)
+            _sequence_pattern_cache[filename_prefix] = pattern
+
+        max_seq = -1
+        stmt = (
+            select(Image.filename)
+            .where(Image.filename.like(f"{filename_prefix}-%"))
+            .order_by(Image.created_at.desc())
+            .limit(100)
+        )
+        for row in session.exec(stmt):
+            match = pattern.match(row)
+            if match:
+                max_seq = max(max_seq, int(match.group(1)))
+                if max_seq >= 0:
+                    break
+
+        start = (max_seq + 1) if max_seq >= 0 else 0
+        _sequence_cache[filename_prefix] = start + reserve
+        return start
 
 def apply_params_to_graph(graph: dict, mapping: dict, params: dict):
     for param_name, value in params.items():
@@ -447,19 +493,8 @@ def process_job(job_id: int):
                 filename_prefix = f"{project.slug}-{folder_name}"
             else:
                 filename_prefix = f"gen_{job_id}"
-            
-            # Find the next available sequence number by checking existing files (0-based)
-            next_seq = 0
-            if target_output_dir and os.path.exists(target_output_dir):
-                import re
-                existing_files = os.listdir(target_output_dir)
-                pattern = re.compile(rf"^{re.escape(filename_prefix)}-(\d+)\.(jpg|jpeg|png)$", re.IGNORECASE)
-                for f in existing_files:
-                    match = pattern.match(f)
-                    if match:
-                        num = int(match.group(1))
-                        if num >= next_seq:
-                            next_seq = num + 1
+
+            next_seq = _get_next_sequence_start(session, filename_prefix, len(images))
             
             # Build provenance data once (shared across all images)
             provenance_data = {
