@@ -99,7 +99,7 @@ export function UndoRedoProvider({ children }: { children: ReactNode }) {
 
   const historyLabels = useMemo(() => undoStack.map(a => a.label).reverse(), [undoStack]);
 
-  const value = useMemo(() => ({
+  const value: UndoRedoContextValue = {
     canUndo: undoStack.length > 0,
     canRedo: redoStack.length > 0,
     undo,
@@ -107,7 +107,7 @@ export function UndoRedoProvider({ children }: { children: ReactNode }) {
     recordChange,
     registerStateChange,
     historyLabels,
-  }), [undoStack.length, redoStack.length, undo, redo, recordChange, registerStateChange, historyLabels]);
+  };
 
   return <UndoRedoContext.Provider value={value}>{children}</UndoRedoContext.Provider>;
 }

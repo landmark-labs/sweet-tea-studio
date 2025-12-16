@@ -80,7 +80,7 @@ export function WorkflowGraphViewer({ graph }: WorkflowGraphViewerProps) {
         if (!graph) return;
 
         let newNodes: Node[] = [];
-        let newEdges: Edge[] = [];
+        const newEdges: Edge[] = [];
 
         // CASE A: Standard UI Format (has "nodes" and "links" arrays)
         if (Array.isArray(graph.nodes) && Array.isArray(graph.links)) {

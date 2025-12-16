@@ -486,7 +486,7 @@ export const DynamicForm = React.memo(function DynamicForm({
                             onCheckedChange={(c) => {
                                 // If enabling bypass, auto-fill any empty required enum fields in the same group
                                 // This prevents "Value not in list" errors from ComfyUI validation
-                                let updates: Record<string, any> = { [key]: c };
+                                const updates: Record<string, any> = { [key]: c };
 
                                 if (c === true) {
                                     const placement = groups.placements[key];

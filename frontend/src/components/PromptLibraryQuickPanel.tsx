@@ -68,7 +68,7 @@ export function PromptLibraryQuickPanel({
                 const key =
                   prompt.prompt_id !== undefined && prompt.prompt_id !== null
                     ? `prompt-${prompt.prompt_id}`
-                    : `img-${prompt.image_id}-${prompt.prompt_name || prompt.created_at || Math.random().toString(36).slice(2)}`;
+                    : `img-${prompt.image_id}-${prompt.prompt_name || prompt.created_at || "local"}`;
 
                 return (
                   <div

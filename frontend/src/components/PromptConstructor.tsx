@@ -606,9 +606,15 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
         }
     };
 
+    const idCounterRef = useRef(0);
+    const nextInstanceId = () => {
+        idCounterRef.current += 1;
+        return idCounterRef.current;
+    };
+
     const addTextSpacer = () => {
         if (!isTargetValid) return;
-        const id = `text-${Date.now()}`;
+        const id = `text-${nextInstanceId()}`;
         const nextIndex = items.filter(i => i.type === 'text').length + 1;
         setItems([...items, { id, type: 'text', content: ", ", label: `Text ${nextIndex}` }]);
     };
@@ -618,7 +624,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
         // Prevent duplicate: Check if this snippet (by sourceId) is already in items
         const alreadyExists = items.some(item => item.sourceId === snippet.id);
         if (alreadyExists) return;
-        const id = `instance-${Date.now()}`;
+        const id = `instance-${nextInstanceId()}`;
         setItems([...items, { ...snippet, id, sourceId: snippet.id }]);
     };
 
@@ -700,7 +706,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
         } else {
             // CREATE NEW
             const newSnippet: PromptItem = {
-                id: `s-${Date.now()}`,
+                id: `s-${nextInstanceId()}`,
                 type: 'block',
                 label: snippetTitle,
                 content: snippetContent,

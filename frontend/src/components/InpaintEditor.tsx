@@ -43,8 +43,8 @@ export function InpaintEditor({ open, onOpenChange, imageUrl, onSave }: InpaintE
             const container = containerRef.current;
             if (!container) return;
 
-            let width = img.naturalWidth;
-            let height = img.naturalHeight;
+            const width = img.naturalWidth;
+            const height = img.naturalHeight;
 
             canvas.width = width;
             canvas.height = height;

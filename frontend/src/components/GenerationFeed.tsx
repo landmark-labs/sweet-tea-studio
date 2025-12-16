@@ -129,7 +129,7 @@ export function GenerationFeed({ items, onSelectPreview, onGenerate }: Generatio
                   className="h-7 w-full text-xs gap-1.5"
                   onClick={(e) => {
                     e.stopPropagation();
-                    onGenerate && onGenerate();
+                    if (onGenerate) onGenerate();
                   }}
                 >
                   <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -156,7 +156,7 @@ export function GenerationFeed({ items, onSelectPreview, onGenerate }: Generatio
                 className="h-7 text-xs gap-1.5 mt-2"
                 onClick={(e) => {
                   e.stopPropagation();
-                  onGenerate && onGenerate();
+                  if (onGenerate) onGenerate();
                 }}
               >
                 <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -171,4 +171,3 @@ export function GenerationFeed({ items, onSelectPreview, onGenerate }: Generatio
     </div>
   );
 }
-

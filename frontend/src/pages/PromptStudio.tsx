@@ -396,7 +396,7 @@ export default function PromptStudio() {
     if (!selectedWorkflow) return;
     const schema = visibleSchema;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let defaults: any = {};
+    const defaults: any = {};
     Object.keys(schema).forEach((k) => {
       if (schema[k].default !== undefined) defaults[k] = schema[k].default;
     });
