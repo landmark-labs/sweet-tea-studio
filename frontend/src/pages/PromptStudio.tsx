@@ -543,8 +543,8 @@ export default function PromptStudio() {
         // ComfyUI finished rendering - reset button immediately 
         // Don't wait for image download/saving (5-7s)
         console.log(`[WS] Received ${data.type} - resetting button`);
-        setJobStatus("saving");
-        setProgress(100);
+        setJobStatus("");  // Clear status to show "generate" button
+        setProgress(0);    // Reset progress
         setIsSubmitting(false);
         // Keep lastJobId so we can receive the final "completed" message with image paths
       } else if (data.type === "executing") {
