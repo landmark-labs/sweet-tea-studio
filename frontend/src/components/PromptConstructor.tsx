@@ -95,7 +95,7 @@ function SortableItem({ item, index, textIndex, onRemove, onUpdateContent, onEdi
                         ref={setNodeRef}
                         style={style}
                         className={cn(
-                            "flex items-center gap-2 px-2 py-1 rounded-md border shadow-sm cursor-grab active:cursor-grabbing select-none group relative text-[11px] font-medium w-full min-h-[32px] transition-all hover:-translate-y-0.5 hover:shadow-md",
+                            "flex items-center gap-1 px-2 py-1 rounded-md border shadow-sm cursor-grab active:cursor-grabbing select-none group relative text-[11px] font-medium w-full min-w-0 min-h-[32px] transition-all hover:-translate-y-0.5 hover:shadow-md",
                             "bg-slate-50 border-slate-300 text-slate-700 hover:border-slate-400",
                             isDragging && "ring-2 ring-blue-200 shadow-lg"
                         )}
@@ -103,7 +103,7 @@ function SortableItem({ item, index, textIndex, onRemove, onUpdateContent, onEdi
                         {...listeners}
                         onDoubleClick={() => setIsEditing(true)}
                     >
-                        <span className="truncate">{textIndex ? `Text ${textIndex}` : "Text"}</span>
+                        <span className="truncate flex-1 min-w-0">{textIndex ? `Text ${textIndex}` : "Text"}</span>
 
                         {onEditTextSnippet && (
                             <Button
@@ -156,14 +156,14 @@ function SortableItem({ item, index, textIndex, onRemove, onUpdateContent, onEdi
                     ref={setNodeRef}
                     style={style}
                     className={cn(
-                        "flex items-center gap-2 px-2 py-1 rounded-md border shadow-sm cursor-grab active:cursor-grabbing select-none group relative text-[11px] font-medium w-full min-h-[32px] transition-all hover:-translate-y-0.5 hover:shadow-md",
+                        "flex items-center gap-1 px-2 py-1 rounded-md border shadow-sm cursor-grab active:cursor-grabbing select-none group relative text-[11px] font-medium w-full min-w-0 min-h-[32px] transition-all hover:-translate-y-0.5 hover:shadow-md",
                         item.color || "bg-slate-100 border-slate-200",
                         isDragging && "ring-2 ring-blue-200 shadow-lg"
                     )}
                     {...attributes}
                     {...listeners}
                 >
-                    <span className="truncate">{item.label || item.content.slice(0, 15)}</span>
+                    <span className="truncate flex-1 min-w-0">{item.label || item.content.slice(0, 15)}</span>
 
                     <Button
                         variant="ghost"
@@ -231,7 +231,7 @@ function SortableLibrarySnippet({ snippet, isEditing, onStartLongPress, onCancel
                             ref={setNodeRef}
                             style={style}
                             className={cn(
-                                "flex items-center gap-2 px-2 py-1.5 rounded-md border shadow-sm cursor-grab active:cursor-grabbing select-none group relative text-[11px] font-medium min-h-[32px] transition-all hover:-translate-y-0.5 hover:shadow-md",
+                                "flex items-center gap-1 px-2 py-1.5 rounded-md border shadow-sm cursor-grab active:cursor-grabbing select-none group relative text-[11px] font-medium w-full min-w-0 min-h-[32px] transition-all hover:-translate-y-0.5 hover:shadow-md",
                                 snippet.color,
                                 isEditing ? "ring-2 ring-amber-400 ring-offset-1" : "",
                                 isDragging && "ring-2 ring-blue-200 shadow-lg"
@@ -247,7 +247,7 @@ function SortableLibrarySnippet({ snippet, isEditing, onStartLongPress, onCancel
                             {...attributes}
                             {...listeners}
                         >
-                            <span className="truncate flex-1">{snippet.label}</span>
+                            <span className="truncate flex-1 min-w-0">{snippet.label}</span>
 
                             {/* Pencil edit button */}
                             <Button

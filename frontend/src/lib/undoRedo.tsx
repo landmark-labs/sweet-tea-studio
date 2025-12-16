@@ -1,10 +1,13 @@
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
+type ActionCategory = 'text' | 'structure';
+
 type UndoRedoAction = {
   label: string;
   undo: () => void;
   redo: () => void;
   guardable?: boolean;
+  category?: ActionCategory;
 };
 
 type UndoRedoContextValue = {
@@ -13,8 +16,9 @@ type UndoRedoContextValue = {
   undo: () => void;
   redo: () => void;
   recordChange: (action: UndoRedoAction) => void;
-  registerStateChange: <T>(label: string, previous: T, next: T, apply: (value: T) => void, guardable?: boolean) => void;
+  registerStateChange: <T>(label: string, previous: T, next: T, apply: (value: T) => void, guardable?: boolean, category?: ActionCategory) => void;
   historyLabels: string[];
+  setTextInputFocused: (focused: boolean) => void;
 };
 
 const UndoRedoContext = createContext<UndoRedoContextValue | undefined>(undefined);
@@ -24,6 +28,11 @@ export function UndoRedoProvider({ children }: { children: ReactNode }) {
   const [undoStack, setUndoStack] = useState<UndoRedoAction[]>([]);
   const [redoStack, setRedoStack] = useState<UndoRedoAction[]>([]);
   const restoringRef = useRef(false);
+  const textInputFocusedRef = useRef(false);
+
+  const setTextInputFocused = useCallback((focused: boolean) => {
+    textInputFocusedRef.current = focused;
+  }, []);
 
   const recordChange = useCallback((action: UndoRedoAction) => {
     if (restoringRef.current) return;
@@ -38,11 +47,12 @@ export function UndoRedoProvider({ children }: { children: ReactNode }) {
     setRedoStack([]);
   }, []);
 
-  const registerStateChange = useCallback(<T,>(label: string, previous: T, next: T, apply: (value: T) => void, guardable?: boolean) => {
+  const registerStateChange = useCallback(<T,>(label: string, previous: T, next: T, apply: (value: T) => void, guardable?: boolean, category?: ActionCategory) => {
     if (previous === next) return;
     recordChange({
       label,
       guardable,
+      category,
       undo: () => {
         restoringRef.current = true;
         apply(previous);
@@ -81,8 +91,16 @@ export function UndoRedoProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
-      const isUndo = (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z";
+      const isUndo = (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z" && !event.shiftKey;
       const isRedo = (event.ctrlKey || event.metaKey) && (event.key.toLowerCase() === "y" || (event.shiftKey && event.key.toLowerCase() === "z"));
+
+      // Segregated undo: when focused on a text input/textarea, let browser handle it
+      // This allows native text undo to work without interference
+      if (textInputFocusedRef.current) {
+        // Don't intercept - let browser native undo/redo work
+        return;
+      }
+
       if (isUndo) {
         event.preventDefault();
         undo();
@@ -107,6 +125,7 @@ export function UndoRedoProvider({ children }: { children: ReactNode }) {
     recordChange,
     registerStateChange,
     historyLabels,
+    setTextInputFocused,
   };
 
   return <UndoRedoContext.Provider value={value}>{children}</UndoRedoContext.Provider>;

@@ -4,6 +4,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { api, TagSuggestion } from "@/lib/api";
 import { PromptItem } from "@/lib/types";
+import { useUndoRedo } from "@/lib/undoRedo";
 
 interface PromptAutocompleteTextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
     value: string;
@@ -68,6 +69,9 @@ export function PromptAutocompleteTextarea({
 }: PromptAutocompleteTextareaProps) {
     const textareaRef = useRef<HTMLTextAreaElement | null>(null);
     const backdropRef = useRef<HTMLDivElement | null>(null);
+
+    // Segregated undo: notify global system when text input is focused
+    const { setTextInputFocused } = useUndoRedo();
     const cacheRef = useRef<Map<string, TagSuggestion[]>>(new Map());
     const abortControllerRef = useRef<AbortController | null>(null);
     // Track intended cursor position to restore after external value changes add delimiters
@@ -117,7 +121,8 @@ export function PromptAutocompleteTextarea({
         const normalizedToken = token.replace(/\s+/g, "_");
 
         // Only check token length, NOT focus state - blur shouldn't stop autocomplete
-        if (normalizedToken.length < 2) {
+        // Require 3+ chars to reduce noise and aggressive triggering
+        if (normalizedToken.length < 3) {
             setIsOpen(false);
             setSuggestions([]);
             return;
@@ -154,7 +159,8 @@ export function PromptAutocompleteTextarea({
             }
         };
 
-        const handle = setTimeout(load, 250);
+        // Increased debounce to 350ms to reduce API calls during active typing
+        const handle = setTimeout(load, 350);
         return () => {
             clearTimeout(handle);
             if (abortControllerRef.current) {
@@ -361,9 +367,12 @@ export function PromptAutocompleteTextarea({
                 }}
                 onFocus={(e) => {
                     updateCursor();
+                    setTextInputFocused(true); // Segregated undo: let browser handle text undo
                     props.onFocus?.(e);
                 }}
                 onBlur={(e) => {
+                    // Segregated undo: restore global undo handling
+                    setTextInputFocused(false);
                     // Close dropdown after delay to allow clicking on dropdown items
                     // We use a longer delay and only close if user truly left the component
                     setTimeout(() => {
