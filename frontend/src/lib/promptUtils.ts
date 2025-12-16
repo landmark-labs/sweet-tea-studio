@@ -182,3 +182,30 @@ export function findPromptFieldsInSchema(
 
     return { positiveField, negativeField };
 }
+
+/**
+ * Find schema fields that are image uploads (LoadImage nodes).
+ * Used to map source images to the correct form fields in a workflow.
+ */
+export function findImageFieldsInSchema(
+    schema: Record<string, { widget?: string; title?: string;[k: string]: unknown }>
+): string[] {
+    const imageFields: string[] = [];
+
+    for (const [key, field] of Object.entries(schema)) {
+        if (key.startsWith("__")) continue;
+
+        const lowerKey = key.toLowerCase();
+        const isImageUpload =
+            field.widget === "upload" ||
+            field.widget === "image_upload" ||
+            lowerKey.includes("loadimage") ||
+            (field.title && field.title.toLowerCase().includes("loadimage"));
+
+        if (isImageUpload) {
+            imageFields.push(key);
+        }
+    }
+
+    return imageFields;
+}

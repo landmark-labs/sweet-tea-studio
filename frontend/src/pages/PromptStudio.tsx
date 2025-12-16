@@ -2,7 +2,7 @@ import { useEffect, useState, useRef, useMemo } from "react";
 import { addProgressEntry, calculateProgressStats, mapStatusToGenerationState, type GenerationState, type ProgressHistoryEntry } from "@/lib/generationState";
 import { useLocation, useNavigate, useOutletContext } from "react-router-dom";
 import { api, Engine, WorkflowTemplate, GalleryItem, EngineHealth, Project } from "@/lib/api";
-import { extractPrompts, findPromptFieldsInSchema } from "@/lib/promptUtils";
+import { extractPrompts, findPromptFieldsInSchema, findImageFieldsInSchema } from "@/lib/promptUtils";
 import { DynamicForm } from "@/components/DynamicForm";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -506,37 +506,66 @@ export default function PromptStudio() {
       ? String(loadParams.workflow_template_id)
       : selectedWorkflowId;
 
-    // Build the params to persist, with prompt injection
-    if (loadParams.job_params && targetWorkflowId) {
-      const sourceParams = { ...loadParams.job_params };
+    // Find the target workflow to get its schema
+    const targetWorkflow = workflows.find(w => String(w.id) === targetWorkflowId);
 
-      // Extract prompts from the source image's job_params
+    if (targetWorkflow?.input_schema && targetWorkflowId) {
+      // STEP 1: Build defaults from target workflow schema
+      const schema = targetWorkflow.input_schema;
+      const targetDefaults: Record<string, unknown> = {};
+
+      Object.entries(schema).forEach(([k, field]: [string, any]) => {
+        if (!k.startsWith("__") && field?.default !== undefined) {
+          targetDefaults[k] = field.default;
+        }
+      });
+
+      // STEP 2: Load any persisted params for this workflow (but we'll override some)
+      let baseParams = { ...targetDefaults };
+      try {
+        const saved = localStorage.getItem(`ds_pipe_params_${targetWorkflowId}`);
+        if (saved) {
+          baseParams = { ...baseParams, ...JSON.parse(saved) };
+        }
+      } catch (e) { /* ignore */ }
+
+      // STEP 3: Extract prompts from source image
       const extracted = extractPrompts(loadParams.job_params);
 
-      // Find the target workflow to get its schema
-      const targetWorkflow = workflows.find(w => String(w.id) === targetWorkflowId);
-      if (targetWorkflow?.input_schema) {
-        const { positiveField, negativeField } = findPromptFieldsInSchema(targetWorkflow.input_schema);
+      // STEP 4: Find prompt fields in target schema and inject
+      const { positiveField, negativeField } = findPromptFieldsInSchema(schema);
 
-        // Inject extracted prompts into the target workflow's fields
-        if (extracted.positive && positiveField) {
-          sourceParams[positiveField] = extracted.positive;
-        }
-        if (extracted.negative && negativeField) {
-          sourceParams[negativeField] = extracted.negative;
-        }
+      if (extracted.positive && positiveField) {
+        baseParams[positiveField] = extracted.positive;
+      }
+      if (extracted.negative && negativeField) {
+        baseParams[negativeField] = extracted.negative;
       }
 
-      // CRITICAL: Persist to localStorage SYNCHRONOUSLY before changing workflow ID
-      // This ensures the workflow initialization effect picks up these params
+      // STEP 5: Find first image field in target schema and inject source image
+      const imageFields = findImageFieldsInSchema(schema);
+      if (imageFields.length > 0) {
+        // Upload the source image and set the field
+        // For now, we use the path directly - the image will need to be uploaded
+        // We'll set a flag to trigger upload after the workflow loads
+        const imagePath = loadParams.image.path;
+        // Store the image path to be processed after navigation
+        sessionStorage.setItem("ds_pending_image_inject", JSON.stringify({
+          imagePath,
+          imageField: imageFields[0],
+          workflowId: targetWorkflowId
+        }));
+      }
+
+      // STEP 6: Persist the selective overrides to localStorage
       try {
-        localStorage.setItem(`ds_pipe_params_${targetWorkflowId}`, JSON.stringify(sourceParams));
+        localStorage.setItem(`ds_pipe_params_${targetWorkflowId}`, JSON.stringify(baseParams));
       } catch (e) {
         console.warn("Failed to persist loadParams", e);
       }
 
-      // Also update form state directly
-      setFormData(sourceParams);
+      // STEP 7: Update form state directly
+      setFormData(baseParams);
     }
 
     // Now change the workflow ID (this triggers the workflow init effect)
@@ -559,6 +588,51 @@ export default function PromptStudio() {
     navigate(location.pathname, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state, navigate, location.pathname]);
+
+  // Effect to process pending image injection after workflow loads
+  useEffect(() => {
+    const processPendingImage = async () => {
+      const pending = sessionStorage.getItem("ds_pending_image_inject");
+      if (!pending) return;
+
+      try {
+        const { imagePath, imageField, workflowId } = JSON.parse(pending);
+
+        // Only process if we're on the correct workflow
+        if (workflowId !== selectedWorkflowId) return;
+
+        // Clear the pending item first to prevent re-processing
+        sessionStorage.removeItem("ds_pending_image_inject");
+
+        // Fetch the image and upload it
+        const url = `/api/v1/gallery/image/path?path=${encodeURIComponent(imagePath)}`;
+        const res = await fetch(url);
+        const blob = await res.blob();
+        const filename = imagePath.split(/[\\/]/).pop() || "injected_image.png";
+        const file = new File([blob], filename, { type: blob.type });
+
+        const id = selectedEngineId ? parseInt(selectedEngineId) : undefined;
+        const result = await api.uploadFile(file, id, selectedProject?.slug, undefined);
+
+        // Update the form with the uploaded image filename
+        const newFormData = { ...formData, [imageField]: result.filename };
+        setFormData(newFormData);
+
+        // Also persist to localStorage
+        try {
+          localStorage.setItem(`ds_pipe_params_${selectedWorkflowId}`, JSON.stringify(newFormData));
+        } catch (e) { /* ignore */ }
+
+      } catch (err) {
+        console.error("Failed to process pending image inject:", err);
+        sessionStorage.removeItem("ds_pending_image_inject");
+      }
+    };
+
+    if (selectedWorkflowId && selectedEngineId) {
+      processPendingImage();
+    }
+  }, [selectedWorkflowId, selectedEngineId, selectedProject]);
 
   const loadPromptLibrary = async (query?: string) => {
     if (!selectedWorkflowId) {
