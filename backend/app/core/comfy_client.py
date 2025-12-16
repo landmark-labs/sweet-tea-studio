@@ -222,6 +222,7 @@ class ComfyClient:
                         if data['node'] is None and data['prompt_id'] == prompt_id:
                             # Execution complete - signal frontend immediately!
                             execution_complete = True
+                            print(f"[ComfyClient] Execution complete detected for {prompt_id}, sending execution_complete callback")
                             if progress_callback:
                                 progress_callback({"type": "execution_complete", "prompt_id": prompt_id})
                             # Clear earlier preview images - only keep post-completion ones
