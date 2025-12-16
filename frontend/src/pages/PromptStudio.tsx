@@ -501,40 +501,51 @@ export default function PromptStudio() {
 
     const { loadParams } = state;
 
+    // Determine the target workflow ID
+    const targetWorkflowId = loadParams.workflow_template_id
+      ? String(loadParams.workflow_template_id)
+      : selectedWorkflowId;
+
+    // Build the params to persist, with prompt injection
+    if (loadParams.job_params && targetWorkflowId) {
+      const sourceParams = { ...loadParams.job_params };
+
+      // Extract prompts from the source image's job_params
+      const extracted = extractPrompts(loadParams.job_params);
+
+      // Find the target workflow to get its schema
+      const targetWorkflow = workflows.find(w => String(w.id) === targetWorkflowId);
+      if (targetWorkflow?.input_schema) {
+        const { positiveField, negativeField } = findPromptFieldsInSchema(targetWorkflow.input_schema);
+
+        // Inject extracted prompts into the target workflow's fields
+        if (extracted.positive && positiveField) {
+          sourceParams[positiveField] = extracted.positive;
+        }
+        if (extracted.negative && negativeField) {
+          sourceParams[negativeField] = extracted.negative;
+        }
+      }
+
+      // CRITICAL: Persist to localStorage SYNCHRONOUSLY before changing workflow ID
+      // This ensures the workflow initialization effect picks up these params
+      try {
+        localStorage.setItem(`ds_pipe_params_${targetWorkflowId}`, JSON.stringify(sourceParams));
+      } catch (e) {
+        console.warn("Failed to persist loadParams", e);
+      }
+
+      // Also update form state directly
+      setFormData(sourceParams);
+    }
+
+    // Now change the workflow ID (this triggers the workflow init effect)
     if (loadParams.workflow_template_id) {
       setSelectedWorkflowId(String(loadParams.workflow_template_id));
     }
 
     if (loadParams.project_id !== undefined) {
       setSelectedProjectId(loadParams.project_id ? String(loadParams.project_id) : null);
-    }
-
-    // Enhanced prompt injection: Extract prompts from source and map to target workflow fields
-    if (loadParams.job_params) {
-      const sourceParams = { ...loadParams.job_params };
-
-      // Extract prompts from the source image's job_params
-      const extracted = extractPrompts(loadParams.job_params);
-
-      // Find the prompt fields in the CURRENT workflow's schema
-      // We need to wait for the workflow to be set, so we use a small delay
-      // to let the schema update, or use the current visibleSchema
-      setTimeout(() => {
-        const currentWorkflow = workflows.find(w => String(w.id) === (loadParams.workflow_template_id ? String(loadParams.workflow_template_id) : selectedWorkflowId));
-        if (currentWorkflow?.input_schema) {
-          const { positiveField, negativeField } = findPromptFieldsInSchema(currentWorkflow.input_schema);
-
-          // Inject extracted prompts into the target workflow's fields
-          if (extracted.positive && positiveField) {
-            sourceParams[positiveField] = extracted.positive;
-          }
-          if (extracted.negative && negativeField) {
-            sourceParams[negativeField] = extracted.negative;
-          }
-        }
-
-        handleFormChange(sourceParams, { immediateHistory: true });
-      }, 50);
     }
 
     setPreviewPath(`/api/v1/gallery/image/path?path=${encodeURIComponent(loadParams.image.path)}`);
