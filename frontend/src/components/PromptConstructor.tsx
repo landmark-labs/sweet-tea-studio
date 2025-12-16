@@ -267,6 +267,8 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
     // Sync item content when library snippets are edited
     // This ensures that when a user edits a snippet, all uses of that snippet in the prompt update
     const libraryRef = useRef<PromptItem[]>(library);
+    const syncingLibraryRef = useRef(false); // Flag to prevent reconcile during sync
+
     useEffect(() => {
         const prevLibrary = libraryRef.current;
         libraryRef.current = library;
@@ -281,6 +283,9 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
         });
 
         if (changedSnippets.size === 0) return;
+
+        // Set flag to prevent reconcile from running
+        syncingLibraryRef.current = true;
 
         // Update all fieldItems that reference changed snippets
         setFieldItems(prev => {
@@ -300,6 +305,11 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
 
             return hasChanges ? updated : prev;
         });
+
+        // Clear flag after a tick to allow state to settle
+        setTimeout(() => {
+            syncingLibraryRef.current = false;
+        }, 0);
     }, [library]);
 
     // Ref Pattern: Track currentValues without triggering effects in Output channel
@@ -315,6 +325,9 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
     // Reconciliation Logic (INPUT Channel: External Text -> Items)
     useEffect(() => {
         if (!isTargetValid) return;
+
+        // Skip if we're syncing library content - the sync effect handles item updates
+        if (syncingLibraryRef.current) return;
 
         const currentVal = currentValues[targetField] || "";
 
