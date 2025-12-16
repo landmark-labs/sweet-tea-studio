@@ -264,6 +264,44 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
     // Sync Library
     // Removed internal library sync (handled by parent)
 
+    // Sync item content when library snippets are edited
+    // This ensures that when a user edits a snippet, all uses of that snippet in the prompt update
+    const libraryRef = useRef<PromptItem[]>(library);
+    useEffect(() => {
+        const prevLibrary = libraryRef.current;
+        libraryRef.current = library;
+
+        // Find snippets that changed content
+        const changedSnippets = new Map<string, string>();
+        library.forEach(snippet => {
+            const prev = prevLibrary.find(p => p.id === snippet.id);
+            if (prev && prev.content !== snippet.content) {
+                changedSnippets.set(snippet.id, snippet.content);
+            }
+        });
+
+        if (changedSnippets.size === 0) return;
+
+        // Update all fieldItems that reference changed snippets
+        setFieldItems(prev => {
+            const updated: Record<string, PromptItem[]> = {};
+            let hasChanges = false;
+
+            Object.entries(prev).forEach(([field, fieldItemsList]) => {
+                const newItems = fieldItemsList.map(item => {
+                    if (item.sourceId && changedSnippets.has(item.sourceId)) {
+                        hasChanges = true;
+                        return { ...item, content: changedSnippets.get(item.sourceId)! };
+                    }
+                    return item;
+                });
+                updated[field] = newItems;
+            });
+
+            return hasChanges ? updated : prev;
+        });
+    }, [library]);
+
     // Ref Pattern: Track currentValues without triggering effects in Output channel
     const valuesRef = useRef(currentValues);
     useEffect(() => { valuesRef.current = currentValues; }, [currentValues]);
