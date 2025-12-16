@@ -10,7 +10,9 @@
 // Detect if running behind nginx at /studio/ path - use /sts-api prefix
 // Otherwise (local dev), use /api directly
 export const isStudioPath = typeof window !== 'undefined' && window.location.pathname.startsWith('/studio');
-const API_BASE = isStudioPath ? "/sts-api/api/v1" : "/api/v1";
+const DEFAULT_API_BASE = "/api/v1";
+const STUDIO_API_BASE = "/sts-api/api/v1";
+const API_BASE = isStudioPath ? STUDIO_API_BASE : DEFAULT_API_BASE;
 
 // Utility function to get the API base path - use this in components
 export const getApiBase = () => API_BASE;
@@ -839,15 +841,33 @@ export interface SnippetCreate {
     sort_order?: number;
 }
 
+// Snippets are critical for persistence. In some deployments, the backend may be
+// served under the /sts-api prefix even when the app is not mounted at /studio.
+// To avoid silent 404s, we retry snippet calls against the studio base once and
+// remember the working base for the rest of the session.
+let snippetApiBase = API_BASE;
+const fetchSnippet = async (path: string, init?: RequestInit) => {
+    const primary = await fetch(`${snippetApiBase}${path}`, init);
+    if (primary.ok || primary.status !== 404 || snippetApiBase === STUDIO_API_BASE) {
+        return primary;
+    }
+
+    const fallback = await fetch(`${STUDIO_API_BASE}${path}`, init);
+    if (fallback.ok) {
+        snippetApiBase = STUDIO_API_BASE;
+    }
+    return fallback;
+};
+
 export const snippetApi = {
     getSnippets: async (): Promise<Snippet[]> => {
-        const res = await fetch(`${API_BASE}/snippets`);
+        const res = await fetchSnippet(`/snippets`);
         if (!res.ok) throw new Error("Failed to fetch snippets");
         return res.json();
     },
 
     createSnippet: async (data: SnippetCreate): Promise<Snippet> => {
-        const res = await fetch(`${API_BASE}/snippets`, {
+        const res = await fetchSnippet(`/snippets`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(data),
@@ -857,7 +877,7 @@ export const snippetApi = {
     },
 
     updateSnippet: async (id: number, data: Partial<SnippetCreate>): Promise<Snippet> => {
-        const res = await fetch(`${API_BASE}/snippets/${id}`, {
+        const res = await fetchSnippet(`/snippets/${id}`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(data),
@@ -867,14 +887,14 @@ export const snippetApi = {
     },
 
     deleteSnippet: async (id: number): Promise<void> => {
-        const res = await fetch(`${API_BASE}/snippets/${id}`, {
+        const res = await fetchSnippet(`/snippets/${id}`, {
             method: "DELETE",
         });
         if (!res.ok) throw new Error("Failed to delete snippet");
     },
 
     reorderSnippets: async (snippetIds: number[]): Promise<Snippet[]> => {
-        const res = await fetch(`${API_BASE}/snippets/reorder`, {
+        const res = await fetchSnippet(`/snippets/reorder`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(snippetIds),
@@ -884,7 +904,7 @@ export const snippetApi = {
     },
 
     bulkUpsert: async (snippets: SnippetCreate[]): Promise<Snippet[]> => {
-        const res = await fetch(`${API_BASE}/snippets/bulk`, {
+        const res = await fetchSnippet(`/snippets/bulk`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(snippets),
