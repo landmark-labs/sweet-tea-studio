@@ -4,7 +4,7 @@ from datetime import datetime
 from fastapi import APIRouter, HTTPException
 from sqlmodel import Session, select
 
-from app.db.engine import engine
+from app.db.engine import ingestion_engine
 from app.models.snippet import Snippet, SnippetCreate, SnippetUpdate, SnippetRead
 
 router = APIRouter()
@@ -19,7 +19,10 @@ DEFAULT_SNIPPETS = [
 @router.get("", response_model=List[SnippetRead])
 def list_snippets():
     """Get all snippets, ordered by sort_order."""
-    with Session(engine) as session:
+    # Use the ingestion engine to avoid SQLite lock contention when we need to
+    # seed default rows on first run. Reads remain lightweight because the
+    # QueuePool is limited to a single connection.
+    with Session(ingestion_engine) as session:
         snippets = session.exec(
             select(Snippet).order_by(Snippet.sort_order, Snippet.id)
         ).all()
@@ -40,7 +43,7 @@ def list_snippets():
 @router.post("", response_model=SnippetRead)
 def create_snippet(data: SnippetCreate):
     """Create a new snippet."""
-    with Session(engine) as session:
+    with Session(ingestion_engine) as session:
         # Get max sort_order for new snippet
         max_order = session.exec(
             select(Snippet.sort_order).order_by(Snippet.sort_order.desc())
@@ -61,7 +64,7 @@ def create_snippet(data: SnippetCreate):
 @router.put("/{snippet_id}", response_model=SnippetRead)
 def update_snippet(snippet_id: int, data: SnippetUpdate):
     """Update an existing snippet."""
-    with Session(engine) as session:
+    with Session(ingestion_engine) as session:
         snippet = session.get(Snippet, snippet_id)
         if not snippet:
             raise HTTPException(status_code=404, detail="Snippet not found")
@@ -85,7 +88,7 @@ def update_snippet(snippet_id: int, data: SnippetUpdate):
 @router.delete("/{snippet_id}")
 def delete_snippet(snippet_id: int):
     """Delete a snippet."""
-    with Session(engine) as session:
+    with Session(ingestion_engine) as session:
         snippet = session.get(Snippet, snippet_id)
         if not snippet:
             raise HTTPException(status_code=404, detail="Snippet not found")
@@ -98,7 +101,7 @@ def delete_snippet(snippet_id: int):
 @router.put("/reorder", response_model=List[SnippetRead])
 def reorder_snippets(snippet_ids: List[int]):
     """Reorder snippets by providing the new order of IDs."""
-    with Session(engine) as session:
+    with Session(ingestion_engine) as session:
         for idx, snippet_id in enumerate(snippet_ids):
             snippet = session.get(Snippet, snippet_id)
             if snippet:
@@ -122,7 +125,7 @@ def bulk_upsert_snippets(snippets_data: List[SnippetCreate]):
     - Inserts new snippets if label doesn't exist
     - Deletes snippets whose labels are NOT in the incoming list
     """
-    with Session(engine) as session:
+    with Session(ingestion_engine) as session:
         # Get existing snippets indexed by label
         existing = session.exec(select(Snippet)).all()
         existing_by_label = {s.label: s for s in existing}
