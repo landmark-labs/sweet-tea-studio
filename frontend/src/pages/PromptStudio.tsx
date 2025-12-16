@@ -2,6 +2,7 @@ import { useEffect, useState, useRef, useMemo } from "react";
 import { addProgressEntry, calculateProgressStats, mapStatusToGenerationState, type GenerationState, type ProgressHistoryEntry } from "@/lib/generationState";
 import { useLocation, useNavigate, useOutletContext } from "react-router-dom";
 import { api, Engine, WorkflowTemplate, GalleryItem, EngineHealth, Project } from "@/lib/api";
+import { extractPrompts, findPromptFieldsInSchema } from "@/lib/promptUtils";
 import { DynamicForm } from "@/components/DynamicForm";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -508,8 +509,32 @@ export default function PromptStudio() {
       setSelectedProjectId(loadParams.project_id ? String(loadParams.project_id) : null);
     }
 
+    // Enhanced prompt injection: Extract prompts from source and map to target workflow fields
     if (loadParams.job_params) {
-      handleFormChange(loadParams.job_params, { immediateHistory: true });
+      const sourceParams = { ...loadParams.job_params };
+
+      // Extract prompts from the source image's job_params
+      const extracted = extractPrompts(loadParams.job_params);
+
+      // Find the prompt fields in the CURRENT workflow's schema
+      // We need to wait for the workflow to be set, so we use a small delay
+      // to let the schema update, or use the current visibleSchema
+      setTimeout(() => {
+        const currentWorkflow = workflows.find(w => String(w.id) === (loadParams.workflow_template_id ? String(loadParams.workflow_template_id) : selectedWorkflowId));
+        if (currentWorkflow?.input_schema) {
+          const { positiveField, negativeField } = findPromptFieldsInSchema(currentWorkflow.input_schema);
+
+          // Inject extracted prompts into the target workflow's fields
+          if (extracted.positive && positiveField) {
+            sourceParams[positiveField] = extracted.positive;
+          }
+          if (extracted.negative && negativeField) {
+            sourceParams[negativeField] = extracted.negative;
+          }
+        }
+
+        handleFormChange(sourceParams, { immediateHistory: true });
+      }, 50);
     }
 
     setPreviewPath(`/api/v1/gallery/image/path?path=${encodeURIComponent(loadParams.image.path)}`);

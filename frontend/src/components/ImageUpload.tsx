@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Upload, X, Loader2, Grid, PenTool } from "lucide-react";
 import { api } from "@/lib/api";
@@ -79,20 +79,45 @@ export function ImageUpload({ value, onChange, engineId, options = [], projectSl
         await processFile(e.target.files[0]);
     };
 
+    // Drag counter to handle nested elements properly
+    // When dragging over child elements, dragenter/dragleave fire on each child
+    // The counter ensures we only set isDragging=false when truly leaving
+    const dragCounterRef = useRef(0);
+
+    const handleDragEnter = (e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dragCounterRef.current++;
+        if (!isDragging) {
+            setIsDragging(true);
+        }
+    };
+
     const handleDragOver = (e: React.DragEvent) => {
         e.preventDefault();
+        e.stopPropagation();
         e.dataTransfer.dropEffect = "copy";
-        setIsDragging(true);
+        // Ensure isDragging stays true during drag
+        if (!isDragging) {
+            setIsDragging(true);
+        }
     };
 
     const handleDragLeave = (e: React.DragEvent) => {
         e.preventDefault();
-        setIsDragging(false);
+        e.stopPropagation();
+        dragCounterRef.current--;
+        // Only set to false when all nested enter events have been matched with leaves
+        if (dragCounterRef.current === 0) {
+            setIsDragging(false);
+        }
     };
 
     const handleDrop = async (e: React.DragEvent) => {
         e.preventDefault();
+        e.stopPropagation();
         setIsDragging(false);
+        dragCounterRef.current = 0; // Reset counter for next drag operation
 
         // Priority 1: Check for Sweet Tea internal image path
         const sweetTeaPath = e.dataTransfer.getData("application/x-sweet-tea-image");
@@ -213,6 +238,7 @@ export function ImageUpload({ value, onChange, engineId, options = [], projectSl
                         "flex flex-col items-center justify-center border-2 border-dashed rounded-lg p-6 transition-colors gap-4",
                         isDragging ? "border-blue-500 bg-blue-50" : "border-slate-200 hover:bg-slate-50"
                     )}
+                    onDragEnter={handleDragEnter}
                     onDragOver={handleDragOver}
                     onDragLeave={handleDragLeave}
                     onDrop={handleDrop}
@@ -291,6 +317,7 @@ export function ImageUpload({ value, onChange, engineId, options = [], projectSl
                         "relative w-full h-48 bg-slate-100 rounded-lg overflow-hidden border group transition-colors",
                         isDragging ? "border-blue-500 ring-2 ring-blue-500 ring-opacity-50" : ""
                     )}
+                    onDragEnter={handleDragEnter}
                     onDragOver={handleDragOver}
                     onDragLeave={handleDragLeave}
                     onDrop={handleDrop}
