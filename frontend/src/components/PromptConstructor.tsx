@@ -261,8 +261,46 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
         }
     }, [schema]);
 
-    // Sync Library
-    // Removed internal library sync (handled by parent)
+    // Sync Library: When a library snippet's content changes, update all linked items
+    // This watches for library changes and syncs content to items with matching sourceId
+    const prevLibraryRef = useRef<PromptItem[]>([]);
+    useEffect(() => {
+        // Build map of current library snippets by ID
+        const libraryById = new Map(library.map(s => [s.id, s]));
+
+        // Check if any library snippet content changed
+        let hasChanges = false;
+        const updatedItems = items.map(item => {
+            // Only sync 'block' items with a sourceId (linked to library)
+            if (item.type !== 'block' || !item.sourceId) return item;
+
+            const librarySnippet = libraryById.get(item.sourceId);
+            if (!librarySnippet) {
+                // Snippet was deleted from library - item becomes unlinked text
+                return { ...item, type: 'text' as const, sourceId: undefined, label: item.label || 'Text' };
+            }
+
+            // If content differs, sync it (snippet was edited)
+            if (item.content !== librarySnippet.content) {
+                hasChanges = true;
+                return {
+                    ...item,
+                    content: librarySnippet.content,
+                    label: librarySnippet.label,
+                    color: librarySnippet.color
+                };
+            }
+
+            return item;
+        });
+
+        if (hasChanges) {
+            setItems(updatedItems, "Library snippet updated", false);
+        }
+
+        prevLibraryRef.current = library;
+    }, [library]);
+
 
     // Ref Pattern: Track currentValues without triggering effects in Output channel
     const valuesRef = useRef(currentValues);
