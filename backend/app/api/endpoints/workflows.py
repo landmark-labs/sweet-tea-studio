@@ -80,42 +80,56 @@ class WorkflowImportRequest(BaseModel):
 
 
 def generate_schema_from_graph(graph: Dict[str, Any], object_info: Dict[str, Any]) -> Dict[str, Any]:
-    schema = {}
+    schema: Dict[str, Any] = {}
     
     # We want to expose widgets. 
     # Logic: Iterate nodes, look at class_type, find widgets in object_info.
     # Group by class_type to handle dupes.
     
-    node_counts = {}
+    node_counts: Dict[str, int] = {}
+    node_meta: Dict[str, Any] = {}
+    ordered_node_ids: List[str] = []
     
     # Sort by ID to have stable order (string IDs)
-    for node_id in sorted(graph.keys(), key=lambda x: int(x) if x.isdigit() else x):
+    for raw_node_id in sorted(graph.keys(), key=lambda x: int(x) if x.isdigit() else x):
+        node_id = str(raw_node_id)
+        ordered_node_ids.append(node_id)
         node = graph[node_id]
         class_type = node.get("class_type")
+        title = node.get("_meta", {}).get("title", class_type)
+
+        node_meta[node_id] = {
+            "class_type": class_type,
+            "title": title,
+            "skipped": None,
+        }
+
         if not class_type:
+            node_meta[node_id]["skipped"] = "missing_class_type"
             continue
             
         # Check against object_info
         if class_type not in object_info:
+            node_meta[node_id]["skipped"] = "unknown_node_type"
             continue # Skip missing nodes for schema generation (validation handles warning)
             
         node_def = object_info[class_type]
         input_conf = node_def.get("input", {})
         required = input_conf.get("required", {})
         optional = input_conf.get("optional", {})
+        node_meta[node_id]["input_count"] = len(required) + len(optional)
         
         # Merge inputs
         all_inputs = {**required, **optional}
         
-        # Track counts for unique naming
+        # Track counts for display naming
         if class_type not in node_counts:
             node_counts[class_type] = 0
         node_counts[class_type] += 1
         count = node_counts[class_type]
         
-        # Suffix for dupes: KSampler (no suffix), KSampler_2, etc.
-        suffix = "" if count == 1 else f"_{count}"
-        
+        fields_added = False
+
         for input_name, input_config in all_inputs.items():
             # input_config is [type, config_dict] e.g. ["INT", {"default": 20...}]
             if not isinstance(input_config, list):
@@ -139,7 +153,15 @@ def generate_schema_from_graph(graph: Dict[str, Any], object_info: Dict[str, Any
             val_type = input_config[0]
             
             # Helper to map Comfy types to JSON Schema
-            field_key = f"{class_type}{suffix}.{input_name}"
+            # Include node_id to make keys stable even when multiple nodes share a class_type.
+            field_key = f"{class_type}#{node_id}.{input_name}"
+            
+            base_field = {
+                "x_node_id": node_id,
+                "x_class_type": class_type,
+                "x_title": title or class_type,
+                "x_instance": count,
+            }
             
             # Simple mapping logic
             if val_type == "INT":
@@ -150,27 +172,25 @@ def generate_schema_from_graph(graph: Dict[str, Any], object_info: Dict[str, Any
                 
                 schema[field_key] = {
                     "type": "integer", 
-                    "title": f"{input_name} ({class_type}{suffix})",
+                    "title": f"{input_name} ({class_type}{'' if count == 1 else f' #{node_id}'})",
                     "default": current_val if current_val is not None else 0,
                     "minimum": min_val,
                     "maximum": config.get("max"),
-                    "x_node_id": node_id,
-                    "x_class_type": class_type,
-                    "x_title": node.get("_meta", {}).get("title", class_type)
+                    **base_field,
                 }
+                fields_added = True
 
             elif val_type == "FLOAT":
                 schema[field_key] = {
                     "type": "number", 
-                    "title": f"{input_name} ({class_type}{suffix})",
+                    "title": f"{input_name} ({class_type}{'' if count == 1 else f' #{node_id}'})",
                     "default": current_val if current_val is not None else 0.0,
                     "minimum": config.get("min"),
                     "maximum": config.get("max"),
                     "step": config.get("step", 0.01),
-                    "x_node_id": node_id,
-                    "x_class_type": class_type,
-                    "x_title": node.get("_meta", {}).get("title", class_type)
+                    **base_field,
                 }
+                fields_added = True
             elif val_type == "STRING":
                  # Check for multiline
                 widget = "textarea" if config.get("multiline") else "text"
@@ -179,34 +199,39 @@ def generate_schema_from_graph(graph: Dict[str, Any], object_info: Dict[str, Any
                     "title": f"{(node.get('_meta', {}).get('title') or input_name)}", 
                     "default": current_val if current_val is not None else "",
                     "widget": widget,
-                    "x_node_id": node_id,
-                    "x_class_type": class_type,
-                    "x_title": node.get("_meta", {}).get("title", class_type)
+                    **base_field,
                 }
+                fields_added = True
             elif isinstance(val_type, list):
                 # Enum
                 # Special case for LoadImage nodes
                 if class_type == "LoadImage" and input_name == "image":
                     schema[field_key] = {
                         "type": "string",
-                        "title": f"Image ({class_type}{suffix})",
+                        "title": f"Image ({class_type}{'' if count == 1 else f' #{node_id}'})",
                         "default": current_val if current_val is not None else (val_type[0] if val_type else ""),
                         "widget": "image_upload", # Force specialized widget
                         "enum": val_type, # Pass available files as options
-                        "x_node_id": node_id,
-                        "x_class_type": class_type,
-                        "x_title": node.get("_meta", {}).get("title", class_type)
+                        **base_field,
                     }
+                    fields_added = True
                 else:
                     schema[field_key] = {
                         "type": "string",
-                        "title": f"{input_name} ({class_type}{suffix})",
+                        "title": f"{input_name} ({class_type}{'' if count == 1 else f' #{node_id}'})",
                         "default": current_val if current_val is not None else val_type[0],
                         "enum": val_type,
-                        "x_node_id": node_id,
-                        "x_class_type": class_type,
-                        "x_title": node.get("_meta", {}).get("title", class_type)
+                        **base_field,
                     }
+                    fields_added = True
+
+        if not fields_added and node_meta[node_id]["skipped"] is None:
+            node_meta[node_id]["skipped"] = "no_exposed_inputs"
+
+    # Attach metadata so the frontend can preserve node ordering and explain omissions
+    schema["__node_order"] = ordered_node_ids
+    schema["__node_meta"] = node_meta
+    schema["__schema_version"] = 2
 
     return schema
 
@@ -337,7 +362,10 @@ def create_workflow(workflow_in: WorkflowTemplateCreate):
             # Generate default helper mapping as well
             workflow_in.node_mapping = {}
             for key, field_def in workflow_in.input_schema.items():
-                if "x_node_id" in field_def:
+                if key.startswith("__"):
+                    continue
+                if not isinstance(field_def, dict) or "x_node_id" not in field_def:
+                    continue
                     # We preserve x_ metadata in the schema for UI grouping!
                     workflow_in.node_mapping[key] = {
                         "node_id": field_def["x_node_id"],

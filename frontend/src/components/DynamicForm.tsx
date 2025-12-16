@@ -525,7 +525,7 @@ export const DynamicForm = React.memo(function DynamicForm({
                 {field.enum || dynamicOptions[key] ? (
                     (() => {
                         const rawOptions = dynamicOptions[key] || field.enum || [];
-                        const currentVal = String(formData[key] || "");
+                        const currentVal = String(formData[key] ?? "");
                         // Ensure the current value is always an option to prevent auto-reset/invalidation
                         const options = currentVal && !rawOptions.includes(currentVal)
                             ? [currentVal, ...rawOptions]
@@ -559,7 +559,7 @@ export const DynamicForm = React.memo(function DynamicForm({
                     <Input
                         id={key}
                         type={field.type === "integer" || field.type === "number" ? "number" : "text"}
-                        value={formData[key] || ""}
+                        value={formData[key] ?? ""}
                         onChange={(e) => handleChange(key, field.type === "integer" ? parseInt(e.target.value) : field.type === "number" ? parseFloat(e.target.value) : e.target.value)}
                         onFocus={() => onFieldFocus?.(key)}
                         placeholder=""

@@ -68,6 +68,11 @@ export default function PromptStudio() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [formData, setFormData] = useState<any>({});
   const [focusedField, setFocusedField] = useState<string>("");
+  const formDataRef = useRef<any>({});
+  useEffect(() => {
+    formDataRef.current = formData;
+  }, [formData]);
+  const initializedWorkflowsRef = useRef<Set<string>>(new Set());
 
   const { generationFeed, trackFeedStart, updateFeed } = useGenerationFeedStore();
 
@@ -316,25 +321,40 @@ export default function PromptStudio() {
   }, [selectedProjectId]);
 
   useEffect(() => {
-    if (selectedWorkflow) {
-      const schema = visibleSchema;
-      const key = `ds_pipe_params_${String(selectedWorkflow.id)}`;
+    if (!selectedWorkflow) return;
 
+    const schema = visibleSchema;
+    const workflowKey = String(selectedWorkflow.id);
+    const currentData = formDataRef.current || {};
+    const hasExistingData = Object.keys(currentData).length > 0;
+    const hasMissingDefaults = Object.entries(schema)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let initialData: any = {};
-      Object.keys(schema).forEach((k) => {
-        if (schema[k].default !== undefined) initialData[k] = schema[k].default;
-      });
-      try {
-        const saved = localStorage.getItem(key);
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          initialData = { ...initialData, ...parsed };
-        }
-      } catch (e) { /* ignore */ }
-      setFormData(initialData);
+      .filter(([key]: [string, any]) => !key.startsWith("__"))
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .some(([key, field]: [string, any]) => field?.default !== undefined && currentData[key] === undefined);
+
+    // Avoid overwriting user edits unless we are switching workflows or have new defaults to apply
+    if (initializedWorkflowsRef.current.has(workflowKey) && hasExistingData && !hasMissingDefaults) {
+      return;
     }
-  }, [selectedWorkflowId, visibleSchema, workflows]);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let initialData: any = {};
+    Object.entries(schema).forEach(([k, field]: [string, any]) => {
+      if (!k.startsWith("__") && field?.default !== undefined) {
+        initialData[k] = field.default;
+      }
+    });
+    try {
+      const saved = localStorage.getItem(`ds_pipe_params_${workflowKey}`);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        initialData = { ...initialData, ...parsed };
+      }
+    } catch (e) { /* ignore */ }
+    setFormData(initialData);
+    initializedWorkflowsRef.current.add(workflowKey);
+  }, [selectedWorkflow, visibleSchema]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { registerStateChange } = useUndoRedo();
@@ -356,11 +376,15 @@ export default function PromptStudio() {
 
   const persistForm = (data: any) => {
     // Safety: Don't persist if checkpoint got wiped (common init race condition)
-    if (data['CheckpointLoaderSimple.ckpt_name'] === "" && formData['CheckpointLoaderSimple.ckpt_name']) {
-      console.warn("[SafeGuard] Prevented overwriting checkpoint with empty string");
-      // Keep the old checkpoint value
-      data['CheckpointLoaderSimple.ckpt_name'] = formData['CheckpointLoaderSimple.ckpt_name'];
-    }
+    Object.keys(data)
+      .filter((key) => key.includes("CheckpointLoaderSimple") && key.endsWith(".ckpt_name"))
+      .forEach((key) => {
+        const previous = formData[key];
+        if (data[key] === "" && typeof previous === "string" && previous.length > 0) {
+          console.warn("[SafeGuard] Prevented overwriting checkpoint with empty string");
+          data[key] = previous;
+        }
+      });
 
     setFormData(data);
     if (selectedWorkflowId) {
@@ -948,8 +972,6 @@ export default function PromptStudio() {
   // Note: 'generation' is already defined earlier in the component
   const handleGenerateRef = useRef(handleGenerate);
   handleGenerateRef.current = handleGenerate;
-  const formDataRef = useRef(formData);
-  formDataRef.current = formData;
 
   useEffect(() => {
     if (!generation) return;

@@ -144,7 +144,7 @@ def get_comfyui_config():
     
     Returns detected ComfyUI paths and whether it can be launched.
     """
-    config = comfy_launcher.detect_comfyui()
+    config = comfy_launcher.get_config()
     return LaunchConfig(
         path=config.path,
         python_path=config.python_path,
@@ -221,4 +221,3 @@ def get_comfyui_status():
         "last_error": status.get("last_error"),
         "last_action_at": status.get("last_action_at"),
     }
-

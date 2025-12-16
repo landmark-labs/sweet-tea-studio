@@ -3,6 +3,7 @@ ComfyUI Launcher Service.
 Provides ability to detect, configure, and launch ComfyUI from Sweet Tea Studio.
 """
 import asyncio
+import json
 import os
 import signal
 import socket
@@ -43,6 +44,14 @@ class ComfyUILauncher:
         # Port check cache for faster is_running() calls
         self._port_check_cache: dict = {"result": None, "timestamp": 0}
         self._port_cache_ttl = 2.0  # Cache for 2 seconds
+        self._config_path = settings.meta_dir / "comfyui_config.json"
+        try:
+            settings.ensure_dirs()
+            self._config_path.parent.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            # Directory creation failures should not crash the launcher; will retry on save.
+            pass
+        self._config = self._load_config_from_disk() or self._config
 
     def get_logs(self, lines: int = 100) -> str:
         """Get the tail of the log file."""
@@ -71,9 +80,71 @@ class ComfyUILauncher:
                 return "".join(lines_data[-n:])
         except Exception:
             return "Error reading log file"
-    
+   
+    def _load_config_from_disk(self) -> Optional[LaunchConfig]:
+        """Load persisted ComfyUI config if present."""
+        try:
+            if not self._config_path.exists():
+                return None
+            with open(self._config_path, "r", encoding="utf-8") as fh:
+                data = json.load(fh)
+
+            config = LaunchConfig(
+                path=data.get("path"),
+                python_path=data.get("python_path"),
+                args=data.get("args") or [],
+                port=data.get("port", 8188),
+                detection_method=data.get("detection_method", "saved_config"),
+            )
+
+            if config.path and self._is_valid_comfyui_path(config.path):
+                config.is_available = True
+                # Re-evaluate python path in case environments changed
+                config.python_path = config.python_path or self._find_python_for_comfyui(config.path)
+            else:
+                config.is_available = False
+
+            return config
+        except Exception as exc:
+            print(f"Failed to load ComfyUI config: {exc}")
+            return None
+
+    def _save_config_to_disk(self, config: LaunchConfig) -> None:
+        """Persist the current ComfyUI config for future sessions."""
+        try:
+            self._config_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(self._config_path, "w", encoding="utf-8") as fh:
+                json.dump(
+                    {
+                        "path": config.path,
+                        "python_path": config.python_path,
+                        "args": config.args or [],
+                        "port": config.port,
+                        "detection_method": config.detection_method,
+                    },
+                    fh,
+                    ensure_ascii=False,
+                    indent=2,
+                )
+        except Exception as exc:
+            print(f"Failed to persist ComfyUI config: {exc}")
+
+    def _resolve_cached_config(self) -> Optional[LaunchConfig]:
+        """Return an in-memory or on-disk config if available."""
+        if self._config:
+            return self._config
+        loaded = self._load_config_from_disk()
+        if loaded:
+            self._config = loaded
+        return loaded
+
     def detect_comfyui(self) -> LaunchConfig:
         """Detect ComfyUI installation paths."""
+        cached = self._resolve_cached_config()
+        cached_unavailable = cached if cached and not cached.is_available else None
+        if cached and cached.is_available:
+            return cached
+
         config = LaunchConfig(args=[])
         
         # Check environment variable first
@@ -84,6 +155,7 @@ class ComfyUILauncher:
             config.detection_method = "environment_variable"
             config.python_path = self._find_python_for_comfyui(env_path)
             self._config = config
+            self._save_config_to_disk(config)
             return config
         
         # Check settings
@@ -94,8 +166,39 @@ class ComfyUILauncher:
             config.detection_method = "settings"
             config.python_path = self._find_python_for_comfyui(settings_path)
             self._config = config
+            self._save_config_to_disk(config)
             return config
-    
+        
+        # Try common paths
+        possible_paths = [
+            Path.home() / "ComfyUI",
+            Path("C:/Users/jkoti/sd/Data/Packages/ComfyUI"),
+            Path("/workspace/ComfyUI"),
+            Path("~/stable-diffusion/ComfyUI").expanduser(),
+        ]
+        
+        for p in possible_paths:
+            if self._is_valid_comfyui_path(str(p)):
+                config.path = str(p)
+                config.is_available = True
+                config.detection_method = f"path_scan:{p}"
+                config.python_path = self._find_python_for_comfyui(str(p))
+                self._config = config
+                self._save_config_to_disk(config)
+                return config
+        
+        # Not found
+        if cached_unavailable:
+            self._config = cached_unavailable
+            self._save_config_to_disk(cached_unavailable)
+            return cached_unavailable
+
+        config.is_available = False
+        config.detection_method = "not_found"
+        self._config = config
+        self._save_config_to_disk(config)
+        return config
+
     def _is_port_in_use(self, port: int) -> bool:
         """Fast check if a port is in use via socket (no process iteration)."""
         try:
@@ -135,53 +238,6 @@ class ComfyUILauncher:
         return None
 
 
-    def detect_comfyui(self) -> LaunchConfig:
-        """Detect ComfyUI installation paths."""
-        config = LaunchConfig(args=[])
-        
-        # Check environment variable first
-        env_path = os.environ.get("COMFYUI_PATH")
-        if env_path and self._is_valid_comfyui_path(env_path):
-            config.path = env_path
-            config.is_available = True
-            config.detection_method = "environment_variable"
-            config.python_path = self._find_python_for_comfyui(env_path)
-            self._config = config
-            return config
-        
-        # Check settings
-        settings_path = getattr(settings, 'COMFYUI_PATH', None)
-        if settings_path and self._is_valid_comfyui_path(settings_path):
-            config.path = settings_path
-            config.is_available = True
-            config.detection_method = "settings"
-            config.python_path = self._find_python_for_comfyui(settings_path)
-            self._config = config
-            return config
-        
-        # Try common paths
-        possible_paths = [
-            Path.home() / "ComfyUI",
-            Path("C:/Users/jkoti/sd/Data/Packages/ComfyUI"),
-            Path("/workspace/ComfyUI"),
-            Path("~/stable-diffusion/ComfyUI").expanduser(),
-        ]
-        
-        for p in possible_paths:
-            if self._is_valid_comfyui_path(str(p)):
-                config.path = str(p)
-                config.is_available = True
-                config.detection_method = f"path_scan:{p}"
-                config.python_path = self._find_python_for_comfyui(str(p))
-                self._config = config
-                return config
-        
-        # Not found
-        config.is_available = False
-        config.detection_method = "not_found"
-        self._config = config
-        return config
-    
     def _is_valid_comfyui_path(self, path_str: str) -> bool:
         """Check if a path contains a valid ComfyUI installation."""
         path = Path(path_str)
@@ -231,11 +287,11 @@ class ComfyUILauncher:
     
     def get_config(self) -> LaunchConfig:
         """Get current launch configuration."""
-        if not self._config:
-            return self.detect_comfyui()
-        if self._config.args is None:
-            self._config.args = []
-        return self._config
+        config = self._resolve_cached_config() or self.detect_comfyui()
+        if config.args is None:
+            config.args = []
+        self._config = config
+        return config
 
     def set_config(self, path: Optional[str], args: Optional[str]) -> dict:
         """Set a user-provided ComfyUI path and arguments."""
@@ -256,6 +312,7 @@ class ComfyUILauncher:
             config.args = args.split() if args.strip() else []
 
         self._config = config
+        self._save_config_to_disk(config)
 
         return {
             "success": True,
