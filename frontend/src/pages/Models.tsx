@@ -396,7 +396,7 @@ export default function Models() {
                     onValueChange={(v) => handleRowChange(row.id, 'target', v)}
                   >
                     <SelectTrigger className="w-[100px] flex-none h-7 text-xs">
-                      <SelectValue />
+                      <span className="truncate block max-w-[70px]"><SelectValue /></span>
                     </SelectTrigger>
                     <SelectContent>
                       {modelFolders.map((folder) => (
