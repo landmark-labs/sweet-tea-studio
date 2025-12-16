@@ -17,7 +17,7 @@ register_gallery_error_handlers(app)
 @app.on_event("startup")
 async def on_startup():
     init_db()
-    # start_tag_cache_refresh_background()  # TEMPORARILY DISABLED
+    start_tag_cache_refresh_background()  # Populate tags.db for autocomplete
     manager.loop = asyncio.get_running_loop()
     await watchdog.start()
 
