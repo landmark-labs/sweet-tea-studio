@@ -860,8 +860,12 @@ export default function PromptStudio() {
         setLastJobId(null);
       } else if (data.type === "preview") {
         // Live Preview from KSampler
-        console.log("[Preview] Received preview blob:", data.data.blob?.substring(0, 50) + "...", "length:", data.data.blob?.length);
-        updateFeed(lastJobId, { previewBlob: data.data.blob });
+        // Use job_id from message to avoid stale closure issues with lastJobId
+        const targetJobId = data.job_id ?? lastJobId;
+        console.log("[Preview] Received preview blob for job", targetJobId, ":", data.data.blob?.substring(0, 50) + "...", "length:", data.data.blob?.length);
+        if (targetJobId) {
+          updateFeed(targetJobId, { previewBlob: data.data.blob });
+        }
       } else if (data.type === "error") {
         setGenerationState("failed");
         setStatusLabel("failed");
