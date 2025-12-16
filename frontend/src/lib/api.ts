@@ -8,11 +8,15 @@
  */
 
 // Detect if running behind nginx at /studio/ path - use /sts-api prefix
-// Otherwise (local dev), use /api directly
+// Otherwise (local dev), use /api directly. Allow runtime overrides via a
+// global injected by the hosting environment (e.g., window.__STS_API_BASE__)
+// so deployments can point the frontend at a different backend host.
 export const isStudioPath = typeof window !== 'undefined' && window.location.pathname.startsWith('/studio');
 const DEFAULT_API_BASE = "/api/v1";
 const STUDIO_API_BASE = "/sts-api/api/v1";
-const API_BASE = isStudioPath ? STUDIO_API_BASE : DEFAULT_API_BASE;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const RUNTIME_API_BASE = (typeof window !== 'undefined' && (window as any).__STS_API_BASE__) || DEFAULT_API_BASE;
+const API_BASE = isStudioPath ? STUDIO_API_BASE : RUNTIME_API_BASE;
 
 // Utility function to get the API base path - use this in components
 export const getApiBase = () => API_BASE;
@@ -842,6 +846,77 @@ export interface SnippetCreate {
 }
 
 // Snippets are critical for persistence. In some deployments, the backend may be
+// served under a different prefix or even a separate host. Detect a working base
+// dynamically (supporting window.__STS_API_BASE__) and reuse it for the session
+// so calls do not get routed back to the SPA HTML with 404/HTML responses.
+const snippetBaseCandidates = Array.from(
+    new Set<string>([
+        API_BASE,
+        STUDIO_API_BASE,
+        RUNTIME_API_BASE,
+    ].filter(Boolean)),
+);
+
+let resolvedSnippetBase: string | null = null;
+let resolvingSnippetBase: Promise<string> | null = null;
+
+const probeBase = async (base: string) => {
+    try {
+        const res = await fetch(`${base}/status/summary`, { method: "GET" });
+        return res.ok;
+    } catch (e) {
+        console.warn(`Failed to reach API base ${base}`, e);
+        return false;
+    }
+};
+
+const resolveSnippetBase = async (): Promise<string> => {
+    if (resolvedSnippetBase) return resolvedSnippetBase;
+    if (resolvingSnippetBase) return resolvingSnippetBase;
+
+    resolvingSnippetBase = (async () => {
+        for (const base of snippetBaseCandidates) {
+            if (await probeBase(base)) {
+                resolvedSnippetBase = base;
+                return base;
+            }
+        }
+        // If nothing probes cleanly, fall back to the first candidate to avoid
+        // leaving the promise unresolved and still give the caller a URL.
+        resolvedSnippetBase = snippetBaseCandidates[0];
+        return resolvedSnippetBase;
+    })();
+
+    return resolvingSnippetBase;
+};
+
+const fetchSnippet = async (path: string, init?: RequestInit) => {
+    const base = await resolveSnippetBase();
+    const primary = await fetch(`${base}${path}`, init);
+    if (primary.ok || primary.status !== 404) {
+        return primary;
+    }
+
+    for (const candidate of snippetBaseCandidates) {
+        if (candidate === base) continue;
+        const res = await fetch(`${candidate}${path}`, init);
+        if (res.ok) {
+            resolvedSnippetBase = candidate;
+            return res;
+        }
+        if (res.status !== 404) return res;
+    }
+
+    return primary;
+};
+
+const parseSnippetJson = async <T>(res: Response): Promise<T> => {
+    const contentType = res.headers.get("content-type") || "";
+    if (!contentType.includes("application/json")) {
+        const body = await res.text();
+        throw new Error(`Unexpected response from snippets API (${res.status}): ${body.slice(0, 200)}`);
+    }
+    return res.json();
 // served under the /sts-api prefix even when the app is not mounted at /studio.
 // To avoid silent 404s, we retry snippet calls against the studio base once and
 // remember the working base for the rest of the session.
@@ -863,7 +938,7 @@ export const snippetApi = {
     getSnippets: async (): Promise<Snippet[]> => {
         const res = await fetchSnippet(`/snippets`);
         if (!res.ok) throw new Error("Failed to fetch snippets");
-        return res.json();
+        return parseSnippetJson<Snippet[]>(res);
     },
 
     createSnippet: async (data: SnippetCreate): Promise<Snippet> => {
@@ -873,7 +948,7 @@ export const snippetApi = {
             body: JSON.stringify(data),
         });
         if (!res.ok) throw new Error("Failed to create snippet");
-        return res.json();
+        return parseSnippetJson<Snippet>(res);
     },
 
     updateSnippet: async (id: number, data: Partial<SnippetCreate>): Promise<Snippet> => {
@@ -883,7 +958,7 @@ export const snippetApi = {
             body: JSON.stringify(data),
         });
         if (!res.ok) throw new Error("Failed to update snippet");
-        return res.json();
+        return parseSnippetJson<Snippet>(res);
     },
 
     deleteSnippet: async (id: number): Promise<void> => {
@@ -900,7 +975,7 @@ export const snippetApi = {
             body: JSON.stringify(snippetIds),
         });
         if (!res.ok) throw new Error("Failed to reorder snippets");
-        return res.json();
+        return parseSnippetJson<Snippet[]>(res);
     },
 
     bulkUpsert: async (snippets: SnippetCreate[]): Promise<Snippet[]> => {
@@ -910,6 +985,6 @@ export const snippetApi = {
             body: JSON.stringify(snippets),
         });
         if (!res.ok) throw new Error("Failed to bulk update snippets");
-        return res.json();
+        return parseSnippetJson<Snippet[]>(res);
     },
 };
