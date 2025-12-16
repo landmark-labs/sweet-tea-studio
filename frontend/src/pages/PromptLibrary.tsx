@@ -207,6 +207,10 @@ export default function PromptLibrary() {
 
             <div className="space-y-4">
                 {filteredPrompts.map((prompt) => {
+                    const key =
+                        prompt.prompt_id !== undefined && prompt.prompt_id !== null
+                            ? `prompt-${prompt.prompt_id}`
+                            : `img-${prompt.image_id}-${prompt.prompt_name || prompt.created_at || Math.random().toString(36).slice(2)}`;
                     const pipeName = prompt.workflow_template_id
                         ? (workflows.find(w => w.id === prompt.workflow_template_id)?.name || `Pipe ${prompt.workflow_template_id}`)
                         : null;
@@ -223,7 +227,7 @@ export default function PromptLibrary() {
 
                     return (
                         <div
-                            key={prompt.image_id}
+                            key={key}
                             className="flex items-start gap-3 p-3 bg-white rounded-lg border border-slate-200 shadow-sm hover:shadow-md transition-all group"
                         >
                             {/* Thumbnail */}

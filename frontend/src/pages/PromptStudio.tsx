@@ -384,6 +384,11 @@ export default function PromptStudio() {
   useEffect(() => {
     return () => {
       flushPendingPersist();
+      if (historyTimerRef.current) {
+        clearTimeout(historyTimerRef.current);
+        historyTimerRef.current = null;
+      }
+      pendingHistoryRef.current = null;
     };
   }, [selectedWorkflowId]);
 
@@ -401,14 +406,39 @@ export default function PromptStudio() {
 
     // Update state 
     persistForm(defaults);
+    // Register a single history entry for reset
+    handleFormChange(defaults, { immediateHistory: true });
     setFocusedField("");
   };
 
+  const pendingHistoryRef = useRef<{ prev: any; next: any } | null>(null);
+  const historyTimerRef = useRef<NodeJS.Timeout | null>(null);
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const handleFormChange = (newData: any) => {
+  const handleFormChange = (newData: any, { immediateHistory }: { immediateHistory?: boolean } = {}) => {
     const previous = formData;
     persistForm(newData);
-    registerStateChange("Form updated", previous, newData, persistForm);
+
+    // Only register undo after edits settle to avoid per-keystroke snapshots
+    if (immediateHistory) {
+      registerStateChange("Form updated", previous, newData, persistForm);
+      if (historyTimerRef.current) {
+        clearTimeout(historyTimerRef.current);
+        historyTimerRef.current = null;
+      }
+      pendingHistoryRef.current = null;
+      return;
+    }
+
+    pendingHistoryRef.current = { prev: previous, next: newData };
+    if (historyTimerRef.current) clearTimeout(historyTimerRef.current);
+    historyTimerRef.current = setTimeout(() => {
+      if (pendingHistoryRef.current) {
+        registerStateChange("Form updated", pendingHistoryRef.current.prev, pendingHistoryRef.current.next, persistForm);
+        pendingHistoryRef.current = null;
+      }
+      historyTimerRef.current = null;
+    }, 350);
   };
 
   const handlePromptUpdate = (field: string, value: string) => {
@@ -432,7 +462,7 @@ export default function PromptStudio() {
     }
 
     if (loadParams.job_params) {
-      handleFormChange(loadParams.job_params);
+      handleFormChange(loadParams.job_params, { immediateHistory: true });
     }
 
     setPreviewPath(`/api/v1/gallery/image/path?path=${encodeURIComponent(loadParams.image.path)}`);
