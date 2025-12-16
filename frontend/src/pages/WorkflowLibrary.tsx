@@ -153,7 +153,8 @@ const NodeCard = ({ node, schemaEdits, setSchemaEdits }: NodeCardProps) => {
                                             onChange={(e) => {
                                                 const s = { ...schemaEdits };
                                                 const val = e.target.value;
-                                                const type = field.type;
+                                                // FIX: Force CFG to be treated as float even if Comfy reports it as integer
+                                                const type = key.toLowerCase() === 'cfg' ? 'float' : field.type;
                                                 if (type === "number" || type === "float") {
                                                     // Allow typing incomplete numbers like "-" or "-." or "." 
                                                     if (val === "" || val === "-" || val === "." || val === "-.") {
