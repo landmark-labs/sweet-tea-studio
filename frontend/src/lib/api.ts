@@ -845,69 +845,11 @@ export interface SnippetCreate {
     sort_order?: number;
 }
 
-// Snippets are critical for persistence. In some deployments, the backend may be
-// served under a different prefix or even a separate host. Detect a working base
-// dynamically (supporting window.__STS_API_BASE__) and reuse it for the session
-// so calls do not get routed back to the SPA HTML with 404/HTML responses.
-const snippetBaseCandidates = Array.from(
-    new Set<string>([
-        API_BASE,
-        STUDIO_API_BASE,
-        RUNTIME_API_BASE,
-    ].filter(Boolean)),
-);
-
-let resolvedSnippetBase: string | null = null;
-let resolvingSnippetBase: Promise<string> | null = null;
-
-const probeBase = async (base: string) => {
-    try {
-        const res = await fetch(`${base}/status/summary`, { method: "GET" });
-        return res.ok;
-    } catch (e) {
-        console.warn(`Failed to reach API base ${base}`, e);
-        return false;
-    }
-};
-
-const resolveSnippetBase = async (): Promise<string> => {
-    if (resolvedSnippetBase) return resolvedSnippetBase;
-    if (resolvingSnippetBase) return resolvingSnippetBase;
-
-    resolvingSnippetBase = (async () => {
-        for (const base of snippetBaseCandidates) {
-            if (await probeBase(base)) {
-                resolvedSnippetBase = base;
-                return base;
-            }
-        }
-        // If nothing probes cleanly, fall back to the first candidate to avoid
-        // leaving the promise unresolved and still give the caller a URL.
-        resolvedSnippetBase = snippetBaseCandidates[0];
-        return resolvedSnippetBase;
-    })();
-
-    return resolvingSnippetBase;
-};
+// Snippet API uses the same base as other APIs
+// No special probing needed - API_BASE already handles /studio vs /api routing
 
 const fetchSnippet = async (path: string, init?: RequestInit) => {
-    const base = await resolveSnippetBase();
-    const primary = await fetch(`${base}${path}`, init);
-    if (primary.ok || primary.status !== 404) {
-        return primary;
-    }
-
-    for (const candidate of snippetBaseCandidates) {
-        if (candidate === base) continue;
-        const res = await fetch(`${candidate}${path}`, init);
-        if (res.ok) {
-            resolvedSnippetBase = candidate;
-            return res;
-        }
-        if (res.status !== 404) return res;
-    }
-
-    return primary;
+    return fetch(`${API_BASE}${path}`, init);
 };
 
 const parseSnippetJson = async <T>(res: Response): Promise<T> => {
