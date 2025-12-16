@@ -7,16 +7,22 @@
  * reference organized by domain. For new imports, prefer '@/lib/types'.
  */
 
-// Detect if running behind nginx at /studio/ path - use /sts-api prefix
-// Otherwise (local dev), use /api directly. Allow runtime overrides via a
-// global injected by the hosting environment (e.g., window.__STS_API_BASE__)
-// so deployments can point the frontend at a different backend host.
+// Detect if running behind nginx (production) vs local dev
+// Use /sts-api prefix when:
+// 1. At /studio/ path (explicit nginx routing)
+// 2. Not on localhost (deployed to remote server)
+// 3. Runtime override via window.__STS_API_BASE__
 export const isStudioPath = typeof window !== 'undefined' && window.location.pathname.startsWith('/studio');
+const isLocalhost = typeof window !== 'undefined' && (
+    window.location.hostname === 'localhost' ||
+    window.location.hostname === '127.0.0.1'
+);
 const DEFAULT_API_BASE = "/api/v1";
 const STUDIO_API_BASE = "/sts-api/api/v1";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const RUNTIME_API_BASE = (typeof window !== 'undefined' && (window as any).__STS_API_BASE__) || DEFAULT_API_BASE;
-const API_BASE = isStudioPath ? STUDIO_API_BASE : RUNTIME_API_BASE;
+const RUNTIME_API_BASE = (typeof window !== 'undefined' && (window as any).__STS_API_BASE__) || null;
+// Priority: Runtime override > Not localhost (use /sts-api) > /studio path > Local dev (/api)
+const API_BASE = RUNTIME_API_BASE || (!isLocalhost ? STUDIO_API_BASE : (isStudioPath ? STUDIO_API_BASE : DEFAULT_API_BASE));
 
 // Utility function to get the API base path - use this in components
 export const getApiBase = () => API_BASE;
