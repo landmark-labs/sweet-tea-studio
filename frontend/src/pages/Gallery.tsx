@@ -343,7 +343,7 @@ export default function Gallery() {
     const cleanupDeleteCount = Math.max(items.length - selectedIds.size, 0);
     const fullscreenItem = fullscreenIndex !== null ? items[fullscreenIndex] : null;
 
-    if (isLoading) return <div className="p-8">Loading gallery...</div>;
+    // Note: We no longer return early for loading - this keeps the sidebar visible for smoother transitions
 
     return (
         <div className="flex h-screen overflow-hidden bg-slate-50">
@@ -422,7 +422,20 @@ export default function Gallery() {
                     </Alert>
                 )}
 
-                {items.length === 0 ? (
+                {/* Subtle loading overlay - keeps existing content visible */}
+                {isLoading && items.length > 0 && (
+                    <div className="absolute inset-0 bg-white/50 flex items-center justify-center z-10 pointer-events-none">
+                        <div className="text-sm text-slate-500 bg-white/90 px-4 py-2 rounded-full shadow-sm border">
+                            Loading...
+                        </div>
+                    </div>
+                )}
+
+                {items.length === 0 && isLoading ? (
+                    <div className="text-center text-slate-500 py-20">
+                        Loading gallery...
+                    </div>
+                ) : items.length === 0 ? (
                     <div className="text-center text-slate-500 py-20">
                         No images generated yet. Go to New Generation to create some!
                     </div>
@@ -497,13 +510,7 @@ export default function Gallery() {
                                                 <span>{new Date(item.created_at).toLocaleString()}</span>
                                             </div>
 
-                                            {item.prompt_name && (
-                                                <p className="text-[11px] uppercase tracking-wide text-slate-500">{item.prompt_name}</p>
-                                            )}
 
-                                            {item.prompt && (
-                                                <p className="line-clamp-2 italic text-slate-700">"{item.prompt}"</p>
-                                            )}
 
                                             {item.caption && (
                                                 <p className="text-slate-600 line-clamp-2">{item.caption}</p>
