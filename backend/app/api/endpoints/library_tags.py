@@ -680,6 +680,9 @@ def fetch_all_rule34_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int = 1
                             "page": "dapi",
                             "s": "tag",
                             "q": "index",
+                            # Fetch most-used tags first (Gelbooru/Rule34-style DAPI)
+                            "order": "count",
+                            "direction": "desc",
                             "limit": limit,
                             "pid": page,
                         }
@@ -867,8 +870,20 @@ def refresh_tag_cache(force: bool = False, only_source: Optional[str] = None):
             state = session.exec(
                 select(TagSyncState).where(TagSyncState.source == source)
             ).first()
-            
+
+            # If the sync state claims we're fresh but the underlying tag rows are missing,
+            # always re-fetch. This avoids a "fresh but empty" cache after migrations,
+            # DB restores, or partial deletes.
+            source_count_raw = session.exec(
+                select(func.count(Tag.id)).where(Tag.source == source)
+            ).one()
+            source_count = (
+                int(source_count_raw[0]) if isinstance(source_count_raw, tuple) else int(source_count_raw or 0)
+            )
+             
             if not state:
+                is_stale = True
+            elif source_count <= 0:
                 is_stale = True
             elif not force and datetime.utcnow() - state.last_synced_at > TAG_CACHE_MAX_AGE:
                 is_stale = True
