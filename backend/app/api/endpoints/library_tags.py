@@ -5,7 +5,9 @@ Handles tag management, external source fetching (Danbooru, e621, Rule34),
 and background caching synchronization.
 """
 
+import logging
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
 import json
 import time
@@ -21,12 +23,110 @@ from app.models.tag import Tag, TagCreate, TagSyncState
 from app.models.prompt import Prompt
 from app.db.engine import engine as db_engine, tags_engine
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
+
+# Path to static fallback tags (shipped with app)
+FALLBACK_TAGS_PATH = Path(__file__).parent.parent.parent / "data" / "fallback_tags.json"
 
 # Constants
 TAG_CACHE_MAX_AGE = timedelta(hours=24)
 TAG_CACHE_MAX_TAGS = 10000
 TAG_CACHE_PAGE_SIZE = 200
+
+# DNS-over-HTTPS endpoints (Cloudflare and Google as fallbacks)
+DOH_SERVERS = [
+    "https://1.1.1.1/dns-query",
+    "https://8.8.8.8/dns-query",
+]
+
+
+def resolve_via_doh(hostname: str) -> Optional[str]:
+    """
+    Resolve hostname to IP address using DNS-over-HTTPS.
+    Bypasses local DNS poisoning on datacenter networks.
+    """
+    for doh_server in DOH_SERVERS:
+        try:
+            with httpx.Client(timeout=5.0) as client:
+                res = client.get(
+                    doh_server,
+                    params={"name": hostname, "type": "A"},
+                    headers={"Accept": "application/dns-json"},
+                )
+                res.raise_for_status()
+                data = res.json()
+                
+                # Extract first A record
+                for answer in data.get("Answer", []):
+                    if answer.get("type") == 1:  # A record
+                        ip = answer.get("data")
+                        if ip:
+                            logger.debug(f"[DoH] Resolved {hostname} -> {ip}")
+                            return ip
+        except Exception as e:
+            logger.debug(f"[DoH] Failed to resolve {hostname} via {doh_server}: {e}")
+            continue
+    
+    logger.warning(f"[DoH] Could not resolve {hostname} via any DoH server")
+    return None
+
+
+def create_doh_client(hostname: str, timeout: float = 10.0) -> httpx.Client:
+    """
+    Create an httpx client that connects to a hostname via DoH-resolved IP.
+    Falls back to normal DNS if DoH resolution fails.
+    Always sets base_url so relative URLs work consistently.
+    """
+    ip = resolve_via_doh(hostname)
+    if not ip:
+        # Fall back to normal DNS with full URL
+        logger.debug(f"[DoH] Falling back to system DNS for {hostname}")
+        return httpx.Client(
+            timeout=timeout,
+            headers={"User-Agent": "sweet-tea-studio/0.1 (preload)"},
+            base_url=f"https://{hostname}",
+        )
+    
+    # Use the resolved IP with custom Host header
+    logger.info(f"[DoH] Using resolved IP {ip} for {hostname}")
+    return httpx.Client(
+        timeout=timeout,
+        headers={
+            "User-Agent": "sweet-tea-studio/0.1 (preload)",
+            "Host": hostname,
+        },
+        base_url=f"https://{ip}",
+        verify=False,  # Required when connecting via IP with different Host header
+    )
+
+
+def load_fallback_tags() -> List["TagSuggestion"]:
+    """Load static fallback tags from bundled JSON file."""
+    if not FALLBACK_TAGS_PATH.exists():
+        logger.warning(f"[TagSync] Fallback tags file not found at {FALLBACK_TAGS_PATH}")
+        return []
+    
+    try:
+        with open(FALLBACK_TAGS_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        
+        tags = [
+            TagSuggestion(
+                name=t.get("name", ""),
+                source=t.get("source", "fallback"),
+                frequency=t.get("frequency", 0),
+                description=t.get("description"),
+            )
+            for t in data
+            if t.get("name")
+        ]
+        logger.info(f"[TagSync] Loaded {len(tags)} fallback tags from static file")
+        return tags
+    except Exception as e:
+        logger.error(f"[TagSync] Failed to load fallback tags: {e}")
+        return []
+
 
 # Models
 class TagSuggestion(BaseModel):
@@ -145,18 +245,24 @@ def fetch_danbooru_tags(query: str, limit: int = 10) -> List[TagSuggestion]:
                 for tag in data
                 if tag.get("name")
             ]
-    except Exception:
+    except Exception as e:
+        logger.warning(f"[TagFetch] Danbooru query failed for '{query}': {e}")
         return []
 
 def fetch_all_danbooru_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int = TAG_CACHE_PAGE_SIZE) -> List[TagSuggestion]:
     collected: List[TagSuggestion] = []
     page = 1
-
-    with httpx.Client(timeout=10.0, headers={"User-Agent": "sweet-tea-studio/0.1 (preload)"}) as client:
+    hostname = "danbooru.donmai.us"
+    
+    # Use DoH client to bypass DNS poisoning
+    client = create_doh_client(hostname, timeout=10.0)
+    
+    with client:
         while len(collected) < max_tags:
             try:
+                # When using DoH client, use relative URL (base_url is set)
                 res = client.get(
-                    "https://danbooru.donmai.us/tags.json",
+                    "/tags.json",
                     params={
                         "search[order]": "count",
                         "limit": page_size,
@@ -165,7 +271,8 @@ def fetch_all_danbooru_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int =
                 )
                 res.raise_for_status()
                 data = res.json()
-            except Exception:
+            except Exception as e:
+                logger.warning(f"[TagSync] Danbooru fetch page {page} failed: {e}")
                 break
 
             if not data:
@@ -216,21 +323,23 @@ def fetch_e621_tags(query: str, limit: int = 10) -> List[TagSuggestion]:
                 for tag in data
                 if tag.get("name")
             ]
-    except Exception:
+    except Exception as e:
+        logger.warning(f"[TagFetch] e621 query failed: {e}")
         return []
 
 def fetch_all_e621_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int = TAG_CACHE_PAGE_SIZE) -> List[TagSuggestion]:
     collected: List[TagSuggestion] = []
     page = 1
-
-    with httpx.Client(
-        timeout=10.0,
-        headers={"User-Agent": "sweet-tea-studio/0.1 (preload)"},
-    ) as client:
+    hostname = "e621.net"
+    
+    # Use DoH client to bypass DNS poisoning
+    client = create_doh_client(hostname, timeout=10.0)
+    
+    with client:
         while len(collected) < max_tags:
             try:
                 res = client.get(
-                    "https://e621.net/tags.json",
+                    "/tags.json",
                     params={
                         "search[order]": "count",
                         "limit": page_size,
@@ -239,7 +348,8 @@ def fetch_all_e621_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int = TAG
                 )
                 res.raise_for_status()
                 data = res.json()
-            except Exception:
+            except Exception as e:
+                logger.warning(f"[TagSync] e621 fetch page {page} failed: {e}")
                 break
 
             if not data:
@@ -316,17 +426,18 @@ def fetch_all_rule34_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int = 1
         "bl", "br", "gr", "lo", "ni", "se", "so", "th"
     ]
     
-    with httpx.Client(
-        timeout=10.0,
-        headers={"User-Agent": "sweet-tea-studio/0.1 (preload)"},
-        follow_redirects=True,
-    ) as client:
+    hostname = "api.rule34.xxx"
+    
+    # Use DoH client to bypass DNS poisoning
+    client = create_doh_client(hostname, timeout=10.0)
+    
+    with client:
         for prefix in prefixes:
             if len(collected) >= max_tags:
                 break
             try:
                 res = client.get(
-                    "https://api.rule34.xxx/autocomplete.php",
+                    "/autocomplete.php",
                     params={"q": prefix},
                 )
                 res.raise_for_status()
@@ -367,6 +478,8 @@ def refresh_remote_tag_cache_if_stale():
         "rule34": fetch_all_rule34_tags,
     }
 
+    total_fetched = 0
+    
     for source, fetcher in sources.items():
         # 1. Check staleness (Quick Read)
         is_stale = False
@@ -385,11 +498,11 @@ def refresh_remote_tag_cache_if_stale():
 
         # 2. Fetch data (Slow Network I/O) - NO DB CONNECTION HELD
         try:
-            print(f"[TagSync] Fetching {source}...")
+            logger.info(f"[TagSync] Fetching {source}...")
             remote_tags = fetcher() # This can take seconds/minutes
-            print(f"[TagSync] Fetched {len(remote_tags)} tags from {source}")
+            logger.info(f"[TagSync] Fetched {len(remote_tags)} tags from {source}")
         except Exception as e:
-            print(f"[TagSync] Failed to fetch {source}: {e}")
+            logger.warning(f"[TagSync] Failed to fetch {source}: {e}")
             continue
 
         # 3. Write data (Quick Write)
@@ -416,9 +529,41 @@ def refresh_remote_tag_cache_if_stale():
                             )
                         )
                     session.commit()
-                    print(f"[TagSync] Saved {len(remote_tags)} tags for {source}")
+                    total_fetched += len(remote_tags)
+                    logger.info(f"[TagSync] Saved {len(remote_tags)} tags for {source}")
             except Exception as e:
-                print(f"[TagSync] Failed to save {source} tags: {e}")
+                logger.error(f"[TagSync] Failed to save {source} tags: {e}")
+
+    # 4. If no network tags were fetched, load fallback tags
+    if total_fetched == 0:
+        logger.warning("[TagSync] No network tags fetched, loading fallback tags...")
+        fallback_tags = load_fallback_tags()
+        if fallback_tags:
+            try:
+                with Session(tags_engine) as session:
+                    bulk_upsert_tag_suggestions(session, fallback_tags, "fallback")
+                    
+                    # Mark fallback as synced so we don't re-run immediately
+                    state = session.exec(
+                        select(TagSyncState).where(TagSyncState.source == "fallback")
+                    ).first()
+                    if state:
+                        state.last_synced_at = datetime.utcnow()
+                        state.tag_count = len(fallback_tags)
+                        session.add(state)
+                    else:
+                        session.add(
+                            TagSyncState(
+                                source="fallback",
+                                last_synced_at=datetime.utcnow(),
+                                tag_count=len(fallback_tags),
+                            )
+                        )
+                    session.commit()
+                    logger.info(f"[TagSync] Loaded {len(fallback_tags)} fallback tags")
+            except Exception as e:
+                logger.error(f"[TagSync] Failed to save fallback tags: {e}")
+
 
 def start_tag_cache_refresh_background():
     Thread(target=refresh_remote_tag_cache_if_stale, daemon=True).start()
@@ -547,3 +692,40 @@ def import_tags(payload: TagImportRequest):
 
         session.commit()
         return {"created": created, "updated": updated, "total": created + updated}
+
+
+@router.post("/refresh")
+def trigger_tag_refresh(background_tasks: BackgroundTasks):
+    """Manually trigger a tag cache refresh (useful for debugging)."""
+    background_tasks.add_task(refresh_remote_tag_cache_if_stale)
+    return {"message": "Tag refresh started in background"}
+
+
+@router.get("/status")
+def get_tag_cache_status():
+    """Get status of the tag cache for debugging."""
+    with Session(tags_engine) as session:
+        # Count tags by source
+        all_tags = session.exec(select(Tag)).all()
+        by_source: Dict[str, int] = {}
+        for tag in all_tags:
+            by_source[tag.source] = by_source.get(tag.source, 0) + 1
+        
+        # Get sync states
+        sync_states = session.exec(select(TagSyncState)).all()
+        states = [
+            {
+                "source": s.source,
+                "last_synced_at": s.last_synced_at.isoformat() if s.last_synced_at else None,
+                "tag_count": s.tag_count,
+            }
+            for s in sync_states
+        ]
+        
+        return {
+            "total_tags": len(all_tags),
+            "tags_by_source": by_source,
+            "sync_states": states,
+            "fallback_file_exists": FALLBACK_TAGS_PATH.exists(),
+        }
+
