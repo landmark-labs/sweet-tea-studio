@@ -17,7 +17,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import httpx
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel
-from sqlmodel import Session, col, select
+from sqlmodel import Session, col, select, func
 
 from app.models.tag import Tag, TagCreate, TagSyncState
 from app.models.prompt import Prompt
@@ -75,20 +75,17 @@ def resolve_via_doh(hostname: str) -> Optional[str]:
 def create_doh_client(hostname: str, timeout: float = 10.0) -> httpx.Client:
     """
     Create an httpx client that connects to a hostname via DoH-resolved IP.
-    Falls back to normal DNS if DoH resolution fails.
-    Always sets base_url so relative URLs work consistently.
+    This is primarily used as a fallback when normal DNS fails.
     """
     ip = resolve_via_doh(hostname)
     if not ip:
-        # Fall back to normal DNS with full URL
-        logger.debug(f"[DoH] Falling back to system DNS for {hostname}")
+        logger.warning(f"[DoH] Could not resolve {hostname}, falling back to system DNS client")
         return httpx.Client(
             timeout=timeout,
             headers={"User-Agent": "sweet-tea-studio/0.1 (preload)"},
             base_url=f"https://{hostname}",
         )
     
-    # Use the resolved IP with custom Host header
     logger.info(f"[DoH] Using resolved IP {ip} for {hostname}")
     return httpx.Client(
         timeout=timeout,
@@ -160,6 +157,86 @@ def upsert_tags(session: Session, tags: List[str], source: str = "custom") -> No
 
     session.commit()
 
+def upsert_tags_in_cache(tags: List[str], source: str = "custom") -> None:
+    """Upsert tags directly into the dedicated autocomplete cache database."""
+    if not tags:
+        return
+    with Session(tags_engine) as session:
+        upsert_tags(session, tags, source)
+
+def bootstrap_tags_db_from_profile():
+    """
+    Legacy migration: copy tags stored in profile.db into tags.db if the cache
+    is empty or clearly behind. This preserves manual tags users previously added.
+    """
+    try:
+        with Session(db_engine) as profile_session:
+            profile_count = profile_session.exec(select(func.count(Tag.id))).one()
+            profile_states = profile_session.exec(select(TagSyncState)).all()
+            profile_tags = profile_session.exec(select(Tag)).all() if profile_count else []
+    except Exception as e:
+        logger.warning(f"[TagSync] Unable to read profile.db tags for migration: {e}")
+        return
+
+    try:
+        with Session(tags_engine) as tag_session:
+            tag_count = tag_session.exec(select(func.count(Tag.id))).one()
+            tag_state_count = tag_session.exec(select(func.count(TagSyncState.id))).one()
+    except Exception as e:
+        logger.warning(f"[TagSync] Unable to inspect tags.db for migration: {e}")
+        return
+
+    if not profile_count:
+        return
+
+    logger.info(
+        f"[TagSync] Backfilling tags.db from profile.db "
+        f"(profile tags: {profile_count}, tags.db: {tag_count})"
+    )
+
+    try:
+        suggestions = [
+            TagSuggestion(
+                name=t.name,
+                source=t.source or "library",
+                frequency=t.frequency or 0,
+                description=t.description,
+            )
+            for t in profile_tags
+            if t.name
+        ]
+
+        with Session(tags_engine) as tag_session:
+            if suggestions:
+                bulk_upsert_tag_suggestions(tag_session, suggestions, source="library")
+
+            # Copy sync state so staleness checks don't thrash
+            for state in profile_states:
+                existing = tag_session.exec(
+                    select(TagSyncState).where(TagSyncState.source == state.source)
+                ).first()
+                if existing:
+                    if state.last_synced_at and (
+                        not existing.last_synced_at
+                        or existing.last_synced_at < state.last_synced_at
+                    ):
+                        existing.last_synced_at = state.last_synced_at
+                        existing.tag_count = state.tag_count
+                        tag_session.add(existing)
+                else:
+                    tag_session.add(
+                        TagSyncState(
+                            source=state.source,
+                            last_synced_at=state.last_synced_at,
+                            tag_count=state.tag_count,
+                        )
+                    )
+            tag_session.commit()
+
+        logger.info(f"[TagSync] Backfilled {len(suggestions)} tags into tags.db")
+    except Exception as e:
+        logger.error(f"[TagSync] Failed to backfill tags.db from profile.db: {e}")
+
 def bulk_upsert_tag_suggestions(session: Session, tags: List[TagSuggestion], source: str) -> int:
     if not tags:
         return 0
@@ -189,19 +266,21 @@ def bulk_upsert_tag_suggestions(session: Session, tags: List[TagSuggestion], sou
             if tag.name in processed_in_batch:
                 continue
             processed_in_batch.add(tag.name)
+            effective_source = tag.source or source
             
             if tag.name in existing_map:
                 current = existing_map[tag.name]
                 current.frequency = max(current.frequency or 0, tag.frequency)
                 current.description = current.description or tag.description
                 current.updated_at = datetime.utcnow()
-                current.source = current.source or source
+                if (not current.source) or (current.source == "library" and effective_source != "library"):
+                    current.source = effective_source
                 total_updated += 1
             else:
                 session.add(
                     Tag(
                         name=tag.name,
-                        source=source,
+                        source=effective_source,
                         frequency=tag.frequency,
                         description=tag.description,
                     )
@@ -254,13 +333,19 @@ def fetch_all_danbooru_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int =
     page = 1
     hostname = "danbooru.donmai.us"
     
-    # Use DoH client to bypass DNS poisoning
-    client = create_doh_client(hostname, timeout=10.0)
-    
-    with client:
+    # Prefer normal DNS first; fall back to DoH-resolved IP only if needed
+    primary_client = httpx.Client(
+        timeout=10.0,
+        headers={"User-Agent": "sweet-tea-studio/0.1 (preload)"},
+        base_url=f"https://{hostname}",
+    )
+    fallback_client: Optional[httpx.Client] = None
+    client = primary_client
+    used_fallback = False
+
+    try:
         while len(collected) < max_tags:
             try:
-                # When using DoH client, use relative URL (base_url is set)
                 res = client.get(
                     "/tags.json",
                     params={
@@ -272,7 +357,13 @@ def fetch_all_danbooru_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int =
                 res.raise_for_status()
                 data = res.json()
             except Exception as e:
-                logger.warning(f"[TagSync] Danbooru fetch page {page} failed: {e}")
+                if not used_fallback:
+                    logger.warning(f"[TagSync] Danbooru primary fetch failed (page {page}), retrying with DoH fallback: {e}")
+                    fallback_client = create_doh_client(hostname, timeout=10.0)
+                    client = fallback_client
+                    used_fallback = True
+                    continue
+                logger.warning(f"[TagSync] Danbooru fetch page {page} failed after fallback: {e}")
                 break
 
             if not data:
@@ -294,6 +385,11 @@ def fetch_all_danbooru_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int =
             if len(data) < page_size:
                 break
             page += 1
+
+    finally:
+        primary_client.close()
+        if fallback_client:
+            fallback_client.close()
 
     return collected[:max_tags]
 
@@ -332,10 +428,17 @@ def fetch_all_e621_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int = TAG
     page = 1
     hostname = "e621.net"
     
-    # Use DoH client to bypass DNS poisoning
-    client = create_doh_client(hostname, timeout=10.0)
-    
-    with client:
+    # Prefer normal DNS first; fall back to DoH-resolved IP only if needed
+    primary_client = httpx.Client(
+        timeout=10.0,
+        headers={"User-Agent": "sweet-tea-studio/0.1 (preload)"},
+        base_url=f"https://{hostname}",
+    )
+    fallback_client: Optional[httpx.Client] = None
+    client = primary_client
+    used_fallback = False
+
+    try:
         while len(collected) < max_tags:
             try:
                 res = client.get(
@@ -349,7 +452,13 @@ def fetch_all_e621_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int = TAG
                 res.raise_for_status()
                 data = res.json()
             except Exception as e:
-                logger.warning(f"[TagSync] e621 fetch page {page} failed: {e}")
+                if not used_fallback:
+                    logger.warning(f"[TagSync] e621 primary fetch failed (page {page}), retrying with DoH fallback: {e}")
+                    fallback_client = create_doh_client(hostname, timeout=10.0)
+                    client = fallback_client
+                    used_fallback = True
+                    continue
+                logger.warning(f"[TagSync] e621 fetch page {page} failed after fallback: {e}")
                 break
 
             if not data:
@@ -371,6 +480,11 @@ def fetch_all_e621_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int = TAG
             if len(data) < page_size:
                 break
             page += 1
+
+    finally:
+        primary_client.close()
+        if fallback_client:
+            fallback_client.close()
 
     return collected[:max_tags]
 
@@ -428,10 +542,17 @@ def fetch_all_rule34_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int = 1
     
     hostname = "api.rule34.xxx"
     
-    # Use DoH client to bypass DNS poisoning
-    client = create_doh_client(hostname, timeout=10.0)
+    # Prefer normal DNS first; fall back to DoH-resolved IP only if needed
+    primary_client = httpx.Client(
+        timeout=10.0,
+        headers={"User-Agent": "sweet-tea-studio/0.1 (preload)"},
+        base_url=f"https://{hostname}",
+    )
+    fallback_client: Optional[httpx.Client] = None
+    client = primary_client
+    used_fallback = False
     
-    with client:
+    try:
         for prefix in prefixes:
             if len(collected) >= max_tags:
                 break
@@ -464,8 +585,50 @@ def fetch_all_rule34_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int = 1
                                 description=None,
                             )
                         )
-            except Exception:
+            except Exception as e:
+                if not used_fallback:
+                    logger.warning(f"[TagSync] Rule34 primary fetch failed (prefix '{prefix}'), retrying with DoH fallback: {e}")
+                    fallback_client = create_doh_client(hostname, timeout=10.0)
+                    client = fallback_client
+                    used_fallback = True
+                    # retry this prefix immediately with fallback client
+                    try:
+                        res = client.get("/autocomplete.php", params={"q": prefix})
+                        res.raise_for_status()
+                        data = res.json()
+                        # Re-run processing loop with fallback response
+                        for item in data:
+                            name = item.get("value", "").strip().lower()
+                            if name and name not in seen_names:
+                                seen_names.add(name)
+                                label = item.get("label", "")
+                                count = 0
+                                if "(" in label and ")" in label:
+                                    try:
+                                        count_str = label.split("(")[-1].rstrip(")")
+                                        count = int(count_str)
+                                    except ValueError:
+                                        pass
+                                
+                                collected.append(
+                                    TagSuggestion(
+                                        name=name,
+                                        source="rule34",
+                                        frequency=count,
+                                        description=None,
+                                    )
+                                )
+                        continue
+                    except Exception as inner_e:
+                        logger.warning(f"[TagSync] Rule34 fallback fetch failed for prefix '{prefix}': {inner_e}")
+                        continue
+                # If already using fallback, skip to next prefix
+                logger.warning(f"[TagSync] Rule34 fetch failed for prefix '{prefix}': {e}")
                 continue
+    finally:
+        primary_client.close()
+        if fallback_client:
+            fallback_client.close()
 
     return collected[:max_tags]
 
@@ -566,6 +729,8 @@ def refresh_remote_tag_cache_if_stale():
 
 
 def start_tag_cache_refresh_background():
+    # Ensure tags.db has any legacy/manual tags before remote sync runs
+    bootstrap_tags_db_from_profile()
     Thread(target=refresh_remote_tag_cache_if_stale, daemon=True).start()
 
 def save_discovered_tags(tags: List[TagSuggestion]):
@@ -676,7 +841,7 @@ def suggest_tags(query: str, background_tasks: BackgroundTasks, limit: int = 20)
 
 @router.post("/import", response_model=Dict[str, Any])
 def import_tags(payload: TagImportRequest):
-    with Session(db_engine) as session:
+    with Session(tags_engine) as session:
         created = 0
         updated = 0
         for tag in payload.tags:
@@ -728,4 +893,3 @@ def get_tag_cache_status():
             "sync_states": states,
             "fallback_file_exists": FALLBACK_TAGS_PATH.exists(),
         }
-

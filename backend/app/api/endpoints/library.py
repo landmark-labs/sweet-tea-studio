@@ -27,7 +27,7 @@ from sqlmodel import Session, col, select
 
 from app.models.prompt import Prompt, PromptCreate, PromptRead
 from app.models.tag import Tag
-from app.db.engine import engine as db_engine
+from app.db.engine import engine as db_engine, tags_engine
 from app.models.image import Image
 from app.models.job import Job
 from app.models.project import Project
@@ -297,7 +297,7 @@ def create_prompt(prompt: PromptCreate):
         session.refresh(new_prompt)
         
         # Call the new tags module function
-        library_tags.upsert_tags(session, inferred_tags, source="prompt")
+        library_tags.upsert_tags_in_cache(inferred_tags, source="prompt")
         
         return new_prompt
 
@@ -331,15 +331,18 @@ def delete_prompt(prompt_id: int):
 
 @router.get("/suggest", response_model=List[Suggestion])
 def suggest(query: str, limit: int = 15):
-    with Session(db_engine) as session:
-        q = f"%{query.lower()}%"
+    q = f"%{query.lower()}%"
 
+    with Session(tags_engine) as tag_session:
         tag_stmt = (
             select(Tag)
             .where(col(Tag.name).ilike(q))
             .order_by(Tag.frequency.desc())
             .limit(limit)
         )
+        tags = tag_session.exec(tag_stmt).all()
+
+    with Session(db_engine) as session:
         prompt_stmt = (
             select(Prompt)
             .where(
@@ -350,37 +353,35 @@ def suggest(query: str, limit: int = 15):
             .order_by(Prompt.updated_at.desc())
             .limit(limit)
         )
-
-        tags = session.exec(tag_stmt).all()
         prompts = session.exec(prompt_stmt).all()
 
-        suggestions: List[Suggestion] = []
-        for t in tags:
-            suggestions.append(
-                Suggestion(value=t.name, type="tag", frequency=t.frequency, source=t.source)
+    suggestions: List[Suggestion] = []
+    for t in tags:
+        suggestions.append(
+            Suggestion(value=t.name, type="tag", frequency=t.frequency, source=t.source)
+        )
+
+    for p in prompts:
+        # Handle tags defensive
+        ptags = p.tags or []
+        if isinstance(ptags, str):
+             try: ptags = json.loads(ptags)
+             except: ptags = []
+
+        snippet_parts = [p.positive_text or "", p.description or ""]
+        snippet = " ".join([s for s in snippet_parts if s]).strip()
+        suggestions.append(
+            Suggestion(
+                value=p.name,
+                type="prompt",
+                frequency=len(ptags),
+                source="library",
+                snippet=snippet[:180] if snippet else None,
             )
+        )
 
-        for p in prompts:
-            # Handle tags defensive
-            ptags = p.tags or []
-            if isinstance(ptags, str):
-                 try: ptags = json.loads(ptags)
-                 except: ptags = []
-
-            snippet_parts = [p.positive_text or "", p.description or ""]
-            snippet = " ".join([s for s in snippet_parts if s]).strip()
-            suggestions.append(
-                Suggestion(
-                    value=p.name,
-                    type="prompt",
-                    frequency=len(ptags),
-                    source="library",
-                    snippet=snippet[:180] if snippet else None,
-                )
-            )
-
-        suggestions.sort(key=lambda s: (0 if s.type == "tag" else 1, -s.frequency, s.value))
-        return suggestions[:limit]
+    suggestions.sort(key=lambda s: (0 if s.type == "tag" else 1, -s.frequency, s.value))
+    return suggestions[:limit]
 
 # Background Tasks (e.g. daily refresh) are now handled by library_tags
 # We could export a helper here if needed, but they are generally started by the main app lifespan.
