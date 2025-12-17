@@ -376,6 +376,10 @@ def process_job(job_id: int):
             
             def on_progress(data):
                 try:
+                    if data.get('type') == 'preview':
+                        # Log preview to debug missing frames
+                        print(f"[JobProcessor] Broadcasting preview for job {job_id}. Blob len: {len(data.get('data', {}).get('blob', ''))}")
+                    
                     data['job_id'] = job_id
                     manager.broadcast_sync(data, str(job_id))
                 except Exception as e:

@@ -245,7 +245,10 @@ class ComfyClient:
                     image_format = struct.unpack('>I', out[4:8])[0]
                     image_data = out[8:]
                     
+                    print(f"[ComfyClient] Received BINARY frame. EventType: {event_type}, Format: {image_format}, DataLen: {len(image_data)}")
+                    
                     if event_type == 1:  # PREVIEW_IMAGE
+                        print(f"[ComfyClient] Received PREVIEW_IMAGE (Event 1). Length: {len(image_data)} bytes")
                         # Convert to base64 for frontend preview
                         b64_img = base64.b64encode(image_data).decode('utf-8')
                         prefix = "data:image/jpeg;base64," if image_format == 1 else "data:image/png;base64,"
