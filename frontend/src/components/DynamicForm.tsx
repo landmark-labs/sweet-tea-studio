@@ -541,10 +541,10 @@ export const DynamicForm = React.memo(function DynamicForm({
                                     handleChange(key, val);
                                 }}
                             >
-                                <SelectTrigger id={key} className={cn("h-7 text-xs flex-1", isActive && "ring-1 ring-blue-400 border-blue-400")}>
-                                    <div className="truncate text-left pr-4">
-                                        <SelectValue placeholder="Select..." />
-                                    </div>
+                                <SelectTrigger id={key} className={cn("h-7 text-xs flex-1 min-w-0 overflow-hidden", isActive && "ring-1 ring-blue-400 border-blue-400")}>
+                                    <span className="truncate block w-full text-left">
+                                        {currentVal || "Select..."}
+                                    </span>
                                 </SelectTrigger>
                                 <SelectContent position="popper" sideOffset={5} className="max-h-[300px] max-w-[320px] overflow-y-auto z-50">
                                     {options.map((opt: string) => (
