@@ -576,49 +576,56 @@ def fetch_rule34_tags(query: str, limit: int = 10) -> List[TagSuggestion]:
         return []
 
 def fetch_all_rule34_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int = 100) -> List[TagSuggestion]:
-    """Fetch popular tags from Rule34 for caching using autocomplete endpoint."""
-    prefixes = [
-        "1", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m",
-        "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z",
-        "bl", "br", "gr", "lo", "ni", "se", "so", "th"
-    ]
-    
+    """Fetch popular tags from Rule34 using the official DAPI (XML)."""
     hostname = "api.rule34.xxx"
+    
+    # Import ElementTree locally to avoid top-level clutter
+    import xml.etree.ElementTree as ET
     
     def _attempt(use_doh: bool) -> List[TagSuggestion]:
         collected: List[TagSuggestion] = []
-        seen_names: set = set()
+        page = 0  # Rule34 'pid' is 0-indexed page number
+        
         dns_ctx = doh_override_dns(hostname) if use_doh else nullcontext(False)
+        
         with dns_ctx:
             with httpx.Client(
-                timeout=10.0,
+                timeout=15.0,
                 headers={"User-Agent": "sweet-tea-studio/0.1 (preload)"},
                 base_url=f"https://{hostname}",
             ) as client:
-                for prefix in prefixes:
-                    if len(collected) >= max_tags:
-                        break
+                while len(collected) < max_tags:
                     try:
+                        # Official DAPI: /index.php?page=dapi&s=tag&q=index
                         res = client.get(
-                            "/autocomplete.php",
-                            params={"q": prefix},
+                            "/index.php",
+                            params={
+                                "page": "dapi",
+                                "s": "tag",
+                                "q": "index",
+                                "limit": page_size,
+                                "order": "count", # Sort by popularity
+                                "pid": page
+                            },
                         )
                         res.raise_for_status()
-                        data = res.json()
                         
-                        for item in data:
-                            name = item.get("value", "").strip().lower()
-                            if name and name not in seen_names:
-                                seen_names.add(name)
-                                label = item.get("label", "")
-                                count = 0
-                                if "(" in label and ")" in label:
-                                    try:
-                                        count_str = label.split("(")[-1].rstrip(")")
-                                        count = int(count_str)
-                                    except ValueError:
-                                        pass
-                                
+                        # Rule34 Tags API usually returns XML
+                        # <tags type="array" count="123456" offset="0">
+                        #   <tag id="1" name="tagname" count="123" type="0" ambiguous="0" />
+                        # </tags>
+                        root = ET.fromstring(res.content)
+                        
+                        tags_found = 0
+                        for child in root.findall("tag"):
+                            tags_found += 1
+                            name = child.get("name", "").strip().lower()
+                            count = int(child.get("count", 0))
+                            
+                            # Rule34 tag types: 0=general, 1=artist, 3=copyright, 4=character
+                            # We can map this to description if we want, but sticking to None for now
+                            
+                            if name:
                                 collected.append(
                                     TagSuggestion(
                                         name=name,
@@ -627,11 +634,21 @@ def fetch_all_rule34_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int = 1
                                         description=None,
                                     )
                                 )
+                        
+                        if tags_found == 0:
+                            break
+                            
+                        page += 1
+                        
+                        # Safety break for huge loops
+                        if page > (max_tags // page_size) + 5:
+                            break
+                            
                     except Exception as e:
                         logger.warning(
-                            f"[TagSync] Rule34 fetch failed for prefix '{prefix}' (doh={use_doh}): {e}"
+                            f"[TagSync] Rule34 fetch page {page} failed (doh={use_doh}): {e}"
                         )
-                        continue
+                        break
         return collected
 
     data = _attempt(use_doh=True)
