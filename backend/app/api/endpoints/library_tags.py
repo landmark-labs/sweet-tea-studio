@@ -576,28 +576,25 @@ def fetch_rule34_tags(query: str, limit: int = 10) -> List[TagSuggestion]:
         return []
 
 def fetch_all_rule34_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int = 100) -> List[TagSuggestion]:
-    """Fetch popular tags from Rule34 using the official DAPI (XML)."""
+    """Fetch popular tags from Rule34 using the official DAPI, with fallbacks."""
     hostname = "api.rule34.xxx"
-    
-    # Import ElementTree locally to avoid top-level clutter
     import xml.etree.ElementTree as ET
-    
-    def _attempt(use_doh: bool) -> List[TagSuggestion]:
+
+    def dapi_attempt(scheme: str, use_doh: bool) -> List[TagSuggestion]:
         collected: List[TagSuggestion] = []
-        page = 0  # Rule34 'pid' is 0-indexed page number
-        
+        page = 0
         dns_ctx = doh_override_dns(hostname) if use_doh else nullcontext(False)
-        
+        base_url = f"{scheme}://{hostname}"
+
         with dns_ctx:
             with httpx.Client(
                 timeout=15.0,
                 headers={"User-Agent": "sweet-tea-studio/0.1 (preload)"},
-                base_url=f"https://{hostname}",
+                base_url=base_url,
                 follow_redirects=True,
             ) as client:
                 while len(collected) < max_tags:
                     try:
-                        # Official DAPI: /index.php?page=dapi&s=tag&q=index
                         res = client.get(
                             "/index.php",
                             params={
@@ -605,116 +602,131 @@ def fetch_all_rule34_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int = 1
                                 "s": "tag",
                                 "q": "index",
                                 "limit": page_size,
-                                "order": "count", # Sort by popularity
-                                "pid": page
+                                "order": "count",
+                                "pid": page,
+                                "json": 1,
                             },
                         )
                         res.raise_for_status()
-                        
-                        # Rule34 Tags API usually returns XML
-                        # <tags type="array" count="123456" offset="0">
-                        #   <tag id="1" name="tagname" count="123" type="0" ambiguous="0" />
-                        # </tags>
-                        root = ET.fromstring(res.content)
-                        
-                        tags_found = 0
-                        for child in root.findall("tag"):
-                            tags_found += 1
-                            name = child.get("name", "").strip().lower()
-                            count = int(child.get("count", 0))
-                            
-                            # Rule34 tag types: 0=general, 1=artist, 3=copyright, 4=character
-                            # We can map this to description if we want, but sticking to None for now
-                            
-                            if name:
-                                collected.append(
-                                    TagSuggestion(
-                                        name=name,
-                                        source="rule34",
-                                        frequency=count,
-                                        description=None,
-                                    )
+                        try:
+                            data = res.json()
+                        except Exception:
+                            root = ET.fromstring(res.content)
+                            data = []
+                            for child in root.findall("tag"):
+                                data.append(
+                                    {
+                                        "name": child.get("name", "").strip().lower(),
+                                        "count": int(child.get("count", 0)),
+                                    }
                                 )
-                        
-                        if tags_found == 0:
+
+                        if not data:
                             break
-                            
+
+                        for item in data:
+                            name = (item.get("name") or "").strip().lower()
+                            if not name:
+                                continue
+                            count = int(item.get("count", 0) or 0)
+                            collected.append(
+                                TagSuggestion(
+                                    name=name,
+                                    source="rule34",
+                                    frequency=count,
+                                    description=None,
+                                )
+                            )
+
+                        if len(data) < page_size:
+                            break
                         page += 1
-                        
-                        # Safety break for huge loops
+
                         if page > (max_tags // page_size) + 5:
                             break
-                            
+
                     except Exception as e:
                         logger.warning(
-                            f"[TagSync] Rule34 fetch page {page} failed (doh={use_doh}): {e}"
+                            f"[TagSync] Rule34 DAPI fetch failed (scheme={scheme}, doh={use_doh}, page={page}): {e}"
                         )
                         break
         return collected
 
-    data = _attempt(use_doh=True)
-    if not data:
-        data = _attempt(use_doh=False)
-
-    # If DAPI fails (common for some mirrors), fall back to autocomplete harvesting
-    if not data:
-        logger.warning("[TagSync] Rule34 DAPI returned no data, falling back to autocomplete harvesting")
-        
+    def autocomplete_attempt(scheme: str, use_doh: bool) -> List[TagSuggestion]:
         prefixes = [
             "1", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m",
             "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z",
             "bl", "br", "gr", "lo", "ni", "se", "so", "th"
         ]
-        
-        def _autocomplete(use_doh: bool) -> List[TagSuggestion]:
-            collected: List[TagSuggestion] = []
-            seen = set()
-            dns_ctx = doh_override_dns(hostname) if use_doh else nullcontext(False)
-            with dns_ctx:
-                with httpx.Client(
-                    timeout=10.0,
-                    headers={"User-Agent": "sweet-tea-studio/0.1 (preload)"},
-                    base_url=f"https://{hostname}",
-                    follow_redirects=True,
-                ) as client:
-                    for prefix in prefixes:
-                        if len(collected) >= max_tags:
-                            break
-                        try:
-                            res = client.get("/autocomplete.php", params={"q": prefix})
-                            res.raise_for_status()
-                            data = res.json()
-                            for item in data:
-                                name = item.get("value", "").strip().lower()
-                                if not name or name in seen:
-                                    continue
-                                seen.add(name)
-                                label = item.get("label", "")
-                                count = 0
-                                if "(" in label and ")" in label:
-                                    try:
-                                        count_str = label.split("(")[-1].rstrip(")")
-                                        count = int(count_str)
-                                    except ValueError:
-                                        pass
-                                collected.append(
-                                    TagSuggestion(
-                                        name=name,
-                                        source="rule34",
-                                        frequency=count,
-                                        description=None,
-                                    )
-                                )
-                        except Exception as e:
-                            logger.warning(f"[TagSync] Rule34 autocomplete failed for prefix '{prefix}' (doh={use_doh}): {e}")
-                            continue
-            return collected
-        
-        data = _autocomplete(use_doh=True)
-        if not data:
-            data = _autocomplete(use_doh=False)
+        collected: List[TagSuggestion] = []
+        seen = set()
+        dns_ctx = doh_override_dns(hostname) if use_doh else nullcontext(False)
+        base_url = f"{scheme}://{hostname}"
 
-    return data[:max_tags]
+        with dns_ctx:
+            with httpx.Client(
+                timeout=10.0,
+                headers={"User-Agent": "sweet-tea-studio/0.1 (preload)"},
+                base_url=base_url,
+                follow_redirects=True,
+            ) as client:
+                for prefix in prefixes:
+                    if len(collected) >= max_tags:
+                        break
+                    try:
+                        res = client.get("/autocomplete.php", params={"q": prefix})
+                        res.raise_for_status()
+                        data = res.json()
+                        for item in data:
+                            name = item.get("value", "").strip().lower()
+                            if not name or name in seen:
+                                continue
+                            seen.add(name)
+                            label = item.get("label", "")
+                            count = 0
+                            if "(" in label and ")" in label:
+                                try:
+                                    count_str = label.split("(")[-1].rstrip(")")
+                                    count = int(count_str)
+                                except ValueError:
+                                    pass
+                            collected.append(
+                                TagSuggestion(
+                                    name=name,
+                                    source="rule34",
+                                    frequency=count,
+                                    description=None,
+                                )
+                            )
+                    except Exception as e:
+                        logger.warning(
+                            f"[TagSync] Rule34 autocomplete failed (scheme={scheme}, doh={use_doh}, prefix={prefix}): {e}"
+                        )
+                        continue
+        return collected
+
+    attempts = [
+        ("https", True),
+        ("https", False),
+        ("http", True),
+        ("http", False),
+    ]
+
+    for scheme, use_doh in attempts:
+        data = dapi_attempt(scheme, use_doh)
+        if data:
+            return data[:max_tags]
+        logger.warning(f"[TagSync] Rule34 DAPI returned 0 tags (scheme={scheme}, doh={use_doh})")
+
+    logger.warning("[TagSync] Rule34 DAPI returned no data across all attempts, falling back to autocomplete harvesting")
+    for scheme, use_doh in attempts:
+        data = autocomplete_attempt(scheme, use_doh)
+        if data:
+            return data[:max_tags]
+        logger.warning(f"[TagSync] Rule34 autocomplete returned 0 tags (scheme={scheme}, doh={use_doh})")
+
+    logger.error("[TagSync] Rule34 fetch failed with no tags collected")
+    return []
 
 # --- Background Workers ---
 
@@ -726,6 +738,7 @@ def refresh_remote_tag_cache_if_stale():
     }
 
     total_fetched = 0
+    attempted_fetch = False
     
     for source, fetcher in sources.items():
         # 1. Check staleness (Quick Read)
@@ -744,6 +757,7 @@ def refresh_remote_tag_cache_if_stale():
             continue
 
         # 2. Fetch data (Slow Network I/O) - NO DB CONNECTION HELD
+        attempted_fetch = True
         try:
             logger.info(f"[TagSync] Fetching {source}...")
             remote_tags = fetcher() # This can take seconds/minutes
@@ -780,9 +794,11 @@ def refresh_remote_tag_cache_if_stale():
                     logger.info(f"[TagSync] Saved {len(remote_tags)} tags for {source}")
             except Exception as e:
                 logger.error(f"[TagSync] Failed to save {source} tags: {e}")
+        else:
+            logger.warning(f"[TagSync] {source} fetch returned 0 tags")
 
     # 4. If no network tags were fetched, load fallback tags
-    if total_fetched == 0:
+    if attempted_fetch and total_fetched == 0:
         logger.warning("[TagSync] No network tags fetched, loading fallback tags...")
         fallback_tags = load_fallback_tags()
         if fallback_tags:
