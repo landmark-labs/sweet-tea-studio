@@ -144,7 +144,7 @@ export default function Layout() {
             className="h-9 w-9 text-muted-foreground hover:text-foreground hover:bg-muted/60"
             onClick={handleRestartBackend}
             disabled={isRestarting}
-            title="Restart Backend"
+            title="restart backend"
           >
             <RefreshCw size={18} className={isRestarting ? "animate-spin" : ""} />
           </Button>
@@ -239,7 +239,7 @@ function GlobalFloatingPanels({ feedOpen, libraryOpen, onFeedClose, onLibraryClo
       >
         <div className="bg-white rounded-lg shadow-xl border overflow-hidden" style={{ maxWidth: '90vw' }}>
           <div className="p-2 bg-slate-100 border-b text-xs font-semibold cursor-move flex items-center justify-between">
-            <span>Generation Feed</span>
+            <span>generation feed</span>
             <button
               onClick={onFeedClose}
               className="p-0.5 rounded hover:bg-slate-200 text-slate-500 hover:text-slate-700"

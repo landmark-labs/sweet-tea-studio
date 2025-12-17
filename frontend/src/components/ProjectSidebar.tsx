@@ -72,7 +72,7 @@ export function ProjectSidebar({
       </Button>
 
       <div className="p-2 flex items-center justify-between border-b h-14">
-        {!collapsed && <span className="font-semibold text-slate-700">Projects</span>}
+        {!collapsed && <span className="font-semibold text-slate-700">projects</span>}
       </div>
 
       <ScrollArea className="flex-1">
@@ -81,20 +81,20 @@ export function ProjectSidebar({
             variant={selectedProjectId === null ? "secondary" : "ghost"}
             className={cn("w-full justify-start", collapsed ? "px-2" : "px-4")}
             onClick={() => onSelectProject(null)}
-            title="All Projects"
+            title="all projects"
           >
             <Layers className="h-4 w-4 mr-2" />
-            {!collapsed && <span>All Projects</span>}
+            {!collapsed && <span>all projects</span>}
           </Button>
 
           <Button
             variant={selectedProjectId === -1 ? "secondary" : "ghost"}
             className={cn("w-full justify-start", collapsed ? "px-2" : "px-4")}
             onClick={() => onSelectProject(-1)}
-            title="Draft generations"
+            title="draft generations"
           >
             <FolderOpen className="h-4 w-4 mr-2" />
-            {!collapsed && <span>Draft mode</span>}
+            {!collapsed && <span>draft mode</span>}
           </Button>
 
           {draftsProject && (
@@ -102,10 +102,10 @@ export function ProjectSidebar({
               variant={selectedProjectId === draftsProject.id ? "secondary" : "ghost"}
               className={cn("w-full justify-start", collapsed ? "px-2" : "px-4")}
               onClick={() => onSelectProject(draftsProject.id)}
-              title="Drafts"
+              title="drafts"
             >
               <FolderOpen className={cn("h-4 w-4 mr-2", selectedProjectId === draftsProject.id ? "text-blue-600" : "text-slate-500")} />
-              {!collapsed && <span className="truncate">Drafts</span>}
+              {!collapsed && <span className="truncate">drafts</span>}
             </Button>
           )}
 
@@ -133,7 +133,7 @@ export function ProjectSidebar({
                     )}
                   >
                     <Layers className="h-3 w-3" />
-                    All
+                    all
                   </button>
                   {projectFolders.map((folder) => (
                     <button

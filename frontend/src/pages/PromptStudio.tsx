@@ -1232,7 +1232,7 @@ export default function PromptStudio() {
 
         {/* Sticky Header Section */}
         <div className="flex-none p-3 space-y-2 border-b bg-slate-50/50 backdrop-blur z-10">
-          <div className="text-xs font-bold text-slate-800 tracking-wider">CONFIGURATOR</div>
+          <div className="text-xs font-bold text-slate-800 tracking-wider">configurator</div>
 
           {/* Project + Destination Row */}
           <div className="flex gap-2 items-end">
@@ -1250,7 +1250,7 @@ export default function PromptStudio() {
                 }}
               >
                 <SelectTrigger className="h-7 text-xs">
-                  <SelectValue placeholder="Select project">
+                  <SelectValue placeholder="select project">
                     {selectedProject?.name || "Draft Mode"}
                   </SelectValue>
                 </SelectTrigger>
@@ -1281,7 +1281,7 @@ export default function PromptStudio() {
                   onValueChange={(value) => setGenerationTarget(value === "engine-default" ? "" : value)}
                 >
                   <SelectTrigger className="h-7 text-[10px]">
-                    <SelectValue placeholder="Output" />
+                    <SelectValue placeholder="output" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="engine-default">default output</SelectItem>
@@ -1377,9 +1377,9 @@ export default function PromptStudio() {
           {/* Connection Warning */}
           {engineOffline && (
             <Alert variant="destructive">
-              <AlertTitle>ComfyUI not connected</AlertTitle>
+              <AlertTitle>comfyui not connected</AlertTitle>
               <AlertDescription>
-                {selectedEngineHealth?.last_error || "We could not reach the configured ComfyUI host."}
+                {selectedEngineHealth?.last_error || "we could not reach the configured comfyui host."}
               </AlertDescription>
             </Alert>
           )}
@@ -1389,7 +1389,7 @@ export default function PromptStudio() {
           {/* Global Error Alert */}
           {error && (
             <Alert variant="destructive" className="mt-4">
-              <AlertTitle>Error</AlertTitle>
+              <AlertTitle>error</AlertTitle>
               <AlertDescription className="break-words text-xs font-mono">
                 {error}
               </AlertDescription>
@@ -1427,7 +1427,7 @@ export default function PromptStudio() {
             </div>
             <Progress value={progress} className="h-1 mb-2" />
             <Button variant="ghost" size="sm" onClick={handleCancel} className="w-full text-red-500 h-6 text-xs hover:text-red-600 hover:bg-red-50">
-              Cancel Job
+              cancel job
             </Button>
           </div>
         )}

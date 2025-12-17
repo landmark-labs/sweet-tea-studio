@@ -364,21 +364,21 @@ export default function Gallery() {
             <div className="flex-1 overflow-auto relative">
                 <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6 sticky top-0 z-20 bg-slate-50 px-8 py-4">
                     <div className="flex items-center gap-4 flex-wrap">
-                        <h1 className="text-3xl font-bold tracking-tight text-slate-900">Generated Gallery</h1>
+                        <h1 className="text-3xl font-bold tracking-tight text-slate-900">gallery</h1>
                         <div className="text-sm text-slate-600 bg-slate-100 border border-slate-200 px-3 py-1 rounded-full whitespace-nowrap">
-                            Viewing {selectedProjectId ? projects.find(p => p.id === selectedProjectId)?.name || "project" : "all projects"}
+                            viewing {selectedProjectId ? projects.find(p => p.id === selectedProjectId)?.name || "project" : "all projects"}
                             {selectedFolder && ` / ${selectedFolder}`}
                         </div>
 
                         {selectedIds.size > 0 && (
                             <div className="flex items-center gap-2 bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-sm font-medium border border-blue-100 animate-in fade-in slide-in-from-left-4 whitespace-nowrap flex-shrink-0">
                                 <Check className="w-4 h-4 flex-shrink-0" />
-                                {cleanupMode ? `${selectedIds.size} to keep` : `${selectedIds.size} Selected`}
+                                {cleanupMode ? `${selectedIds.size} to keep` : `${selectedIds.size} selected`}
                                 <div className="h-4 w-px bg-blue-200 mx-1 flex-shrink-0" />
                                 {!cleanupMode && (
-                                    <button onClick={handleBulkDelete} className="hover:underline text-red-600">Delete</button>
+                                    <button onClick={handleBulkDelete} className="hover:underline text-red-600">delete</button>
                                 )}
-                                <button onClick={() => setSelectedIds(new Set())} className="hover:underline text-slate-500">Clear</button>
+                                <button onClick={() => setSelectedIds(new Set())} className="hover:underline text-slate-500">clear</button>
                             </div>
                         )}
                     </div>
@@ -388,7 +388,7 @@ export default function Gallery() {
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
                                 <Input
                                     type="search"
-                                    placeholder="Search prompts, tags, captions..."
+                                    placeholder="search prompts, tags, captions..."
                                     className="pl-9"
                                     value={search}
                                     onChange={(e) => setSearch(e.target.value)}
@@ -397,14 +397,14 @@ export default function Gallery() {
                         </form>
                         <div className="flex items-center gap-2">
                             <Button variant={selectionMode ? "default" : "outline"} onClick={() => setSelectionMode(!selectionMode)}>
-                                {selectionMode ? "Selection mode on" : "Selection mode off"}
+                                {selectionMode ? "selection mode on" : "selection mode off"}
                             </Button>
                             <Button variant={cleanupMode ? "secondary" : "outline"} onClick={cleanupMode ? () => setCleanupMode(false) : handleCleanupStart}>
-                                {cleanupMode ? "Done selecting" : "Gallery cleanup"}
+                                {cleanupMode ? "done selecting" : "gallery cleanup"}
                             </Button>
                             {cleanupMode && (
                                 <Button variant="destructive" onClick={handleCleanupPurge} disabled={items.length === 0}>
-                                    Clean up gallery
+                                    clean up gallery
                                 </Button>
                             )}
                         </div>
@@ -414,7 +414,7 @@ export default function Gallery() {
                 <div className="px-8 pb-8">
                     {cleanupMode && (
                         <Alert className="mb-4">
-                            <AlertTitle>Cleanup mode</AlertTitle>
+                            <AlertTitle>cleanup mode</AlertTitle>
                             <AlertDescription>
                                 Select every image you want to keep (Ctrl/Cmd, Shift, and Ctrl+Shift all work). When you clean up, {cleanupDeleteCount} images will be removed.
                             </AlertDescription>
@@ -581,10 +581,10 @@ export default function Gallery() {
                                         </Card>
                                     </ContextMenuTrigger>
                                     <ContextMenuContent>
-                                        <ContextMenuItem onSelect={() => handleRegenerate(item)}>Regenerate</ContextMenuItem>
-                                        <ContextMenuItem onSelect={() => handleSavePrompt(item)}>Save Prompt</ContextMenuItem>
+                                        <ContextMenuItem onSelect={() => handleRegenerate(item)}>regenerate</ContextMenuItem>
+                                        <ContextMenuItem onSelect={() => handleSavePrompt(item)}>save prompt</ContextMenuItem>
                                         <ContextMenuSeparator />
-                                        <ContextMenuItem className="text-red-600" onSelect={() => handleDelete(item.image.id)}>Delete</ContextMenuItem>
+                                        <ContextMenuItem className="text-red-600" onSelect={() => handleDelete(item.image.id)}>delete</ContextMenuItem>
                                     </ContextMenuContent>
                                 </ContextMenu>
                             ))}

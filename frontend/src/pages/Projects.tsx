@@ -147,7 +147,7 @@ export default function Projects() {
     const otherProjects = projects.filter((p) => p.slug !== "drafts");
 
     return (
-        <div className="p-6 space-y-6 h-full overflow-auto">
+        <div className="p-4 space-y-4 h-full overflow-auto">
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div>
@@ -202,15 +202,15 @@ export default function Projects() {
             <Dialog open={!!managingProject} onOpenChange={(open) => !open && setManagingProject(null)}>
                 <DialogContent>
                     <DialogHeader>
-                        <DialogTitle>Manage Folders: {managingProject?.name}</DialogTitle>
+                        <DialogTitle>manage folders: {managingProject?.name}</DialogTitle>
                         <DialogDescription>
-                            Organize outputs into subfolders.
+                            organize outputs into subfolders.
                         </DialogDescription>
                     </DialogHeader>
 
                     <div className="space-y-4 py-2">
                         <div className="space-y-2">
-                            <div className="text-sm font-medium">Current Folders</div>
+                            <div className="text-sm font-medium">current folders</div>
                             <ScrollArea className="h-[300px] w-full rounded-md border p-2">
                                 <div className="space-y-1">
                                     {(managingProject?.config_json?.folders || ["inputs", "output", "masks"]).map((folder) => (
@@ -225,7 +225,7 @@ export default function Projects() {
 
                         <div className="flex items-center gap-2">
                             <Input
-                                placeholder="New folder name..."
+                                placeholder="new folder name..."
                                 value={newFolderName}
                                 onChange={(e) => {
                                     console.log("[Projects] Input onChange:", e.target.value);
@@ -275,16 +275,16 @@ export default function Projects() {
 
             {/* Drafts section */}
             {draftsProject && (
-                <div className="space-y-3">
-                    <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+                <div className="space-y-2">
+                    <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider pl-1">
                         {labels.entity.drafts}
                     </h2>
                     <Card
                         className={cn(
-                            "transition-all hover:border-primary/50",
+                            "transition-all hover:border-primary/50 max-w-sm",
                         )}
                     >
-                        <CardHeader className="pb-2">
+                        <CardHeader className="pb-2 p-3">
                             <div className="flex items-center gap-3">
                                 <div className="p-2 rounded-lg bg-muted">
                                     <FolderOpen size={20} className="text-muted-foreground" />
@@ -299,7 +299,7 @@ export default function Projects() {
                                 </div>
                             </div>
                         </CardHeader>
-                        <CardContent className="pt-0">
+                        <CardContent className="pt-0 p-3">
                             <div className="flex items-center gap-4 text-xs text-muted-foreground mt-2">
                                 <div className="flex items-center gap-1">
                                     <ImageIcon size={12} />
@@ -317,11 +317,11 @@ export default function Projects() {
 
             {/* Projects grid */}
             {otherProjects.length > 0 && (
-                <div className="space-y-3">
-                    <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+                <div className="space-y-2">
+                    <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider pl-1">
                         {labels.entity.projects}
                     </h2>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                         {otherProjects.map((project) => (
                             <Card
                                 key={project.id}
@@ -329,7 +329,7 @@ export default function Projects() {
                                     "transition-all hover:border-primary/50 group relative"
                                 )}
                             >
-                                <CardHeader className="pb-2">
+                                <CardHeader className="pb-2 p-3">
                                     <div className="flex items-start justify-between">
                                         <div className="flex items-center gap-3">
                                             <div className="p-2 rounded-lg bg-primary/10">
@@ -355,7 +355,7 @@ export default function Projects() {
                                                     e.stopPropagation();
                                                     setManagingProject(project);
                                                 }}
-                                                title="Manage folders"
+                                                title="manage folders"
                                             >
                                                 <Settings size={14} />
                                             </Button>
@@ -367,14 +367,14 @@ export default function Projects() {
                                                     e.stopPropagation();
                                                     handleArchiveProject(project.id);
                                                 }}
-                                                title="Archive project"
+                                                title="archive project"
                                             >
                                                 <Archive size={14} />
                                             </Button>
                                         </div>
                                     </div>
                                 </CardHeader>
-                                <CardContent className="pt-0">
+                                <CardContent className="pt-0 p-3">
                                     <Separator className="my-2" />
                                     <div className="flex items-center gap-4 text-xs text-muted-foreground">
                                         <div className="flex items-center gap-1">

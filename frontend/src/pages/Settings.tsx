@@ -163,8 +163,8 @@ export default function Settings() {
         <div className="h-full overflow-auto">
             <div className="max-w-2xl mx-auto p-6 space-y-8">
                 <div>
-                    <h1 className="text-2xl font-semibold">Settings</h1>
-                    <p className="text-muted-foreground">Configure your ComfyUI connection and paths</p>
+                    <h1 className="text-2xl font-semibold">settings</h1>
+                    <p className="text-muted-foreground">configure your comfyui connection and paths</p>
                 </div>
 
                 {error && (
@@ -182,11 +182,11 @@ export default function Settings() {
                 )}
 
                 <div className="space-y-6 bg-white rounded-xl p-6 border shadow-sm">
-                    <h2 className="text-lg font-medium border-b pb-2">ComfyUI Engine</h2>
+                    <h2 className="text-lg font-medium border-b pb-2">comfyui engine</h2>
 
                     <div className="space-y-4">
                         <div className="space-y-2">
-                            <Label htmlFor="name">Engine Name</Label>
+                            <Label htmlFor="name">engine name</Label>
                             <Input
                                 id="name"
                                 value={formData.name}
@@ -196,7 +196,7 @@ export default function Settings() {
                         </div>
 
                         <div className="space-y-2">
-                            <Label htmlFor="base_url">ComfyUI URL</Label>
+                            <Label htmlFor="base_url">comfyui url</Label>
                             <Input
                                 id="base_url"
                                 value={formData.base_url}
@@ -209,7 +209,7 @@ export default function Settings() {
                         </div>
 
                         <div className="space-y-2">
-                            <Label htmlFor="output_dir">Output Directory</Label>
+                            <Label htmlFor="output_dir">output directory</Label>
                             <Input
                                 id="output_dir"
                                 value={formData.output_dir}
@@ -222,7 +222,7 @@ export default function Settings() {
                         </div>
 
                         <div className="space-y-2">
-                            <Label htmlFor="input_dir">Input Directory</Label>
+                            <Label htmlFor="input_dir">input directory</Label>
                             <Input
                                 id="input_dir"
                                 value={formData.input_dir}
@@ -242,20 +242,20 @@ export default function Settings() {
                             ) : (
                                 <Save className="w-4 h-4 mr-2" />
                             )}
-                            Save Settings
+                            save settings
                         </Button>
                         <Button variant="outline" onClick={loadEngines} disabled={loading}>
                             <RefreshCw className="w-4 h-4 mr-2" />
-                            Reload
+                            reload
                         </Button>
                     </div>
                 </div>
 
                 {/* ComfyUI Launch Settings */}
                 <div className="space-y-6 bg-white rounded-xl p-6 border shadow-sm">
-                    <h2 className="text-lg font-medium border-b pb-2">ComfyUI Launch Settings</h2>
+                    <h2 className="text-lg font-medium border-b pb-2">comfyui launch settings</h2>
                     <p className="text-sm text-muted-foreground">
-                        Configure how Sweet Tea Studio launches ComfyUI. Leave fields blank to use automatic detection.
+                        configure how sweet tea studio launches comfyui. leave fields blank to use automatic detection.
                     </p>
 
                     {launchConfig && (
@@ -276,12 +276,12 @@ export default function Settings() {
 
                     <div className="space-y-4">
                         <div className="space-y-2">
-                            <Label htmlFor="comfy_path">ComfyUI Folder Path</Label>
+                            <Label htmlFor="comfy_path">comfyui folder path</Label>
                             <Input
                                 id="comfy_path"
                                 value={comfyPath}
                                 onChange={(e) => setComfyPath(e.target.value)}
-                                placeholder="Leave blank to auto-detect"
+                                placeholder="leave blank to auto-detect"
                                 className="font-mono text-sm"
                             />
                             <p className="text-xs text-muted-foreground">
@@ -290,7 +290,7 @@ export default function Settings() {
                         </div>
 
                         <div className="space-y-2">
-                            <Label htmlFor="launch_args">Launch Arguments</Label>
+                            <Label htmlFor="launch_args">launch arguments</Label>
                             <Input
                                 id="launch_args"
                                 value={launchArgs}
@@ -299,7 +299,7 @@ export default function Settings() {
                                 className="font-mono text-sm"
                             />
                             <p className="text-xs text-muted-foreground">
-                                Optional arguments passed to ComfyUI on launch (e.g., --listen --port 8188)
+                                optional arguments passed to comfyui on launch (e.g., --listen --port 8188)
                             </p>
                         </div>
                     </div>
@@ -311,22 +311,22 @@ export default function Settings() {
                             ) : (
                                 <Save className="w-4 h-4 mr-2" />
                             )}
-                            Save Launch Settings
+                            save launch settings
                         </Button>
                     </div>
                 </div>
 
                 {/* API Keys */}
                 <div className="space-y-6 bg-white rounded-xl p-6 border shadow-sm">
-                    <h2 className="text-lg font-medium border-b pb-2">API Keys</h2>
+                    <h2 className="text-lg font-medium border-b pb-2">api keys</h2>
                     <p className="text-sm text-muted-foreground">
-                        Configure API keys for external services. Keys are stored in the database and override environment variables.
+                        configure api keys for external services. keys are stored in the database and override environment variables.
                     </p>
 
                     <div className="space-y-4">
                         {/* Civitai API Key */}
                         <div className="space-y-2">
-                            <Label htmlFor="civitai_api_key">Civitai API Key</Label>
+                            <Label htmlFor="civitai_api_key">civitai api key</Label>
                             <div className="flex gap-2">
                                 <div className="relative flex-1">
                                     <Input
@@ -334,7 +334,7 @@ export default function Settings() {
                                         type={showCivitaiKey ? "text" : "password"}
                                         value={apiKeysForm.civitai_api_key}
                                         onChange={(e) => setApiKeysForm({ ...apiKeysForm, civitai_api_key: e.target.value })}
-                                        placeholder={apiKeys?.civitai_api_key.is_set ? `Current: ${apiKeys.civitai_api_key.value}` : "Enter API key"}
+                                        placeholder={apiKeys?.civitai_api_key.is_set ? `current: ${apiKeys.civitai_api_key.value}` : "enter api key"}
                                         className="font-mono text-sm pr-10"
                                     />
                                     <button
@@ -347,9 +347,9 @@ export default function Settings() {
                                 </div>
                             </div>
                             <p className="text-xs text-muted-foreground">
-                                Required for downloading models from Civitai.{" "}
+                                required for downloading models from civitai.{" "}
                                 <a href="https://civitai.com/user/account" target="_blank" rel="noreferrer" className="text-blue-600 underline">
-                                    Get your key
+                                    get your key
                                 </a>
                                 {apiKeys?.civitai_api_key.is_set && (
                                     <span className="ml-2 text-green-600">
@@ -361,7 +361,7 @@ export default function Settings() {
 
                         {/* Rule34 API Key */}
                         <div className="space-y-2">
-                            <Label htmlFor="rule34_api_key">Rule34 API Key</Label>
+                            <Label htmlFor="rule34_api_key">rule34 api key</Label>
                             <div className="flex gap-2">
                                 <div className="relative flex-1">
                                     <Input
@@ -369,7 +369,7 @@ export default function Settings() {
                                         type={showRule34Key ? "text" : "password"}
                                         value={apiKeysForm.rule34_api_key}
                                         onChange={(e) => setApiKeysForm({ ...apiKeysForm, rule34_api_key: e.target.value })}
-                                        placeholder={apiKeys?.rule34_api_key.is_set ? `Current: ${apiKeys.rule34_api_key.value}` : "Enter API key"}
+                                        placeholder={apiKeys?.rule34_api_key.is_set ? `current: ${apiKeys.rule34_api_key.value}` : "enter api key"}
                                         className="font-mono text-sm pr-10"
                                     />
                                     <button
@@ -390,18 +390,18 @@ export default function Settings() {
 
                         {/* Rule34 User ID */}
                         <div className="space-y-2">
-                            <Label htmlFor="rule34_user_id">Rule34 User ID</Label>
+                            <Label htmlFor="rule34_user_id">rule34 user id</Label>
                             <Input
                                 id="rule34_user_id"
                                 value={apiKeysForm.rule34_user_id}
                                 onChange={(e) => setApiKeysForm({ ...apiKeysForm, rule34_user_id: e.target.value })}
-                                placeholder={apiKeys?.rule34_user_id.is_set ? `Current: ${apiKeys.rule34_user_id.value}` : "Enter User ID"}
+                                placeholder={apiKeys?.rule34_user_id.is_set ? `current: ${apiKeys.rule34_user_id.value}` : "enter user id"}
                                 className="font-mono text-sm"
                             />
                             <p className="text-xs text-muted-foreground">
-                                Optional credentials for Rule34 tag autocomplete.{" "}
+                                optional credentials for rule34 tag autocomplete.{" "}
                                 <a href="https://rule34.xxx/index.php?page=account&s=options" target="_blank" rel="noreferrer" className="text-blue-600 underline">
-                                    Get your credentials
+                                    get your credentials
                                 </a>
                                 {apiKeys?.rule34_user_id.is_set && (
                                     <span className="ml-2 text-green-600">
@@ -419,10 +419,10 @@ export default function Settings() {
                             ) : (
                                 <Save className="w-4 h-4 mr-2" />
                             )}
-                            Save API Keys
+                            save api keys
                         </Button>
                         <span className="text-xs text-muted-foreground">
-                            Leave fields empty to keep current values
+                            leave fields empty to keep current values
                         </span>
                     </div>
                 </div>

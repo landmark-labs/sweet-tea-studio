@@ -59,7 +59,7 @@ export function PerformanceHUD({ className, refreshMs = 3000, visible = true, on
         <div className="flex items-center justify-between px-2 py-1.5 border-b border-slate-200 cursor-move">
           <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-800">
             <Gauge className={cn("w-3 h-3 text-blue-600", loading && "animate-pulse")} />
-            Performance
+            performance
           </div>
           <div className="flex items-center gap-1.5">
             <span className="text-[9px] text-slate-400">{Math.round(refreshMs / 1000)}s</span>

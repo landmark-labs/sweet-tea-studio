@@ -34,7 +34,7 @@ export function PromptLibraryQuickPanel({
     <div className="w-96 pointer-events-auto">
       <Card className="shadow-xl border-blue-100 bg-blue-50/95 backdrop-blur">
         <div className="flex items-center justify-between px-4 py-2 border-b border-slate-200 cursor-move">
-          <div className="font-semibold text-slate-800 text-sm">Prompt Library</div>
+          <div className="font-semibold text-slate-800 text-sm">prompt library</div>
           <Button variant="ghost" size="sm" className="h-7" onClick={onClose}>
             <X className="w-4 h-4" />
           </Button>

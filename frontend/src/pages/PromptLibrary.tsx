@@ -122,7 +122,7 @@ export default function PromptLibrary() {
     return (
         <div className="h-full overflow-auto p-8 max-w-7xl mx-auto">
             <div className="flex items-center justify-between mb-8">
-                <h1 className="text-3xl font-bold tracking-tight text-slate-900">Prompt Library</h1>
+                <h1 className="text-3xl font-bold tracking-tight text-slate-900">prompt library</h1>
                 <form onSubmit={handleSearch} className="flex gap-2 w-full max-w-sm">
                     <div className="relative flex-1">
                         <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />

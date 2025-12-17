@@ -86,16 +86,16 @@ export const labels = {
         scheduler: 'scheduler',
     },
 
-    // Page titles (UPPERCASE for emphasis)
+    // Page titles (lowercase for consistency)
     pageTitle: {
-        generation: 'GENERATION',
-        projects: 'PROJECTS',
-        pipes: 'PIPES',
-        gallery: 'GALLERY',
-        library: 'LIBRARY',
-        models: 'MODELS',
-        status: 'STATUS',
-        settings: 'SETTINGS',
+        generation: 'generation',
+        projects: 'projects',
+        pipes: 'pipes',
+        gallery: 'gallery',
+        library: 'library',
+        models: 'models',
+        status: 'status',
+        settings: 'settings',
     },
 
     // Placeholders (lowercase)

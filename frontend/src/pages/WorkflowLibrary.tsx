@@ -900,7 +900,7 @@ export default function WorkflowLibrary() {
                             </div>
                             <DialogFooter>
                                 <Button onClick={handleCompose} disabled={!composeSource || !composeTarget || !composeName}>
-                                    Create Composition
+                                    create composition
                                 </Button>
                             </DialogFooter>
                         </DialogContent>
@@ -949,7 +949,7 @@ export default function WorkflowLibrary() {
                             </div>
                             <DialogFooter>
                                 <Button disabled={!importFile || isImporting} onClick={handleImport}>
-                                    {isImporting ? "Importing..." : "Import"}
+                                    {isImporting ? "importing..." : "import"}
                                 </Button>
                             </DialogFooter>
                         </DialogContent>
@@ -964,7 +964,7 @@ export default function WorkflowLibrary() {
                 </Alert>
             )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                 {workflows.map((w) => {
                     const missing = getMissingNodes(w);
                     return (
@@ -1001,13 +1001,13 @@ export default function WorkflowLibrary() {
                             </CardContent>
                             <CardFooter className="flex justify-end gap-2 text-slate-400">
                                 <Button variant="ghost" size="sm" onClick={() => handleViewGraph(w)}>
-                                    <GitBranch className="w-4 h-4 mr-1" /> View Graph
+                                    <GitBranch className="w-4 h-4 mr-1" /> view graph
                                 </Button>
                                 <Button variant="ghost" size="sm" onClick={() => handleExport(w)}>
-                                    <Save className="w-4 h-4 mr-1" /> Export
+                                    <Save className="w-4 h-4 mr-1" /> export
                                 </Button>
                                 <Button variant="ghost" size="sm" onClick={() => handleEdit(w)}>
-                                    <Edit2 className="w-4 h-4 mr-1" /> Edit
+                                    <Edit2 className="w-4 h-4 mr-1" /> edit
                                 </Button>
                                 <Button variant="ghost" size="sm" className="hover:text-red-500" onClick={() => handleDelete(w.id)}>
                                     <Trash2 className="w-4 h-4" />
@@ -1044,9 +1044,9 @@ export default function WorkflowLibrary() {
             }}>
                 <DialogContent>
                     <DialogHeader>
-                        <DialogTitle>Install Missing Nodes</DialogTitle>
+                        <DialogTitle>install missing nodes</DialogTitle>
                         <DialogDescription>
-                            Using ComfyUI Manager to install nodes.
+                            using comfyui manager to install nodes.
                         </DialogDescription>
                     </DialogHeader>
 
@@ -1076,7 +1076,7 @@ export default function WorkflowLibrary() {
 
                                 {installStatus.installed && installStatus.installed.length > 0 && (
                                     <div>
-                                        <div className="text-xs font-semibold mb-1 text-green-700">Successfully Installed:</div>
+                                        <div className="text-xs font-semibold mb-1 text-green-700">successfully installed:</div>
                                         <div className="text-xs space-y-1">
                                             {installStatus.installed.map((item: string, i: number) => (
                                                 <div key={i} className="flex items-center"><CheckCircle2 className="w-3 h-3 mr-1 text-green-500" /> {item}</div>
@@ -1087,7 +1087,7 @@ export default function WorkflowLibrary() {
 
                                 {installStatus.failed && installStatus.failed.length > 0 && (
                                     <div>
-                                        <div className="text-xs font-semibold mb-1 text-red-700">Failed to Install:</div>
+                                        <div className="text-xs font-semibold mb-1 text-red-700">failed to install:</div>
                                         <div className="text-xs space-y-1 text-red-600">
                                             {installStatus.failed.map((item: string, i: number) => (
                                                 <div key={i} className="flex items-center"><XCircle className="w-3 h-3 mr-1" /> {item}</div>
@@ -1098,7 +1098,7 @@ export default function WorkflowLibrary() {
 
                                 {installStatus.unknown && installStatus.unknown.length > 0 && (
                                     <div>
-                                        <div className="text-xs font-semibold mb-1 text-amber-700">Unknown Nodes (No Repo Found):</div>
+                                        <div className="text-xs font-semibold mb-1 text-amber-700">unknown nodes (no repo found):</div>
                                         <div className="text-xs space-y-1 text-amber-600">
                                             {installStatus.unknown.map((item: string, i: number) => (
                                                 <div key={i}>• {item}</div>
@@ -1119,15 +1119,15 @@ export default function WorkflowLibrary() {
                     <DialogFooter>
                         {installStatus?.status === "completed" ? (
                             <div className="flex w-full justify-between items-center">
-                                <div className="text-xs text-slate-500">Reboot required to apply changes.</div>
+                                <div className="text-xs text-slate-500">reboot required to apply changes.</div>
                                 <div className="flex gap-2">
-                                    <Button variant="ghost" onClick={() => setInstallOpen(false)}>Close</Button>
-                                    <Button variant="default" onClick={handleReboot}>Reboot Now</Button>
+                                    <Button variant="ghost" onClick={() => setInstallOpen(false)}>close</Button>
+                                    <Button variant="default" onClick={handleReboot}>reboot now</Button>
                                 </div>
                             </div>
                         ) : (
                             <Button variant="outline" onClick={() => setInstallOpen(false)} disabled={installStatus?.status === "running"}>
-                                Close
+                                close
                             </Button>
                         )}
                     </DialogFooter>

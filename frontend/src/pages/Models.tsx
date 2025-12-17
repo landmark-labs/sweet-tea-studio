@@ -296,8 +296,8 @@ export default function Models() {
         {/* Column 1: ComfyUI Folders */}
         <Card className="h-full flex flex-col overflow-hidden">
           <CardHeader className="flex flex-row items-center justify-between pb-1 p-3 flex-none">
-            <CardTitle className="text-sm">ComfyUI folders</CardTitle>
-            <span title="Click to set a custom models directory">
+            <CardTitle className="text-sm">comfyui folders</CardTitle>
+            <span title="click to set a custom models directory">
               <FolderOpen
                 className="text-blue-500 cursor-pointer hover:text-blue-600 active:scale-95 transition-all"
                 size={14}
@@ -382,9 +382,9 @@ export default function Models() {
         {/* Column 2: Add Model Downloads */}
         <Card className="h-full flex flex-col overflow-hidden">
           <CardHeader className="pb-1 p-3 flex-none">
-            <CardTitle className="text-sm">Add model downloads</CardTitle>
+            <CardTitle className="text-sm">add model downloads</CardTitle>
             <CardDescription className="text-[10px]">
-              Smart-detects Civitai vs Hugging Face links.
+              smart-detects civitai vs hugging face links.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-2 flex-1 overflow-y-auto p-2 scrollbar-thin">
@@ -410,7 +410,7 @@ export default function Models() {
                     </SelectContent>
                   </Select>
                   <Input
-                    placeholder="Paste link..."
+                    placeholder="paste link..."
                     className="flex-1 min-w-0 h-7 text-xs"
                     value={row.url}
                     onChange={(e) => handleRowChange(row.id, 'url', e.target.value)}
@@ -434,13 +434,13 @@ export default function Models() {
               onClick={handleAddRow}
             >
               <div className="w-3 h-3 rounded-full bg-slate-200 flex items-center justify-center font-bold text-slate-600">+</div>
-              Add another link
+              add another link
             </Button>
 
             <div className="pt-2 border-t mt-2">
               <Button className="w-full h-8 text-xs" onClick={processQueue} disabled={!downloadRows.some(r => r.url.trim().length > 0)}>
                 <Rocket className="w-3 h-3 mr-2" />
-                Start Downloads
+                start downloads
               </Button>
             </div>
 
@@ -454,8 +454,8 @@ export default function Models() {
         {/* Column 3: Download Queue */}
         <Card className="h-full flex flex-col overflow-hidden">
           <CardHeader className="pb-1 p-3 flex-none">
-            <CardTitle className="text-sm">Download queue</CardTitle>
-            <CardDescription className="text-[10px]">Active and past jobs.</CardDescription>
+            <CardTitle className="text-sm">download queue</CardTitle>
+            <CardDescription className="text-[10px]">active and past jobs.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2 flex-1 overflow-y-auto p-2 scrollbar-thin">
             {downloadQueue.map((job) => (
@@ -484,7 +484,7 @@ export default function Models() {
                         variant="ghost"
                         className="h-6 w-6 text-slate-400 hover:text-red-500"
                         onClick={() => cancelJob(job.id)}
-                        title="Cancel download"
+                        title="cancel download"
                       >
                         <XCircle size={14} />
                       </Button>
@@ -519,7 +519,7 @@ export default function Models() {
             {!downloadQueue.length && (
               <div className="flex flex-col items-center justify-center py-8 text-slate-400">
                 <ArrowDownCircle className="w-6 h-6 opacity-20 mb-1" />
-                <p className="text-xs">Queue is empty</p>
+                <p className="text-xs">queue is empty</p>
               </div>
             )}
           </CardContent>
@@ -530,19 +530,19 @@ export default function Models() {
         <CardHeader className="py-2 px-4 flex-none border-b">
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="text-base">Installed models</CardTitle>
+              <CardTitle className="text-base">installed models</CardTitle>
               <CardDescription className="text-xs">discover what is already available inside comfyui for this sweet tea instance.</CardDescription>
             </div>
             <div className="flex items-center gap-2">
               <Input
-                placeholder="Search models..."
+                placeholder="search models..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="h-7 text-xs w-48"
               />
               <Select value={selectedCategory} onValueChange={(value) => setSelectedCategory(value as ModelCategory)}>
                 <SelectTrigger className="h-7 text-xs w-32">
-                  <SelectValue placeholder="Filter type" />
+                  <SelectValue placeholder="filter type" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all" className="text-xs">all types</SelectItem>
@@ -554,7 +554,7 @@ export default function Models() {
                 </SelectContent>
               </Select>
               <Button variant="outline" size="sm" onClick={() => fetchModels(true)} disabled={isLoading} className="h-7 text-xs">
-                {isLoading ? "..." : "Refresh"}
+                {isLoading ? "..." : "refresh"}
               </Button>
             </div>
           </div>
@@ -563,12 +563,12 @@ export default function Models() {
           <Table className="text-xs w-full">
             <TableHeader className="bg-slate-50 sticky top-0 z-10 shadow-sm">
               <TableRow className="h-8 hover:bg-slate-50 border-b">
-                <TableHead className="h-8 py-1 pl-4 w-[25%]">Name</TableHead>
-                <TableHead className="h-8 py-1 w-[10%]">Type</TableHead>
-                <TableHead className="h-8 py-1 w-[10%]">Source</TableHead>
-                <TableHead className="h-8 py-1 w-[10%]">Size</TableHead>
-                <TableHead className="h-8 py-1 w-[30%]">Location</TableHead>
-                <TableHead className="h-8 py-1 w-[15%]">Notes</TableHead>
+                <TableHead className="h-8 py-1 pl-4 w-[25%]">name</TableHead>
+                <TableHead className="h-8 py-1 w-[10%]">type</TableHead>
+                <TableHead className="h-8 py-1 w-[10%]">source</TableHead>
+                <TableHead className="h-8 py-1 w-[10%]">size</TableHead>
+                <TableHead className="h-8 py-1 w-[30%]">location</TableHead>
+                <TableHead className="h-8 py-1 w-[15%]">notes</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -585,7 +585,7 @@ export default function Models() {
               {!filteredModels.length && (
                 <TableRow>
                   <TableCell colSpan={6} className="text-center text-slate-500 py-8">
-                    No models match the current filters.
+                    no models match the current filters.
                   </TableCell>
                 </TableRow>
               )}
