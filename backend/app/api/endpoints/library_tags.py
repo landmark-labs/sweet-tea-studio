@@ -730,7 +730,11 @@ def fetch_all_rule34_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int = 1
 
 # --- Background Workers ---
 
-def refresh_remote_tag_cache_if_stale():
+def refresh_tag_cache(force: bool = False, only_source: Optional[str] = None):
+    """
+    Refresh tag cache. If force=True, ignore staleness and re-fetch all (or only_source).
+    only_source may be one of: danbooru, e621, rule34.
+    """
     sources = {
         "danbooru": fetch_all_danbooru_tags,
         "e621": fetch_all_e621_tags,
@@ -739,10 +743,13 @@ def refresh_remote_tag_cache_if_stale():
 
     total_fetched = 0
     attempted_fetch = False
-    
+
     for source, fetcher in sources.items():
+        if only_source and source != only_source:
+            continue
+
         # 1. Check staleness (Quick Read)
-        is_stale = False
+        is_stale = force
         with Session(tags_engine) as session:
             state = session.exec(
                 select(TagSyncState).where(TagSyncState.source == source)
@@ -750,7 +757,7 @@ def refresh_remote_tag_cache_if_stale():
             
             if not state:
                 is_stale = True
-            elif datetime.utcnow() - state.last_synced_at > TAG_CACHE_MAX_AGE:
+            elif not force and datetime.utcnow() - state.last_synced_at > TAG_CACHE_MAX_AGE:
                 is_stale = True
         
         if not is_stale:
@@ -760,7 +767,7 @@ def refresh_remote_tag_cache_if_stale():
         # 2. Fetch data (Slow Network I/O) - NO DB CONNECTION HELD
         attempted_fetch = True
         try:
-            logger.info(f"[TagSync] Fetching {source}...")
+            logger.info(f"[TagSync] Fetching {source} (force={force})...")
             remote_tags = fetcher() # This can take seconds/minutes
             logger.info(f"[TagSync] Fetched {len(remote_tags)} tags from {source}")
         except Exception as e:
@@ -829,10 +836,14 @@ def refresh_remote_tag_cache_if_stale():
                 logger.error(f"[TagSync] Failed to save fallback tags: {e}")
 
 
+def refresh_remote_tag_cache_if_stale():
+    refresh_tag_cache(force=False, only_source=None)
+
+
 def start_tag_cache_refresh_background():
     # Ensure tags.db has any legacy/manual tags before remote sync runs
     bootstrap_tags_db_from_profile()
-    Thread(target=refresh_remote_tag_cache_if_stale, daemon=True).start()
+    Thread(target=refresh_tag_cache, kwargs={"force": False, "only_source": None}, daemon=True).start()
 
 def save_discovered_tags(tags: List[TagSuggestion]):
     """Background task to save discovered tags to the database."""
@@ -988,11 +999,23 @@ def import_tags(payload: TagImportRequest):
 
 @router.post("/refresh")
 @router.get("/refresh")
-def trigger_tag_refresh(background_tasks: BackgroundTasks):
-    """Manually trigger a tag cache refresh (useful for debugging)."""
-    logger.info("[TagSync] Manual refresh requested")
-    background_tasks.add_task(refresh_remote_tag_cache_if_stale)
-    return {"message": "Tag refresh started in background"}
+def trigger_tag_refresh(
+    background_tasks: BackgroundTasks,
+    force: bool = False,
+    source: Optional[str] = None,
+):
+    """
+    Manually trigger a tag cache refresh (useful for debugging).
+    Query params:
+      - force=true to bypass staleness checks
+      - source=rule34 (or danbooru/e621) to refresh only that source
+    """
+    if source and source not in {"danbooru", "e621", "rule34"}:
+        raise HTTPException(status_code=400, detail="Invalid source")
+
+    logger.info(f"[TagSync] Manual refresh requested (force={force}, source={source})")
+    background_tasks.add_task(refresh_tag_cache, force=force, only_source=source)
+    return {"message": "Tag refresh started in background", "force": force, "source": source or "all"}
 
 
 @router.get("/status")
