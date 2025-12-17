@@ -125,8 +125,8 @@ export function ProjectGallery({ projects, className, onSelectImage }: ProjectGa
                 >
                     <ChevronLeft className="h-4 w-4" />
                 </Button>
-                <div className="mt-2 writing-mode-vertical text-xs text-slate-400 font-medium tracking-wider">
-                    PROJECT GALLERY
+                <div className="mt-4 [writing-mode:vertical-rl] [text-orientation:mixed] text-xs text-slate-400 font-medium tracking-wider whitespace-nowrap">
+                    project gallery
                 </div>
             </div>
         );
