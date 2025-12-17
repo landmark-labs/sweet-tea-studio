@@ -53,6 +53,8 @@ app.include_router(models.router, prefix="/api/v1/models", tags=["models"])
 app.include_router(portfolio.router, prefix="/api/v1/portfolio", tags=["portfolio"])
 app.include_router(snippets.router, prefix="/api/v1/snippets", tags=["snippets"])
 app.include_router(status.router, prefix="/api/v1", tags=["status"])
+from app.api.endpoints import settings
+app.include_router(settings.router, prefix="/api/v1", tags=["settings"])
 
 @app.get("/")
 def root():

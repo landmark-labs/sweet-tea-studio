@@ -648,8 +648,10 @@ def fetch_all_rule34_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int = 1
     ]
 
     def dapi_attempt(cfg: Dict[str, Any]) -> List[TagSuggestion]:
-        user_id = (settings.RULE34_USER_ID or "").strip()
-        api_key = (settings.RULE34_API_KEY or "").strip()
+        # Get credentials from database or environment
+        from app.services.app_settings import get_rule34_user_id, get_rule34_api_key
+        user_id = (get_rule34_user_id() or "").strip()
+        api_key = (get_rule34_api_key() or "").strip()
         use_auth = bool(user_id and api_key)
         if (user_id and not api_key) or (api_key and not user_id):
             logger.warning(

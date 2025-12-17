@@ -504,11 +504,13 @@ class DownloadManager:
         """Download from Civitai."""
         url = job.url
         
-        # Civitai requires API key for most downloads
-        api_key = os.environ.get("CIVITAI_API_KEY")
+        # Get API key from database or environment
+        from app.services.app_settings import get_civitai_api_key
+        api_key = get_civitai_api_key()
         if not api_key:
             raise ValueError(
-                "CIVITAI_API_KEY environment variable not set. "
+                "Civitai API key not configured. "
+                "Set it in Settings > API Keys or via CIVITAI_API_KEY environment variable. "
                 "Get your API key from https://civitai.com/user/account"
             )
         

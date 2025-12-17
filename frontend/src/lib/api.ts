@@ -254,6 +254,25 @@ export interface ImageMetadata {
     source: "sweet_tea" | "comfyui" | "comfyui_workflow" | "database" | "none";
 }
 
+// --- API Keys Settings ---
+export interface ApiKeyInfo {
+    value: string;  // Masked value like "abc1...xyz9"
+    is_set: boolean;
+    source: "database" | "environment" | "none";
+}
+
+export interface ApiKeysSettings {
+    civitai_api_key: ApiKeyInfo;
+    rule34_api_key: ApiKeyInfo;
+    rule34_user_id: ApiKeyInfo;
+}
+
+export interface ApiKeysUpdate {
+    civitai_api_key?: string;
+    rule34_api_key?: string;
+    rule34_user_id?: string;
+}
+
 export const api = {
     // --- Engines ---
     getEngines: async (): Promise<Engine[]> => {
@@ -774,6 +793,23 @@ export const api = {
     restartBackend: async (): Promise<{ message: string; status: string }> => {
         const res = await fetch(`${API_BASE}/status/restart`, { method: "POST" });
         if (!res.ok) throw new Error("Failed to restart backend");
+        return res.json();
+    },
+
+    // --- API Keys Settings ---
+    getApiKeys: async (): Promise<ApiKeysSettings> => {
+        const res = await fetch(`${API_BASE}/settings/api-keys`);
+        if (!res.ok) throw new Error("Failed to fetch API keys");
+        return res.json();
+    },
+
+    updateApiKeys: async (keys: ApiKeysUpdate): Promise<ApiKeysSettings> => {
+        const res = await fetch(`${API_BASE}/settings/api-keys`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(keys),
+        });
+        if (!res.ok) throw new Error("Failed to update API keys");
         return res.json();
     },
 };

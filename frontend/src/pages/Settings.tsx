@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
-import { api, Engine, ComfyLaunchConfig } from "@/lib/api";
+import { api, Engine, ComfyLaunchConfig, ApiKeysSettings } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { AlertCircle, CheckCircle2, Loader2, Save, RefreshCw } from "lucide-react";
+import { AlertCircle, CheckCircle2, Loader2, Save, RefreshCw, Eye, EyeOff } from "lucide-react";
 
 export default function Settings() {
     const [engines, setEngines] = useState<Engine[]>([]);
@@ -26,9 +26,21 @@ export default function Settings() {
     const [launchArgs, setLaunchArgs] = useState("");
     const [savingLaunch, setSavingLaunch] = useState(false);
 
+    // API Keys state
+    const [apiKeys, setApiKeys] = useState<ApiKeysSettings | null>(null);
+    const [apiKeysForm, setApiKeysForm] = useState({
+        civitai_api_key: "",
+        rule34_api_key: "",
+        rule34_user_id: "",
+    });
+    const [savingApiKeys, setSavingApiKeys] = useState(false);
+    const [showCivitaiKey, setShowCivitaiKey] = useState(false);
+    const [showRule34Key, setShowRule34Key] = useState(false);
+
     useEffect(() => {
         loadEngines();
         loadLaunchConfig();
+        loadApiKeys();
     }, []);
 
     const loadEngines = async () => {
@@ -103,6 +115,39 @@ export default function Settings() {
             setError(e instanceof Error ? e.message : "Failed to save launch config");
         } finally {
             setSavingLaunch(false);
+        }
+    };
+
+    const loadApiKeys = async () => {
+        try {
+            const keys = await api.getApiKeys();
+            setApiKeys(keys);
+            // Don't populate form - user will enter new values if they want to change
+        } catch (e) {
+            console.warn("Failed to load API keys", e);
+        }
+    };
+
+    const handleSaveApiKeys = async () => {
+        setSavingApiKeys(true);
+        setError(null);
+        setSuccess(null);
+
+        try {
+            const updated = await api.updateApiKeys(apiKeysForm);
+            setApiKeys(updated);
+            // Clear form after save
+            setApiKeysForm({
+                civitai_api_key: "",
+                rule34_api_key: "",
+                rule34_user_id: "",
+            });
+            setSuccess("API keys saved!");
+            setTimeout(() => setSuccess(null), 3000);
+        } catch (e) {
+            setError(e instanceof Error ? e.message : "Failed to save API keys");
+        } finally {
+            setSavingApiKeys(false);
         }
     };
 
@@ -271,11 +316,125 @@ export default function Settings() {
                     </div>
                 </div>
 
+                {/* API Keys */}
+                <div className="space-y-6 bg-white rounded-xl p-6 border shadow-sm">
+                    <h2 className="text-lg font-medium border-b pb-2">API Keys</h2>
+                    <p className="text-sm text-muted-foreground">
+                        Configure API keys for external services. Keys are stored in the database and override environment variables.
+                    </p>
+
+                    <div className="space-y-4">
+                        {/* Civitai API Key */}
+                        <div className="space-y-2">
+                            <Label htmlFor="civitai_api_key">Civitai API Key</Label>
+                            <div className="flex gap-2">
+                                <div className="relative flex-1">
+                                    <Input
+                                        id="civitai_api_key"
+                                        type={showCivitaiKey ? "text" : "password"}
+                                        value={apiKeysForm.civitai_api_key}
+                                        onChange={(e) => setApiKeysForm({ ...apiKeysForm, civitai_api_key: e.target.value })}
+                                        placeholder={apiKeys?.civitai_api_key.is_set ? `Current: ${apiKeys.civitai_api_key.value}` : "Enter API key"}
+                                        className="font-mono text-sm pr-10"
+                                    />
+                                    <button
+                                        type="button"
+                                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                                        onClick={() => setShowCivitaiKey(!showCivitaiKey)}
+                                    >
+                                        {showCivitaiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                    </button>
+                                </div>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                                Required for downloading models from Civitai.{" "}
+                                <a href="https://civitai.com/user/account" target="_blank" rel="noreferrer" className="text-blue-600 underline">
+                                    Get your key
+                                </a>
+                                {apiKeys?.civitai_api_key.is_set && (
+                                    <span className="ml-2 text-green-600">
+                                        ✓ Set via {apiKeys.civitai_api_key.source}
+                                    </span>
+                                )}
+                            </p>
+                        </div>
+
+                        {/* Rule34 API Key */}
+                        <div className="space-y-2">
+                            <Label htmlFor="rule34_api_key">Rule34 API Key</Label>
+                            <div className="flex gap-2">
+                                <div className="relative flex-1">
+                                    <Input
+                                        id="rule34_api_key"
+                                        type={showRule34Key ? "text" : "password"}
+                                        value={apiKeysForm.rule34_api_key}
+                                        onChange={(e) => setApiKeysForm({ ...apiKeysForm, rule34_api_key: e.target.value })}
+                                        placeholder={apiKeys?.rule34_api_key.is_set ? `Current: ${apiKeys.rule34_api_key.value}` : "Enter API key"}
+                                        className="font-mono text-sm pr-10"
+                                    />
+                                    <button
+                                        type="button"
+                                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                                        onClick={() => setShowRule34Key(!showRule34Key)}
+                                    >
+                                        {showRule34Key ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                    </button>
+                                </div>
+                            </div>
+                            {apiKeys?.rule34_api_key.is_set && (
+                                <p className="text-xs text-green-600">
+                                    ✓ Set via {apiKeys.rule34_api_key.source}
+                                </p>
+                            )}
+                        </div>
+
+                        {/* Rule34 User ID */}
+                        <div className="space-y-2">
+                            <Label htmlFor="rule34_user_id">Rule34 User ID</Label>
+                            <Input
+                                id="rule34_user_id"
+                                value={apiKeysForm.rule34_user_id}
+                                onChange={(e) => setApiKeysForm({ ...apiKeysForm, rule34_user_id: e.target.value })}
+                                placeholder={apiKeys?.rule34_user_id.is_set ? `Current: ${apiKeys.rule34_user_id.value}` : "Enter User ID"}
+                                className="font-mono text-sm"
+                            />
+                            <p className="text-xs text-muted-foreground">
+                                Optional credentials for Rule34 tag autocomplete.{" "}
+                                <a href="https://rule34.xxx/index.php?page=account&s=options" target="_blank" rel="noreferrer" className="text-blue-600 underline">
+                                    Get your credentials
+                                </a>
+                                {apiKeys?.rule34_user_id.is_set && (
+                                    <span className="ml-2 text-green-600">
+                                        ✓ Set via {apiKeys.rule34_user_id.source}
+                                    </span>
+                                )}
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="flex items-center gap-3 pt-4 border-t">
+                        <Button onClick={handleSaveApiKeys} disabled={savingApiKeys}>
+                            {savingApiKeys ? (
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            ) : (
+                                <Save className="w-4 h-4 mr-2" />
+                            )}
+                            Save API Keys
+                        </Button>
+                        <span className="text-xs text-muted-foreground">
+                            Leave fields empty to keep current values
+                        </span>
+                    </div>
+                </div>
+
                 <div className="text-xs text-muted-foreground p-4 bg-slate-50 rounded-lg">
                     <strong>Tip:</strong> You can also set paths via environment variables before starting the backend:
                     <ul className="list-disc ml-5 mt-2 space-y-1">
                         <li><code>SWEET_TEA_COMFYUI_OUTPUT_DIR=/path/to/output</code></li>
                         <li><code>SWEET_TEA_COMFYUI_INPUT_DIR=/path/to/input</code></li>
+                        <li><code>CIVITAI_API_KEY=your_api_key</code></li>
+                        <li><code>SWEET_TEA_RULE34_API_KEY=your_api_key</code></li>
+                        <li><code>SWEET_TEA_RULE34_USER_ID=your_user_id</code></li>
                     </ul>
                 </div>
             </div>
