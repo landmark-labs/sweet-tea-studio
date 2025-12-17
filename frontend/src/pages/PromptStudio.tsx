@@ -721,6 +721,7 @@ export default function PromptStudio() {
   }, []); // Empty dependency array intentionally to run only on mount
 
   const wsRef = useRef<WebSocket | null>(null);
+  const lastPreviewUpdateRef = useRef<number>(0);
 
   useEffect(() => {
     if (!lastJobId) return;
@@ -859,11 +860,16 @@ export default function PromptStudio() {
         // Cleanup - button was already reset by generation_done
         setLastJobId(null);
       } else if (data.type === "preview") {
-        // Live Preview from KSampler
-        // Use job_id from message to avoid stale closure issues with lastJobId
+        // Live Preview from KSampler - THROTTLED to prevent main thread blocking
+        // Large base64 blobs cause React state updates that freeze the UI (Chrome "message handler took Xms" warnings)
+        const now = Date.now();
+        if (now - lastPreviewUpdateRef.current < 100) {
+          return; // Skip this preview, update at most every 100ms
+        }
+        lastPreviewUpdateRef.current = now;
+
         const targetJobId = data.job_id ?? lastJobId;
-        console.log("[Preview] Received preview blob for job", targetJobId, ":", data.data.blob?.substring(0, 50) + "...", "length:", data.data.blob?.length);
-        if (targetJobId) {
+        if (targetJobId && data.data?.blob) {
           updateFeed(targetJobId, { previewBlob: data.data.blob });
         }
       } else if (data.type === "error") {

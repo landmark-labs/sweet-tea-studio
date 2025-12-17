@@ -268,6 +268,7 @@ export function GenerationProvider({ children }: GenerationProviderProps) {
             const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             const wsApiPath = window.location.pathname.startsWith('/studio') ? '/sts-api/api/v1' : '/api/v1';
             const ws = new WebSocket(`${wsProtocol}//${window.location.host}${wsApiPath}/jobs/${job.id}/ws`);
+            let lastPreviewUpdate = 0;
             ws.onmessage = (event) => {
                 const data = JSON.parse(event.data);
                 if (data.type === "status") {
@@ -285,7 +286,11 @@ export function GenerationProvider({ children }: GenerationProviderProps) {
                     });
                     ws.close();
                 } else if (data.type === "preview") {
-                    updateFeed(job.id, { previewBlob: data.data.blob });
+                    // Throttle preview updates to prevent main thread blocking
+                    const now = Date.now();
+                    if (now - lastPreviewUpdate < 100) return;
+                    lastPreviewUpdate = now;
+                    if (data.data?.blob) updateFeed(job.id, { previewBlob: data.data.blob });
                 } else if (data.type === "error") {
                     updateFeed(job.id, { status: "failed" });
                     ws.close();
