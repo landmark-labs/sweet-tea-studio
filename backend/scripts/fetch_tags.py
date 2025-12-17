@@ -19,7 +19,7 @@ import httpx
 
 OUTPUT_PATH = Path(__file__).parent.parent / "app" / "data" / "fallback_tags.json"
 
-def fetch_danbooru_tags(max_tags: int = 8000, page_size: int = 200) -> list:
+def fetch_danbooru_tags(max_tags: int = 10000, page_size: int = 200) -> list:
     """Fetch top tags from Danbooru ordered by post count."""
     collected = []
     page = 1
@@ -69,7 +69,7 @@ def fetch_danbooru_tags(max_tags: int = 8000, page_size: int = 200) -> list:
     return collected[:max_tags]
 
 
-def fetch_e621_tags(max_tags: int = 2000, page_size: int = 200) -> list:
+def fetch_e621_tags(max_tags: int = 10000, page_size: int = 200) -> list:
     """Fetch top tags from e621 ordered by post count."""
     collected = []
     page = 1
@@ -161,8 +161,8 @@ def main():
     print()
     
     # Fetch from sources
-    danbooru_tags = fetch_danbooru_tags(max_tags=8000)
-    e621_tags = fetch_e621_tags(max_tags=2000)
+    danbooru_tags = fetch_danbooru_tags(max_tags=10000)
+    e621_tags = fetch_e621_tags(max_tags=10000)
     quality_tags = add_quality_tags()
     
     # Merge and deduplicate (keep highest frequency)
