@@ -610,6 +610,26 @@ export const api = {
         return res.json();
     },
 
+    keepImages: async (imageIds: number[], keep: boolean): Promise<{ status: string; count: number }> => {
+        const res = await fetch(`${API_BASE}/gallery/keep`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ image_ids: imageIds, keep }),
+        });
+        if (!res.ok) throw new Error("Failed to update kept status");
+        return res.json();
+    },
+
+    cleanupGallery: async (jobId?: number): Promise<{ status: string; count: number; files_deleted: number }> => {
+        const res = await fetch(`${API_BASE}/gallery/cleanup`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ job_id: jobId }),
+        });
+        if (!res.ok) throw new Error("Failed to cleanup gallery");
+        return res.json();
+    },
+
     // --- Captioning ---
     captionImage: async (file: File, imageId?: number): Promise<CaptionResponse> => {
         const formData = new FormData();

@@ -220,14 +220,23 @@ export default function Gallery() {
         if (!confirmed) return;
 
         try {
-            await Promise.all(deleteCandidates.map((item) => api.deleteImage(item.image.id)));
+            // Step 1: Mark selected images as "kept"
+            const keepIds = Array.from(selectedIds);
+            await api.keepImages(keepIds, true);
+
+            // Step 2: Call cleanup which deletes all non-kept images in one server-side transaction
+            const result = await api.cleanupGallery();
+
+            // Step 3: Update local state - keep only the images that were marked as kept
             setItems(items.filter((item) => selectedIds.has(item.image.id)));
             setCleanupMode(false);
             setSelectedIds(new Set());
             setLastSelectedId(null);
+
+            console.log(`Cleanup complete: ${result.count} images deleted, ${result.files_deleted} files removed`);
         } catch (err) {
             console.error(err);
-            alert("Failed to clean up some images");
+            alert("Failed to clean up gallery: " + (err instanceof Error ? err.message : "Unknown error"));
         }
     };
 
