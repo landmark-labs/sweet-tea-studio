@@ -1225,78 +1225,73 @@ export default function PromptStudio() {
       <div className="w-[420px] flex-none bg-blue-50 border-r border-blue-100 flex flex-col h-full overflow-hidden">
 
         {/* Sticky Header Section */}
-        <div className="flex-none p-4 space-y-4 border-b bg-slate-50/50 backdrop-blur z-10">
+        <div className="flex-none p-3 space-y-2 border-b bg-slate-50/50 backdrop-blur z-10">
           <div className="text-xs font-bold text-slate-800 tracking-wider">CONFIGURATOR</div>
 
-          {/* Project Selection */}
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-bold text-slate-400 lowercase tracking-wider">project</label>
-            <Select
-              value={selectedProjectId || "none"}
-              onValueChange={(value) => {
-                if (value === "none") {
-                  setSelectedProjectId(null);
-                } else {
-                  setSelectedProjectId(value);
-                }
-                setGalleryRefresh((prev) => prev + 1);
-              }}
-            >
-              <SelectTrigger className="h-8 text-xs">
-                <SelectValue placeholder="Select project">
-                  {selectedProject?.name || "Draft Mode"}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">draft mode (unsaved)</SelectItem>
-                {draftsProject && (
-                  <SelectItem value={String(draftsProject.id)}>
-                    {draftsProject.name || "Drafts"}
-                  </SelectItem>
-                )}
-                {projects
-                  .filter((p) => !draftsProject || p.id !== draftsProject.id)
-                  .map((p) => (
-                    <SelectItem key={p.id} value={String(p.id)}>
-                      {p.name}
-                    </SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
-
-            {/* Target / Description */}
-            <div className="text-[10px] text-slate-500 px-1">
-              {selectedProject
-                ? `Saving to: ${generationTarget ? "/" + generationTarget : "Default"}`
-                : "Generations will be temporary drafts."}
-            </div>
-          </div>
-
-          {/* Destination Selector (Mini) */}
-          {selectedProjectId && (
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-slate-400 lowercase tracking-wider">destination</label>
+          {/* Project + Destination Row */}
+          <div className="flex gap-2 items-end">
+            <div className="flex-1">
+              <label className="text-[9px] font-bold text-slate-400 lowercase tracking-wider">project</label>
               <Select
-                value={generationTarget || "engine-default"}
-                onValueChange={(value) => setGenerationTarget(value === "engine-default" ? "" : value)}
+                value={selectedProjectId || "none"}
+                onValueChange={(value) => {
+                  if (value === "none") {
+                    setSelectedProjectId(null);
+                  } else {
+                    setSelectedProjectId(value);
+                  }
+                  setGalleryRefresh((prev) => prev + 1);
+                }}
               >
-                <SelectTrigger className="h-7 text-[10px]">
-                  <SelectValue placeholder="Output Folder" />
+                <SelectTrigger className="h-7 text-xs">
+                  <SelectValue placeholder="Select project">
+                    {selectedProject?.name || "Draft Mode"}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="engine-default">Engine default output</SelectItem>
-                  {projectFolders.map((folder) => (
-                    <SelectItem key={folder} value={folder}>
-                      /{folder}
+                  <SelectItem value="none">draft mode (unsaved)</SelectItem>
+                  {draftsProject && (
+                    <SelectItem value={String(draftsProject.id)}>
+                      {draftsProject.name || "Drafts"}
                     </SelectItem>
-                  ))}
+                  )}
+                  {projects
+                    .filter((p) => !draftsProject || p.id !== draftsProject.id)
+                    .map((p) => (
+                      <SelectItem key={p.id} value={String(p.id)}>
+                        {p.name}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
             </div>
-          )}
+
+            {/* Destination Selector (Compact) */}
+            {selectedProjectId && (
+              <div className="flex-1">
+                <label className="text-[9px] font-bold text-slate-400 lowercase tracking-wider">destination</label>
+                <Select
+                  value={generationTarget || "engine-default"}
+                  onValueChange={(value) => setGenerationTarget(value === "engine-default" ? "" : value)}
+                >
+                  <SelectTrigger className="h-7 text-[10px]">
+                    <SelectValue placeholder="Output" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="engine-default">default output</SelectItem>
+                    {projectFolders.map((folder) => (
+                      <SelectItem key={folder} value={folder}>
+                        /{folder}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
 
           {/* GENERATE BUTTON */}
-          <div className="pt-2">
+          <div className="pt-1">
             <Button
               size="lg"
               className="w-full relative overflow-hidden transition-all active:scale-[0.98] shadow-sm hover:shadow-md"

@@ -519,9 +519,12 @@ export const DynamicForm = React.memo(function DynamicForm({
             );
         }
 
+        // Inline layout for non-prompt fields (label on left)
+        const isNumberType = field.type === "integer" || field.type === "number" || field.type === "float";
+
         return (
-            <div key={key} className="space-y-2">
-                <Label htmlFor={key} className={cn("text-xs text-slate-500", isActive && "text-blue-600 font-semibold")}>{field.title || key}</Label>
+            <div key={key} className="flex items-center gap-2 py-0.5">
+                <Label htmlFor={key} className={cn("text-xs text-slate-500 w-24 flex-shrink-0 text-right", isActive && "text-blue-600 font-semibold")}>{field.title || key}</Label>
                 {field.enum || dynamicOptions[key] ? (
                     (() => {
                         const rawOptions = dynamicOptions[key] || field.enum || [];
@@ -538,7 +541,7 @@ export const DynamicForm = React.memo(function DynamicForm({
                                     handleChange(key, val);
                                 }}
                             >
-                                <SelectTrigger id={key} className={cn("h-8 text-xs", isActive && "ring-1 ring-blue-400 border-blue-400")}>
+                                <SelectTrigger id={key} className={cn("h-7 text-xs flex-1", isActive && "ring-1 ring-blue-400 border-blue-400")}>
                                     <div className="truncate text-left pr-4">
                                         <SelectValue placeholder="Select..." />
                                     </div>
@@ -558,12 +561,32 @@ export const DynamicForm = React.memo(function DynamicForm({
                 ) : (
                     <Input
                         id={key}
-                        type={field.type === "integer" || field.type === "number" ? "number" : "text"}
+                        type="text"
+                        inputMode={isNumberType ? "decimal" : "text"}
                         value={formData[key] ?? ""}
-                        onChange={(e) => handleChange(key, field.type === "integer" ? parseInt(e.target.value) : field.type === "number" ? parseFloat(e.target.value) : e.target.value)}
+                        onChange={(e) => {
+                            const val = e.target.value;
+                            // For number fields, allow typing raw values including "-", ".", "-."
+                            // Don't parse until blur to allow natural typing of negatives and decimals
+                            handleChange(key, val);
+                        }}
+                        onBlur={(e) => {
+                            // Parse number on blur for number types
+                            if (isNumberType) {
+                                const val = e.target.value;
+                                if (val === "" || val === "-" || val === "." || val === "-.") {
+                                    // Leave as-is or clear incomplete values
+                                    return;
+                                }
+                                const parsed = field.type === "integer" ? parseInt(val) : parseFloat(val);
+                                if (!isNaN(parsed)) {
+                                    handleChange(key, parsed);
+                                }
+                            }
+                        }}
                         onFocus={() => onFieldFocus?.(key)}
                         placeholder=""
-                        className={cn("h-8 text-xs", isActive && "ring-1 ring-blue-400 border-blue-400")}
+                        className={cn("h-7 text-xs flex-1", isActive && "ring-1 ring-blue-400 border-blue-400")}
                         step={field.step || (field.type === "integer" ? 1 : 0.01)}
                         min={field.minimum}
                         max={field.maximum}

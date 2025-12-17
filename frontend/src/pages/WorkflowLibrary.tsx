@@ -169,29 +169,37 @@ const NodeCard = ({ node, schemaEdits, setSchemaEdits }: NodeCardProps) => {
                                                     value={field.default === undefined || field.default === null || (typeof field.default === 'number' && isNaN(field.default)) ? "" : String(field.default)}
                                                     onChange={(e) => {
                                                         const s = { ...schemaEdits };
+                                                        // Store raw value while typing to allow natural input of "-", ".", etc.
+                                                        s[key].default = e.target.value;
+                                                        setSchemaEdits(s);
+                                                    }}
+                                                    onBlur={(e) => {
+                                                        const s = { ...schemaEdits };
                                                         const val = e.target.value;
-                                                        // FIX: Force CFG to be treated as float even if Comfy reports it as integer
                                                         const type = key.toLowerCase() === 'cfg' ? 'float' : field.type;
+
+                                                        // Parse on blur for number types
                                                         if (type === "number" || type === "float") {
-                                                            // Allow typing incomplete numbers like "-" or "-." or "." 
                                                             if (val === "" || val === "-" || val === "." || val === "-.") {
                                                                 s[key].default = val === "" ? undefined : val;
                                                             } else {
                                                                 const parsed = parseFloat(val);
-                                                                s[key].default = isNaN(parsed) ? val : parsed;
+                                                                if (!isNaN(parsed)) {
+                                                                    s[key].default = parsed;
+                                                                    setSchemaEdits(s);
+                                                                }
                                                             }
                                                         } else if (type === "integer") {
-                                                            // Allow typing incomplete numbers like "-"
                                                             if (val === "" || val === "-") {
                                                                 s[key].default = val === "" ? undefined : val;
                                                             } else {
                                                                 const parsed = parseInt(val);
-                                                                s[key].default = isNaN(parsed) ? val : parsed;
+                                                                if (!isNaN(parsed)) {
+                                                                    s[key].default = parsed;
+                                                                    setSchemaEdits(s);
+                                                                }
                                                             }
-                                                        } else {
-                                                            s[key].default = val;
                                                         }
-                                                        setSchemaEdits(s);
                                                     }}
                                                 />
                                             )}
