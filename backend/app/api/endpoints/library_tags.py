@@ -754,6 +754,7 @@ def refresh_remote_tag_cache_if_stale():
                 is_stale = True
         
         if not is_stale:
+            logger.info(f"[TagSync] Skipping {source}: cache fresh (last_sync={state.last_synced_at if state else 'none'})")
             continue
 
         # 2. Fetch data (Slow Network I/O) - NO DB CONNECTION HELD
@@ -986,8 +987,10 @@ def import_tags(payload: TagImportRequest):
 
 
 @router.post("/refresh")
+@router.get("/refresh")
 def trigger_tag_refresh(background_tasks: BackgroundTasks):
     """Manually trigger a tag cache refresh (useful for debugging)."""
+    logger.info("[TagSync] Manual refresh requested")
     background_tasks.add_task(refresh_remote_tag_cache_if_stale)
     return {"message": "Tag refresh started in background"}
 
