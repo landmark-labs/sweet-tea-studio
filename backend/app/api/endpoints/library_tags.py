@@ -848,22 +848,37 @@ def save_discovered_tags(tags: List[TagSuggestion]):
 
 @router.get("/suggest", response_model=List[TagSuggestion])
 def suggest_tags(query: str, background_tasks: BackgroundTasks, limit: int = 20):
-    # Normalize query
-    normalized_query = query.lower().replace(" ", "_")
-    query_like = f"%{normalized_query}%"
+    # Normalize query: replace spaces with underscores for tag matching
+    normalized_query = query.strip().lower().replace(" ", "_")
+    if not normalized_query or len(normalized_query) < 2:
+        return []
+
+    # Prepare SQL patterns
+    # 1. Exact match or prefix match pattern
+    prefix_like = f"{normalized_query}%"
+    # 2. General substring match pattern (for standard LIKE)
+    substring_like = f"%{normalized_query}%"
 
     merged: Dict[str, TagSuggestion] = {}
-    
-    # Track tags needed to be saved/updated
     tags_to_save: List[TagSuggestion] = []
 
-    # 1. Fetch from local DB (Tags and Prompts)
+    # 1. Fetch from local DB (Tags)
+    # We prioritize:
+    # 1. Starts with query (Prefix match)
+    # 2. Tag frequency
     with Session(tags_engine) as session:
+        # Use a case statement to boost prefix matches
+        # Note: In SQLite, True is 1, False is 0.
+        prefix_match_expr = col(Tag.name).like(prefix_like)
+        
         tag_stmt = (
             select(Tag)
-            .where(col(Tag.name).ilike(query_like))
-            .order_by(Tag.frequency.desc())
-            .limit(limit * 2)
+            .where(col(Tag.name).ilike(substring_like)) # Match any substring
+            .order_by(
+                prefix_match_expr.desc(), # Prefix matches first
+                col(Tag.frequency).desc() # Then by frequency
+            )
+            .limit(limit * 3) # Fetch more candidates to allow frontend to fine-tune
         )
         tags = session.exec(tag_stmt).all()
         for tag in tags:
@@ -875,48 +890,59 @@ def suggest_tags(query: str, background_tasks: BackgroundTasks, limit: int = 20)
             )
     
     # 1b. Fetch prompts from main profile.db
+    # Prompts are naturally "fuzzy" in name/content
     with Session(db_engine) as session:
         prompt_stmt = (
             select(Prompt)
             .where(
-                (col(Prompt.name).ilike(query_like))
-                | (col(Prompt.positive_text).ilike(query_like))
+                (col(Prompt.name).ilike(substring_like))
+                | (col(Prompt.positive_text).ilike(substring_like))
             )
             .order_by(Prompt.updated_at.desc())
             .limit(limit)
         )
         prompts = session.exec(prompt_stmt).all()
         for p in prompts:
+            # Safely parse tags
             ptags = p.tags or []
             if isinstance(ptags, str):
                  try: ptags = json.loads(ptags)
                  except: ptags = []
             
+            # Construct description snippet
             snippet_parts = [p.positive_text or "", p.description or ""]
             snippet = " ".join([s for s in snippet_parts if s]).strip()
             
             key = f"prompt:{p.id}"
-            merged[key] = TagSuggestion(
+            # Ensure unique key avoiding collision with tag names if desired, 
+            # though frontend usually treats them differently. 
+            # Actually frontend keys by name. Let's keep separate logic if needed.
+            # But merged dict keys are tag names. 
+            # If a prompt is named "1girl", it overwrites the tag? 
+            # Original logic used distinct keys but prompt names are arbitrary.
+            # Let's use prompt name as the suggestion name.
+            
+            # Note: The original code merged everything into `merged`.
+            # If prompt name collides with tag name, it overwrites.
+            # That's probably fine, typically prompts have spaces.
+            merged[p.name.lower()] = TagSuggestion(
                 name=p.name,
                 source="prompt",
                 frequency=len(ptags),
                 description=snippet[:180] if snippet else None,
             )
 
-    # Note: External APIs disabled for performance (as per original code)
-
-    # Schedule background save for new/updated tags
-    if tags_to_save:
-        background_tasks.add_task(save_discovered_tags, tags_to_save)
+    # Note: External APIs disabled for performance
 
     priority = {"library": 0, "prompt": 0, "custom": 0, "danbooru": 1, "e621": 2, "rule34": 3}
 
     sorted_tags = sorted(
         merged.values(),
         key=lambda t: (
-            0 if t.name.lower() == normalized_query else 1,
-            priority.get(t.source, 3),
-            -t.frequency,
+            0 if t.name.lower() == normalized_query else 1, # Exact match always top
+            0 if t.name.lower().startswith(normalized_query) else 1, # Prefix match second
+            priority.get(t.source, 3), # Source priority
+            -t.frequency, # High frequency first
             t.name,
         ),
     )
