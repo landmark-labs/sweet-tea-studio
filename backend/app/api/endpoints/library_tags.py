@@ -581,6 +581,22 @@ def fetch_all_rule34_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int = 1
     import xml.etree.ElementTree as ET
 
     def dapi_attempt(scheme: str, use_doh: bool) -> List[TagSuggestion]:
+        # Rule34 effectively forces HTTPS; skip plain HTTP attempts
+        if scheme == "http":
+            return []
+
+        browser_headers = {
+            # Pretend to be Chrome; Cloudflare blocks obvious non-browser UAs
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/120.0.0.0 Safari/537.36"
+            ),
+            "Accept": "application/xml;q=0.9, text/xml;q=0.8, */*;q=0.1",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Referer": "https://rule34.xxx/",
+        }
+
         collected: List[TagSuggestion] = []
         page = 0
         dns_ctx = doh_override_dns(hostname) if use_doh else nullcontext(False)
@@ -589,7 +605,7 @@ def fetch_all_rule34_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int = 1
         with dns_ctx:
             with httpx.Client(
                 timeout=15.0,
-                headers={"User-Agent": "sweet-tea-studio/0.1 (preload)"},
+                headers=browser_headers,
                 base_url=base_url,
                 follow_redirects=True,
             ) as client:
@@ -602,24 +618,33 @@ def fetch_all_rule34_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int = 1
                                 "s": "tag",
                                 "q": "index",
                                 "limit": page_size,
-                                "order": "count",
                                 "pid": page,
-                                "json": 1,
                             },
                         )
-                        res.raise_for_status()
+                        if res.status_code != 200:
+                            # Likely Cloudflare challenge/ban
+                            snippet = res.text[:200]
+                            logger.warning(
+                                f"[TagSync] Rule34 DAPI non-200 (status={res.status_code}, doh={use_doh}): {snippet}"
+                            )
+                            res.raise_for_status()
+
                         try:
-                            data = res.json()
-                        except Exception:
                             root = ET.fromstring(res.content)
-                            data = []
-                            for child in root.findall("tag"):
-                                data.append(
-                                    {
-                                        "name": child.get("name", "").strip().lower(),
-                                        "count": int(child.get("count", 0)),
-                                    }
-                                )
+                        except ET.ParseError:
+                            logger.warning(
+                                "[TagSync] Rule34 DAPI XML parse failed (possible Cloudflare HTML challenge)"
+                            )
+                            break
+
+                        data = []
+                        for child in root.findall("tag"):
+                            data.append(
+                                {
+                                    "name": child.get("name", "").strip().lower(),
+                                    "count": int(child.get("count", 0)),
+                                }
+                            )
 
                         if not data:
                             break
@@ -663,10 +688,21 @@ def fetch_all_rule34_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int = 1
         dns_ctx = doh_override_dns(hostname) if use_doh else nullcontext(False)
         base_url = f"{scheme}://{hostname}"
 
+        browser_headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/120.0.0.0 Safari/537.36"
+            ),
+            "Accept": "application/json,text/html;q=0.8,*/*;q=0.1",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Referer": "https://rule34.xxx/",
+        }
+
         with dns_ctx:
             with httpx.Client(
                 timeout=10.0,
-                headers={"User-Agent": "sweet-tea-studio/0.1 (preload)"},
+                headers=browser_headers,
                 base_url=base_url,
                 follow_redirects=True,
             ) as client:
@@ -708,8 +744,6 @@ def fetch_all_rule34_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int = 1
     attempts = [
         ("https", True),
         ("https", False),
-        ("http", True),
-        ("http", False),
     ]
 
     for scheme, use_doh in attempts:
