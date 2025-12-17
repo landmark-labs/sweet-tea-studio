@@ -6,6 +6,9 @@ import { api, TagSuggestion } from "@/lib/api";
 import { PromptItem } from "@/lib/types";
 import { useUndoRedo } from "@/lib/undoRedo";
 
+const AUTOCOMPLETE_STORAGE_KEY = "sts_autocomplete_enabled";
+const AUTOCOMPLETE_EVENT_NAME = "sts-autocomplete-enabled-changed";
+
 interface PromptAutocompleteTextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
     value: string;
     onValueChange: (value: string) => void;
@@ -72,6 +75,12 @@ export function PromptAutocompleteTextarea({
 
     // Segregated undo: notify global system when text input is focused
     const { setTextInputFocused } = useUndoRedo();
+    const [autocompleteEnabled, setAutocompleteEnabled] = useState<boolean>(() => {
+        if (typeof window === "undefined") return true;
+        const raw = window.localStorage.getItem(AUTOCOMPLETE_STORAGE_KEY);
+        if (raw === null) return true;
+        return raw === "true";
+    });
     const cacheRef = useRef<Map<string, TagSuggestion[]>>(new Map());
     const abortControllerRef = useRef<AbortController | null>(null);
     // Track intended cursor position to restore after external value changes add delimiters
@@ -82,6 +91,37 @@ export function PromptAutocompleteTextarea({
     const [highlightIndex, setHighlightIndex] = useState(0);
     const [isOpen, setIsOpen] = useState(false);
     const [dropdownRect, setDropdownRect] = useState<{ top: number; left: number; width: number } | null>(null);
+
+    useEffect(() => {
+        const onToggle = (event: Event) => {
+            const custom = event as CustomEvent<{ enabled?: boolean }>;
+            if (typeof custom.detail?.enabled === "boolean") {
+                setAutocompleteEnabled(custom.detail.enabled);
+            }
+        };
+
+        window.addEventListener(AUTOCOMPLETE_EVENT_NAME, onToggle as EventListener);
+        return () => window.removeEventListener(AUTOCOMPLETE_EVENT_NAME, onToggle as EventListener);
+    }, []);
+
+    const toggleAutocomplete = () => {
+        const next = !autocompleteEnabled;
+        setAutocompleteEnabled(next);
+        try {
+            window.localStorage.setItem(AUTOCOMPLETE_STORAGE_KEY, String(next));
+        } catch {
+            // ignore (private mode / storage disabled)
+        }
+        window.dispatchEvent(new CustomEvent(AUTOCOMPLETE_EVENT_NAME, { detail: { enabled: next } }));
+
+        if (!next) {
+            if (abortControllerRef.current) {
+                abortControllerRef.current.abort();
+            }
+            setSuggestions([]);
+            setIsOpen(false);
+        }
+    };
 
     const updateCursor = () => {
         if (!textareaRef.current) return;
@@ -117,6 +157,15 @@ export function PromptAutocompleteTextarea({
     const deferredToken = useDeferredValue(currentToken);
 
     useEffect(() => {
+        if (!autocompleteEnabled) {
+            if (abortControllerRef.current) {
+                abortControllerRef.current.abort();
+            }
+            setIsOpen(false);
+            setSuggestions([]);
+            return;
+        }
+
         const token = deferredToken.trim();
         const normalizedToken = token.replace(/\s+/g, "_");
 
@@ -167,7 +216,7 @@ export function PromptAutocompleteTextarea({
                 abortControllerRef.current.abort();
             }
         };
-    }, [deferredToken]); // Removed isFocused dependency
+    }, [deferredToken, autocompleteEnabled]); // Removed isFocused dependency
 
     // Keep dropdown aligned without forcing layout thrash on every render
     useEffect(() => {
@@ -333,6 +382,25 @@ export function PromptAutocompleteTextarea({
 
     return (
         <div className="relative group/container w-full">
+            <button
+                type="button"
+                className={cn(
+                    "absolute right-2 top-2 z-20 rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-opacity",
+                    "opacity-0 group-hover/container:opacity-100 focus-within:opacity-100",
+                    autocompleteEnabled
+                        ? "bg-white/90 text-slate-700 border-slate-200 hover:bg-white"
+                        : "bg-slate-100/90 text-slate-500 border-slate-200 hover:bg-slate-50",
+                )}
+                title={autocompleteEnabled ? "Disable autocomplete" : "Enable autocomplete"}
+                onMouseDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    toggleAutocomplete();
+                }}
+            >
+                {autocompleteEnabled ? "Autocomplete" : "Autocomplete off"}
+            </button>
+
             {/* Overlay for highlighting */}
             {highlightSnippets && highlightedContent && (
                 <div
@@ -409,7 +477,7 @@ export function PromptAutocompleteTextarea({
                 onKeyDown={handleKeyDown}
             />
 
-            {showDropdown && textareaRef.current && dropdownRect && createPortal(
+            {autocompleteEnabled && showDropdown && textareaRef.current && dropdownRect && createPortal(
                 <div
                     className="fixed z-[9999] rounded-lg border border-slate-300 bg-white shadow-2xl max-h-60 overflow-y-auto text-sm ring-1 ring-black/5"
                     style={{
@@ -458,5 +526,3 @@ export function PromptAutocompleteTextarea({
         </div>
     );
 }
-
-

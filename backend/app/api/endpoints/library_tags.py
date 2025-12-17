@@ -369,36 +369,46 @@ def bulk_upsert_tag_suggestions(session: Session, tags: List[TagSuggestion], sou
 # --- External Fetchers ---
 
 def fetch_danbooru_tags(query: str, limit: int = 10) -> List[TagSuggestion]:
-    try:
-        with httpx.Client(
-            timeout=5.0,
-            headers={"User-Agent": "sweet-tea-studio/0.1"},
-            follow_redirects=True,
-            trust_env=False,
-        ) as client:
-            res = client.get(
-                "https://danbooru.donmai.us/tags.json",
-                params={
-                    "search[name_matches]": f"{query}*",
-                    "search[order]": "count",
-                    "limit": limit,
-                },
-            )
-            res.raise_for_status()
-            data = res.json()
-            return [
-                TagSuggestion(
-                    name=tag.get("name", ""),
-                    source="danbooru",
-                    frequency=int(tag.get("post_count", 0) or 0),
-                    description=tag.get("category_name"),
-                )
-                for tag in data
-                if tag.get("name")
-            ]
-    except Exception as e:
-        logger.warning(f"[TagFetch] Danbooru query failed for '{query}': {e}")
-        return []
+    hostname = "danbooru.donmai.us"
+    last_error: Optional[Exception] = None
+
+    for use_doh in (True, False):
+        dns_ctx = doh_override_dns(hostname) if use_doh else nullcontext(False)
+        with dns_ctx:
+            try:
+                with httpx.Client(
+                    timeout=5.0,
+                    headers={"User-Agent": "sweet-tea-studio/0.1 (autocomplete)"},
+                    base_url=f"https://{hostname}",
+                    follow_redirects=True,
+                    trust_env=False,
+                ) as client:
+                    res = client.get(
+                        "/tags.json",
+                        params={
+                            "search[name_matches]": f"{query}*",
+                            "search[order]": "count",
+                            "limit": limit,
+                        },
+                    )
+                    res.raise_for_status()
+                    data = res.json()
+                    return [
+                        TagSuggestion(
+                            name=tag.get("name", ""),
+                            source="danbooru",
+                            frequency=int(tag.get("post_count", 0) or 0),
+                            description=tag.get("category_name"),
+                        )
+                        for tag in data
+                        if tag.get("name")
+                    ]
+            except Exception as e:
+                last_error = e
+                continue
+
+    logger.warning(f"[TagFetch] Danbooru query failed for '{query}': {last_error}")
+    return []
 
 def fetch_all_danbooru_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int = TAG_CACHE_PAGE_SIZE) -> List[TagSuggestion]:
     hostname = "danbooru.donmai.us"
@@ -461,36 +471,46 @@ def fetch_all_danbooru_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int =
     return data[:max_tags]
 
 def fetch_e621_tags(query: str, limit: int = 10) -> List[TagSuggestion]:
-    try:
-        with httpx.Client(
-            timeout=5.0,
-            headers={"User-Agent": "sweet-tea-studio/0.1 (autocomplete)"},
-            follow_redirects=True,
-            trust_env=False,
-        ) as client:
-            res = client.get(
-                "https://e621.net/tags.json",
-                params={
-                    "search[name_matches]": f"{query}*",
-                    "search[order]": "count",
-                    "limit": limit,
-                },
-            )
-            res.raise_for_status()
-            data = res.json()
-            return [
-                TagSuggestion(
-                    name=tag.get("name", ""),
-                    source="e621",
-                    frequency=int(tag.get("post_count", 0) or 0),
-                    description=str(tag.get("category") or ""),
-                )
-                for tag in data
-                if tag.get("name")
-            ]
-    except Exception as e:
-        logger.warning(f"[TagFetch] e621 query failed: {e}")
-        return []
+    hostname = "e621.net"
+    last_error: Optional[Exception] = None
+
+    for use_doh in (True, False):
+        dns_ctx = doh_override_dns(hostname) if use_doh else nullcontext(False)
+        with dns_ctx:
+            try:
+                with httpx.Client(
+                    timeout=5.0,
+                    headers={"User-Agent": "sweet-tea-studio/0.1 (autocomplete)"},
+                    base_url=f"https://{hostname}",
+                    follow_redirects=True,
+                    trust_env=False,
+                ) as client:
+                    res = client.get(
+                        "/tags.json",
+                        params={
+                            "search[name_matches]": f"{query}*",
+                            "search[order]": "count",
+                            "limit": limit,
+                        },
+                    )
+                    res.raise_for_status()
+                    data = res.json()
+                    return [
+                        TagSuggestion(
+                            name=tag.get("name", ""),
+                            source="e621",
+                            frequency=int(tag.get("post_count", 0) or 0),
+                            description=str(tag.get("category") or ""),
+                        )
+                        for tag in data
+                        if tag.get("name")
+                    ]
+            except Exception as e:
+                last_error = e
+                continue
+
+    logger.warning(f"[TagFetch] e621 query failed: {last_error}")
+    return []
 
 def fetch_all_e621_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int = TAG_CACHE_PAGE_SIZE) -> List[TagSuggestion]:
     hostname = "e621.net"
@@ -558,7 +578,16 @@ def fetch_rule34_tags(query: str, limit: int = 10) -> List[TagSuggestion]:
         with dns_ctx:
             with httpx.Client(
                 timeout=5.0,
-                headers={"User-Agent": "sweet-tea-studio/0.1 (autocomplete)"},
+                headers={
+                    "User-Agent": (
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                        "AppleWebKit/537.36 (KHTML, like Gecko) "
+                        "Chrome/120.0.0.0 Safari/537.36"
+                    ),
+                    "Accept": "application/json,text/html;q=0.8,*/*;q=0.1",
+                    "Accept-Language": "en-US,en;q=0.9",
+                    "Referer": "https://rule34.xxx/",
+                },
                 follow_redirects=True,
                 trust_env=False,
             ) as client:
@@ -592,7 +621,7 @@ def fetch_rule34_tags(query: str, limit: int = 10) -> List[TagSuggestion]:
                     )
             return tags
     except Exception as e:
-        print(f"rule34 fetch error: {e}")
+        logger.warning(f"[TagFetch] Rule34 query failed for '{query}': {e}")
         return []
 
 def fetch_all_rule34_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int = 100) -> List[TagSuggestion]:
@@ -621,9 +650,11 @@ def fetch_all_rule34_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int = 1
     def dapi_attempt(cfg: Dict[str, Any]) -> List[TagSuggestion]:
         user_id = (settings.RULE34_USER_ID or "").strip()
         api_key = (settings.RULE34_API_KEY or "").strip()
-        if not (user_id and api_key):
-            # Rule34 DAPI requires authentication for many endpoints (tag index included)
-            return []
+        use_auth = bool(user_id and api_key)
+        if (user_id and not api_key) or (api_key and not user_id):
+            logger.warning(
+                "[TagSync] Rule34 DAPI credentials are incomplete; ignoring auth and trying unauthenticated"
+            )
 
         collected: List[TagSuggestion] = []
         page = 0
@@ -645,17 +676,20 @@ def fetch_all_rule34_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int = 1
             ) as client:
                 while len(collected) < max_tags:
                     try:
+                        params: Dict[str, Any] = {
+                            "page": "dapi",
+                            "s": "tag",
+                            "q": "index",
+                            "limit": limit,
+                            "pid": page,
+                        }
+                        if use_auth:
+                            params["user_id"] = user_id
+                            params["api_key"] = api_key
+
                         res = client.get(
                             "/index.php",
-                            params={
-                                "page": "dapi",
-                                "s": "tag",
-                                "q": "index",
-                                "user_id": user_id,
-                                "api_key": api_key,
-                                "limit": limit,
-                                "pid": page,
-                            },
+                            params=params,
                         )
                         if res.status_code != 200:
                             snippet = res.text[:200]
@@ -791,18 +825,11 @@ def fetch_all_rule34_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int = 1
         return collected
 
     # Try DoH override first, then system DNS; fall back to autocomplete if DAPI fails.
-    has_creds = bool((settings.RULE34_USER_ID or "").strip() and (settings.RULE34_API_KEY or "").strip())
-    if not has_creds:
-        logger.warning(
-            "[TagSync] Rule34 DAPI disabled (missing SWEET_TEA_RULE34_USER_ID / SWEET_TEA_RULE34_API_KEY); "
-            "using autocomplete harvesting instead"
-        )
-    else:
-        for cfg in client_configs:
-            data = dapi_attempt(cfg)
-            if data:
-                return data[:max_tags]
-            logger.warning(f"[TagSync] Rule34 DAPI returned 0 tags (cfg={cfg.get('label')})")
+    for cfg in client_configs:
+        data = dapi_attempt(cfg)
+        if data:
+            return data[:max_tags]
+        logger.warning(f"[TagSync] Rule34 DAPI returned 0 tags (cfg={cfg.get('label')})")
 
     logger.warning("[TagSync] Rule34 DAPI returned no data, falling back to autocomplete harvesting")
     for cfg in client_configs:
@@ -962,16 +989,20 @@ def save_discovered_tags(tags: List[TagSuggestion]):
 
 @router.get("/suggest", response_model=List[TagSuggestion])
 def suggest_tags(query: str, background_tasks: BackgroundTasks, limit: int = 20):
-    # Normalize query: replace spaces with underscores for tag matching
-    normalized_query = query.strip().lower().replace(" ", "_")
-    if not normalized_query or len(normalized_query) < 2:
+    raw_query = " ".join((query or "").strip().lower().split())
+    if not raw_query or len(raw_query) < 2:
         return []
 
-    # Prepare SQL patterns
-    # 1. Exact match or prefix match pattern
+    # Normalize query forms so tags with spaces/underscores can match either way.
+    # We treat underscores as the canonical tag form for remote APIs.
+    normalized_query = raw_query.replace(" ", "_")
+    normalized_query_alt = raw_query.replace("_", " ")
+
+    # Prepare SQL patterns (space/underscore tolerant)
     prefix_like = f"{normalized_query}%"
-    # 2. General substring match pattern (for standard LIKE)
+    prefix_like_alt = f"{normalized_query_alt}%"
     substring_like = f"%{normalized_query}%"
+    substring_like_alt = f"%{normalized_query_alt}%"
 
     merged: Dict[str, TagSuggestion] = {}
     tags_to_save: List[TagSuggestion] = []
@@ -983,11 +1014,13 @@ def suggest_tags(query: str, background_tasks: BackgroundTasks, limit: int = 20)
     with Session(tags_engine) as session:
         # Use a case statement to boost prefix matches
         # Note: In SQLite, True is 1, False is 0.
-        prefix_match_expr = col(Tag.name).like(prefix_like)
-        
+        prefix_match_expr = col(Tag.name).ilike(prefix_like)
+        if prefix_like_alt != prefix_like:
+            prefix_match_expr = prefix_match_expr | col(Tag.name).ilike(prefix_like_alt)
+         
         tag_stmt = (
             select(Tag)
-            .where(col(Tag.name).ilike(substring_like)) # Match any substring
+            .where(col(Tag.name).ilike(substring_like) | col(Tag.name).ilike(substring_like_alt))
             .order_by(
                 prefix_match_expr.desc(), # Prefix matches first
                 col(Tag.frequency).desc() # Then by frequency
@@ -1006,11 +1039,18 @@ def suggest_tags(query: str, background_tasks: BackgroundTasks, limit: int = 20)
     # 1b. Fetch prompts from main profile.db
     # Prompts are naturally "fuzzy" in name/content
     with Session(db_engine) as session:
+        prompt_like = f"%{raw_query}%"
+        prompt_like_alt = f"%{normalized_query_alt}%"
+        prompt_like_tag = f"%{normalized_query}%"
         prompt_stmt = (
             select(Prompt)
             .where(
-                (col(Prompt.name).ilike(substring_like))
-                | (col(Prompt.positive_text).ilike(substring_like))
+                col(Prompt.name).ilike(prompt_like)
+                | col(Prompt.positive_text).ilike(prompt_like)
+                | col(Prompt.name).ilike(prompt_like_alt)
+                | col(Prompt.positive_text).ilike(prompt_like_alt)
+                | col(Prompt.name).ilike(prompt_like_tag)
+                | col(Prompt.positive_text).ilike(prompt_like_tag)
             )
             .order_by(Prompt.updated_at.desc())
             .limit(limit)
@@ -1046,15 +1086,56 @@ def suggest_tags(query: str, background_tasks: BackgroundTasks, limit: int = 20)
                 description=snippet[:180] if snippet else None,
             )
 
-    # Note: External APIs disabled for performance
+    # 2. If local cache doesn't have enough suggestions, query remote APIs once.
+    # This enables "harvest as you type" behavior when tags.db is missing a tag.
+    if len(normalized_query) >= 3:
+        existing_tag_count = sum(1 for s in merged.values() if s.source != "prompt")
+        if existing_tag_count < limit:
+            remote_limit = min(10, max(1, limit))
+            remote_results: List[TagSuggestion] = []
+
+            fetchers = [
+                ("danbooru", lambda: fetch_danbooru_tags(normalized_query, limit=remote_limit)),
+                ("e621", lambda: fetch_e621_tags(normalized_query, limit=remote_limit)),
+                ("rule34", lambda: fetch_rule34_tags(normalized_query, limit=remote_limit)),
+            ]
+
+            with ThreadPoolExecutor(max_workers=len(fetchers)) as executor:
+                futures = {executor.submit(fn): label for label, fn in fetchers}
+                for future in as_completed(futures):
+                    label = futures[future]
+                    try:
+                        data = future.result()
+                        if data:
+                            remote_results.extend(data)
+                    except Exception as e:
+                        logger.warning(f"[TagFetch] {label} remote suggest failed: {e}")
+
+            # Merge remote results + save them for future local suggestions.
+            seen_to_save: set[str] = set()
+            for suggestion in remote_results:
+                key = (suggestion.name or "").strip().lower()
+                if not key:
+                    continue
+                if key not in merged:
+                    merged[key] = suggestion
+                if key not in seen_to_save and suggestion.source != "prompt":
+                    tags_to_save.append(suggestion)
+                    seen_to_save.add(key)
+
+            if tags_to_save:
+                background_tasks.add_task(save_discovered_tags, tags_to_save)
 
     priority = {"library": 0, "prompt": 0, "custom": 0, "danbooru": 1, "e621": 2, "rule34": 3}
+
+    def _norm_name(value: str) -> str:
+        return (value or "").strip().lower().replace(" ", "_")
 
     sorted_tags = sorted(
         merged.values(),
         key=lambda t: (
-            0 if t.name.lower() == normalized_query else 1, # Exact match always top
-            0 if t.name.lower().startswith(normalized_query) else 1, # Prefix match second
+            0 if _norm_name(t.name) == normalized_query else 1, # Exact match always top
+            0 if _norm_name(t.name).startswith(normalized_query) else 1, # Prefix match second
             priority.get(t.source, 3), # Source priority
             -t.frequency, # High frequency first
             t.name,
