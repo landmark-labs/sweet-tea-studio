@@ -20,6 +20,7 @@ interface PromptConstructorProps {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     schema: any;
     onUpdate: (field: string, value: string) => void;
+    onUpdateMany?: (updates: Record<string, string>) => void;
     currentValues: Record<string, string>;
     targetField?: string;
     onTargetChange?: (field: string) => void;
@@ -302,7 +303,7 @@ function SortableLibrarySnippet({ snippet, isEditing, onStartLongPress, onCancel
 
 // --- Main Component ---
 
-export const PromptConstructor = React.memo(function PromptConstructor({ schema, onUpdate, currentValues, targetField: controlledTarget, onTargetChange, onFinish, snippets: library, onUpdateSnippets: setLibrary }: PromptConstructorProps) {
+export const PromptConstructor = React.memo(function PromptConstructor({ schema, onUpdate, onUpdateMany, currentValues, targetField: controlledTarget, onTargetChange, onFinish, snippets: library, onUpdateSnippets: setLibrary }: PromptConstructorProps) {
     // 1. Identify Target Fields
     const [internalTarget, setInternalTarget] = useState<string>("");
     const targetField = controlledTarget !== undefined ? controlledTarget : internalTarget;
@@ -368,47 +369,6 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
         }
     }, [schema]);
 
-    // Sync Library: When a library snippet's content changes, update all linked items
-    // This watches for library changes and syncs content to items with matching sourceId
-    const prevLibraryRef = useRef<PromptItem[]>([]);
-    useEffect(() => {
-        // Build map of current library snippets by ID
-        const libraryById = new Map(library.map(s => [s.id, s]));
-
-        // Check if any library snippet content changed
-        let hasChanges = false;
-        const updatedItems = items.map(item => {
-            // Only sync 'block' items with a sourceId (linked to library)
-            if (item.type !== 'block' || !item.sourceId) return item;
-
-            const librarySnippet = libraryById.get(item.sourceId);
-            if (!librarySnippet) {
-                // Snippet was deleted from library - item becomes unlinked text
-                return { ...item, type: 'text' as const, sourceId: undefined, label: item.label || 'Text' };
-            }
-
-            // If content differs, sync it (snippet was edited)
-            if (item.content !== librarySnippet.content) {
-                hasChanges = true;
-                return {
-                    ...item,
-                    content: librarySnippet.content,
-                    label: librarySnippet.label,
-                    color: librarySnippet.color
-                };
-            }
-
-            return item;
-        });
-
-        if (hasChanges) {
-            setItems(updatedItems, "Library snippet updated", false);
-        }
-
-        prevLibraryRef.current = library;
-    }, [library]);
-
-
     // Ref Pattern: Track currentValues without triggering effects in Output channel
     const valuesRef = useRef(currentValues);
     useEffect(() => { valuesRef.current = currentValues; }, [currentValues]);
@@ -416,12 +376,98 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
     // Guard Ref: To prevent "Echo" loops where we parse what we just compiled
     const lastCompiledRef = useRef<{ field: string, value: string } | null>(null);
 
+    // When syncing snippets -> prompts we intentionally skip reconcile/compile for one tick
+    // to prevent stale parent values from overwriting linked blocks.
+    const syncingLibraryRef = useRef(false);
+    const suppressCompileRef = useRef(false);
+
     // Helper to validate target
     const isTargetValid = targetField && schema && schema[targetField] && schema[targetField].type === 'string';
+
+    // Sync Library: keep linked blocks + prompt text aligned when snippets change.
+    // Important: reconciliation depends on `library`, so we must guard against it
+    // running on a library edit before the parent prompt text is updated.
+    useEffect(() => {
+        if (!library || library.length === 0) return;
+        const fieldKeys = Object.keys(fieldItems);
+        if (fieldKeys.length === 0) return;
+
+        const libraryById = new Map(library.map(s => [s.id, s]));
+        const nextFieldItems: Record<string, PromptItem[]> = {};
+        let didChangeItems = false;
+
+        const valueUpdates: Record<string, string> = {};
+
+        for (const fieldKey of fieldKeys) {
+            const existing = fieldItems[fieldKey] || [];
+            let didChangeField = false;
+
+            const updated = existing.map(item => {
+                if (item.type !== "block" || !item.sourceId) return item;
+
+                const librarySnippet = libraryById.get(item.sourceId);
+                if (!librarySnippet) {
+                    didChangeField = true;
+                    return { ...item, type: "text" as const, sourceId: undefined, label: item.label || "Text" };
+                }
+
+                const nextLabel = librarySnippet.label;
+                const nextContent = librarySnippet.content;
+                const nextColor = librarySnippet.color;
+
+                if (item.label !== nextLabel || item.content !== nextContent || item.color !== nextColor) {
+                    didChangeField = true;
+                    return { ...item, label: nextLabel, content: nextContent, color: nextColor };
+                }
+
+                return item;
+            });
+
+            if (didChangeField) didChangeItems = true;
+            nextFieldItems[fieldKey] = didChangeField ? updated : existing;
+
+            const hasLinkedBlocks = updated.some(i => i.type === "block" && !!i.sourceId);
+            if (!hasLinkedBlocks) continue;
+
+            const compiled = updated.map(i => i.content).join(", ");
+            const currentRaw = (currentValues as any)?.[fieldKey];
+            const currentVal = typeof currentRaw === "string" ? currentRaw : (currentRaw === null || currentRaw === undefined ? "" : String(currentRaw));
+
+            if (compiled !== currentVal) {
+                valueUpdates[fieldKey] = compiled;
+            }
+        }
+
+        const hasValueUpdates = Object.keys(valueUpdates).length > 0;
+        if (!didChangeItems && !hasValueUpdates) return;
+
+        // Prevent reconcile from overwriting freshly-synced linked blocks
+        syncingLibraryRef.current = true;
+
+        if (didChangeItems) {
+            setFieldItems(nextFieldItems);
+        }
+
+        if (hasValueUpdates) {
+            if (onUpdateMany) {
+                suppressCompileRef.current = true;
+                onUpdateMany(valueUpdates);
+            } else if (targetField && valueUpdates[targetField] !== undefined) {
+                suppressCompileRef.current = true;
+                onUpdate(targetField, valueUpdates[targetField]);
+            }
+        }
+
+        // Clear flag after a tick to allow state/props to settle
+        setTimeout(() => {
+            syncingLibraryRef.current = false;
+        }, 0);
+    }, [library]);
 
     // Reconciliation Logic (INPUT Channel: External Text -> Items)
     useEffect(() => {
         if (!isTargetValid) return;
+        if (syncingLibraryRef.current) return;
 
         const currentVal = currentValues[targetField] || "";
 
@@ -568,6 +614,10 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
     // Compile (OUTPUT Channel: Items -> Parent)
     useEffect(() => {
         if (!isTargetValid) return;
+        if (suppressCompileRef.current) {
+            suppressCompileRef.current = false;
+            return;
+        }
 
         // Only update parent if local change differs from parent value
         // Use implicit ", " separator for cleaner linking

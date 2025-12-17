@@ -495,6 +495,11 @@ export default function PromptStudio() {
     handleFormChange({ ...formData, [field]: value });
   };
 
+  const handlePromptUpdateMany = (updates: Record<string, string>) => {
+    if (!updates || Object.keys(updates).length === 0) return;
+    handleFormChange({ ...formData, ...updates });
+  };
+
 
 
   // Effect 1: CAPTURE loadParams immediately when navigation happens
@@ -1216,6 +1221,7 @@ export default function PromptStudio() {
             }
             currentValues={formData}
             onUpdate={handlePromptUpdate}
+            onUpdateMany={handlePromptUpdateMany}
             targetField={focusedField}
             onTargetChange={setFocusedField}
             onFinish={() => setFocusedField("")}
