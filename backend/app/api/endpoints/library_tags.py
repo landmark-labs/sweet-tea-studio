@@ -6,6 +6,7 @@ and background caching synchronization.
 """
 
 import logging
+import socket
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
@@ -13,6 +14,7 @@ import json
 import time
 from threading import Thread
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from contextlib import contextmanager, nullcontext
 
 import httpx
 from fastapi import APIRouter, HTTPException, BackgroundTasks
@@ -121,6 +123,40 @@ def build_tag_clients(hostname: str, timeout: float = 10.0, prefer_doh: bool = T
     )
     fallback = create_doh_client(hostname, timeout=timeout)
     return primary, fallback, False
+
+
+@contextmanager
+def doh_override_dns(hostname: str):
+    """
+    Force socket.getaddrinfo to return the DoH-resolved IP for the target host.
+    This keeps SNI and TLS verification working because the URL still contains
+    the original hostname.
+    """
+    ip = resolve_via_doh(hostname)
+    if not ip:
+        yield False
+        return
+
+    original_getaddrinfo = socket.getaddrinfo
+
+    def patched_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
+        if host == hostname:
+            return [
+                (
+                    socket.AF_INET,
+                    socket.SOCK_STREAM,
+                    proto or socket.IPPROTO_TCP,
+                    "",
+                    (ip, port),
+                )
+            ]
+        return original_getaddrinfo(host, port, family, type, proto, flags)
+
+    socket.getaddrinfo = patched_getaddrinfo
+    try:
+        yield True
+    finally:
+        socket.getaddrinfo = original_getaddrinfo
 
 
 def load_fallback_tags() -> List["TagSuggestion"]:
@@ -354,66 +390,62 @@ def fetch_danbooru_tags(query: str, limit: int = 10) -> List[TagSuggestion]:
         return []
 
 def fetch_all_danbooru_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int = TAG_CACHE_PAGE_SIZE) -> List[TagSuggestion]:
-    collected: List[TagSuggestion] = []
-    page = 1
     hostname = "danbooru.donmai.us"
     
-    # Vast.ai often needs DoH first; still keep a fallback to normal DNS
-    primary_client, fallback_client, primary_is_doh = build_tag_clients(hostname, timeout=10.0, prefer_doh=True)
-    client = primary_client
-    used_fallback = False
+    def _attempt(use_doh: bool) -> List[TagSuggestion]:
+        collected: List[TagSuggestion] = []
+        page = 1
+        dns_ctx = doh_override_dns(hostname) if use_doh else nullcontext(False)
+        with dns_ctx:
+            with httpx.Client(
+                timeout=10.0,
+                headers={"User-Agent": "sweet-tea-studio/0.1 (preload)"},
+                base_url=f"https://{hostname}",
+            ) as client:
+                while len(collected) < max_tags:
+                    try:
+                        res = client.get(
+                            "/tags.json",
+                            params={
+                                "search[order]": "count",
+                                "limit": page_size,
+                                "page": page,
+                            },
+                        )
+                        res.raise_for_status()
+                        data = res.json()
+                    except Exception as e:
+                        logger.warning(
+                            f"[TagSync] Danbooru fetch page {page} failed (doh={use_doh}): {e}"
+                        )
+                        break
 
-    try:
-        while len(collected) < max_tags:
-            try:
-                res = client.get(
-                    "/tags.json",
-                    params={
-                        "search[order]": "count",
-                        "limit": page_size,
-                        "page": page,
-                    },
-                )
-                res.raise_for_status()
-                data = res.json()
-            except Exception as e:
-                if not used_fallback and fallback_client:
-                    logger.warning(
-                        f"[TagSync] Danbooru primary fetch failed (page {page}, doh={primary_is_doh}); "
-                        f"retrying with fallback: {e}"
+                    if not data:
+                        break
+
+                    collected.extend(
+                        [
+                            TagSuggestion(
+                                name=tag.get("name", ""),
+                                source="danbooru",
+                                frequency=int(tag.get("post_count", 0) or 0),
+                                description=tag.get("category_name"),
+                            )
+                            for tag in data
+                            if tag.get("name")
+                        ]
                     )
-                    client = fallback_client
-                    used_fallback = True
-                    continue
-                logger.warning(f"[TagSync] Danbooru fetch page {page} failed after fallback: {e}")
-                break
 
-            if not data:
-                break
+                    if len(data) < page_size:
+                        break
+                    page += 1
+        return collected
 
-            collected.extend(
-                [
-                    TagSuggestion(
-                        name=tag.get("name", ""),
-                        source="danbooru",
-                        frequency=int(tag.get("post_count", 0) or 0),
-                        description=tag.get("category_name"),
-                    )
-                    for tag in data
-                    if tag.get("name")
-                ]
-            )
-
-            if len(data) < page_size:
-                break
-            page += 1
-
-    finally:
-        primary_client.close()
-        if fallback_client:
-            fallback_client.close()
-
-    return collected[:max_tags]
+    # Prefer DoH (vast.ai) first, then fall back to system DNS
+    data = _attempt(use_doh=True)
+    if not data:
+        data = _attempt(use_doh=False)
+    return data[:max_tags]
 
 def fetch_e621_tags(query: str, limit: int = 10) -> List[TagSuggestion]:
     try:
@@ -446,66 +478,61 @@ def fetch_e621_tags(query: str, limit: int = 10) -> List[TagSuggestion]:
         return []
 
 def fetch_all_e621_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int = TAG_CACHE_PAGE_SIZE) -> List[TagSuggestion]:
-    collected: List[TagSuggestion] = []
-    page = 1
     hostname = "e621.net"
     
-    # Vast.ai often needs DoH first; still keep a fallback to normal DNS
-    primary_client, fallback_client, primary_is_doh = build_tag_clients(hostname, timeout=10.0, prefer_doh=True)
-    client = primary_client
-    used_fallback = False
+    def _attempt(use_doh: bool) -> List[TagSuggestion]:
+        collected: List[TagSuggestion] = []
+        page = 1
+        dns_ctx = doh_override_dns(hostname) if use_doh else nullcontext(False)
+        with dns_ctx:
+            with httpx.Client(
+                timeout=10.0,
+                headers={"User-Agent": "sweet-tea-studio/0.1 (preload)"},
+                base_url=f"https://{hostname}",
+            ) as client:
+                while len(collected) < max_tags:
+                    try:
+                        res = client.get(
+                            "/tags.json",
+                            params={
+                                "search[order]": "count",
+                                "limit": page_size,
+                                "page": page,
+                            },
+                        )
+                        res.raise_for_status()
+                        data = res.json()
+                    except Exception as e:
+                        logger.warning(
+                            f"[TagSync] e621 fetch page {page} failed (doh={use_doh}): {e}"
+                        )
+                        break
 
-    try:
-        while len(collected) < max_tags:
-            try:
-                res = client.get(
-                    "/tags.json",
-                    params={
-                        "search[order]": "count",
-                        "limit": page_size,
-                        "page": page,
-                    },
-                )
-                res.raise_for_status()
-                data = res.json()
-            except Exception as e:
-                if not used_fallback and fallback_client:
-                    logger.warning(
-                        f"[TagSync] e621 primary fetch failed (page {page}, doh={primary_is_doh}); "
-                        f"retrying with fallback: {e}"
+                    if not data:
+                        break
+
+                    collected.extend(
+                        [
+                            TagSuggestion(
+                                name=tag.get("name", ""),
+                                source="e621",
+                                frequency=int(tag.get("post_count", 0) or 0),
+                                description=str(tag.get("category") or ""),
+                            )
+                            for tag in data
+                            if tag.get("name")
+                        ]
                     )
-                    client = fallback_client
-                    used_fallback = True
-                    continue
-                logger.warning(f"[TagSync] e621 fetch page {page} failed after fallback: {e}")
-                break
 
-            if not data:
-                break
+                    if len(data) < page_size:
+                        break
+                    page += 1
+        return collected
 
-            collected.extend(
-                [
-                    TagSuggestion(
-                        name=tag.get("name", ""),
-                        source="e621",
-                        frequency=int(tag.get("post_count", 0) or 0),
-                        description=str(tag.get("category") or ""),
-                    )
-                    for tag in data
-                    if tag.get("name")
-                ]
-            )
-
-            if len(data) < page_size:
-                break
-            page += 1
-
-    finally:
-        primary_client.close()
-        if fallback_client:
-            fallback_client.close()
-
-    return collected[:max_tags]
+    data = _attempt(use_doh=True)
+    if not data:
+        data = _attempt(use_doh=False)
+    return data[:max_tags]
 
 def fetch_rule34_tags(query: str, limit: int = 10) -> List[TagSuggestion]:
     """Fetch tags from Rule34 autocomplete API."""
@@ -550,9 +577,6 @@ def fetch_rule34_tags(query: str, limit: int = 10) -> List[TagSuggestion]:
 
 def fetch_all_rule34_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int = 100) -> List[TagSuggestion]:
     """Fetch popular tags from Rule34 for caching using autocomplete endpoint."""
-    collected: List[TagSuggestion] = []
-    seen_names: set = set()
-    
     prefixes = [
         "1", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m",
         "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z",
@@ -561,58 +585,27 @@ def fetch_all_rule34_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int = 1
     
     hostname = "api.rule34.xxx"
     
-    # Vast.ai often needs DoH first; still keep a fallback to normal DNS
-    primary_client, fallback_client, primary_is_doh = build_tag_clients(hostname, timeout=10.0, prefer_doh=True)
-    client = primary_client
-    used_fallback = False
-    
-    try:
-        for prefix in prefixes:
-            if len(collected) >= max_tags:
-                break
-            try:
-                res = client.get(
-                    "/autocomplete.php",
-                    params={"q": prefix},
-                )
-                res.raise_for_status()
-                data = res.json()
-                
-                for item in data:
-                    name = item.get("value", "").strip().lower()
-                    if name and name not in seen_names:
-                        seen_names.add(name)
-                        label = item.get("label", "")
-                        count = 0
-                        if "(" in label and ")" in label:
-                            try:
-                                count_str = label.split("(")[-1].rstrip(")")
-                                count = int(count_str)
-                            except ValueError:
-                                pass
-                        
-                        collected.append(
-                            TagSuggestion(
-                                name=name,
-                                source="rule34",
-                                frequency=count,
-                                description=None,
-                            )
-                        )
-            except Exception as e:
-                if not used_fallback and fallback_client:
-                    logger.warning(
-                        f"[TagSync] Rule34 primary fetch failed (prefix '{prefix}', doh={primary_is_doh}); "
-                        f"retrying with fallback: {e}"
-                    )
-                    client = fallback_client
-                    used_fallback = True
-                    # retry this prefix immediately with fallback client
+    def _attempt(use_doh: bool) -> List[TagSuggestion]:
+        collected: List[TagSuggestion] = []
+        seen_names: set = set()
+        dns_ctx = doh_override_dns(hostname) if use_doh else nullcontext(False)
+        with dns_ctx:
+            with httpx.Client(
+                timeout=10.0,
+                headers={"User-Agent": "sweet-tea-studio/0.1 (preload)"},
+                base_url=f"https://{hostname}",
+            ) as client:
+                for prefix in prefixes:
+                    if len(collected) >= max_tags:
+                        break
                     try:
-                        res = client.get("/autocomplete.php", params={"q": prefix})
+                        res = client.get(
+                            "/autocomplete.php",
+                            params={"q": prefix},
+                        )
                         res.raise_for_status()
                         data = res.json()
-                        # Re-run processing loop with fallback response
+                        
                         for item in data:
                             name = item.get("value", "").strip().lower()
                             if name and name not in seen_names:
@@ -634,19 +627,17 @@ def fetch_all_rule34_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int = 1
                                         description=None,
                                     )
                                 )
+                    except Exception as e:
+                        logger.warning(
+                            f"[TagSync] Rule34 fetch failed for prefix '{prefix}' (doh={use_doh}): {e}"
+                        )
                         continue
-                    except Exception as inner_e:
-                        logger.warning(f"[TagSync] Rule34 fallback fetch failed for prefix '{prefix}': {inner_e}")
-                        continue
-                # If already using fallback, skip to next prefix
-                logger.warning(f"[TagSync] Rule34 fetch failed for prefix '{prefix}': {e}")
-                continue
-    finally:
-        primary_client.close()
-        if fallback_client:
-            fallback_client.close()
+        return collected
 
-    return collected[:max_tags]
+    data = _attempt(use_doh=True)
+    if not data:
+        data = _attempt(use_doh=False)
+    return data[:max_tags]
 
 # --- Background Workers ---
 
