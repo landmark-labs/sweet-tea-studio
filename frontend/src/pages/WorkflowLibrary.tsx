@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { FileJson, AlertTriangle, GitBranch, Edit2, Trash2, Save, RotateCw, CheckCircle2, XCircle, GripVertical } from "lucide-react";
+import { FileJson, AlertTriangle, GitBranch, Edit2, Trash2, Save, RotateCw, CheckCircle2, XCircle, GripVertical, ChevronDown, ChevronUp } from "lucide-react";
 import { api, WorkflowTemplate } from "@/lib/api";
 import { WorkflowGraphViewer } from "@/components/WorkflowGraphViewer";
 import { cn } from "@/lib/utils";
@@ -42,6 +42,7 @@ interface NodeCardProps {
 }
 
 const NodeCard = ({ node, schemaEdits, setSchemaEdits }: NodeCardProps) => {
+    const [isExpanded, setIsExpanded] = useState(false);
     const {
         attributes,
         listeners,
@@ -68,6 +69,8 @@ const NodeCard = ({ node, schemaEdits, setSchemaEdits }: NodeCardProps) => {
         setSchemaEdits(s);
     };
 
+    const paramCount = node.active.length + node.hidden.length;
+
     return (
         <div
             ref={setNodeRef}
@@ -77,22 +80,29 @@ const NodeCard = ({ node, schemaEdits, setSchemaEdits }: NodeCardProps) => {
                 isDragging && "ring-2 ring-blue-200 shadow-lg"
             )}
         >
-            <div className="px-4 py-2 bg-slate-100 border-b flex justify-between items-center">
+            <div
+                className="px-4 py-2 bg-slate-100 border-b flex justify-between items-center cursor-pointer hover:bg-slate-150 transition-colors"
+                onClick={() => setIsExpanded(!isExpanded)}
+            >
                 <div className="flex items-center gap-2">
                     <button
                         type="button"
                         className="p-1 rounded-md text-slate-400 hover:text-slate-600 hover:bg-white"
                         aria-label="Reorder node"
+                        onClick={(e) => e.stopPropagation()}
                         {...attributes}
                         {...listeners}
                     >
                         <GripVertical className="w-4 h-4" />
                     </button>
                     <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-xs font-mono text-slate-500">{node.id}</div>
-                    {node.title}
+                    <span className="font-medium text-sm">{node.title}</span>
+                    {!isExpanded && (
+                        <span className="text-[10px] text-slate-400 ml-1">({paramCount} params)</span>
+                    )}
                 </div>
                 <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                         <span className="text-[10px] text-slate-400 uppercase">
                             {isCore ? "Core" : "Expanded"}
                         </span>
@@ -106,117 +116,126 @@ const NodeCard = ({ node, schemaEdits, setSchemaEdits }: NodeCardProps) => {
                         />
                     </div>
                     <span className="text-[10px] font-mono text-slate-400">{node.type}</span>
+                    {isExpanded ? (
+                        <ChevronUp className="w-4 h-4 text-slate-400" />
+                    ) : (
+                        <ChevronDown className="w-4 h-4 text-slate-400" />
+                    )}
                 </div>
             </div>
 
-            {node.active.length > 0 && (
-                <Table>
-                    <TableHeader>
-                        <TableRow className="border-b-0 hover:bg-transparent">
-                            <TableHead className="h-8 text-xs w-[30%]">Label</TableHead>
-                            <TableHead className="h-8 text-xs w-[20%]">Field ID</TableHead>
-                            <TableHead className="h-8 text-xs w-[15%]">Type</TableHead>
-                            <TableHead className="h-8 text-xs w-[25%]">Default Value</TableHead>
-                            <TableHead className="h-8 text-xs text-right w-[10%]">Action</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {node.active.map(([key, field]: [string, any]) => (
-                            <TableRow key={key} className="hover:bg-slate-50/50">
-                                <TableCell className="py-2">
-                                    <Input
-                                        className="h-7 text-xs"
-                                        value={field.title || key}
-                                        onChange={(e) => {
-                                            const s = { ...schemaEdits };
-                                            s[key].title = e.target.value;
-                                            setSchemaEdits(s);
-                                        }}
-                                    />
-                                </TableCell>
-                                <TableCell className="font-mono text-[10px] text-slate-500 py-2">{key}</TableCell>
-                                <TableCell className="text-xs text-slate-500 py-2">{field.type}</TableCell>
-                                <TableCell className="py-2">
-                                    {field.widget === "toggle" || field.type === "boolean" ? (
-                                        <Switch
-                                            checked={Boolean(field.default)}
-                                            onCheckedChange={(checked) => {
-                                                const s = { ...schemaEdits };
-                                                s[key].default = checked;
-                                                setSchemaEdits(s);
-                                            }}
-                                        />
-                                    ) : (
-                                        <Input
-                                            className="h-7 text-xs"
-                                            value={field.default === undefined || field.default === null || (typeof field.default === 'number' && isNaN(field.default)) ? "" : String(field.default)}
-                                            onChange={(e) => {
-                                                const s = { ...schemaEdits };
-                                                const val = e.target.value;
-                                                // FIX: Force CFG to be treated as float even if Comfy reports it as integer
-                                                const type = key.toLowerCase() === 'cfg' ? 'float' : field.type;
-                                                if (type === "number" || type === "float") {
-                                                    // Allow typing incomplete numbers like "-" or "-." or "." 
-                                                    if (val === "" || val === "-" || val === "." || val === "-.") {
-                                                        s[key].default = val === "" ? undefined : val;
-                                                    } else {
-                                                        const parsed = parseFloat(val);
-                                                        s[key].default = isNaN(parsed) ? val : parsed;
-                                                    }
-                                                } else if (type === "integer") {
-                                                    // Allow typing incomplete numbers like "-"
-                                                    if (val === "" || val === "-") {
-                                                        s[key].default = val === "" ? undefined : val;
-                                                    } else {
-                                                        const parsed = parseInt(val);
-                                                        s[key].default = isNaN(parsed) ? val : parsed;
-                                                    }
-                                                } else {
-                                                    s[key].default = val;
-                                                }
-                                                setSchemaEdits(s);
-                                            }}
-                                        />
-                                    )}
-                                </TableCell>
-                                <TableCell className="text-right py-2">
-                                    <Button variant="ghost" size="sm" className="h-6 text-xs text-red-500 hover:text-red-700" onClick={() => {
-                                        const s = { ...schemaEdits };
-                                        s[key].__hidden = true;
-                                        setSchemaEdits(s);
-                                    }}>Hide</Button>
-                                </TableCell>
-                            </TableRow>
-                        ))}
-                    </TableBody>
-                </Table>
-            )}
-
-            {node.hidden.length > 0 && (
-                <div className="bg-slate-50 border-t border-slate-200">
-                    <div className="px-4 py-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Hidden Parameters</div>
-                    <Table>
-                        <TableBody>
-                            {node.hidden.map(([key, field]: [string, any]) => (
-                                <TableRow key={key} className="hover:bg-slate-100/50 opacity-60">
-                                    <TableCell className="py-2 text-xs text-slate-500 w-[30%]">{field.title || key}</TableCell>
-                                    <TableCell className="font-mono text-[10px] text-slate-400 py-2 w-[20%] break-all">{key}</TableCell>
-                                    <TableCell className="text-xs py-2 text-slate-400 w-[15%]">{field.type}</TableCell>
-                                    <TableCell className="py-2 text-xs text-slate-400 w-[25%]">{String(field.default ?? "-")}</TableCell>
-                                    <TableCell className="text-right py-2 w-[10%]">
-                                        <Button variant="ghost" size="sm" className="h-6 text-xs text-blue-500 hover:text-blue-700" onClick={() => {
-                                            const s = { ...schemaEdits };
-                                            delete s[key].__hidden;
-                                            setSchemaEdits(s);
-                                        }}>
-                                            Restore
-                                        </Button>
-                                    </TableCell>
+            {isExpanded && (
+                <>
+                    {node.active.length > 0 && (
+                        <Table>
+                            <TableHeader>
+                                <TableRow className="border-b-0 hover:bg-transparent">
+                                    <TableHead className="h-8 text-xs w-[30%]">Label</TableHead>
+                                    <TableHead className="h-8 text-xs w-[20%]">Field ID</TableHead>
+                                    <TableHead className="h-8 text-xs w-[15%]">Type</TableHead>
+                                    <TableHead className="h-8 text-xs w-[25%]">Default Value</TableHead>
+                                    <TableHead className="h-8 text-xs text-right w-[10%]">Action</TableHead>
                                 </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
-                </div>
+                            </TableHeader>
+                            <TableBody>
+                                {node.active.map(([key, field]: [string, any]) => (
+                                    <TableRow key={key} className="hover:bg-slate-50/50">
+                                        <TableCell className="py-2">
+                                            <Input
+                                                className="h-7 text-xs"
+                                                value={field.title || key}
+                                                onChange={(e) => {
+                                                    const s = { ...schemaEdits };
+                                                    s[key].title = e.target.value;
+                                                    setSchemaEdits(s);
+                                                }}
+                                            />
+                                        </TableCell>
+                                        <TableCell className="font-mono text-[10px] text-slate-500 py-2">{key}</TableCell>
+                                        <TableCell className="text-xs text-slate-500 py-2">{field.type}</TableCell>
+                                        <TableCell className="py-2">
+                                            {field.widget === "toggle" || field.type === "boolean" ? (
+                                                <Switch
+                                                    checked={Boolean(field.default)}
+                                                    onCheckedChange={(checked) => {
+                                                        const s = { ...schemaEdits };
+                                                        s[key].default = checked;
+                                                        setSchemaEdits(s);
+                                                    }}
+                                                />
+                                            ) : (
+                                                <Input
+                                                    className="h-7 text-xs"
+                                                    value={field.default === undefined || field.default === null || (typeof field.default === 'number' && isNaN(field.default)) ? "" : String(field.default)}
+                                                    onChange={(e) => {
+                                                        const s = { ...schemaEdits };
+                                                        const val = e.target.value;
+                                                        // FIX: Force CFG to be treated as float even if Comfy reports it as integer
+                                                        const type = key.toLowerCase() === 'cfg' ? 'float' : field.type;
+                                                        if (type === "number" || type === "float") {
+                                                            // Allow typing incomplete numbers like "-" or "-." or "." 
+                                                            if (val === "" || val === "-" || val === "." || val === "-.") {
+                                                                s[key].default = val === "" ? undefined : val;
+                                                            } else {
+                                                                const parsed = parseFloat(val);
+                                                                s[key].default = isNaN(parsed) ? val : parsed;
+                                                            }
+                                                        } else if (type === "integer") {
+                                                            // Allow typing incomplete numbers like "-"
+                                                            if (val === "" || val === "-") {
+                                                                s[key].default = val === "" ? undefined : val;
+                                                            } else {
+                                                                const parsed = parseInt(val);
+                                                                s[key].default = isNaN(parsed) ? val : parsed;
+                                                            }
+                                                        } else {
+                                                            s[key].default = val;
+                                                        }
+                                                        setSchemaEdits(s);
+                                                    }}
+                                                />
+                                            )}
+                                        </TableCell>
+                                        <TableCell className="text-right py-2">
+                                            <Button variant="ghost" size="sm" className="h-6 text-xs text-red-500 hover:text-red-700" onClick={() => {
+                                                const s = { ...schemaEdits };
+                                                s[key].__hidden = true;
+                                                setSchemaEdits(s);
+                                            }}>Hide</Button>
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    )}
+
+                    {node.hidden.length > 0 && (
+                        <div className="bg-slate-50 border-t border-slate-200">
+                            <div className="px-4 py-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Hidden Parameters</div>
+                            <Table>
+                                <TableBody>
+                                    {node.hidden.map(([key, field]: [string, any]) => (
+                                        <TableRow key={key} className="hover:bg-slate-100/50 opacity-60">
+                                            <TableCell className="py-2 text-xs text-slate-500 w-[30%]">{field.title || key}</TableCell>
+                                            <TableCell className="font-mono text-[10px] text-slate-400 py-2 w-[20%] break-all">{key}</TableCell>
+                                            <TableCell className="text-xs py-2 text-slate-400 w-[15%]">{field.type}</TableCell>
+                                            <TableCell className="py-2 text-xs text-slate-400 w-[25%]">{String(field.default ?? "-")}</TableCell>
+                                            <TableCell className="text-right py-2 w-[10%]">
+                                                <Button variant="ghost" size="sm" className="h-6 text-xs text-blue-500 hover:text-blue-700" onClick={() => {
+                                                    const s = { ...schemaEdits };
+                                                    delete s[key].__hidden;
+                                                    setSchemaEdits(s);
+                                                }}>
+                                                    Restore
+                                                </Button>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    )}
+                </>
             )}
         </div>
     );
@@ -593,30 +612,51 @@ export default function WorkflowLibrary() {
         };
 
         return (
-            <div className="container mx-auto p-4 h-[calc(100vh-4rem)] flex flex-col">
-                <div className="flex justify-between items-center mb-6">
-                    <div className="flex flex-col gap-2 flex-1">
-                        <h1 className="text-2xl font-bold">edit pipe</h1>
-                        <div className="flex flex-col gap-1 max-w-lg">
-                            <Label htmlFor="pipe-name">pipe name</Label>
-                            <Input
-                                id="pipe-name"
-                                value={editName}
-                                onChange={(e) => {
-                                    setEditName(e.target.value);
-                                    if (nameError) setNameError(validateName(e.target.value, editingWorkflow.id));
-                                }}
-                                onBlur={() => setNameError(validateName(editName, editingWorkflow.id))}
-                                placeholder="enter a unique name"
-                            />
-                            {nameError && <span className="text-xs text-red-600">{nameError}</span>}
-                        </div>
+            <div className="container mx-auto p-4 h-[calc(100vh-4rem)] flex flex-row gap-4">
+                {/* Left Sidebar */}
+                <div className="w-72 flex-shrink-0 flex flex-col bg-white border rounded-lg p-4">
+                    <h1 className="text-xl font-bold mb-4">edit pipe</h1>
+
+                    {/* Pipe Name */}
+                    <div className="space-y-1 mb-4">
+                        <Label htmlFor="pipe-name" className="text-sm">pipe name</Label>
+                        <Input
+                            id="pipe-name"
+                            value={editName}
+                            onChange={(e) => {
+                                setEditName(e.target.value);
+                                if (nameError) setNameError(validateName(e.target.value, editingWorkflow.id));
+                            }}
+                            onBlur={() => setNameError(validateName(editName, editingWorkflow.id))}
+                            placeholder="enter a unique name"
+                            className="text-sm"
+                        />
+                        {nameError && <span className="text-xs text-red-600">{nameError}</span>}
                     </div>
-                    <div className="flex gap-2 items-start">
-                        {/* We reuse the Bypass dialog as a generic "Add stuff" entry point for now */}
+
+                    {/* Description */}
+                    <div className="space-y-1 mb-4">
+                        <Label htmlFor="edit-description" className="text-sm">description</Label>
+                        <Textarea
+                            id="edit-description"
+                            value={editingWorkflow.description || ""}
+                            onChange={(e) => setEditingWorkflow({ ...editingWorkflow, description: e.target.value.slice(0, 500) })}
+                            placeholder="summarize what this pipe generates"
+                            maxLength={500}
+                            rows={6}
+                            className="text-sm resize-none"
+                        />
+                        <div className="text-[10px] text-slate-400 text-right">{(editingWorkflow.description || "").length}/500</div>
+                    </div>
+
+                    {/* Spacer to push buttons to bottom */}
+                    <div className="flex-1" />
+
+                    {/* Action Buttons */}
+                    <div className="space-y-2 pt-4 border-t">
                         <Dialog>
                             <DialogTrigger asChild>
-                                <Button variant="secondary" size="sm">
+                                <Button variant="secondary" size="sm" className="w-full justify-start">
                                     <AlertTriangle className="w-4 h-4 mr-2" />
                                     manage bypasses
                                 </Button>
@@ -671,22 +711,19 @@ export default function WorkflowLibrary() {
                                 </div>
                             </DialogContent>
                         </Dialog>
-                        <Button variant="outline" onClick={() => { setEditingWorkflow(null); setNodeOrder([]); }} disabled={isSaving}>Cancel</Button>
-                        <Button onClick={handleSaveSchema} disabled={Boolean(nameError) || isSaving}>
-                            <Save className="w-4 h-4 mr-2" /> {isSaving ? "Saving..." : "Save Changes"}
-                        </Button>
+
                         <Dialog open={visibilityDialogOpen} onOpenChange={setVisibilityDialogOpen}>
                             <DialogTrigger asChild>
-                                <Button variant="secondary" size="sm">
+                                <Button variant="secondary" size="sm" className="w-full justify-start">
                                     <GitBranch className="w-4 h-4 mr-2" />
-                                    manage controls visibility
+                                    manage visibility
                                 </Button>
                             </DialogTrigger>
                             <DialogContent className="max-w-xl">
                                 <DialogHeader>
                                     <DialogTitle>Hide nodes from configurator</DialogTitle>
                                     <DialogDescription>
-                                        Hidden nodes stay in the execution graph with their defaults intact; they just don’t show up in the configurator UI.
+                                        Hidden nodes stay in the execution graph with their defaults intact; they just don't show up in the configurator UI.
                                     </DialogDescription>
                                 </DialogHeader>
 
@@ -731,43 +768,35 @@ export default function WorkflowLibrary() {
                                 </DialogFooter>
                             </DialogContent>
                         </Dialog>
-                    </div>
-                </div>
-                <div className="bg-white border rounded-md p-4 space-y-4 mb-4">
-                    <div className="grid grid-cols-6 items-center gap-4">
-                        <Label htmlFor="edit-name" className="text-right">pipe name</Label>
-                        <div className="col-span-5 space-y-1">
-                            <Input
-                                id="edit-name"
-                                value={editName}
-                                onChange={(e) => {
-                                    setEditName(e.target.value);
-                                    if (nameError) setNameError(validateName(e.target.value, editingWorkflow.id));
-                                }}
-                                onBlur={() => setNameError(validateName(editName, editingWorkflow.id))}
-                                placeholder="enter a unique name"
-                            />
-                            {nameError && <span className="text-xs text-red-600">{nameError}</span>}
-                        </div>
-                    </div>
 
-                    <div className="grid grid-cols-6 items-start gap-4">
-                        <Label htmlFor="edit-description" className="text-right mt-2">description</Label>
-                        <div className="col-span-5 space-y-1">
-                            <Textarea
-                                id="edit-description"
-                                value={editingWorkflow.description || ""}
-                                onChange={(e) => setEditingWorkflow({ ...editingWorkflow, description: e.target.value.slice(0, 500) })}
-                                placeholder="summarize what this pipe generates"
-                                maxLength={500}
-                            />
-                            <div className="text-[11px] text-slate-500 text-right">{(editingWorkflow.description || "").length}/500</div>
+                        <div className="flex gap-2 pt-2">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                className="flex-1"
+                                onClick={() => { setEditingWorkflow(null); setNodeOrder([]); }}
+                                disabled={isSaving}
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                size="sm"
+                                className="flex-1"
+                                onClick={handleSaveSchema}
+                                disabled={Boolean(nameError) || isSaving}
+                            >
+                                <Save className="w-4 h-4 mr-1" /> {isSaving ? "Saving..." : "Save"}
+                            </Button>
                         </div>
                     </div>
                 </div>
+
+                {/* Right Content - Pipe Parameters */}
                 <Card className="flex-1 overflow-auto bg-slate-50/50">
-                    <CardHeader><CardTitle>Pipe Parameters</CardTitle></CardHeader>
-                    <CardContent className="space-y-6">
+                    <CardHeader className="pb-4">
+                        <CardTitle>Pipe Parameters</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
                         {nodesRenderData.length === 0 && <div className="text-center text-slate-400 py-8">No parameters exposed.</div>}
 
                         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
