@@ -352,8 +352,8 @@ export default function Gallery() {
                 onSelectFolder={handleSelectFolder}
                 projectFolders={projectFolders}
             />
-            <div className="flex-1 overflow-auto p-8 relative">
-                <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6 sticky top-0 z-20 bg-slate-50 py-2 -mt-2">
+            <div className="flex-1 overflow-auto relative">
+                <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6 sticky top-0 z-20 bg-slate-50 px-8 py-4">
                     <div className="flex items-center gap-4 flex-wrap">
                         <h1 className="text-3xl font-bold tracking-tight text-slate-900">Generated Gallery</h1>
                         <div className="text-sm text-slate-600 bg-slate-100 border border-slate-200 px-3 py-1 rounded-full whitespace-nowrap">
@@ -402,184 +402,186 @@ export default function Gallery() {
                     </div>
                 </div>
 
-                {cleanupMode && (
-                    <Alert className="mb-4">
-                        <AlertTitle>Cleanup mode</AlertTitle>
-                        <AlertDescription>
-                            Select every image you want to keep (Ctrl/Cmd, Shift, and Ctrl+Shift all work). When you clean up, {cleanupDeleteCount} images will be removed.
-                        </AlertDescription>
-                    </Alert>
-                )}
+                <div className="px-8 pb-8">
+                    {cleanupMode && (
+                        <Alert className="mb-4">
+                            <AlertTitle>Cleanup mode</AlertTitle>
+                            <AlertDescription>
+                                Select every image you want to keep (Ctrl/Cmd, Shift, and Ctrl+Shift all work). When you clean up, {cleanupDeleteCount} images will be removed.
+                            </AlertDescription>
+                        </Alert>
+                    )}
 
-                {error && (
-                    <Alert variant="destructive" className="mb-6">
-                        <AlertTitle>Error</AlertTitle>
-                        <AlertDescription>{error}</AlertDescription>
-                    </Alert>
-                )}
+                    {error && (
+                        <Alert variant="destructive" className="mb-6">
+                            <AlertTitle>Error</AlertTitle>
+                            <AlertDescription>{error}</AlertDescription>
+                        </Alert>
+                    )}
 
-                {/* Subtle loading overlay - keeps existing content visible */}
-                {isLoading && displayItems.length > 0 && (
-                    <div className="absolute inset-0 bg-white/50 flex items-center justify-center z-10 pointer-events-none">
-                        <div className="text-sm text-slate-500 bg-white/90 px-4 py-2 rounded-full shadow-sm border">
-                            Loading...
+                    {/* Subtle loading overlay - keeps existing content visible */}
+                    {isLoading && displayItems.length > 0 && (
+                        <div className="absolute inset-0 bg-white/50 flex items-center justify-center z-10 pointer-events-none">
+                            <div className="text-sm text-slate-500 bg-white/90 px-4 py-2 rounded-full shadow-sm border">
+                                Loading...
+                            </div>
                         </div>
-                    </div>
-                )}
+                    )}
 
-                {displayItems.length === 0 && isLoading ? (
-                    <div className="text-center text-slate-500 py-20">
-                        Loading gallery...
-                    </div>
-                ) : displayItems.length === 0 ? (
-                    <div className="text-center text-slate-500 py-20">
-                        {selectedFolder ? `No images in folder "${selectedFolder}"` : "No images generated yet. Go to New Generation to create some!"}
-                    </div>
-                ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                        {displayItems.map((item) => (
-                            <ContextMenu key={item.image.id}>
-                                <ContextMenuTrigger>
-                                    <Card
-                                        className={cn(
-                                            "group overflow-hidden flex flex-col relative transition-all duration-200 select-none",
-                                            selectedIds.has(item.image.id) ? "ring-2 ring-blue-500 shadow-lg scale-[0.98] bg-blue-50/50" : ""
-                                        )}
-                                        onClick={(e) => handleCardClick(item, e)}
-                                        onDoubleClick={() => handleCardDoubleClick(item)}
-                                    >
-                                        <div className="relative aspect-square bg-slate-100">
-                                            {/* Selection Overlay Checkbox */}
-                                            {selectedIds.has(item.image.id) && (
-                                                <div className="absolute top-2 left-2 z-20 bg-blue-500 text-white rounded-full p-0.5 shadow-sm">
-                                                    <Check className="w-3 h-3" />
-                                                </div>
+                    {displayItems.length === 0 && isLoading ? (
+                        <div className="text-center text-slate-500 py-20">
+                            Loading gallery...
+                        </div>
+                    ) : displayItems.length === 0 ? (
+                        <div className="text-center text-slate-500 py-20">
+                            {selectedFolder ? `No images in folder "${selectedFolder}"` : "No images generated yet. Go to New Generation to create some!"}
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                            {displayItems.map((item) => (
+                                <ContextMenu key={item.image.id}>
+                                    <ContextMenuTrigger>
+                                        <Card
+                                            className={cn(
+                                                "group overflow-hidden flex flex-col relative transition-all duration-200 select-none",
+                                                selectedIds.has(item.image.id) ? "ring-2 ring-blue-500 shadow-lg scale-[0.98] bg-blue-50/50" : ""
                                             )}
-
-                                            <img
-                                                src={`/api/v1/gallery/image/${item.image.id}`}
-                                                alt={item.image.filename}
-                                                className="w-full h-full object-cover transition-transform group-hover:scale-105"
-                                                onError={(e) => {
-                                                    (e.target as HTMLImageElement).src = "https://placehold.co/400x400?text=Missing+File";
-                                                }}
-                                            />
-
-                                            <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                                                {/* Keep existing overlay buttons but make them stop propagation so they don't trigger select */}
-                                                <Button
-                                                    variant="secondary"
-                                                    size="icon"
-                                                    onClick={(e) => { e.stopPropagation(); handleSavePrompt(item); }}
-                                                    title="Save Prompt to Library"
-                                                >
-                                                    <Save className="w-4 h-4" />
-                                                </Button>
-
-
-                                                <Button
-                                                    variant="secondary"
-                                                    size="icon"
-                                                    onClick={(e) => { e.stopPropagation(); handleRegenerate(item); }}
-                                                    title="Regenerate"
-                                                >
-                                                    <RotateCcw className="w-4 h-4" />
-                                                </Button>
-                                                <Button
-                                                    variant="destructive"
-                                                    size="icon"
-                                                    onClick={(e) => { e.stopPropagation(); handleDelete(item.image.id); }}
-                                                    title="Delete"
-                                                >
-                                                    <Trash2 className="w-4 h-4" />
-                                                </Button>
-                                            </div>
-                                        </div>
-
-                                        <CardContent className="p-4 text-xs space-y-2 bg-white flex-1 relative z-10" onClick={(e) => {
-                                            // Ensure text selection works, but Card click (parent) handles row selection
-                                            // Stop prop if clicking buttons
-                                        }}>
-                                            {/* Existing Content Preserved */}
-                                            <div className="flex items-center gap-2 text-slate-500">
-                                                <Calendar className="w-3 h-3" />
-                                                <span>{new Date(item.created_at).toLocaleString()}</span>
-                                            </div>
-
-
-
-                                            {item.caption && (
-                                                <p className="text-slate-600 line-clamp-2">{item.caption}</p>
-                                            )}
-
-                                            {item.prompt_tags && item.prompt_tags.length > 0 && (
-                                                <div className="flex flex-wrap gap-1 mt-1">
-                                                    {item.prompt_tags.slice(0, 6).map((tag) => (
-                                                        <span key={tag} className="px-1.5 py-0.5 bg-indigo-50 text-indigo-600 border border-indigo-100 rounded">#{tag}</span>
-                                                    ))}
-                                                </div>
-                                            )}
-
-                                            {(() => {
-                                                const { positive, negative } = getPrompts(item.job_params);
-                                                return (
-                                                    <div className="mt-2 space-y-2">
-                                                        {positive && (
-                                                            <div className="group/prompt">
-                                                                <div className="flex items-center justify-between mb-1">
-                                                                    <span className="font-semibold text-green-600 block text-[10px] uppercase">Positive</span>
-                                                                    <Button variant="ghost" size="icon" className="h-4 w-4 opacity-0 group-hover/prompt:opacity-100" onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(positive); }}>
-                                                                        <Copy className="h-3 w-3 text-slate-400" />
-                                                                    </Button>
-                                                                </div>
-                                                                <HoverCard openDelay={200}>
-                                                                    <HoverCardTrigger asChild>
-                                                                        <p className="line-clamp-3 text-slate-700 leading-relaxed cursor-help select-text">{positive}</p>
-                                                                    </HoverCardTrigger>
-                                                                    <HoverCardContent className="w-[500px] max-h-[60vh] overflow-y-auto p-4 z-[100]" align="start">
-                                                                        <div className="space-y-4">
-                                                                            <div>
-                                                                                <div className="flex items-center gap-2 mb-1">
-                                                                                    <span className="font-semibold text-green-600 text-xs uppercase">Positive Prompt</span>
-                                                                                </div>
-                                                                                <p className="text-sm text-slate-700 whitespace-pre-wrap font-mono text-[11px] leading-relaxed select-text">{positive}</p>
-                                                                            </div>
-                                                                            {negative && (
-                                                                                <div className="border-t pt-3">
-                                                                                    <div className="flex items-center gap-2 mb-1">
-                                                                                        <span className="font-semibold text-red-500 text-xs uppercase">Negative Prompt</span>
-                                                                                    </div>
-                                                                                    <p className="text-sm text-slate-600 whitespace-pre-wrap font-mono text-[11px] leading-relaxed select-text">{negative}</p>
-                                                                                </div>
-                                                                            )}
-                                                                        </div>
-                                                                    </HoverCardContent>
-                                                                </HoverCard>
-                                                            </div>
-                                                        )}
-                                                        {!positive && !negative && (
-                                                            <div className="flex flex-wrap gap-1 mt-2">
-                                                                {Object.entries(item.job_params).slice(0, 4).map(([k, v]) => (
-                                                                    <span key={k} className="px-1.5 py-0.5 bg-slate-100 rounded text-slate-500 border border-slate-200">{k}: {String(v)}</span>
-                                                                ))}
-                                                            </div>
-                                                        )}
+                                            onClick={(e) => handleCardClick(item, e)}
+                                            onDoubleClick={() => handleCardDoubleClick(item)}
+                                        >
+                                            <div className="relative aspect-square bg-slate-100">
+                                                {/* Selection Overlay Checkbox */}
+                                                {selectedIds.has(item.image.id) && (
+                                                    <div className="absolute top-2 left-2 z-20 bg-blue-500 text-white rounded-full p-0.5 shadow-sm">
+                                                        <Check className="w-3 h-3" />
                                                     </div>
-                                                );
-                                            })()}
-                                        </CardContent>
-                                    </Card>
-                                </ContextMenuTrigger>
-                                <ContextMenuContent>
-                                    <ContextMenuItem onSelect={() => handleRegenerate(item)}>Regenerate</ContextMenuItem>
-                                    <ContextMenuItem onSelect={() => handleSavePrompt(item)}>Save Prompt</ContextMenuItem>
-                                    <ContextMenuSeparator />
-                                    <ContextMenuItem className="text-red-600" onSelect={() => handleDelete(item.image.id)}>Delete</ContextMenuItem>
-                                </ContextMenuContent>
-                            </ContextMenu>
-                        ))}
-                    </div>
-                )}
+                                                )}
+
+                                                <img
+                                                    src={`/api/v1/gallery/image/${item.image.id}`}
+                                                    alt={item.image.filename}
+                                                    className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                                                    onError={(e) => {
+                                                        (e.target as HTMLImageElement).src = "https://placehold.co/400x400?text=Missing+File";
+                                                    }}
+                                                />
+
+                                                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                                                    {/* Keep existing overlay buttons but make them stop propagation so they don't trigger select */}
+                                                    <Button
+                                                        variant="secondary"
+                                                        size="icon"
+                                                        onClick={(e) => { e.stopPropagation(); handleSavePrompt(item); }}
+                                                        title="Save Prompt to Library"
+                                                    >
+                                                        <Save className="w-4 h-4" />
+                                                    </Button>
+
+
+                                                    <Button
+                                                        variant="secondary"
+                                                        size="icon"
+                                                        onClick={(e) => { e.stopPropagation(); handleRegenerate(item); }}
+                                                        title="Regenerate"
+                                                    >
+                                                        <RotateCcw className="w-4 h-4" />
+                                                    </Button>
+                                                    <Button
+                                                        variant="destructive"
+                                                        size="icon"
+                                                        onClick={(e) => { e.stopPropagation(); handleDelete(item.image.id); }}
+                                                        title="Delete"
+                                                    >
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </Button>
+                                                </div>
+                                            </div>
+
+                                            <CardContent className="p-4 text-xs space-y-2 bg-white flex-1 relative z-10" onClick={(e) => {
+                                                // Ensure text selection works, but Card click (parent) handles row selection
+                                                // Stop prop if clicking buttons
+                                            }}>
+                                                {/* Existing Content Preserved */}
+                                                <div className="flex items-center gap-2 text-slate-500">
+                                                    <Calendar className="w-3 h-3" />
+                                                    <span>{new Date(item.created_at).toLocaleString()}</span>
+                                                </div>
+
+
+
+                                                {item.caption && (
+                                                    <p className="text-slate-600 line-clamp-2">{item.caption}</p>
+                                                )}
+
+                                                {item.prompt_tags && item.prompt_tags.length > 0 && (
+                                                    <div className="flex flex-wrap gap-1 mt-1">
+                                                        {item.prompt_tags.slice(0, 6).map((tag) => (
+                                                            <span key={tag} className="px-1.5 py-0.5 bg-indigo-50 text-indigo-600 border border-indigo-100 rounded">#{tag}</span>
+                                                        ))}
+                                                    </div>
+                                                )}
+
+                                                {(() => {
+                                                    const { positive, negative } = getPrompts(item.job_params);
+                                                    return (
+                                                        <div className="mt-2 space-y-2">
+                                                            {positive && (
+                                                                <div className="group/prompt">
+                                                                    <div className="flex items-center justify-between mb-1">
+                                                                        <span className="font-semibold text-green-600 block text-[10px] uppercase">Positive</span>
+                                                                        <Button variant="ghost" size="icon" className="h-4 w-4 opacity-0 group-hover/prompt:opacity-100" onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(positive); }}>
+                                                                            <Copy className="h-3 w-3 text-slate-400" />
+                                                                        </Button>
+                                                                    </div>
+                                                                    <HoverCard openDelay={200}>
+                                                                        <HoverCardTrigger asChild>
+                                                                            <p className="line-clamp-3 text-slate-700 leading-relaxed cursor-help select-text">{positive}</p>
+                                                                        </HoverCardTrigger>
+                                                                        <HoverCardContent className="w-[500px] max-h-[60vh] overflow-y-auto p-4 z-[100]" align="start">
+                                                                            <div className="space-y-4">
+                                                                                <div>
+                                                                                    <div className="flex items-center gap-2 mb-1">
+                                                                                        <span className="font-semibold text-green-600 text-xs uppercase">Positive Prompt</span>
+                                                                                    </div>
+                                                                                    <p className="text-sm text-slate-700 whitespace-pre-wrap font-mono text-[11px] leading-relaxed select-text">{positive}</p>
+                                                                                </div>
+                                                                                {negative && (
+                                                                                    <div className="border-t pt-3">
+                                                                                        <div className="flex items-center gap-2 mb-1">
+                                                                                            <span className="font-semibold text-red-500 text-xs uppercase">Negative Prompt</span>
+                                                                                        </div>
+                                                                                        <p className="text-sm text-slate-600 whitespace-pre-wrap font-mono text-[11px] leading-relaxed select-text">{negative}</p>
+                                                                                    </div>
+                                                                                )}
+                                                                            </div>
+                                                                        </HoverCardContent>
+                                                                    </HoverCard>
+                                                                </div>
+                                                            )}
+                                                            {!positive && !negative && (
+                                                                <div className="flex flex-wrap gap-1 mt-2">
+                                                                    {Object.entries(item.job_params).slice(0, 4).map(([k, v]) => (
+                                                                        <span key={k} className="px-1.5 py-0.5 bg-slate-100 rounded text-slate-500 border border-slate-200">{k}: {String(v)}</span>
+                                                                    ))}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })()}
+                                            </CardContent>
+                                        </Card>
+                                    </ContextMenuTrigger>
+                                    <ContextMenuContent>
+                                        <ContextMenuItem onSelect={() => handleRegenerate(item)}>Regenerate</ContextMenuItem>
+                                        <ContextMenuItem onSelect={() => handleSavePrompt(item)}>Save Prompt</ContextMenuItem>
+                                        <ContextMenuSeparator />
+                                        <ContextMenuItem className="text-red-600" onSelect={() => handleDelete(item.image.id)}>Delete</ContextMenuItem>
+                                    </ContextMenuContent>
+                                </ContextMenu>
+                            ))}
+                        </div>
+                    )}
+                </div>
             </div>
             {
                 fullscreenItem && (
