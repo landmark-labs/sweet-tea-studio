@@ -24,6 +24,7 @@ from sqlmodel import Session, col, select, func
 from app.models.tag import Tag, TagCreate, TagSyncState
 from app.models.prompt import Prompt
 from app.db.engine import engine as db_engine, tags_engine
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -618,8 +619,16 @@ def fetch_all_rule34_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int = 1
     ]
 
     def dapi_attempt(cfg: Dict[str, Any]) -> List[TagSuggestion]:
+        user_id = (settings.RULE34_USER_ID or "").strip()
+        api_key = (settings.RULE34_API_KEY or "").strip()
+        if not (user_id and api_key):
+            # Rule34 DAPI requires authentication for many endpoints (tag index included)
+            return []
+
         collected: List[TagSuggestion] = []
         page = 0
+        # Rule34 DAPI hard-limits `limit` to 100; larger values can yield empty/error responses.
+        limit = 100
         dns_ctx = (
             doh_override_dns(hostname, additional_hosts=[redirect_host])
             if cfg.get("use_doh")
@@ -642,7 +651,9 @@ def fetch_all_rule34_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int = 1
                                 "page": "dapi",
                                 "s": "tag",
                                 "q": "index",
-                                "limit": page_size,
+                                "user_id": user_id,
+                                "api_key": api_key,
+                                "limit": limit,
                                 "pid": page,
                             },
                         )
@@ -661,12 +672,19 @@ def fetch_all_rule34_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int = 1
                             )
                             break
 
+                        if root.tag.lower() == "error":
+                            msg = (root.text or "").strip()
+                            logger.warning(
+                                f"[TagSync] Rule34 DAPI error (cfg={cfg.get('label')}): {msg or 'unknown error'}"
+                            )
+                            break
+
                         data = []
                         for child in root.findall("tag"):
                             data.append(
                                 {
                                     "name": child.get("name", "").strip().lower(),
-                                    "count": int(child.get("count", 0)),
+                                    "count": int(child.get("count") or 0),
                                 }
                             )
 
@@ -687,7 +705,7 @@ def fetch_all_rule34_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int = 1
                                 )
                             )
 
-                        if len(data) < page_size:
+                        if len(data) < limit:
                             break
                         page += 1
                         if page > 100:
@@ -773,11 +791,18 @@ def fetch_all_rule34_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int = 1
         return collected
 
     # Try DoH override first, then system DNS; fall back to autocomplete if DAPI fails.
-    for cfg in client_configs:
-        data = dapi_attempt(cfg)
-        if data:
-            return data[:max_tags]
-        logger.warning(f"[TagSync] Rule34 DAPI returned 0 tags (cfg={cfg.get('label')})")
+    has_creds = bool((settings.RULE34_USER_ID or "").strip() and (settings.RULE34_API_KEY or "").strip())
+    if not has_creds:
+        logger.warning(
+            "[TagSync] Rule34 DAPI disabled (missing SWEET_TEA_RULE34_USER_ID / SWEET_TEA_RULE34_API_KEY); "
+            "using autocomplete harvesting instead"
+        )
+    else:
+        for cfg in client_configs:
+            data = dapi_attempt(cfg)
+            if data:
+                return data[:max_tags]
+            logger.warning(f"[TagSync] Rule34 DAPI returned 0 tags (cfg={cfg.get('label')})")
 
     logger.warning("[TagSync] Rule34 DAPI returned no data, falling back to autocomplete harvesting")
     for cfg in client_configs:

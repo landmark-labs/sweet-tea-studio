@@ -24,6 +24,11 @@ class Settings(BaseSettings):
     # e.g., SWEET_TEA_COMFYUI_OUTPUT_DIR=/opt/ComfyUI/output
     COMFYUI_OUTPUT_DIR: Optional[str] = None
     COMFYUI_INPUT_DIR: Optional[str] = None
+
+    # Rule34 API credentials (required for some DAPI endpoints like tag index)
+    # Get these from: https://rule34.xxx/index.php?page=account&s=options
+    RULE34_USER_ID: Optional[str] = None
+    RULE34_API_KEY: Optional[str] = None
     
     # BACKEND_CORS_ORIGINS is a JSON-formatted list of origins
     # e.g: '["http://localhost", "http://localhost:4200", "http://localhost:3000"]'
@@ -207,4 +212,3 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
-
