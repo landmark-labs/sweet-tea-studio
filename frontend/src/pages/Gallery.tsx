@@ -353,19 +353,19 @@ export default function Gallery() {
                 projectFolders={projectFolders}
             />
             <div className="flex-1 overflow-auto p-8 relative">
-                <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
-                    <div className="flex items-center gap-4">
+                <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6 sticky top-0 z-20 bg-slate-50 py-2 -mt-2">
+                    <div className="flex items-center gap-4 flex-wrap">
                         <h1 className="text-3xl font-bold tracking-tight text-slate-900">Generated Gallery</h1>
-                        <div className="text-sm text-slate-600 bg-slate-100 border border-slate-200 px-3 py-1 rounded-full">
+                        <div className="text-sm text-slate-600 bg-slate-100 border border-slate-200 px-3 py-1 rounded-full whitespace-nowrap">
                             Viewing {selectedProjectId ? projects.find(p => p.id === selectedProjectId)?.name || "project" : "all projects"}
                             {selectedFolder && ` / ${selectedFolder}`}
                         </div>
 
                         {selectedIds.size > 0 && (
-                            <div className="flex items-center gap-2 bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-sm font-medium border border-blue-100 animate-in fade-in slide-in-from-left-4">
-                                <Check className="w-4 h-4" />
+                            <div className="flex items-center gap-2 bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-sm font-medium border border-blue-100 animate-in fade-in slide-in-from-left-4 whitespace-nowrap flex-shrink-0">
+                                <Check className="w-4 h-4 flex-shrink-0" />
                                 {cleanupMode ? `${selectedIds.size} to keep` : `${selectedIds.size} Selected`}
-                                <div className="h-4 w-px bg-blue-200 mx-1" />
+                                <div className="h-4 w-px bg-blue-200 mx-1 flex-shrink-0" />
                                 {!cleanupMode && (
                                     <button onClick={handleBulkDelete} className="hover:underline text-red-600">Delete</button>
                                 )}
