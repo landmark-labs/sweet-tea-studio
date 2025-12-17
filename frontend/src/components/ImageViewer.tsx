@@ -414,7 +414,7 @@ export function ImageViewer({
                             className="px-3 py-2 hover:bg-slate-100 cursor-pointer flex items-center gap-2"
                             onClick={handleDownload}
                         >
-                            <Download size={14} /> Download
+                            <Download size={14} /> download
                         </div>
                         <div className="h-px bg-slate-100 my-1" />
 
@@ -480,7 +480,7 @@ export function ImageViewer({
                         {/* Right: Keep/Download */}
                         <div className="flex items-center gap-2">
                             <Button variant="outline" size="sm" onClick={handleDownload} className="h-7 text-xs">
-                                <Download className="w-3 h-3 mr-1" />Download
+                                <Download className="w-3 h-3 mr-1" />download
                             </Button>
                         </div>
                     </div>
