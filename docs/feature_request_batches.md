@@ -49,13 +49,11 @@ Focus on the prompt input experience - cursor behavior, autocomplete, and snippe
 
 | # | Issue | Summary |
 |---|-------|---------|
-| 9 | Cursor Jumping with Snippets | Writing next to snippets randomly moves cursor; clicking in/out of textbox moves cursor. Fix contenteditable/textarea interaction with inline elements. |
 | 18 | Autocomplete Issues | 3rd party tags not working; prompt library suggestions too aggressive. Fix tag loading and tune suggestion triggering logic. |
 | 19 | Snippet Brick Text Cutoff | Bricks only use 60-70% of width. Adjust CSS/max-width calculations. |
 | 7 | Segregated Undo | Inside textbox: undo text. Outside textbox: undo last non-text action. Implement separate undo stacks. |
 
 **Approach:**
-1. Debug cursor position logic in `PromptAutocompleteTextarea`
 2. Fix 3rd party tag file loading and indexing
 3. Add debounce/threshold for prompt library suggestions
 4. Implement focus-aware undo system (complex, may need global state)
@@ -90,7 +88,7 @@ Issues with workflow parsing, node handling, and configuration persistence.
 | # | Issue | Summary |
 |---|-------|---------|
 | 12 | Nodes Excluded on Import | Trivial nodes being excluded during pipe setup. Is this intentional logic or a bug? Document or fix. |
-| 21 | Parameter Swapping | Consecutive nodes of same type get parameters randomly swapped during import. Fix node identification/ordering logic. |
+| 21 | Parameter Swapping | Do consecutive nodes of same type get parameters randomly swapped during import. Fix/make clearer node identification/ordering logic. |
 | 11 | Default Values Failing | Defaults sometimes don't populate in configurator; values forgotten on navigation. Particularly scheduler selector. |
 | 6 | ComfyUI Settings Not Saving | Folder path and launch arguments don't persist. Fix settings storage/retrieval. |
 
@@ -105,7 +103,7 @@ Issues with workflow parsing, node handling, and configuration persistence.
 ## Batch 6: Gallery Features & UX
 **Priority: Medium** | **Risk: Low** | **Dependencies: Batch 1 (stability), Batch 4 (metadata)**
 
-Enhancements to the project gallery for better image management.
+Enhancements to the gallery (gallery page) / project gallery (generation page) for better image management.
 
 | # | Issue | Summary |
 |---|-------|---------|

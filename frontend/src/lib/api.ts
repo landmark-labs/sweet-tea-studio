@@ -769,6 +769,13 @@ export const api = {
         if (!res.ok) throw new Error("Failed to fetch folder images");
         return res.json();
     },
+
+    // --- System Control ---
+    restartBackend: async (): Promise<{ message: string; status: string }> => {
+        const res = await fetch(`${API_BASE}/status/restart`, { method: "POST" });
+        if (!res.ok) throw new Error("Failed to restart backend");
+        return res.json();
+    },
 };
 
 export interface Image {

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Outlet, NavLink } from "react-router-dom";
-import { PlusCircle, Settings, Library, Image as ImageIcon, GitBranch, ChevronLeft, ChevronRight, HardDrive, FolderOpen, Database, Loader2 } from "lucide-react";
+import { PlusCircle, Settings, Library, Image as ImageIcon, GitBranch, ChevronLeft, ChevronRight, HardDrive, FolderOpen, Database, Loader2, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { UndoRedoBar } from "@/components/UndoRedoBar";
@@ -29,6 +29,7 @@ import { useGeneration } from "@/lib/GenerationContext";
 export default function Layout() {
   const [collapsed, setCollapsed] = useState(false);
   const [isExportingDb, setIsExportingDb] = useState(false);
+  const [isRestarting, setIsRestarting] = useState(false);
 
   // Persisted Panel States
   const [feedOpen, setFeedOpen] = useState(() => localStorage.getItem("ds_feed_open") !== "false");
@@ -51,6 +52,22 @@ export default function Layout() {
     } finally {
       setIsExportingDb(false);
     }
+  };
+
+  const handleRestartBackend = async () => {
+    if (!confirm("Are you sure you want to restart the backend? This will temporarily disconnect all services.")) {
+      return;
+    }
+    setIsRestarting(true);
+    try {
+      await api.restartBackend();
+      // Backend will restart, page should reconnect automatically
+    } catch (e) {
+      // Expected - backend exits before response completes
+      console.log("Backend restarting...");
+    }
+    // Keep spinning for a moment as backend restarts
+    setTimeout(() => setIsRestarting(false), 3000);
   };
 
   return (
@@ -101,12 +118,12 @@ export default function Layout() {
         <div className="border-t border-border/70">
           <StatusBar collapsed={collapsed} />
         </div>
-        <div className="p-3 border-t-0 border-border/70">
+        <div className="p-3 border-t-0 border-border/70 flex items-center gap-2">
           <NavLink
             to="/settings"
             className={({ isActive }) =>
               cn(
-                "flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all border border-transparent",
+                "flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all border border-transparent flex-1",
                 isActive
                   ? "bg-primary/10 text-primary border-primary/20 shadow-sm"
                   : "text-muted-foreground hover:text-foreground hover:bg-muted/60",
@@ -117,6 +134,16 @@ export default function Layout() {
             <Settings size={20} />
             {!collapsed && <span>{labels.nav.settings}</span>}
           </NavLink>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-9 w-9 text-muted-foreground hover:text-foreground hover:bg-muted/60"
+            onClick={handleRestartBackend}
+            disabled={isRestarting}
+            title="Restart Backend"
+          >
+            <RefreshCw size={18} className={isRestarting ? "animate-spin" : ""} />
+          </Button>
         </div>
       </aside>
       {/* Main Content */}

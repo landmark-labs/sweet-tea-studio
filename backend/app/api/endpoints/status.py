@@ -239,3 +239,27 @@ def get_io_status_detail():
 def get_models_status_detail():
     """Get detailed models status."""
     return get_models_status()
+
+
+@router.post("/restart")
+async def restart_backend():
+    """
+    Restart the backend server.
+    
+    Triggers a graceful shutdown of the backend process.
+    Relies on the process manager (Docker, systemd, etc.) to restart the service.
+    Returns immediately with acknowledgment, then exits after a brief delay.
+    """
+    import os
+    import sys
+    import threading
+    
+    def delayed_exit():
+        import time
+        time.sleep(0.5)  # Brief delay to allow response to be sent
+        os._exit(0)  # Exit with code 0 so process manager restarts
+    
+    # Start exit in background thread so response can be sent first
+    threading.Thread(target=delayed_exit, daemon=True).start()
+    
+    return {"message": "Backend restarting...", "status": "shutting_down"}
