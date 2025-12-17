@@ -580,104 +580,113 @@ def fetch_all_rule34_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int = 1
     hostname = "api.rule34.xxx"
     import xml.etree.ElementTree as ET
 
-    def dapi_attempt(scheme: str, use_doh: bool) -> List[TagSuggestion]:
-        # Rule34 effectively forces HTTPS; skip plain HTTP attempts
-        if scheme == "http":
-            return []
+    browser_headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/120.0.0.0 Safari/537.36"
+        ),
+        "Accept": "application/xml;q=0.9, text/xml;q=0.8, */*;q=0.1",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Referer": "https://rule34.xxx/",
+    }
 
-        browser_headers = {
-            # Pretend to be Chrome; Cloudflare blocks obvious non-browser UAs
-            "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/120.0.0.0 Safari/537.36"
-            ),
-            "Accept": "application/xml;q=0.9, text/xml;q=0.8, */*;q=0.1",
-            "Accept-Language": "en-US,en;q=0.9",
-            "Referer": "https://rule34.xxx/",
+    # Build client configurations: try DoH IP first (verify disabled due to IP), then normal DNS host.
+    client_configs: List[Dict[str, Any]] = []
+    ip = resolve_via_doh(hostname)
+    if ip:
+        client_configs.append(
+            {
+                "label": "doh-ip",
+                "base_url": f"https://{ip}",
+                "headers": {**browser_headers, "Host": hostname},
+                "verify": False,  # Certificate won't match IP
+            }
+        )
+    client_configs.append(
+        {
+            "label": "dns-host",
+            "base_url": f"https://{hostname}",
+            "headers": browser_headers,
+            "verify": True,
         }
+    )
 
+    def dapi_attempt(cfg: Dict[str, Any]) -> List[TagSuggestion]:
         collected: List[TagSuggestion] = []
         page = 0
-        dns_ctx = doh_override_dns(hostname) if use_doh else nullcontext(False)
-        base_url = f"{scheme}://{hostname}"
-
-        with dns_ctx:
-            with httpx.Client(
-                timeout=15.0,
-                headers=browser_headers,
-                base_url=base_url,
-                follow_redirects=True,
-            ) as client:
-                while len(collected) < max_tags:
-                    try:
-                        res = client.get(
-                            "/index.php",
-                            params={
-                                "page": "dapi",
-                                "s": "tag",
-                                "q": "index",
-                                "limit": page_size,
-                                "pid": page,
-                            },
-                        )
-                        if res.status_code != 200:
-                            # Likely Cloudflare challenge/ban
-                            snippet = res.text[:200]
-                            logger.warning(
-                                f"[TagSync] Rule34 DAPI non-200 (status={res.status_code}, doh={use_doh}): {snippet}"
-                            )
-                            res.raise_for_status()
-
-                        try:
-                            root = ET.fromstring(res.content)
-                        except ET.ParseError:
-                            logger.warning(
-                                "[TagSync] Rule34 DAPI XML parse failed (possible Cloudflare HTML challenge)"
-                            )
-                            break
-
-                        data = []
-                        for child in root.findall("tag"):
-                            data.append(
-                                {
-                                    "name": child.get("name", "").strip().lower(),
-                                    "count": int(child.get("count", 0)),
-                                }
-                            )
-
-                        if not data:
-                            break
-
-                        for item in data:
-                            name = (item.get("name") or "").strip().lower()
-                            if not name:
-                                continue
-                            count = int(item.get("count", 0) or 0)
-                            collected.append(
-                                TagSuggestion(
-                                    name=name,
-                                    source="rule34",
-                                    frequency=count,
-                                    description=None,
-                                )
-                            )
-
-                        if len(data) < page_size:
-                            break
-                        page += 1
-
-                        if page > (max_tags // page_size) + 5:
-                            break
-
-                    except Exception as e:
+        with httpx.Client(
+            timeout=15.0,
+            follow_redirects=True,
+            **{k: v for k, v in cfg.items() if k in {"base_url", "headers", "verify"}},
+        ) as client:
+            while len(collected) < max_tags:
+                try:
+                    res = client.get(
+                        "/index.php",
+                        params={
+                            "page": "dapi",
+                            "s": "tag",
+                            "q": "index",
+                            "limit": page_size,
+                            "pid": page,
+                        },
+                    )
+                    if res.status_code != 200:
+                        snippet = res.text[:200]
                         logger.warning(
-                            f"[TagSync] Rule34 DAPI fetch failed (scheme={scheme}, doh={use_doh}, page={page}): {e}"
+                            f"[TagSync] Rule34 DAPI non-200 (status={res.status_code}, cfg={cfg.get('label')}): {snippet}"
+                        )
+                        res.raise_for_status()
+
+                    try:
+                        root = ET.fromstring(res.content)
+                    except ET.ParseError:
+                        logger.warning(
+                            f"[TagSync] Rule34 DAPI XML parse failed (cfg={cfg.get('label')}) – possible Cloudflare HTML"
                         )
                         break
+
+                    data = []
+                    for child in root.findall("tag"):
+                        data.append(
+                            {
+                                "name": child.get("name", "").strip().lower(),
+                                "count": int(child.get("count", 0)),
+                            }
+                        )
+
+                    if not data:
+                        break
+
+                    for item in data:
+                        name = (item.get("name") or "").strip().lower()
+                        if not name:
+                            continue
+                        count = int(item.get("count", 0) or 0)
+                        collected.append(
+                            TagSuggestion(
+                                name=name,
+                                source="rule34",
+                                frequency=count,
+                                description=None,
+                            )
+                        )
+
+                    if len(data) < page_size:
+                        break
+                    page += 1
+                    if page > 100:
+                        break
+
+                except Exception as e:
+                    logger.warning(
+                        f"[TagSync] Rule34 DAPI fetch failed (cfg={cfg.get('label')}, page={page}): {e}"
+                    )
+                    break
         return collected
 
-    def autocomplete_attempt(scheme: str, use_doh: bool) -> List[TagSuggestion]:
+    def autocomplete_attempt(cfg: Dict[str, Any]) -> List[TagSuggestion]:
         prefixes = [
             "1", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m",
             "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z",
@@ -685,79 +694,68 @@ def fetch_all_rule34_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int = 1
         ]
         collected: List[TagSuggestion] = []
         seen = set()
-        dns_ctx = doh_override_dns(hostname) if use_doh else nullcontext(False)
-        base_url = f"{scheme}://{hostname}"
 
-        browser_headers = {
-            "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/120.0.0.0 Safari/537.36"
-            ),
-            "Accept": "application/json,text/html;q=0.8,*/*;q=0.1",
-            "Accept-Language": "en-US,en;q=0.9",
-            "Referer": "https://rule34.xxx/",
-        }
+        headers = cfg["headers"]
+        headers = headers if "Host" in headers else {**headers, "Host": hostname}
 
-        with dns_ctx:
-            with httpx.Client(
-                timeout=10.0,
-                headers=browser_headers,
-                base_url=base_url,
-                follow_redirects=True,
-            ) as client:
-                for prefix in prefixes:
-                    if len(collected) >= max_tags:
-                        break
-                    try:
-                        res = client.get("/autocomplete.php", params={"q": prefix})
-                        res.raise_for_status()
-                        data = res.json()
-                        for item in data:
-                            name = item.get("value", "").strip().lower()
-                            if not name or name in seen:
-                                continue
-                            seen.add(name)
-                            label = item.get("label", "")
-                            count = 0
-                            if "(" in label and ")" in label:
-                                try:
-                                    count_str = label.split("(")[-1].rstrip(")")
-                                    count = int(count_str)
-                                except ValueError:
-                                    pass
-                            collected.append(
-                                TagSuggestion(
-                                    name=name,
-                                    source="rule34",
-                                    frequency=count,
-                                    description=None,
-                                )
-                            )
-                    except Exception as e:
+        with httpx.Client(
+            timeout=10.0,
+            follow_redirects=True,
+            **{k: v for k, v in cfg.items() if k in {"base_url", "verify"}},
+            headers=headers,
+        ) as client:
+            for prefix in prefixes:
+                if len(collected) >= max_tags:
+                    break
+                try:
+                    res = client.get("/autocomplete.php", params={"q": prefix})
+                    if res.status_code != 200:
                         logger.warning(
-                            f"[TagSync] Rule34 autocomplete failed (scheme={scheme}, doh={use_doh}, prefix={prefix}): {e}"
+                            f"[TagSync] Rule34 autocomplete non-200 (status={res.status_code}, cfg={cfg.get('label')}, prefix={prefix})"
                         )
-                        continue
+                        res.raise_for_status()
+                    data = res.json()
+                    for item in data:
+                        name = item.get("value", "").strip().lower()
+                        if not name or name in seen:
+                            continue
+                        seen.add(name)
+                        label = item.get("label", "")
+                        count = 0
+                        if "(" in label and ")" in label:
+                            try:
+                                count_str = label.split("(")[-1].rstrip(")")
+                                count = int(count_str)
+                            except ValueError:
+                                pass
+                        collected.append(
+                            TagSuggestion(
+                                name=name,
+                                source="rule34",
+                                frequency=count,
+                                description=None,
+                            )
+                        )
+                except Exception as e:
+                    logger.warning(
+                        f"[TagSync] Rule34 autocomplete failed (cfg={cfg.get('label')}, prefix={prefix}): {e}"
+                    )
+                    continue
         return collected
 
-    attempts = [
-        ("https", True),
-        ("https", False),
-    ]
-
-    for scheme, use_doh in attempts:
-        data = dapi_attempt(scheme, use_doh)
+    # Try DAPI via IP (if available) then DNS; fall back to autocomplete if all DAPI attempts fail.
+    for cfg in client_configs:
+        data = dapi_attempt(cfg)
         if data:
             return data[:max_tags]
-        logger.warning(f"[TagSync] Rule34 DAPI returned 0 tags (scheme={scheme}, doh={use_doh})")
+        logger.warning(f"[TagSync] Rule34 DAPI returned 0 tags (cfg={cfg.get('label')})")
 
-    logger.warning("[TagSync] Rule34 DAPI returned no data across all attempts, falling back to autocomplete harvesting")
-    for scheme, use_doh in attempts:
-        data = autocomplete_attempt(scheme, use_doh)
+    logger.warning("[TagSync] Rule34 DAPI returned no data, falling back to autocomplete harvesting")
+    for cfg in client_configs:
+        data = autocomplete_attempt(cfg)
         if data:
             return data[:max_tags]
-        logger.warning(f"[TagSync] Rule34 autocomplete returned 0 tags (scheme={scheme}, doh={use_doh})")
+        logger.warning(f"[TagSync] Rule34 autocomplete returned 0 tags (cfg={cfg.get('label')})")
 
     logger.error("[TagSync] Rule34 fetch failed with no tags collected")
     return []
