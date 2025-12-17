@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
 import json
 import time
-from threading import Thread
+from threading import Thread, RLock
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager, nullcontext
 
@@ -42,6 +42,44 @@ DOH_SERVERS = [
     "https://8.8.8.8/dns-query",
 ]
 
+_DOH_DNS_LOCK = RLock()
+_DOH_DNS_OVERRIDES: Dict[str, str] = {}
+_DOH_DNS_REFCOUNTS: Dict[str, int] = {}
+_DOH_ORIGINAL_GETADDRINFO = socket.getaddrinfo
+_DOH_PATCH_INSTALLED = False
+
+
+def _doh_patched_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
+    try:
+        host_key = host.lower() if isinstance(host, str) else host
+    except Exception:
+        host_key = host
+
+    with _DOH_DNS_LOCK:
+        override_ip = _DOH_DNS_OVERRIDES.get(host_key)
+
+    if override_ip:
+        return _DOH_ORIGINAL_GETADDRINFO(override_ip, port, family, type, proto, flags)
+    return _DOH_ORIGINAL_GETADDRINFO(host, port, family, type, proto, flags)
+
+
+def _install_doh_patch_if_needed() -> None:
+    global _DOH_PATCH_INSTALLED
+    if _DOH_PATCH_INSTALLED:
+        return
+    socket.getaddrinfo = _doh_patched_getaddrinfo
+    _DOH_PATCH_INSTALLED = True
+
+
+def _uninstall_doh_patch_if_needed() -> None:
+    global _DOH_PATCH_INSTALLED
+    if not _DOH_PATCH_INSTALLED:
+        return
+    if _DOH_DNS_REFCOUNTS:
+        return
+    socket.getaddrinfo = _DOH_ORIGINAL_GETADDRINFO
+    _DOH_PATCH_INSTALLED = False
+
 
 def resolve_via_doh(hostname: str) -> Optional[str]:
     """
@@ -50,7 +88,7 @@ def resolve_via_doh(hostname: str) -> Optional[str]:
     """
     for doh_server in DOH_SERVERS:
         try:
-            with httpx.Client(timeout=5.0) as client:
+            with httpx.Client(timeout=5.0, follow_redirects=True, trust_env=False) as client:
                 res = client.get(
                     doh_server,
                     params={"name": hostname, "type": "A"},
@@ -74,89 +112,56 @@ def resolve_via_doh(hostname: str) -> Optional[str]:
     return None
 
 
-def create_doh_client(hostname: str, timeout: float = 10.0) -> httpx.Client:
-    """
-    Create an httpx client that connects to a hostname via DoH-resolved IP.
-    Vast.ai often MITMs DNS, so DoH is required there; we still fall back to
-    normal DNS if DoH resolution fails.
-    """
-    ip = resolve_via_doh(hostname)
-    if not ip:
-        logger.warning(f"[DoH] Could not resolve {hostname}, falling back to system DNS client")
-        return httpx.Client(
-            timeout=timeout,
-            headers={"User-Agent": "sweet-tea-studio/0.1 (preload)"},
-            base_url=f"https://{hostname}",
-        )
-    
-    logger.info(f"[DoH] Using resolved IP {ip} for {hostname}")
-    return httpx.Client(
-        timeout=timeout,
-        headers={
-            "User-Agent": "sweet-tea-studio/0.1 (preload)",
-            "Host": hostname,
-        },
-        base_url=f"https://{ip}",
-        verify=False,  # Required when connecting via IP with different Host header
-    )
-
-
-def build_tag_clients(hostname: str, timeout: float = 10.0, prefer_doh: bool = True):
-    """
-    Return (primary_client, fallback_client, used_primary_is_doh).
-    When prefer_doh=True (default), the primary uses DoH/IP to survive poisoned DNS,
-    and the fallback uses normal DNS. Otherwise the order is reversed.
-    """
-    if prefer_doh:
-        primary = create_doh_client(hostname, timeout=timeout)
-        fallback = httpx.Client(
-            timeout=timeout,
-            headers={"User-Agent": "sweet-tea-studio/0.1 (preload)"},
-            base_url=f"https://{hostname}",
-        )
-        return primary, fallback, True
-    # prefer normal DNS first
-    primary = httpx.Client(
-        timeout=timeout,
-        headers={"User-Agent": "sweet-tea-studio/0.1 (preload)"},
-        base_url=f"https://{hostname}",
-    )
-    fallback = create_doh_client(hostname, timeout=timeout)
-    return primary, fallback, False
-
-
 @contextmanager
-def doh_override_dns(hostname: str):
+def doh_override_dns(hostname: str, additional_hosts: Optional[List[str]] = None):
     """
-    Force socket.getaddrinfo to return the DoH-resolved IP for the target host.
-    This keeps SNI and TLS verification working because the URL still contains
-    the original hostname.
+    Force DNS resolution for one or more hosts to DoH-resolved IPs.
+
+    This keeps SNI/TLS verification correct because callers keep using the real
+    hostname in the URL (mirrors `curl --doh-url ... https://host/...` behavior).
+
+    Implementation detail: installs a single global `socket.getaddrinfo` patch
+    and uses a reference-counted mapping so it is safe under concurrent use.
     """
-    ip = resolve_via_doh(hostname)
-    if not ip:
+    hosts = [hostname] + (additional_hosts or [])
+    resolved: Dict[str, str] = {}
+
+    for host in hosts:
+        if not host:
+            continue
+        host_key = host.lower()
+        ip = resolve_via_doh(host_key)
+        if ip:
+            resolved[host_key] = ip
+        else:
+            logger.warning(f"[DoH] Failed to resolve {host_key}, using system DNS")
+
+    if not resolved:
         yield False
         return
 
-    original_getaddrinfo = socket.getaddrinfo
+    with _DOH_DNS_LOCK:
+        _install_doh_patch_if_needed()
+        for host_key, ip in resolved.items():
+            if host_key in _DOH_DNS_REFCOUNTS:
+                _DOH_DNS_REFCOUNTS[host_key] += 1
+                continue
+            _DOH_DNS_REFCOUNTS[host_key] = 1
+            _DOH_DNS_OVERRIDES[host_key] = ip
+            logger.warning(f"[DoH] Overriding DNS: {host_key} -> {ip}")
 
-    def patched_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
-        if host == hostname:
-            return [
-                (
-                    socket.AF_INET,
-                    socket.SOCK_STREAM,
-                    proto or socket.IPPROTO_TCP,
-                    "",
-                    (ip, port),
-                )
-            ]
-        return original_getaddrinfo(host, port, family, type, proto, flags)
-
-    socket.getaddrinfo = patched_getaddrinfo
     try:
         yield True
     finally:
-        socket.getaddrinfo = original_getaddrinfo
+        with _DOH_DNS_LOCK:
+            for host_key in list(resolved.keys()):
+                count = _DOH_DNS_REFCOUNTS.get(host_key, 0)
+                if count <= 1:
+                    _DOH_DNS_REFCOUNTS.pop(host_key, None)
+                    _DOH_DNS_OVERRIDES.pop(host_key, None)
+                else:
+                    _DOH_DNS_REFCOUNTS[host_key] = count - 1
+            _uninstall_doh_patch_if_needed()
 
 
 def load_fallback_tags() -> List["TagSuggestion"]:
@@ -364,7 +369,12 @@ def bulk_upsert_tag_suggestions(session: Session, tags: List[TagSuggestion], sou
 
 def fetch_danbooru_tags(query: str, limit: int = 10) -> List[TagSuggestion]:
     try:
-        with httpx.Client(timeout=5.0, headers={"User-Agent": "sweet-tea-studio/0.1"}) as client:
+        with httpx.Client(
+            timeout=5.0,
+            headers={"User-Agent": "sweet-tea-studio/0.1"},
+            follow_redirects=True,
+            trust_env=False,
+        ) as client:
             res = client.get(
                 "https://danbooru.donmai.us/tags.json",
                 params={
@@ -401,6 +411,8 @@ def fetch_all_danbooru_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int =
                 timeout=10.0,
                 headers={"User-Agent": "sweet-tea-studio/0.1 (preload)"},
                 base_url=f"https://{hostname}",
+                follow_redirects=True,
+                trust_env=False,
             ) as client:
                 while len(collected) < max_tags:
                     try:
@@ -452,6 +464,8 @@ def fetch_e621_tags(query: str, limit: int = 10) -> List[TagSuggestion]:
         with httpx.Client(
             timeout=5.0,
             headers={"User-Agent": "sweet-tea-studio/0.1 (autocomplete)"},
+            follow_redirects=True,
+            trust_env=False,
         ) as client:
             res = client.get(
                 "https://e621.net/tags.json",
@@ -489,6 +503,8 @@ def fetch_all_e621_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int = TAG
                 timeout=10.0,
                 headers={"User-Agent": "sweet-tea-studio/0.1 (preload)"},
                 base_url=f"https://{hostname}",
+                follow_redirects=True,
+                trust_env=False,
             ) as client:
                 while len(collected) < max_tags:
                     try:
@@ -537,15 +553,18 @@ def fetch_all_e621_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int = TAG
 def fetch_rule34_tags(query: str, limit: int = 10) -> List[TagSuggestion]:
     """Fetch tags from Rule34 autocomplete API."""
     try:
-        with httpx.Client(
-            timeout=5.0,
-            headers={"User-Agent": "sweet-tea-studio/0.1 (autocomplete)"},
-            follow_redirects=True,
-        ) as client:
-            res = client.get(
-                "https://api.rule34.xxx/autocomplete.php",
-                params={"q": query},
-            )
+        dns_ctx = doh_override_dns("api.rule34.xxx", additional_hosts=["rule34.xxx"])
+        with dns_ctx:
+            with httpx.Client(
+                timeout=5.0,
+                headers={"User-Agent": "sweet-tea-studio/0.1 (autocomplete)"},
+                follow_redirects=True,
+                trust_env=False,
+            ) as client:
+                res = client.get(
+                    "https://api.rule34.xxx/autocomplete.php",
+                    params={"q": query},
+                )
             res.raise_for_status()
             
             data = res.json()
@@ -578,6 +597,7 @@ def fetch_rule34_tags(query: str, limit: int = 10) -> List[TagSuggestion]:
 def fetch_all_rule34_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int = 100) -> List[TagSuggestion]:
     """Fetch popular tags from Rule34 using the official DAPI, with fallbacks."""
     hostname = "api.rule34.xxx"
+    redirect_host = "rule34.xxx"
     import xml.etree.ElementTree as ET
 
     browser_headers = {
@@ -591,99 +611,93 @@ def fetch_all_rule34_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int = 1
         "Referer": "https://rule34.xxx/",
     }
 
-    # Build client configurations: try DoH IP first (verify disabled due to IP), then normal DNS host.
-    client_configs: List[Dict[str, Any]] = []
-    ip = resolve_via_doh(hostname)
-    if ip:
-        client_configs.append(
-            {
-                "label": "doh-ip",
-                "base_url": f"https://{ip}",
-                "headers": {**browser_headers, "Host": hostname},
-                "verify": False,  # Certificate won't match IP
-            }
-        )
-    client_configs.append(
-        {
-            "label": "dns-host",
-            "base_url": f"https://{hostname}",
-            "headers": browser_headers,
-            "verify": True,
-        }
-    )
+    # Keep the URL as https://api.rule34.xxx so SNI is correct; override DNS via DoH underneath.
+    client_configs: List[Dict[str, Any]] = [
+        {"label": "doh", "use_doh": True},
+        {"label": "dns", "use_doh": False},
+    ]
 
     def dapi_attempt(cfg: Dict[str, Any]) -> List[TagSuggestion]:
         collected: List[TagSuggestion] = []
         page = 0
-        with httpx.Client(
-            timeout=15.0,
-            follow_redirects=True,
-            **{k: v for k, v in cfg.items() if k in {"base_url", "headers", "verify"}},
-        ) as client:
-            while len(collected) < max_tags:
-                try:
-                    res = client.get(
-                        "/index.php",
-                        params={
-                            "page": "dapi",
-                            "s": "tag",
-                            "q": "index",
-                            "limit": page_size,
-                            "pid": page,
-                        },
-                    )
-                    if res.status_code != 200:
-                        snippet = res.text[:200]
-                        logger.warning(
-                            f"[TagSync] Rule34 DAPI non-200 (status={res.status_code}, cfg={cfg.get('label')}): {snippet}"
-                        )
-                        res.raise_for_status()
+        dns_ctx = (
+            doh_override_dns(hostname, additional_hosts=[redirect_host])
+            if cfg.get("use_doh")
+            else nullcontext(False)
+        )
 
+        with dns_ctx:
+            with httpx.Client(
+                timeout=15.0,
+                follow_redirects=True,
+                base_url=f"https://{hostname}",
+                headers=browser_headers,
+                trust_env=False,
+            ) as client:
+                while len(collected) < max_tags:
                     try:
-                        root = ET.fromstring(res.content)
-                    except ET.ParseError:
-                        logger.warning(
-                            f"[TagSync] Rule34 DAPI XML parse failed (cfg={cfg.get('label')}) – possible Cloudflare HTML"
+                        res = client.get(
+                            "/index.php",
+                            params={
+                                "page": "dapi",
+                                "s": "tag",
+                                "q": "index",
+                                "limit": page_size,
+                                "pid": page,
+                            },
                         )
-                        break
-
-                    data = []
-                    for child in root.findall("tag"):
-                        data.append(
-                            {
-                                "name": child.get("name", "").strip().lower(),
-                                "count": int(child.get("count", 0)),
-                            }
-                        )
-
-                    if not data:
-                        break
-
-                    for item in data:
-                        name = (item.get("name") or "").strip().lower()
-                        if not name:
-                            continue
-                        count = int(item.get("count", 0) or 0)
-                        collected.append(
-                            TagSuggestion(
-                                name=name,
-                                source="rule34",
-                                frequency=count,
-                                description=None,
+                        if res.status_code != 200:
+                            snippet = res.text[:200]
+                            logger.warning(
+                                f"[TagSync] Rule34 DAPI non-200 (status={res.status_code}, cfg={cfg.get('label')}): {snippet}"
                             )
+                            res.raise_for_status()
+
+                        try:
+                            root = ET.fromstring(res.content)
+                        except ET.ParseError:
+                            logger.warning(
+                                f"[TagSync] Rule34 DAPI XML parse failed (cfg={cfg.get('label')}) - possible Cloudflare HTML"
+                            )
+                            break
+
+                        data = []
+                        for child in root.findall("tag"):
+                            data.append(
+                                {
+                                    "name": child.get("name", "").strip().lower(),
+                                    "count": int(child.get("count", 0)),
+                                }
+                            )
+
+                        if not data:
+                            break
+
+                        for item in data:
+                            name = (item.get("name") or "").strip().lower()
+                            if not name:
+                                continue
+                            count = int(item.get("count", 0) or 0)
+                            collected.append(
+                                TagSuggestion(
+                                    name=name,
+                                    source="rule34",
+                                    frequency=count,
+                                    description=None,
+                                )
+                            )
+
+                        if len(data) < page_size:
+                            break
+                        page += 1
+                        if page > 100:
+                            break
+
+                    except Exception as e:
+                        logger.warning(
+                            f"[TagSync] Rule34 DAPI fetch failed (cfg={cfg.get('label')}, page={page}): {e}"
                         )
-
-                    if len(data) < page_size:
                         break
-                    page += 1
-                    if page > 100:
-                        break
-
-                except Exception as e:
-                    logger.warning(
-                        f"[TagSync] Rule34 DAPI fetch failed (cfg={cfg.get('label')}, page={page}): {e}"
-                    )
-                    break
         return collected
 
     def autocomplete_attempt(cfg: Dict[str, Any]) -> List[TagSuggestion]:
@@ -695,55 +709,70 @@ def fetch_all_rule34_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int = 1
         collected: List[TagSuggestion] = []
         seen = set()
 
-        headers = cfg["headers"]
-        headers = headers if "Host" in headers else {**headers, "Host": hostname}
+        dns_ctx = (
+            doh_override_dns(hostname, additional_hosts=[redirect_host])
+            if cfg.get("use_doh")
+            else nullcontext(False)
+        )
 
-        with httpx.Client(
-            timeout=10.0,
-            follow_redirects=True,
-            **{k: v for k, v in cfg.items() if k in {"base_url", "verify"}},
-            headers=headers,
-        ) as client:
-            for prefix in prefixes:
-                if len(collected) >= max_tags:
-                    break
-                try:
-                    res = client.get("/autocomplete.php", params={"q": prefix})
-                    if res.status_code != 200:
-                        logger.warning(
-                            f"[TagSync] Rule34 autocomplete non-200 (status={res.status_code}, cfg={cfg.get('label')}, prefix={prefix})"
-                        )
-                        res.raise_for_status()
-                    data = res.json()
-                    for item in data:
-                        name = item.get("value", "").strip().lower()
-                        if not name or name in seen:
-                            continue
-                        seen.add(name)
-                        label = item.get("label", "")
-                        count = 0
-                        if "(" in label and ")" in label:
-                            try:
-                                count_str = label.split("(")[-1].rstrip(")")
-                                count = int(count_str)
-                            except ValueError:
-                                pass
-                        collected.append(
-                            TagSuggestion(
-                                name=name,
-                                source="rule34",
-                                frequency=count,
-                                description=None,
+        autocomplete_headers = {**browser_headers, "Accept": "application/json,text/html;q=0.8,*/*;q=0.1"}
+
+        with dns_ctx:
+            with httpx.Client(
+                timeout=10.0,
+                follow_redirects=True,
+                base_url=f"https://{hostname}",
+                headers=autocomplete_headers,
+                trust_env=False,
+            ) as client:
+                for prefix in prefixes:
+                    if len(collected) >= max_tags:
+                        break
+                    try:
+                        res = client.get("/autocomplete.php", params={"q": prefix})
+                        if res.status_code != 200:
+                            logger.warning(
+                                f"[TagSync] Rule34 autocomplete non-200 (status={res.status_code}, cfg={cfg.get('label')}, prefix={prefix}): {res.text[:200]}"
                             )
+                            res.raise_for_status()
+
+                        try:
+                            data = res.json()
+                        except Exception:
+                            logger.warning(
+                                f"[TagSync] Rule34 autocomplete JSON parse failed (cfg={cfg.get('label')}, prefix={prefix}): {res.text[:200]}"
+                            )
+                            continue
+
+                        for item in data:
+                            name = (item.get("value") or "").strip().lower()
+                            if not name or name in seen:
+                                continue
+                            seen.add(name)
+                            label = item.get("label", "")
+                            count = 0
+                            if "(" in label and ")" in label:
+                                try:
+                                    count_str = label.split("(")[-1].rstrip(")")
+                                    count = int(count_str)
+                                except ValueError:
+                                    pass
+                            collected.append(
+                                TagSuggestion(
+                                    name=name,
+                                    source="rule34",
+                                    frequency=count,
+                                    description=None,
+                                )
+                            )
+                    except Exception as e:
+                        logger.warning(
+                            f"[TagSync] Rule34 autocomplete failed (cfg={cfg.get('label')}, prefix={prefix}): {e}"
                         )
-                except Exception as e:
-                    logger.warning(
-                        f"[TagSync] Rule34 autocomplete failed (cfg={cfg.get('label')}, prefix={prefix}): {e}"
-                    )
-                    continue
+                        continue
         return collected
 
-    # Try DAPI via IP (if available) then DNS; fall back to autocomplete if all DAPI attempts fail.
+    # Try DoH override first, then system DNS; fall back to autocomplete if DAPI fails.
     for cfg in client_configs:
         data = dapi_attempt(cfg)
         if data:
@@ -1035,17 +1064,47 @@ def trigger_tag_refresh(
     background_tasks: BackgroundTasks,
     force: bool = False,
     source: Optional[str] = None,
+    wait: bool = False,
 ):
     """
     Manually trigger a tag cache refresh (useful for debugging).
     Query params:
       - force=true to bypass staleness checks
       - source=rule34 (or danbooru/e621) to refresh only that source
+      - wait=true to run synchronously and return counts
     """
     if source and source not in {"danbooru", "e621", "rule34"}:
         raise HTTPException(status_code=400, detail="Invalid source")
 
-    logger.info(f"[TagSync] Manual refresh requested (force={force}, source={source})")
+    logger.warning(f"[TagSync] Manual refresh requested (force={force}, source={source}, wait={wait})")
+
+    if wait:
+        refresh_tag_cache(force=force, only_source=source)
+        with Session(tags_engine) as session:
+            total_raw = session.exec(select(func.count(Tag.id))).one()
+            total = total_raw[0] if isinstance(total_raw, tuple) else total_raw
+            by_source_rows = session.exec(
+                select(Tag.source, func.count(Tag.id)).group_by(Tag.source)
+            ).all()
+            by_source = {src: int(cnt) for src, cnt in by_source_rows}
+            sync_states = session.exec(select(TagSyncState)).all()
+            states = [
+                {
+                    "source": s.source,
+                    "last_synced_at": s.last_synced_at.isoformat() if s.last_synced_at else None,
+                    "tag_count": s.tag_count,
+                }
+                for s in sync_states
+            ]
+        return {
+            "message": "Tag refresh completed",
+            "force": force,
+            "source": source or "all",
+            "total_tags": int(total or 0),
+            "tags_by_source": by_source,
+            "sync_states": states,
+        }
+
     background_tasks.add_task(refresh_tag_cache, force=force, only_source=source)
     return {"message": "Tag refresh started in background", "force": force, "source": source or "all"}
 
@@ -1054,11 +1113,12 @@ def trigger_tag_refresh(
 def get_tag_cache_status():
     """Get status of the tag cache for debugging."""
     with Session(tags_engine) as session:
-        # Count tags by source
-        all_tags = session.exec(select(Tag)).all()
-        by_source: Dict[str, int] = {}
-        for tag in all_tags:
-            by_source[tag.source] = by_source.get(tag.source, 0) + 1
+        total_raw = session.exec(select(func.count(Tag.id))).one()
+        total = total_raw[0] if isinstance(total_raw, tuple) else total_raw
+        by_source_rows = session.exec(
+            select(Tag.source, func.count(Tag.id)).group_by(Tag.source)
+        ).all()
+        by_source = {src: int(cnt) for src, cnt in by_source_rows}
         
         # Get sync states
         sync_states = session.exec(select(TagSyncState)).all()
@@ -1072,7 +1132,7 @@ def get_tag_cache_status():
         ]
         
         return {
-            "total_tags": len(all_tags),
+            "total_tags": int(total or 0),
             "tags_by_source": by_source,
             "sync_states": states,
             "fallback_file_exists": FALLBACK_TAGS_PATH.exists(),
