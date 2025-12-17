@@ -211,16 +211,16 @@ export default function Layout() {
         </div>
       </main>
       <ConnectionBanner />
-      <PerformanceHUD visible={perfHudOpen} />
+      <PerformanceHUD visible={perfHudOpen} onClose={() => setPerfHudOpen(false)} />
 
       {/* Global Floating Panels */}
-      <GlobalFloatingPanels feedOpen={feedOpen} libraryOpen={libraryOpen} />
+      <GlobalFloatingPanels feedOpen={feedOpen} libraryOpen={libraryOpen} onFeedClose={() => setFeedOpen(false)} onLibraryClose={() => setLibraryOpen(false)} />
     </div>
   );
 }
 
 // Separate component for panels to use hooks
-function GlobalFloatingPanels({ feedOpen, libraryOpen }: { feedOpen: boolean; libraryOpen: boolean }) {
+function GlobalFloatingPanels({ feedOpen, libraryOpen, onFeedClose, onLibraryClose }: { feedOpen: boolean; libraryOpen: boolean; onFeedClose: () => void; onLibraryClose: () => void }) {
   const { generationFeed } = useGenerationFeedStore();
   const { prompts, searchQuery: promptSearch, setSearchQuery: setPromptSearch } = usePromptLibraryStore();
   const generation = useGeneration();
@@ -234,7 +234,18 @@ function GlobalFloatingPanels({ feedOpen, libraryOpen }: { feedOpen: boolean; li
         className={`z-40 ${feedOpen ? "" : "hidden"}`}
       >
         <div className="bg-white rounded-lg shadow-xl border overflow-hidden" style={{ maxWidth: '90vw' }}>
-          <div className="p-2 bg-slate-100 border-b text-xs font-semibold cursor-move">Generation Feed</div>
+          <div className="p-2 bg-slate-100 border-b text-xs font-semibold cursor-move flex items-center justify-between">
+            <span>Generation Feed</span>
+            <button
+              onClick={onFeedClose}
+              className="p-0.5 rounded hover:bg-slate-200 text-slate-500 hover:text-slate-700"
+              aria-label="Close generation feed"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
           <GenerationFeed
             items={generationFeed}
             onSelectPreview={() => { }}
@@ -257,7 +268,7 @@ function GlobalFloatingPanels({ feedOpen, libraryOpen }: { feedOpen: boolean; li
             onSearchChange={setPromptSearch}
             onSearchSubmit={generation?.loadPromptLibrary || (() => { })}
             searchValue={promptSearch}
-            onClose={() => { }}
+            onClose={onLibraryClose}
           />
         </div>
       </DraggablePanel>
