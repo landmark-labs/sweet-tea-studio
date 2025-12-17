@@ -122,16 +122,17 @@ export default function Layout() {
         <div className="border-t border-border/70">
           <StatusBar collapsed={collapsed} />
         </div>
-        <div className="p-3 border-t-0 border-border/70 flex items-center gap-2">
+        <div className={cn("border-t-0 border-border/70 flex items-center transition-all", collapsed ? "flex-col p-2 gap-2 pb-4" : "p-3 gap-2")}>
           <NavLink
             to="/settings"
             className={({ isActive }) =>
               cn(
-                "flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all border border-transparent flex-1",
+                "flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all border border-transparent",
+                !collapsed && "flex-1",
                 isActive
                   ? "bg-primary/10 text-primary border-primary/20 shadow-sm"
                   : "text-muted-foreground hover:text-foreground hover:bg-muted/60",
-                collapsed && "justify-center px-2"
+                collapsed && "justify-center px-2 w-full h-9"
               )
             }
           >
@@ -141,7 +142,7 @@ export default function Layout() {
           <Button
             variant="ghost"
             size="icon"
-            className="h-9 w-9 text-muted-foreground hover:text-foreground hover:bg-muted/60"
+            className={cn("text-muted-foreground hover:text-foreground hover:bg-muted/60", collapsed ? "h-9 w-full" : "h-9 w-9")}
             onClick={handleRestartBackend}
             disabled={isRestarting}
             title="restart backend"
