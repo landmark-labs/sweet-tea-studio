@@ -381,101 +381,104 @@ export function PromptAutocompleteTextarea({
 
 
     return (
-        <div className="relative group/container w-full">
-            <button
-                type="button"
-                className={cn(
-                    "absolute right-2 top-2 z-20 rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-opacity",
-                    "opacity-0 group-hover/container:opacity-100 focus-within:opacity-100",
-                    autocompleteEnabled
-                        ? "bg-white/90 text-slate-700 border-slate-200 hover:bg-white"
-                        : "bg-slate-100/90 text-slate-500 border-slate-200 hover:bg-slate-50",
-                )}
-                title={autocompleteEnabled ? "Disable autocomplete" : "Enable autocomplete"}
-                onMouseDown={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    toggleAutocomplete();
-                }}
-            >
-                {autocompleteEnabled ? "Autocomplete" : "Autocomplete off"}
-            </button>
-
-            {/* Overlay for highlighting */}
-            {highlightSnippets && highlightedContent && (
-                <div
-                    ref={backdropRef}
-                    aria-hidden="true"
+        <div className="flex flex-col gap-1 w-full group/container">
+            <div className="flex justify-end px-1">
+                <button
+                    type="button"
                     className={cn(
-                        // Match Textarea base styles EXACTLY
-                        "absolute inset-0 z-0 p-3 text-xs font-mono whitespace-pre-wrap break-words overflow-auto bg-transparent border border-transparent pointer-events-none text-transparent",
-                        // Must match textarea sizing/resize
-                        className?.includes("h-") ? "" : "h-auto" // If height is fixed in class, it inherits naturally via inset. If auto, we might drift.
-                        // Actually, Scroll Sync handles offset.
+                        "rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors",
+                        autocompleteEnabled
+                            ? "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                            : "bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200",
                     )}
-                    style={{
-                        // Match resize behavior if possible, but Textarea resize handles are tricky.
-                        // We rely on standard scroll sync.
+                    title={autocompleteEnabled ? "Disable autocomplete" : "Enable autocomplete"}
+                    onMouseDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        toggleAutocomplete();
                     }}
                 >
-                    {highlightedContent}
-                </div>
-            )}
+                    {autocompleteEnabled ? "Autocomplete" : "Autocomplete off"}
+                </button>
+            </div>
 
-            <Textarea
-                {...props}
-                ref={textareaRef}
-                value={value}
-                onChange={(e) => {
-                    const newCursor = e.target.selectionStart || 0;
-                    intendedCursorRef.current = newCursor;
-                    onValueChange(e.target.value);
-                    setCursor((prev) => (prev === newCursor ? prev : newCursor));
-                    props.onChange?.(e);
-                }}
-                onFocus={(e) => {
-                    updateCursor();
-                    setTextInputFocused(true); // Segregated undo: let browser handle text undo
-                    props.onFocus?.(e);
-                }}
-                onBlur={(e) => {
-                    // Segregated undo: restore global undo handling
-                    setTextInputFocused(false);
-                    // Close dropdown after delay to allow clicking on dropdown items
-                    // We use a longer delay and only close if user truly left the component
-                    setTimeout(() => {
-                        // Only close if focus is truly outside (not on dropdown buttons either)
-                        const active = document.activeElement;
-                        if (active !== textareaRef.current) {
-                            setIsOpen(false);
-                        }
-                    }, 300);
-                    props.onBlur?.(e);
-                }}
-                onClick={(e) => {
-                    updateCursor();
-                    props.onClick?.(e);
-                }}
-                onKeyUp={(e) => {
-                    updateCursor();
-                    props.onKeyUp?.(e);
-                }}
-                onSelect={(e) => {
-                    updateCursor();
-                    props.onSelect?.(e);
-                }}
-                onScroll={handleScroll}
-                className={cn(
-                    "text-xs font-mono transition-all min-h-[150px] relative z-10",
-                    isActive && "ring-2 ring-blue-400 border-blue-400",
-                    highlightSnippets ? "bg-transparent focus:bg-transparent" : "",
-                    highlightSnippets && isActive && "bg-blue-50/10", // slight tint if active but transparent
-                    className,
-                    // Ensure padding matches overlay
-                    !className?.includes("p-") && "p-3"
+            <div className="relative w-full">
+                {/* Overlay for highlighting */}
+                {highlightSnippets && highlightedContent && (
+                    <div
+                        ref={backdropRef}
+                        aria-hidden="true"
+                        className={cn(
+                            // Match Textarea base styles EXACTLY
+                            "absolute inset-0 z-0 p-3 text-xs font-mono whitespace-pre-wrap break-words overflow-auto bg-transparent border border-transparent pointer-events-none text-transparent",
+                            // Must match textarea sizing/resize
+                            className?.includes("h-") ? "" : "h-auto" // If height is fixed in class, it inherits naturally via inset. If auto, we might drift.
+                            // Actually, Scroll Sync handles offset.
+                        )}
+                        style={{
+                            // Match resize behavior if possible, but Textarea resize handles are tricky.
+                            // We rely on standard scroll sync.
+                        }}
+                    >
+                        {highlightedContent}
+                    </div>
                 )}
-                onKeyDown={handleKeyDown}
-            />
+
+                <Textarea
+                    {...props}
+                    ref={textareaRef}
+                    value={value}
+                    onChange={(e) => {
+                        const newCursor = e.target.selectionStart || 0;
+                        intendedCursorRef.current = newCursor;
+                        onValueChange(e.target.value);
+                        setCursor((prev) => (prev === newCursor ? prev : newCursor));
+                        props.onChange?.(e);
+                    }}
+                    onFocus={(e) => {
+                        updateCursor();
+                        setTextInputFocused(true); // Segregated undo: let browser handle text undo
+                        props.onFocus?.(e);
+                    }}
+                    onBlur={(e) => {
+                        // Segregated undo: restore global undo handling
+                        setTextInputFocused(false);
+                        // Close dropdown after delay to allow clicking on dropdown items
+                        // We use a longer delay and only close if user truly left the component
+                        setTimeout(() => {
+                            // Only close if focus is truly outside (not on dropdown buttons either)
+                            const active = document.activeElement;
+                            if (active !== textareaRef.current) {
+                                setIsOpen(false);
+                            }
+                        }, 300);
+                        props.onBlur?.(e);
+                    }}
+                    onClick={(e) => {
+                        updateCursor();
+                        props.onClick?.(e);
+                    }}
+                    onKeyUp={(e) => {
+                        updateCursor();
+                        props.onKeyUp?.(e);
+                    }}
+                    onSelect={(e) => {
+                        updateCursor();
+                        props.onSelect?.(e);
+                    }}
+                    onScroll={handleScroll}
+                    className={cn(
+                        "text-xs font-mono transition-all min-h-[150px] relative z-10",
+                        isActive && "ring-2 ring-blue-400 border-blue-400",
+                        highlightSnippets ? "bg-transparent focus:bg-transparent" : "",
+                        highlightSnippets && isActive && "bg-blue-50/10", // slight tint if active but transparent
+                        className,
+                        // Ensure padding matches overlay
+                        !className?.includes("p-") && "p-3"
+                    )}
+                    onKeyDown={handleKeyDown}
+                />
+            </div>
 
             {autocompleteEnabled && showDropdown && textareaRef.current && dropdownRect && createPortal(
                 <div
