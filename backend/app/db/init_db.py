@@ -72,4 +72,28 @@ def init_db():
             session.add(drafts_project)
             session.commit()
             print("Seeded drafts project.")
+        
+        # Seed default starter pipes if empty
+        if not session.exec(select(WorkflowTemplate)).first():
+            from app.db.default_workflows import DEFAULT_T2I_WORKFLOW, DEFAULT_I2I_WORKFLOW
+            
+            t2i_pipe = WorkflowTemplate(
+                name="sts_t2i_basic",
+                description="basic text-to-image starter pipe",
+                graph_json=DEFAULT_T2I_WORKFLOW["graph"],
+                input_schema=DEFAULT_T2I_WORKFLOW["input_schema"],
+                node_mapping=DEFAULT_T2I_WORKFLOW.get("node_mapping")
+            )
+            i2i_pipe = WorkflowTemplate(
+                name="sts_i2i_basic",
+                description="basic image-to-image starter pipe",
+                graph_json=DEFAULT_I2I_WORKFLOW["graph"],
+                input_schema=DEFAULT_I2I_WORKFLOW["input_schema"],
+                node_mapping=DEFAULT_I2I_WORKFLOW.get("node_mapping")
+            )
+            
+            session.add(t2i_pipe)
+            session.add(i2i_pipe)
+            session.commit()
+            print("Seeded default starter pipes (sts_t2i_basic, sts_i2i_basic).")
 
