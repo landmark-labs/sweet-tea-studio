@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { UndoRedoBar } from "@/components/UndoRedoBar";
 import { ConnectionIndicator } from "@/components/ConnectionIndicator";
+import { LemonBadge } from "@/components/icons/LemonBadge";
 import { labels } from "@/ui/labels";
 import { api } from "@/lib/api";
 
@@ -75,20 +76,23 @@ export default function Layout() {
       {/* Sidebar */}
       <aside
         className={cn(
-          "border-r border-border/70 bg-surface/95 backdrop-blur flex flex-col transition-all duration-300 shadow-sm",
+          "border-r border-border/70 bg-blue-50/80 backdrop-blur flex flex-col transition-all duration-300 shadow-sm",
           collapsed ? "w-16" : "w-56"
         )}
       >
         <div className={cn("p-4 border-b border-border/70 flex items-center", collapsed ? "justify-center" : "justify-between")}>
           {!collapsed && (
             <div>
-              <div className="flex items-baseline gap-2">
-                <h1 className="text-xl font-semibold bg-gradient-to-r from-primary via-secondary to-accent bg-clip-text text-transparent whitespace-nowrap">
+              <h1 className="flex items-baseline gap-1 text-xl font-semibold leading-none whitespace-nowrap">
+                <span className="bg-gradient-to-r from-primary via-secondary to-accent bg-clip-text text-transparent">
                   sweet tea
-                </h1>
-                <span className="rounded-full bg-primary/10 text-primary px-2 py-0.5 text-xs font-medium">studio</span>
-              </div>
-              <p className="text-xs text-muted-foreground whitespace-nowrap">a creative workspace</p>
+                </span>
+                <span className="relative inline-flex items-center justify-center text-foreground ml-0 -mt-[15px]">
+                  <LemonBadge className="absolute h-[64px] w-[102px] left-1/2 top-1/2 -translate-y-1/2 -translate-x-[calc(50%+8px)]" />
+                  <span className="relative z-10 text-sm font-semibold px-2">studio</span>
+                </span>
+              </h1>
+              <p className="text-[10px] text-muted-foreground whitespace-nowrap">a creative workspace</p>
             </div>
           )}
           <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full" onClick={() => setCollapsed(!collapsed)}>
@@ -149,7 +153,7 @@ export default function Layout() {
       {/* Main Content */}
       <main className="flex-1 overflow-auto bg-gradient-to-b from-surface/50 to-background">
         <div className="w-full h-full flex flex-col">
-          <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-3 flex-none border-b border-border/50 bg-surface/50">
+          <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-3 flex-none border-b border-border/50 bg-blue-50/80">
             {/* Left: Connection Indicator + ComfyUI Control */}
             <div className="flex items-center gap-3">
               <ConnectionIndicator />
