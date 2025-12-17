@@ -171,6 +171,7 @@ class ComfyClient:
         image_counter = 0
         preview_counter = 0
         execution_complete = False  # Track when node execution finishes
+        self._last_preview_time = 0
 
         try:
             while True:
@@ -249,6 +250,13 @@ class ComfyClient:
                     
                     if event_type == 1:  # PREVIEW_IMAGE
                         print(f"[ComfyClient] Received PREVIEW_IMAGE (Event 1). Length: {len(image_data)} bytes")
+                        # Throttle previews to avoid overwhelming the WebSocket (max 10 FPS)
+                        # Always process if execution is complete (to ensure we capture the final result)
+                        current_time = time.time()
+                        if not execution_complete and (current_time - self._last_preview_time < 0.1):
+                            continue
+                        self._last_preview_time = current_time
+
                         # Convert to base64 for frontend preview
                         b64_img = base64.b64encode(image_data).decode('utf-8')
                         prefix = "data:image/jpeg;base64," if image_format == 1 else "data:image/png;base64,"
