@@ -324,33 +324,70 @@ class ComfyClient:
         if captured_images:
             print(f"Using {len(captured_images)} images captured from WebSocket stream")
             return captured_images
-        
-        # Fallback: Use the last preview image(s) as output when no SaveImage node exists
-        # This handles workflows using only PreviewImage nodes
+
+        def _history_output_images() -> List[Dict[str, Any]]:
+            try:
+                history_map = self.get_history(prompt_id)
+                history = history_map.get(prompt_id) if isinstance(history_map, dict) else None
+                if not history and isinstance(history_map, dict) and prompt_id in history_map:
+                    history = history_map[prompt_id]
+            except Exception:
+                return []
+
+            if not isinstance(history, dict):
+                return []
+
+            outputs = history.get("outputs") or {}
+            if not isinstance(outputs, dict):
+                return []
+
+            output_images: List[Dict[str, Any]] = []
+            for node_output in outputs.values():
+                if not isinstance(node_output, dict):
+                    continue
+                images = node_output.get("images") or []
+                if not isinstance(images, list):
+                    continue
+                for image in images:
+                    if not isinstance(image, dict):
+                        continue
+                    filename = image.get("filename")
+                    if not filename:
+                        continue
+                    subfolder = image.get("subfolder") or ""
+                    image_type = image.get("type") or "output"
+                    img = dict(image)
+                    img["url"] = self._get_url(
+                        f"/view?filename={urllib.parse.quote(str(filename))}"
+                        f"&subfolder={urllib.parse.quote(str(subfolder))}"
+                        f"&type={urllib.parse.quote(str(image_type))}"
+                    )
+                    output_images.append(img)
+            return output_images
+
+        # Prefer history outputs whenever possible so we preserve the true ComfyUI
+        # filenames (including `type=temp` previews stored under ComfyUI/temp).
+        # History can lag slightly behind the websocket completion signal, so retry briefly.
+        for _attempt in range(5):
+            output_images = _history_output_images()
+            if output_images:
+                return output_images
+            time.sleep(0.2)
+
+        # Fallback: Use the last preview image(s) as output when no history images exist.
+        # This handles workflows using only PreviewImage nodes even if ComfyUI doesn't persist temp files.
         if preview_images:
-            print(f"No SaveImage node detected. Using {len(preview_images)} preview image(s) as final output")
-            # Use the last preview as the final image (it's the completed generation)
+            print(f"No history images detected. Using {len(preview_images)} preview image(s) as final output")
             last_preview = preview_images[-1]
-            return [{
-                "filename": f"gen_{prompt_id[:8]}_{1:03d}.{last_preview['format']}",
-                "subfolder": "",
-                "type": "output",
-                "image_bytes": last_preview["image_bytes"],
-                "format": last_preview["format"],
-                "source": "preview_fallback"
-            }]
+            return [
+                {
+                    "filename": f"gen_{prompt_id[:8]}_{1:03d}.{last_preview['format']}",
+                    "subfolder": "",
+                    "type": "output",
+                    "image_bytes": last_preview["image_bytes"],
+                    "format": last_preview["format"],
+                    "source": "preview_fallback",
+                }
+            ]
 
-        # Fallback: Fetch from history API (traditional SaveImage node)
-        history = self.get_history(prompt_id)[prompt_id]
-        output_images = []
-
-        for node_id in history['outputs']:
-            node_output = history['outputs'][node_id]
-            if 'images' in node_output:
-                for image in node_output['images']:
-                    # Construct full URL or path
-                    image['url'] = self._get_url(f"/view?filename={image['filename']}&subfolder={image['subfolder']}&type={image['type']}")
-                    output_images.append(image)
-
-        return output_images
-
+        return []

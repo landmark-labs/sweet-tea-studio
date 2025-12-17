@@ -110,10 +110,12 @@ def _process_single_image(
     idx: int,
     save_dir: str,
     filename: str,
-    provenance_data: dict,
+    provenance_json: str,
+    xp_comment_bytes: bytes,
     engine_output_dir: str | None,
-    project_name: str | None = None,
-    folder_name: str | None = None
+    engine_root_dir: str | None,
+    xp_title_bytes: bytes | None = None,
+    xp_subject_bytes: bytes | None = None,
 ) -> tuple[str, str, int] | None:
     """
     Process a single image: download, convert PNG->JPG, save, embed metadata.
@@ -134,29 +136,43 @@ def _process_single_image(
     if 'image_bytes' in img_data:
         image_bytes = img_data['image_bytes']
     else:
-        img_url = img_data.get('url')
-        if img_url:
-            try:
-                with urllib.request.urlopen(img_url, timeout=30) as response:
-                    image_bytes = response.read()
-            except Exception as e:
-                print(f"Failed to download image from {img_url}: {e}")
-                # Fallback to filesystem
-                if engine_output_dir:
-                    subfolder = img_data.get('subfolder', '')
-                    orig_filename = img_data.get('filename', filename)
-                    src_path = os.path.join(engine_output_dir, subfolder, orig_filename) if subfolder else os.path.join(engine_output_dir, orig_filename)
-                    if os.path.exists(src_path):
-                        with open(src_path, 'rb') as f:
-                            image_bytes = f.read()
+        # Prefer local filesystem reads (ComfyUI usually runs on the same machine/container).
+        orig_filename = img_data.get('filename', filename)
+        subfolder = img_data.get('subfolder', '')
+        img_type = img_data.get('type')  # e.g. "output", "temp"
+
+        base_dir = None
+        if engine_root_dir and img_type:
+            candidate = os.path.join(engine_root_dir, str(img_type))
+            if os.path.isdir(candidate):
+                base_dir = candidate
+        if not base_dir and engine_output_dir:
+            base_dir = engine_output_dir
+
+        if base_dir:
+            src_path = os.path.join(base_dir, subfolder, orig_filename) if subfolder else os.path.join(base_dir, orig_filename)
+            if os.path.exists(src_path):
+                try:
+                    with open(src_path, 'rb') as f:
+                        image_bytes = f.read()
+                except Exception:
+                    image_bytes = None
+
+        # Fall back to HTTP fetch (remote ComfyUI or unknown paths).
+        if not image_bytes:
+            img_url = img_data.get('url')
+            if img_url:
+                try:
+                    with urllib.request.urlopen(img_url, timeout=30) as response:
+                        image_bytes = response.read()
+                except Exception as e:
+                    print(f"Failed to download image from {img_url}: {e}")
     
     if not image_bytes:
         return None
 
-    os.makedirs(save_dir, exist_ok=True)
     final_filename = filename
     full_path = os.path.join(save_dir, final_filename)
-    provenance_json = json.dumps(provenance_data, ensure_ascii=False)
 
     # Process and save (single write path)
     if pil_available:
@@ -187,17 +203,14 @@ def _process_single_image(
                     exif_dict = {"0th": {}, "Exif": {}, "GPS": {}, "1st": {}}
 
                     # XPTitle (0x9C9B) - Project name
-                    if project_name:
-                        title_bytes = project_name.encode("utf-16le") + b"\x00\x00"
-                        exif_dict["0th"][0x9C9B] = title_bytes
+                    if xp_title_bytes:
+                        exif_dict["0th"][0x9C9B] = xp_title_bytes
 
                     # XPSubject (0x9C9F) - Destination folder
-                    if folder_name:
-                        subject_bytes = folder_name.encode("utf-16le") + b"\x00\x00"
-                        exif_dict["0th"][0x9C9F] = subject_bytes
+                    if xp_subject_bytes:
+                        exif_dict["0th"][0x9C9F] = xp_subject_bytes
 
                     # XPComment (0x9C9C) - Full generation params
-                    xp_comment_bytes = provenance_json.encode("utf-16le") + b"\x00\x00"
                     exif_dict["0th"][0x9C9C] = xp_comment_bytes
 
                     exif_bytes = piexif.dump(exif_dict)
@@ -207,15 +220,15 @@ def _process_single_image(
                         exif_data = image.getexif()
 
                         # XPTitle (0x9C9B) - Project name
-                        if project_name:
-                            exif_data[0x9C9B] = project_name.encode("utf-16le") + b"\x00\x00"
+                        if xp_title_bytes:
+                            exif_data[0x9C9B] = xp_title_bytes
 
                         # XPSubject (0x9C9F) - Destination folder
-                        if folder_name:
-                            exif_data[0x9C9F] = folder_name.encode("utf-16le") + b"\x00\x00"
+                        if xp_subject_bytes:
+                            exif_data[0x9C9F] = xp_subject_bytes
 
                         # XPComment (0x9C9C) - Full generation params
-                        exif_data[0x9C9C] = provenance_json.encode("utf-16le") + b"\x00\x00"
+                        exif_data[0x9C9C] = xp_comment_bytes
 
                         exif_bytes = exif_data.tobytes()
                     except Exception as pillow_exif_err:
@@ -510,6 +523,19 @@ def process_job(job_id: int):
                 "timestamp": datetime.utcnow().isoformat(),
                 "params": {k: v for k, v in working_params.items() if k != "metadata" and not k.startswith("__")}
             }
+
+            # Precompute serialized metadata once (shared across all images) to avoid
+            # repeating JSON serialization + UTF-16 encoding in every worker thread.
+            provenance_json = json.dumps(provenance_data, ensure_ascii=False)
+            xp_comment_bytes = provenance_json.encode("utf-16le") + b"\x00\x00"
+
+            xp_title_bytes: bytes | None = None
+            if 'project' in locals() and project and project.name:
+                xp_title_bytes = project.name.encode("utf-16le") + b"\x00\x00"
+
+            xp_subject_bytes: bytes | None = None
+            if folder_name:
+                xp_subject_bytes = str(folder_name).encode("utf-16le") + b"\x00\x00"
             
             # Determine save_dir once
             if target_output_dir:
@@ -518,6 +544,19 @@ def process_job(job_id: int):
                 save_dir = engine.output_dir
             else:
                 raise ComfyResponseError("No output directory configured.")
+
+            # Best-effort ComfyUI root dir (so we can read `type=temp` previews from /ComfyUI/temp).
+            engine_root_dir: str | None = None
+            try:
+                base_path = None
+                if engine.output_dir:
+                    base_path = Path(engine.output_dir)
+                elif engine.input_dir:
+                    base_path = Path(engine.input_dir)
+                if base_path:
+                    engine_root_dir = str(base_path.parent if base_path.name in ("output", "input") else base_path)
+            except Exception:
+                engine_root_dir = None
             
             # Prepare tasks for parallel processing
             image_tasks = []
@@ -525,20 +564,40 @@ def process_job(job_id: int):
                 seq_num = next_seq + idx
                 original_ext = img_data['filename'].rsplit('.', 1)[-1].lower() if '.' in img_data['filename'] else 'jpg'
                 filename = f"{filename_prefix}-{seq_num:04d}.{original_ext}"
-                image_tasks.append((
-                    img_data, 
-                    idx, 
-                    save_dir, 
-                    filename, 
-                    provenance_data, 
-                    engine.output_dir,
-                    project.name if 'project' in locals() and project else None,
-                    folder_name
-                ))
-            
+                image_tasks.append(
+                    (
+                        img_data,
+                        idx,
+                        save_dir,
+                        filename,
+                        provenance_json,
+                        xp_comment_bytes,
+                        engine.output_dir,
+                        engine_root_dir,
+                        xp_title_bytes,
+                        xp_subject_bytes,
+                    )
+                )
+             
             # Process images in parallel using ThreadPoolExecutor
             processed_results = []
-            with ThreadPoolExecutor(max_workers=min(4, len(image_tasks) or 1)) as executor:
+
+            os.makedirs(save_dir, exist_ok=True)
+
+            configured_workers_raw = os.getenv("SWEET_TEA_POSTPROCESS_WORKERS", "").strip()
+            configured_workers = None
+            if configured_workers_raw:
+                try:
+                    configured_workers = int(configured_workers_raw)
+                except ValueError:
+                    configured_workers = None
+
+            cpu_workers = os.cpu_count() or 4
+            default_workers = min(32, cpu_workers)
+            max_workers = configured_workers if configured_workers and configured_workers > 0 else default_workers
+            max_workers = max(1, min(max_workers, len(image_tasks) or 1))
+
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 futures = {
                     executor.submit(_process_single_image, *task): task[1]  # task[1] = idx
                     for task in image_tasks
@@ -587,11 +646,12 @@ def process_job(job_id: int):
             
             # Create database records for each successfully processed image
             for full_path, final_filename, idx in processed_results:
+                image_format = os.path.splitext(final_filename)[1].lstrip(".").lower() or "png"
                 new_image = Image(
                     job_id=job_id,
                     path=full_path,
                     filename=final_filename,
-                    format="png",
+                    format=image_format,
                     extra_metadata=image_metadata,
                     is_kept=False
                 )
