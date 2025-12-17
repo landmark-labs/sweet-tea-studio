@@ -76,7 +76,7 @@ export default function Layout() {
       <aside
         className={cn(
           "border-r border-border/70 bg-surface/95 backdrop-blur flex flex-col transition-all duration-300 shadow-sm",
-          collapsed ? "w-16" : "w-72"
+          collapsed ? "w-16" : "w-56"
         )}
       >
         <div className={cn("p-4 border-b border-border/70 flex items-center", collapsed ? "justify-center" : "justify-between")}>
