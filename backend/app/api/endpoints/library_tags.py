@@ -593,6 +593,7 @@ def fetch_all_rule34_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int = 1
                 timeout=15.0,
                 headers={"User-Agent": "sweet-tea-studio/0.1 (preload)"},
                 base_url=f"https://{hostname}",
+                follow_redirects=True,
             ) as client:
                 while len(collected) < max_tags:
                     try:
@@ -654,6 +655,65 @@ def fetch_all_rule34_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int = 1
     data = _attempt(use_doh=True)
     if not data:
         data = _attempt(use_doh=False)
+
+    # If DAPI fails (common for some mirrors), fall back to autocomplete harvesting
+    if not data:
+        logger.warning("[TagSync] Rule34 DAPI returned no data, falling back to autocomplete harvesting")
+        
+        prefixes = [
+            "1", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m",
+            "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z",
+            "bl", "br", "gr", "lo", "ni", "se", "so", "th"
+        ]
+        
+        def _autocomplete(use_doh: bool) -> List[TagSuggestion]:
+            collected: List[TagSuggestion] = []
+            seen = set()
+            dns_ctx = doh_override_dns(hostname) if use_doh else nullcontext(False)
+            with dns_ctx:
+                with httpx.Client(
+                    timeout=10.0,
+                    headers={"User-Agent": "sweet-tea-studio/0.1 (preload)"},
+                    base_url=f"https://{hostname}",
+                    follow_redirects=True,
+                ) as client:
+                    for prefix in prefixes:
+                        if len(collected) >= max_tags:
+                            break
+                        try:
+                            res = client.get("/autocomplete.php", params={"q": prefix})
+                            res.raise_for_status()
+                            data = res.json()
+                            for item in data:
+                                name = item.get("value", "").strip().lower()
+                                if not name or name in seen:
+                                    continue
+                                seen.add(name)
+                                label = item.get("label", "")
+                                count = 0
+                                if "(" in label and ")" in label:
+                                    try:
+                                        count_str = label.split("(")[-1].rstrip(")")
+                                        count = int(count_str)
+                                    except ValueError:
+                                        pass
+                                collected.append(
+                                    TagSuggestion(
+                                        name=name,
+                                        source="rule34",
+                                        frequency=count,
+                                        description=None,
+                                    )
+                                )
+                        except Exception as e:
+                            logger.warning(f"[TagSync] Rule34 autocomplete failed for prefix '{prefix}' (doh={use_doh}): {e}")
+                            continue
+            return collected
+        
+        data = _autocomplete(use_doh=True)
+        if not data:
+            data = _autocomplete(use_doh=False)
+
     return data[:max_tags]
 
 # --- Background Workers ---
