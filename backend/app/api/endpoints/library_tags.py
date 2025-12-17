@@ -75,7 +75,8 @@ def resolve_via_doh(hostname: str) -> Optional[str]:
 def create_doh_client(hostname: str, timeout: float = 10.0) -> httpx.Client:
     """
     Create an httpx client that connects to a hostname via DoH-resolved IP.
-    This is primarily used as a fallback when normal DNS fails.
+    Vast.ai often MITMs DNS, so DoH is required there; we still fall back to
+    normal DNS if DoH resolution fails.
     """
     ip = resolve_via_doh(hostname)
     if not ip:
@@ -96,6 +97,30 @@ def create_doh_client(hostname: str, timeout: float = 10.0) -> httpx.Client:
         base_url=f"https://{ip}",
         verify=False,  # Required when connecting via IP with different Host header
     )
+
+
+def build_tag_clients(hostname: str, timeout: float = 10.0, prefer_doh: bool = True):
+    """
+    Return (primary_client, fallback_client, used_primary_is_doh).
+    When prefer_doh=True (default), the primary uses DoH/IP to survive poisoned DNS,
+    and the fallback uses normal DNS. Otherwise the order is reversed.
+    """
+    if prefer_doh:
+        primary = create_doh_client(hostname, timeout=timeout)
+        fallback = httpx.Client(
+            timeout=timeout,
+            headers={"User-Agent": "sweet-tea-studio/0.1 (preload)"},
+            base_url=f"https://{hostname}",
+        )
+        return primary, fallback, True
+    # prefer normal DNS first
+    primary = httpx.Client(
+        timeout=timeout,
+        headers={"User-Agent": "sweet-tea-studio/0.1 (preload)"},
+        base_url=f"https://{hostname}",
+    )
+    fallback = create_doh_client(hostname, timeout=timeout)
+    return primary, fallback, False
 
 
 def load_fallback_tags() -> List["TagSuggestion"]:
@@ -333,13 +358,8 @@ def fetch_all_danbooru_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int =
     page = 1
     hostname = "danbooru.donmai.us"
     
-    # Prefer normal DNS first; fall back to DoH-resolved IP only if needed
-    primary_client = httpx.Client(
-        timeout=10.0,
-        headers={"User-Agent": "sweet-tea-studio/0.1 (preload)"},
-        base_url=f"https://{hostname}",
-    )
-    fallback_client: Optional[httpx.Client] = None
+    # Vast.ai often needs DoH first; still keep a fallback to normal DNS
+    primary_client, fallback_client, primary_is_doh = build_tag_clients(hostname, timeout=10.0, prefer_doh=True)
     client = primary_client
     used_fallback = False
 
@@ -357,9 +377,11 @@ def fetch_all_danbooru_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int =
                 res.raise_for_status()
                 data = res.json()
             except Exception as e:
-                if not used_fallback:
-                    logger.warning(f"[TagSync] Danbooru primary fetch failed (page {page}), retrying with DoH fallback: {e}")
-                    fallback_client = create_doh_client(hostname, timeout=10.0)
+                if not used_fallback and fallback_client:
+                    logger.warning(
+                        f"[TagSync] Danbooru primary fetch failed (page {page}, doh={primary_is_doh}); "
+                        f"retrying with fallback: {e}"
+                    )
                     client = fallback_client
                     used_fallback = True
                     continue
@@ -428,13 +450,8 @@ def fetch_all_e621_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int = TAG
     page = 1
     hostname = "e621.net"
     
-    # Prefer normal DNS first; fall back to DoH-resolved IP only if needed
-    primary_client = httpx.Client(
-        timeout=10.0,
-        headers={"User-Agent": "sweet-tea-studio/0.1 (preload)"},
-        base_url=f"https://{hostname}",
-    )
-    fallback_client: Optional[httpx.Client] = None
+    # Vast.ai often needs DoH first; still keep a fallback to normal DNS
+    primary_client, fallback_client, primary_is_doh = build_tag_clients(hostname, timeout=10.0, prefer_doh=True)
     client = primary_client
     used_fallback = False
 
@@ -452,9 +469,11 @@ def fetch_all_e621_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int = TAG
                 res.raise_for_status()
                 data = res.json()
             except Exception as e:
-                if not used_fallback:
-                    logger.warning(f"[TagSync] e621 primary fetch failed (page {page}), retrying with DoH fallback: {e}")
-                    fallback_client = create_doh_client(hostname, timeout=10.0)
+                if not used_fallback and fallback_client:
+                    logger.warning(
+                        f"[TagSync] e621 primary fetch failed (page {page}, doh={primary_is_doh}); "
+                        f"retrying with fallback: {e}"
+                    )
                     client = fallback_client
                     used_fallback = True
                     continue
@@ -542,13 +561,8 @@ def fetch_all_rule34_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int = 1
     
     hostname = "api.rule34.xxx"
     
-    # Prefer normal DNS first; fall back to DoH-resolved IP only if needed
-    primary_client = httpx.Client(
-        timeout=10.0,
-        headers={"User-Agent": "sweet-tea-studio/0.1 (preload)"},
-        base_url=f"https://{hostname}",
-    )
-    fallback_client: Optional[httpx.Client] = None
+    # Vast.ai often needs DoH first; still keep a fallback to normal DNS
+    primary_client, fallback_client, primary_is_doh = build_tag_clients(hostname, timeout=10.0, prefer_doh=True)
     client = primary_client
     used_fallback = False
     
@@ -586,9 +600,11 @@ def fetch_all_rule34_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int = 1
                             )
                         )
             except Exception as e:
-                if not used_fallback:
-                    logger.warning(f"[TagSync] Rule34 primary fetch failed (prefix '{prefix}'), retrying with DoH fallback: {e}")
-                    fallback_client = create_doh_client(hostname, timeout=10.0)
+                if not used_fallback and fallback_client:
+                    logger.warning(
+                        f"[TagSync] Rule34 primary fetch failed (prefix '{prefix}', doh={primary_is_doh}); "
+                        f"retrying with fallback: {e}"
+                    )
                     client = fallback_client
                     used_fallback = True
                     # retry this prefix immediately with fallback client
