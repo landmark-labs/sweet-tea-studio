@@ -537,15 +537,29 @@ export default function PromptStudio() {
     const loadParams: GalleryItem = {
       ...(galleryItem || {} as GalleryItem),
       image: safeImage,
-      prompt: galleryItem?.prompt || (galleryItem?.job_params as any)?.prompt,
-      negative_prompt: galleryItem?.negative_prompt || (galleryItem?.job_params as any)?.negative_prompt,
+      prompt: galleryItem?.prompt
+        || (galleryItem?.job_params as any)?.prompt
+        || (galleryItem?.job_params as any)?.positive
+        || (galleryItem?.job_params as any)?.text_positive,
+      negative_prompt: galleryItem?.negative_prompt
+        || (galleryItem?.job_params as any)?.negative_prompt
+        || (galleryItem?.job_params as any)?.negative
+        || (galleryItem?.job_params as any)?.text_negative,
       workflow_template_id: parseInt(workflowId, 10),
       job_params: {
         ...(galleryItem?.job_params || {}),
-        prompt: galleryItem?.prompt || (galleryItem?.job_params as any)?.prompt,
-        positive: galleryItem?.prompt || (galleryItem?.job_params as any)?.positive,
-        negative: galleryItem?.negative_prompt || (galleryItem?.job_params as any)?.negative,
-        negative_prompt: galleryItem?.negative_prompt || (galleryItem?.job_params as any)?.negative_prompt,
+        prompt: galleryItem?.prompt
+          || (galleryItem?.job_params as any)?.prompt
+          || (galleryItem?.job_params as any)?.positive,
+        positive: galleryItem?.prompt
+          || (galleryItem?.job_params as any)?.positive
+          || (galleryItem?.job_params as any)?.text_positive,
+        negative: galleryItem?.negative_prompt
+          || (galleryItem?.job_params as any)?.negative
+          || (galleryItem?.job_params as any)?.text_negative,
+        negative_prompt: galleryItem?.negative_prompt
+          || (galleryItem?.job_params as any)?.negative_prompt
+          || (galleryItem?.job_params as any)?.negative,
       }
     };
 

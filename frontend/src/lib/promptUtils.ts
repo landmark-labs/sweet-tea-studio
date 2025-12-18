@@ -32,9 +32,11 @@ export function extractPrompts(params: Record<string, unknown> | null | undefine
         return result;
     }
 
-    const entries = Object.entries(params);
+    const entries = Object.entries(params).filter(([_, v]) => v !== undefined && v !== null);
 
     // Pass 1: Look for explicit positive/negative keys
+    const positiveKeys = ["positive", "prompt", "text_positive", "text_g", "clip_l", "active_positive"];
+    const negativeKeys = ["negative", "text_negative", "negative_prompt", "clip_l_negative", "active_negative"];
     for (const [key, value] of entries) {
         if (typeof value !== "string" || !value.trim()) continue;
 
@@ -42,11 +44,7 @@ export function extractPrompts(params: Record<string, unknown> | null | undefine
 
         // Positive matches
         if (
-            lowerKey === "positive" ||
-            lowerKey === "prompt" ||
-            lowerKey === "text_positive" ||
-            lowerKey === "text_g" ||
-            lowerKey === "clip_l" ||
+            positiveKeys.includes(lowerKey) ||
             (lowerKey.includes("positive") && !lowerKey.includes("negative"))
         ) {
             if (!result.positive || value.length > result.positive.length) {
@@ -57,10 +55,7 @@ export function extractPrompts(params: Record<string, unknown> | null | undefine
 
         // Negative matches
         if (
-            lowerKey === "negative" ||
-            lowerKey === "text_negative" ||
-            lowerKey === "negative_prompt" ||
-            lowerKey === "clip_l_negative" ||
+            negativeKeys.includes(lowerKey) ||
             (lowerKey.includes("negative") && !lowerKey.includes("positive"))
         ) {
             if (!result.negative || value.length > result.negative.length) {
