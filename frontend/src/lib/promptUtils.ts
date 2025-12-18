@@ -180,6 +180,32 @@ export function findPromptFieldsInSchema(
         negativeField = clipTextFields[1].key;
     }
 
+    // Fallback: scan all text/textarea fields for keyword matches
+    if (!positiveField || !negativeField) {
+        for (const [key, field] of Object.entries(schema)) {
+            if (key.startsWith("__")) continue;
+            const widget = (field as any)?.widget;
+            const type = (field as any)?.type;
+            const isText =
+                widget === "textarea" ||
+                widget === "text" ||
+                type === "STRING" ||
+                type === "string";
+            if (!isText) continue;
+
+            const label = `${(field as any)?.title || ""} ${key}`.toLowerCase();
+
+            if (!positiveField && /(positive|pos)[ _-]?(prompt|text)?/.test(label)) {
+                positiveField = key;
+            }
+            if (!negativeField && /(negative|neg)[ _-]?(prompt|text)?/.test(label)) {
+                negativeField = key;
+            }
+
+            if (positiveField && negativeField) break;
+        }
+    }
+
     return { positiveField, negativeField };
 }
 

@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useMemo } from "react";
 import { addProgressEntry, calculateProgressStats, mapStatusToGenerationState, type GenerationState, type ProgressHistoryEntry } from "@/lib/generationState";
 import { useLocation, useNavigate, useOutletContext } from "react-router-dom";
-import { api, Engine, WorkflowTemplate, GalleryItem, EngineHealth, Project } from "@/lib/api";
+import { api, Engine, WorkflowTemplate, GalleryItem, EngineHealth, Project, Image as ApiImage } from "@/lib/api";
 import { extractPrompts, findPromptFieldsInSchema, findImageFieldsInSchema } from "@/lib/promptUtils";
 import { DynamicForm } from "@/components/DynamicForm";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -508,6 +508,42 @@ export default function PromptStudio() {
   const handlePromptUpdateMany = (updates: Record<string, string>) => {
     if (!updates || Object.keys(updates).length === 0) return;
     handleFormChange({ ...formData, ...updates });
+  };
+
+  const handleUseInPipe = ({ workflowId, imagePath, galleryItem }: { workflowId: string; imagePath: string; galleryItem: GalleryItem }) => {
+    // Choose the workflow
+    setSelectedWorkflowId(workflowId);
+
+    const safeImage: ApiImage = {
+      id: galleryItem?.image?.id ?? -1,
+      job_id: galleryItem?.image?.job_id ?? null,
+      path: imagePath,
+      filename: galleryItem?.image?.filename || imagePath.split(/[\\/]/).pop() || "image.png",
+      created_at: galleryItem?.image?.created_at || new Date().toISOString(),
+    };
+
+    const loadParams: GalleryItem = {
+      ...(galleryItem || {} as GalleryItem),
+      image: safeImage,
+      prompt: galleryItem?.prompt || galleryItem?.job_params?.prompt,
+      negative_prompt: galleryItem?.negative_prompt || galleryItem?.job_params?.negative_prompt,
+      workflow_template_id: parseInt(workflowId, 10),
+    };
+
+    // Preview immediately
+    setPreviewPath(`/api/v1/gallery/image/path?path=${encodeURIComponent(imagePath)}`);
+    setPreviewMetadata({
+      prompt: loadParams.prompt || loadParams.job_params?.prompt,
+      negative_prompt: loadParams.negative_prompt || loadParams.job_params?.negative_prompt,
+      caption: loadParams.caption,
+      created_at: loadParams.created_at,
+    });
+
+    if (loadParams.project_id !== undefined) {
+      setSelectedProjectId(loadParams.project_id ? String(loadParams.project_id) : null);
+    }
+
+    setPendingLoadParams(loadParams);
   };
 
 
@@ -1460,6 +1496,7 @@ export default function PromptStudio() {
             selectedImagePath={previewPath || undefined}
             workflows={workflows}
             onSelectWorkflow={handleWorkflowSelect}
+            onUseInPipe={handleUseInPipe}
             onImageUpdate={(updatedCalc) => {
               setGalleryImages(prev => prev.map(item =>
                 item.image.id === updatedCalc.id ? { ...item, image: updatedCalc } : item

@@ -12,6 +12,7 @@ interface ImageViewerProps {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     workflows?: any[];
     onSelectWorkflow?: (workflowId: string, imagePath?: string) => void;
+    onUseInPipe?: (payload: { workflowId: string; imagePath: string; galleryItem: GalleryItem }) => void;
     onImageUpdate?: (image: ApiImage) => void;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     onRegenerate?: (item: any) => void;
@@ -25,6 +26,7 @@ export function ImageViewer({
     metadata,
     workflows = [],
     onSelectWorkflow,
+    onUseInPipe,
     onImageUpdate,
     onRegenerate,
     onDelete,
@@ -442,8 +444,28 @@ export function ImageViewer({
                                             key={w.id}
                                             className="px-3 py-2 hover:bg-slate-100 cursor-pointer truncate"
                                             onClick={() => {
-                                                onSelectWorkflow?.(String(w.id), imagePath || undefined);
+                                                const item = galleryItems?.find(g => g.image.path === imagePath);
+                                                onUseInPipe?.({
+                                                    workflowId: String(w.id),
+                                                    imagePath: imagePath || "",
+                                                    galleryItem: item || {
+                                                        image: currentImage as any,
+                                                        job_params: metadata || {},
+                                                        prompt: (metadata as any)?.prompt,
+                                                        negative_prompt: (metadata as any)?.negative_prompt,
+                                                        prompt_history: [],
+                                                        workflow_template_id: w.id,
+                                                        created_at: currentImage?.created_at || "",
+                                                        caption: (metadata as any)?.caption,
+                                                        prompt_tags: [],
+                                                        prompt_name: undefined,
+                                                        engine_id: undefined,
+                                                        collection_id: undefined,
+                                                        project_id: undefined,
+                                                    }
+                                                });
                                                 setLightboxOpen(false); // Close lightbox if selecting
+                                                setContextMenu(null);
                                             }}
                                         >
                                             {w.name}
@@ -468,7 +490,30 @@ export function ImageViewer({
                                     </Button>
                                     <div className="absolute left-0 top-full mt-1 hidden group-hover/wf:block bg-white border border-slate-200 rounded-md shadow-lg py-1 w-48 max-h-64 overflow-y-auto z-50">
                                         {imgWorkflows.map(w => (
-                                            <div key={w.id} className="px-3 py-2 hover:bg-slate-100 cursor-pointer truncate text-xs" onClick={() => onSelectWorkflow?.(String(w.id), imagePath || undefined)}>
+                                            <div key={w.id} className="px-3 py-2 hover:bg-slate-100 cursor-pointer truncate text-xs" onClick={() => {
+                                                const item = galleryItems?.find(g => g.image.path === imagePath);
+                                                onUseInPipe?.({
+                                                    workflowId: String(w.id),
+                                                    imagePath: imagePath || "",
+                                                    galleryItem: item || {
+                                                        image: currentImage as any,
+                                                        job_params: metadata || {},
+                                                        prompt: (metadata as any)?.prompt,
+                                                        negative_prompt: (metadata as any)?.negative_prompt,
+                                                        prompt_history: [],
+                                                        workflow_template_id: w.id,
+                                                        created_at: currentImage?.created_at || "",
+                                                        caption: (metadata as any)?.caption,
+                                                        prompt_tags: [],
+                                                        prompt_name: undefined,
+                                                        engine_id: undefined,
+                                                        collection_id: undefined,
+                                                        project_id: undefined,
+                                                    }
+                                                });
+                                                setLightboxOpen?.(false);
+                                                setContextMenu(null);
+                                            }}>
                                                 {w.name}
                                             </div>
                                         ))}
