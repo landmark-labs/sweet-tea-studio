@@ -28,6 +28,10 @@ def init_db():
     from app.db.migrations.add_soft_delete_to_images import migrate as migrate_soft_delete
     migrate_soft_delete()
     
+    # Backfill __node_order for existing workflows
+    from app.db.migrations.backfill_node_order import migrate as migrate_node_order
+    migrate_node_order()
+    
     # Ensure directory structure exists
     settings.ensure_dirs()
     
