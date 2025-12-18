@@ -914,29 +914,36 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
                         collisionDetection={closestCenter}
                         onDragEnd={handleDragEnd}
                     >
+                        {/* Floating Controls pinned to top-right (outside canvas to avoid overlap) */}
+                        {targetField && (
+                            <div className="absolute top-3 right-3 flex gap-2 z-20">
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7 text-green-600 bg-green-50 hover:bg-green-100 hover:text-green-700 border border-green-200 shadow-sm"
+                                    onClick={() => onFinish?.()}
+                                    title="Finish Editing (Deselect)"
+                                >
+                                    <Check size={16} />
+                                </Button>
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7 text-slate-400 hover:text-red-500 hover:bg-red-50 border border-slate-200 shadow-sm"
+                                    onClick={clearCanvas}
+                                    title="Clear Canvas"
+                                >
+                                    <Eraser size={16} />
+                                </Button>
+                            </div>
+                        )}
+
                         <SortableContext
                             items={items.map(i => i.id)}
                             strategy={rectSortingStrategy}
                         >
                             {/* Canvas grid uses 2-column layout to match snippet bank. */}
                             <div className="grid grid-cols-2 auto-rows-[minmax(32px,auto)] items-start gap-2 min-h-[100px] p-2 rounded-xl border-2 border-dashed border-slate-300 bg-white/80 transition-colors hover:bg-white/100 relative group/canvas">
-
-                                {/* Floating Controls */}
-                                {targetField && (
-                                    <div className="absolute top-2 right-2 flex gap-1 z-10 opacity-0 group-hover/canvas:opacity-100 transition-opacity">
-                                        <Button
-                                            variant="ghost" size="icon"
-                                            className="h-6 w-6 text-green-500 bg-green-50 hover:bg-green-100 hover:text-green-600 border border-green-200"
-                                            onClick={() => onFinish?.()}
-                                            title="Finish Editing (Deselect)"
-                                        >
-                                            <Check size={14} />
-                                        </Button>
-                                        <Button variant="ghost" size="icon" className="h-6 w-6 text-slate-300 hover:text-red-500 hover:bg-red-50" onClick={clearCanvas} title="Clear Canvas">
-                                            <Eraser size={14} />
-                                        </Button>
-                                    </div>
-                                )}
 
                                 {items.length === 0 && (
                                     <div className="w-full text-center py-10 text-slate-400 text-sm select-none italic flex flex-col items-center gap-2">
