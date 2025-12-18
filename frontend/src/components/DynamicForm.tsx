@@ -242,7 +242,7 @@ export const DynamicForm = React.memo(function DynamicForm({
                     section: "prompts",
                     groupId: field.x_node_id || "prompt",
                     groupTitle: field.title || "Prompt",
-                    order: nodeOrderPosition ?? parseOrder(field.x_node_id, 0),
+                    order: nodeOrderPosition ?? -1,
                     source: "heuristic",
                     reason: "prompt_textarea"
                 };
