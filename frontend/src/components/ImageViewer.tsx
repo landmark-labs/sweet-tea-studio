@@ -461,12 +461,21 @@ export function ImageViewer({
                                             onClick={() => {
                                                 const rawPath = resolveRawPath(imagePath);
                                                 const item = galleryItems?.find(g => g.image.path === rawPath) || galleryItems?.find(g => g.image.path === imagePath);
+                                                if (metadataLoading && !item) {
+                                                    return;
+                                                }
                                                 onUseInPipe?.({
                                                     workflowId: String(w.id),
                                                     imagePath: rawPath || imagePath || "",
                                                     galleryItem: item || {
                                                         image: currentImage as any,
-                                                        job_params: currentMetadata?.job_params || {},
+                                                        job_params: {
+                                                            ...(currentMetadata?.job_params || {}),
+                                                            prompt: currentMetadata?.prompt,
+                                                            positive: currentMetadata?.prompt,
+                                                            negative_prompt: currentMetadata?.negative_prompt,
+                                                            negative: currentMetadata?.negative_prompt,
+                                                        },
                                                         prompt: currentMetadata?.prompt as string | undefined,
                                                         negative_prompt: currentMetadata?.negative_prompt as string | undefined,
                                                         prompt_history: [],
@@ -507,16 +516,25 @@ export function ImageViewer({
                                     <div className="absolute left-0 top-full mt-1 hidden group-hover/wf:block bg-white border border-slate-200 rounded-md shadow-lg py-1 w-48 max-h-64 overflow-y-auto z-50">
                                         {imgWorkflows.map(w => (
                                             <div key={w.id} className="px-3 py-2 hover:bg-slate-100 cursor-pointer truncate text-xs" onClick={() => {
-                                                const rawPath = resolveRawPath(imagePath);
-                                                const item = galleryItems?.find(g => g.image.path === rawPath) || galleryItems?.find(g => g.image.path === imagePath);
-                                                onUseInPipe?.({
-                                                    workflowId: String(w.id),
-                                                    imagePath: rawPath || imagePath || "",
-                                                    galleryItem: item || {
-                                                        image: currentImage as any,
-                                                        job_params: currentMetadata?.job_params || {},
-                                                        prompt: currentMetadata?.prompt as string | undefined,
-                                                        negative_prompt: currentMetadata?.negative_prompt as string | undefined,
+                                                    const rawPath = resolveRawPath(imagePath);
+                                                    const item = galleryItems?.find(g => g.image.path === rawPath) || galleryItems?.find(g => g.image.path === imagePath);
+                                                    if (metadataLoading && !item) {
+                                                        return;
+                                                    }
+                                                    onUseInPipe?.({
+                                                        workflowId: String(w.id),
+                                                        imagePath: rawPath || imagePath || "",
+                                                        galleryItem: item || {
+                                                            image: currentImage as any,
+                                                            job_params: {
+                                                                ...(currentMetadata?.job_params || {}),
+                                                                prompt: currentMetadata?.prompt,
+                                                                positive: currentMetadata?.prompt,
+                                                                negative_prompt: currentMetadata?.negative_prompt,
+                                                                negative: currentMetadata?.negative_prompt,
+                                                            },
+                                                            prompt: currentMetadata?.prompt as string | undefined,
+                                                            negative_prompt: currentMetadata?.negative_prompt as string | undefined,
                                                         prompt_history: [],
                                                         workflow_template_id: w.id,
                                                         created_at: currentImage?.created_at || "",

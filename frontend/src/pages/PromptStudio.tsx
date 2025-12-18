@@ -618,91 +618,125 @@ export default function PromptStudio() {
   // Effect 2: PROCESS pendingLoadParams once workflows are available
   useEffect(() => {
     if (!pendingLoadParams) return;
-    if (workflows.length === 0) {
-      console.log("[LoadParams] Waiting for workflows to load...");
-      return;
-    }
+    let cancelled = false;
 
-    const loadParams = pendingLoadParams;
-    const targetWorkflowId = loadParams.workflow_template_id
-      ? String(loadParams.workflow_template_id)
-      : selectedWorkflowId;
-
-    const targetWorkflow = workflows.find(w => String(w.id) === targetWorkflowId);
-    if (!targetWorkflow?.input_schema) {
-      console.log("[LoadParams] Target workflow not found or has no schema:", targetWorkflowId);
-      return;
-    }
-
-    console.log("[LoadParams] Processing with workflow:", targetWorkflow.name);
-
-    const schema = targetWorkflow.input_schema;
-
-    // STEP 1: Build defaults from target workflow schema
-    const targetDefaults: Record<string, unknown> = {};
-    Object.entries(schema).forEach(([k, field]: [string, any]) => {
-      if (!k.startsWith("__") && field?.default !== undefined) {
-        targetDefaults[k] = field.default;
+    const processLoadParams = async () => {
+      if (workflows.length === 0) {
+        console.log("[LoadParams] Waiting for workflows to load...");
+        return;
       }
-    });
 
-    // STEP 2: Start with defaults (DO NOT load from localStorage - we want fresh defaults)
-    const baseParams = { ...targetDefaults };
+      const loadParams = pendingLoadParams;
+      const targetWorkflowId = loadParams.workflow_template_id
+        ? String(loadParams.workflow_template_id)
+        : selectedWorkflowId;
 
-    // STEP 3: Extract prompts from source image
-    // First check top-level fields (most reliable source)
-    let positivePrompt = loadParams.prompt;
-    let negativePrompt = loadParams.negative_prompt;
+      const targetWorkflow = workflows.find(w => String(w.id) === targetWorkflowId);
+      if (!targetWorkflow?.input_schema) {
+        console.log("[LoadParams] Target workflow not found or has no schema:", targetWorkflowId);
+        return;
+      }
 
-    // Fallback: extract from job_params if top-level fields are empty
-    if (!positivePrompt || !negativePrompt) {
+      console.log("[LoadParams] Processing with workflow:", targetWorkflow.name);
+
+      const schema = targetWorkflow.input_schema;
+
+      // STEP 1: Build defaults from target workflow schema
+      const targetDefaults: Record<string, unknown> = {};
+      Object.entries(schema).forEach(([k, field]: [string, any]) => {
+        if (!k.startsWith("__") && field?.default !== undefined) {
+          targetDefaults[k] = field.default;
+        }
+      });
+
+      // STEP 2: Merge persisted params (preserve user-tuned settings) then overlay defaults
+      let storedParams: Record<string, unknown> = {};
+      try {
+        const saved = localStorage.getItem(`ds_pipe_params_${targetWorkflowId}`);
+        if (saved) storedParams = JSON.parse(saved);
+      } catch (e) {
+        console.warn("Failed to parse stored params", e);
+      }
+      const baseParams: Record<string, unknown> = { ...targetDefaults, ...storedParams };
+
+      // STEP 3: Extract prompts from source image with multiple fallbacks
+      let positivePrompt =
+        loadParams.prompt ||
+        (loadParams.job_params as any)?.prompt ||
+        (loadParams.job_params as any)?.positive ||
+        null;
+      let negativePrompt =
+        loadParams.negative_prompt ||
+        (loadParams.job_params as any)?.negative_prompt ||
+        (loadParams.job_params as any)?.negative ||
+        null;
+
       const extracted = extractPrompts(loadParams.job_params);
-      if (!positivePrompt) positivePrompt = extracted.positive ?? undefined;
-      if (!negativePrompt) negativePrompt = extracted.negative ?? undefined;
-    }
+      if (!positivePrompt && extracted.positive) positivePrompt = extracted.positive;
+      if (!negativePrompt && extracted.negative) negativePrompt = extracted.negative;
 
-    console.log("[LoadParams] Extracted prompts:", {
-      positive: positivePrompt?.substring(0, 50) + "...",
-      negative: negativePrompt?.substring(0, 50) + "..."
-    });
+      if (!positivePrompt || !negativePrompt) {
+        try {
+          const meta = await api.getImageMetadata(loadParams.image.path);
+          positivePrompt = positivePrompt || (meta as any)?.prompt || null;
+          negativePrompt = negativePrompt || (meta as any)?.negative_prompt || null;
+        } catch (err) {
+          console.warn("Failed to fetch metadata for prompt fallback", err);
+        }
+      }
 
-    // STEP 4: Find prompt fields in target schema and inject
-    const { positiveField, negativeField } = findPromptFieldsInSchema(schema);
-    console.log("[LoadParams] Found prompt fields:", { positiveField, negativeField });
+      console.log("[LoadParams] Extracted prompts:", {
+        positive: positivePrompt ? String(positivePrompt).substring(0, 50) + "..." : "undefined",
+        negative: negativePrompt ? String(negativePrompt).substring(0, 50) + "..." : "undefined"
+      });
 
-    if (positivePrompt && positiveField) {
-      baseParams[positiveField] = positivePrompt;
-    }
-    if (negativePrompt && negativeField) {
-      baseParams[negativeField] = negativePrompt;
-    }
+      if ((!positivePrompt || !negativePrompt) && !cancelled) {
+        setError("Could not extract prompts from the selected image. Please paste prompts manually.");
+      }
 
-    // STEP 5: Find first image field in target schema and set up image injection
-    const imageFields = findImageFieldsInSchema(schema);
-    console.log("[LoadParams] Found image fields:", imageFields);
+      // STEP 4: Find prompt fields in target schema and inject
+      const { positiveField, negativeField } = findPromptFieldsInSchema(schema);
+      console.log("[LoadParams] Found prompt fields:", { positiveField, negativeField });
 
-    if (imageFields.length > 0) {
-      const imagePath = loadParams.image.path;
-      sessionStorage.setItem("ds_pending_image_inject", JSON.stringify({
-        imagePath,
-        imageField: imageFields[0],
-        workflowId: targetWorkflowId
-      }));
-    }
+      if (positivePrompt && positiveField) {
+        baseParams[positiveField] = positivePrompt;
+      }
+      if (negativePrompt && negativeField) {
+        baseParams[negativeField] = negativePrompt;
+      }
 
-    // STEP 6: Persist to localStorage so workflow init effect picks it up
-    try {
-      localStorage.setItem(`ds_pipe_params_${targetWorkflowId}`, JSON.stringify(baseParams));
-    } catch (e) {
-      console.warn("Failed to persist loadParams", e);
-    }
+      // STEP 5: Find first image field in target schema and set up image injection
+      const imageFields = findImageFieldsInSchema(schema);
+      console.log("[LoadParams] Found image fields:", imageFields);
 
-    // STEP 7: Update form state directly  
-    setFormData(baseParams);
+      if (imageFields.length > 0) {
+        const imagePath = loadParams.image.path;
+        sessionStorage.setItem("ds_pending_image_inject", JSON.stringify({
+          imagePath,
+          imageField: imageFields[0],
+          workflowId: targetWorkflowId
+        }));
+      }
 
-    // Clear pending - we've processed it
-    setPendingLoadParams(null);
-    console.log("[LoadParams] Processing complete");
+      if (cancelled) return;
+
+      // STEP 6: Persist to localStorage so workflow init effect picks it up
+      try {
+        localStorage.setItem(`ds_pipe_params_${targetWorkflowId}`, JSON.stringify(baseParams));
+      } catch (e) {
+        console.warn("Failed to persist loadParams", e);
+      }
+
+      // STEP 7: Update form state directly  
+      setFormData(baseParams);
+
+      // Clear pending - we've processed it
+      setPendingLoadParams(null);
+      console.log("[LoadParams] Processing complete");
+    };
+
+    processLoadParams();
+    return () => { cancelled = true; };
 
   }, [pendingLoadParams, workflows, selectedWorkflowId]);
 

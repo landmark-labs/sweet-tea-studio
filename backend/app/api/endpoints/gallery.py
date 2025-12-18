@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse
-from PIL import Image as PILImage
+from PIL import Image as PILImage, ExifTags
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session, func, or_, select
@@ -36,6 +36,56 @@ class GalleryItem(BaseModel):
     engine_id: Optional[int] = None
     collection_id: Optional[int] = None
     project_id: Optional[int] = None
+
+
+def _decode_xp_comment(raw: Any) -> Optional[str]:
+    """
+    Decode Windows XPComment (UTF-16LE with null terminator) or generic bytes.
+    """
+    if raw is None:
+        return None
+    if isinstance(raw, bytes):
+        try:
+            return raw.decode("utf-16le", errors="ignore").rstrip("\x00")
+        except Exception:
+            try:
+                return raw.decode("utf-8", errors="ignore")
+            except Exception:
+                return None
+    if isinstance(raw, str):
+        return raw
+    return None
+
+
+def _extract_prompts_from_comment_blob(comment: Optional[str]) -> Dict[str, Optional[str]]:
+    """
+    Attempt to pull positive/negative prompts from a JPEG comment/XPComment blob.
+    """
+    result = {"prompt": None, "negative_prompt": None}
+    if not comment:
+        return result
+
+    # JSON is the cleanest form – many tools embed JSON into comments
+    try:
+        parsed = json.loads(comment)
+        if isinstance(parsed, dict):
+            result["prompt"] = parsed.get("positive_prompt") or parsed.get("prompt") or parsed.get("text") or parsed.get("text_positive")
+            result["negative_prompt"] = parsed.get("negative_prompt") or parsed.get("text_negative") or parsed.get("negative")
+            return result
+    except json.JSONDecodeError:
+        pass
+
+    # Heuristic split on "Negative prompt:"
+    lower = comment.lower()
+    if "negative prompt:" in lower:
+        parts = comment.split("Negative prompt:", 1)
+        result["prompt"] = parts[0].strip() or None
+        result["negative_prompt"] = parts[1].strip() if len(parts) > 1 else None
+        return result
+
+    # Fallback: treat whole comment as positive prompt
+    result["prompt"] = comment.strip() or None
+    return result
 
 
 def _build_search_block(
@@ -480,13 +530,40 @@ def get_image_metadata_by_path(path: str, session: Session = Depends(get_session
     try:
         with PILImage.open(actual_path) as img:
             info = img.info or {}
+
+            # JPEG/EXIF comment path (commonly where prompts are stored)
+            try:
+                # PIL stores JPEG comments in info["comment"]; EXIF has XPComment/UserComment
+                comment_text = None
+                if "comment" in info:
+                    comment_text = _decode_xp_comment(info.get("comment"))
+                else:
+                    exif = img.getexif()
+                    if exif:
+                        for tag_id, value in exif.items():
+                            tag_name = ExifTags.TAGS.get(tag_id, tag_id)
+                            if str(tag_name).lower() in {"xpcomment", "usercomment", "comment"}:
+                                comment_text = _decode_xp_comment(value)
+                                if comment_text:
+                                    break
+
+                if comment_text:
+                    parsed_comment = _extract_prompts_from_comment_blob(comment_text)
+                    if parsed_comment.get("prompt") and not result["prompt"]:
+                        result["prompt"] = parsed_comment.get("prompt")
+                    if parsed_comment.get("negative_prompt") and not result["negative_prompt"]:
+                        result["negative_prompt"] = parsed_comment.get("negative_prompt")
+                    if parsed_comment.get("prompt") or parsed_comment.get("negative_prompt"):
+                        result["source"] = result["source"] if result["source"] != "none" else "jpeg_comment"
+            except Exception:
+                pass
             
             # Try Sweet Tea provenance first (our custom format)
             if "sweet_tea_provenance" in info:
                 try:
                     provenance = json.loads(info["sweet_tea_provenance"])
-                    result["prompt"] = provenance.get("positive_prompt")
-                    result["negative_prompt"] = provenance.get("negative_prompt")
+                    result["prompt"] = result["prompt"] or provenance.get("positive_prompt")
+                    result["negative_prompt"] = result["negative_prompt"] or provenance.get("negative_prompt")
                     result["parameters"] = {
                         k: v for k, v in provenance.items()
                         if k not in ["positive_prompt", "negative_prompt", "models", "params"]
@@ -551,7 +628,7 @@ def get_image_metadata_by_path(path: str, session: Session = Depends(get_session
                     pass
     
     except Exception as e:
-        logger.warning("Failed to read PNG metadata", extra={"path": path, "error": str(e)})
+        logger.warning("Failed to read image metadata", extra={"path": path, "error": str(e)})
     
     # Fallback: try to find in database by path (most recent first)
     image = session.exec(
@@ -566,9 +643,10 @@ def get_image_metadata_by_path(path: str, session: Session = Depends(get_session
                 metadata = {}
         
         active_prompt = metadata.get("active_prompt", {})
-        result["prompt"] = active_prompt.get("positive_text")
-        result["negative_prompt"] = active_prompt.get("negative_text")
-        result["source"] = "database"
+        result["prompt"] = result["prompt"] or active_prompt.get("positive_text")
+        result["negative_prompt"] = result["negative_prompt"] or active_prompt.get("negative_text")
+        if result["prompt"] or result["negative_prompt"]:
+            result["source"] = "database"
         
         # Use generation_params if available (ALL non-bypassed node params)
         # Fall back to job.input_params for legacy images
@@ -589,5 +667,11 @@ def get_image_metadata_by_path(path: str, session: Session = Depends(get_session
                     k: v for k, v in params.items() 
                     if v is not None and not isinstance(v, (dict, list)) and not k.startswith("__")
                 }
+                if not result["prompt"]:
+                    result["prompt"] = params.get("prompt") or params.get("positive") or params.get("text_positive")
+                if not result["negative_prompt"]:
+                    result["negative_prompt"] = params.get("negative_prompt") or params.get("negative") or params.get("text_negative")
+                if result["prompt"] or result["negative_prompt"]:
+                    result["source"] = "database"
     
     return result
