@@ -514,24 +514,43 @@ export default function PromptStudio() {
     // Choose the workflow
     setSelectedWorkflowId(workflowId);
 
+    // Prefer raw filesystem path, not API URL
+    const rawPath = (() => {
+      if (imagePath.includes("/api/") && imagePath.includes("path=")) {
+        try {
+          const url = new URL(imagePath, window.location.origin);
+          const p = url.searchParams.get("path");
+          if (p) return p;
+        } catch { /* ignore */ }
+      }
+      return imagePath;
+    })();
+
     const safeImage: ApiImage = {
       id: galleryItem?.image?.id ?? -1,
       job_id: galleryItem?.image?.job_id ?? null,
-      path: imagePath,
-      filename: galleryItem?.image?.filename || imagePath.split(/[\\/]/).pop() || "image.png",
+      path: rawPath,
+      filename: galleryItem?.image?.filename || rawPath.split(/[\\/]/).pop() || "image.png",
       created_at: galleryItem?.image?.created_at || new Date().toISOString(),
     };
 
     const loadParams: GalleryItem = {
       ...(galleryItem || {} as GalleryItem),
       image: safeImage,
-      prompt: galleryItem?.prompt || galleryItem?.job_params?.prompt,
-      negative_prompt: galleryItem?.negative_prompt || galleryItem?.job_params?.negative_prompt,
+      prompt: galleryItem?.prompt || (galleryItem?.job_params as any)?.prompt,
+      negative_prompt: galleryItem?.negative_prompt || (galleryItem?.job_params as any)?.negative_prompt,
       workflow_template_id: parseInt(workflowId, 10),
+      job_params: {
+        ...(galleryItem?.job_params || {}),
+        prompt: galleryItem?.prompt || (galleryItem?.job_params as any)?.prompt,
+        positive: galleryItem?.prompt || (galleryItem?.job_params as any)?.positive,
+        negative: galleryItem?.negative_prompt || (galleryItem?.job_params as any)?.negative,
+        negative_prompt: galleryItem?.negative_prompt || (galleryItem?.job_params as any)?.negative_prompt,
+      }
     };
 
     // Preview immediately
-    setPreviewPath(`/api/v1/gallery/image/path?path=${encodeURIComponent(imagePath)}`);
+    setPreviewPath(`/api/v1/gallery/image/path?path=${encodeURIComponent(rawPath)}`);
     setPreviewMetadata({
       prompt: loadParams.prompt || loadParams.job_params?.prompt,
       negative_prompt: loadParams.negative_prompt || loadParams.job_params?.negative_prompt,

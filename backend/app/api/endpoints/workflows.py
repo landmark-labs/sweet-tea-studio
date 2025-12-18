@@ -88,12 +88,14 @@ def generate_schema_from_graph(graph: Dict[str, Any], object_info: Dict[str, Any
     
     node_counts: Dict[str, int] = {}
     node_meta: Dict[str, Any] = {}
-    ordered_node_ids: List[str] = []
     
     # Sort by ID to have stable order (string IDs)
-    for raw_node_id in sorted(graph.keys(), key=lambda x: int(x) if x.isdigit() else x):
-        node_id = str(raw_node_id)
-        ordered_node_ids.append(node_id)
+    ordered_node_ids = sorted(
+        graph.keys(), 
+        key=lambda x: int(x) if str(x).isdigit() else x
+    )
+    
+    for node_id in ordered_node_ids:
         node = graph[node_id]
         class_type = node.get("class_type")
         title = node.get("_meta", {}).get("title", class_type)
@@ -229,11 +231,29 @@ def generate_schema_from_graph(graph: Dict[str, Any], object_info: Dict[str, Any
             node_meta[node_id]["skipped"] = "no_exposed_inputs"
 
     # Attach metadata so the frontend can preserve node ordering and explain omissions
-    schema["__node_order"] = ordered_node_ids
+    schema["__node_order"] = [str(nid) for nid in ordered_node_ids]
     schema["__node_meta"] = node_meta
     schema["__schema_version"] = 2
 
     return schema
+
+
+def ensure_node_order(workflow: WorkflowTemplate | WorkflowTemplateCreate):
+    """Ensure __node_order exists in input_schema, generating it if missing."""
+    if not workflow.input_schema or "__node_order" in workflow.input_schema:
+        return
+        
+    graph = workflow.graph_json or {}
+    if not graph:
+        return
+        
+    # Sort by ID to have stable order (string IDs)
+    ordered_node_ids = sorted(
+        graph.keys(), 
+        key=lambda x: int(x) if str(x).isdigit() else x
+    )
+    
+    workflow.input_schema["__node_order"] = [str(nid) for nid in ordered_node_ids]
 
 
 def _prepare_import_payload(payload: WorkflowImportRequest) -> WorkflowTemplateCreate:
@@ -358,19 +378,22 @@ def create_workflow(workflow_in: WorkflowTemplateCreate):
         # 3. Generate Schema if not provided/empty
         if not workflow_in.input_schema:
             workflow_in.input_schema = generate_schema_from_graph(graph, object_info)
+        else:
+            # Ensure __node_order exists if a pre-existing schema was provided (e.g. from import)
+            ensure_node_order(workflow_in)
             
-            # Generate default helper mapping as well
-            workflow_in.node_mapping = {}
-            for key, field_def in workflow_in.input_schema.items():
-                if key.startswith("__"):
-                    continue
-                if not isinstance(field_def, dict) or "x_node_id" not in field_def:
-                    continue
-                    # We preserve x_ metadata in the schema for UI grouping!
-                    workflow_in.node_mapping[key] = {
-                        "node_id": field_def["x_node_id"],
-                        "field": f"inputs.{field_def.get('mock_field', key.split('.')[-1])}" # fallback logic
-                    }
+        # Generate default helper mapping as well
+        workflow_in.node_mapping = {}
+        for key, field_def in workflow_in.input_schema.items():
+            if key.startswith("__"):
+                continue
+            if not isinstance(field_def, dict) or "x_node_id" not in field_def:
+                continue
+                # We preserve x_ metadata in the schema for UI grouping!
+                workflow_in.node_mapping[key] = {
+                    "node_id": field_def["x_node_id"],
+                    "field": f"inputs.{field_def.get('mock_field', key.split('.')[-1])}" # fallback logic
+                }
 
         workflow_in.description = _clean_description(workflow_in.description)
 
@@ -484,6 +507,9 @@ def update_workflow(workflow_id: int, workflow_in: WorkflowTemplateCreate):
         workflow = session.get(WorkflowTemplate, workflow_id)
         if not workflow:
             raise HTTPException(status_code=404, detail="Workflow not found")
+
+        # Backfill metadata if missing in the new data
+        ensure_node_order(workflow_in)
 
         workflow_in.description = _clean_description(workflow_in.description)
         workflow_data = workflow_in.dict(exclude_unset=True)

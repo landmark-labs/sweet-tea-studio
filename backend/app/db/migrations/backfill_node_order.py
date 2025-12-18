@@ -32,7 +32,7 @@ def migrate():
             # Sort node IDs numerically
             node_ids = sorted(
                 graph.keys(),
-                key=lambda x: int(x) if str(x).isdigit() else float('inf')
+                key=lambda x: int(x) if str(x).isdigit() else x
             )
             
             # Update schema with new order
