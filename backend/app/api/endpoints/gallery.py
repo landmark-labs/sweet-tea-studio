@@ -258,33 +258,19 @@ def read_gallery(
 
 @router.delete("/{image_id}")
 def delete_image(image_id: int, session: Session = Depends(get_session)):
-    image = session.get(Image, image_id)
-    if not image:
+    # Reuse bulk path for robustness and consistent behavior
+    result = _bulk_soft_delete([image_id], session)
+    if result.deleted == 0:
         logger.warning("Image not found for deletion", extra={"image_id": image_id})
         raise HTTPException(status_code=404, detail="Image not found")
-    
-    # Delete from filesystem
-    file_deleted = False
-    if image.path and os.path.exists(image.path):
-        try:
-            os.remove(image.path)
-            file_deleted = True
-            logger.info("Deleted file", extra={"path": image.path, "image_id": image_id})
-            
-            # Also delete associated .json metadata file if it exists
-            json_path = os.path.splitext(image.path)[0] + ".json"
-            if os.path.exists(json_path):
-                os.remove(json_path)
-                logger.info("Deleted associated JSON", extra={"path": json_path, "image_id": image_id})
-        except OSError:
-            logger.exception("Failed to delete file", extra={"path": image.path, "image_id": image_id})
-    
-    # Soft delete: set flag instead of removing from DB
-    image.is_deleted = True
-    image.deleted_at = datetime.utcnow()
-    session.add(image)
-    session.commit()
-    return {"status": "deleted", "file_deleted": file_deleted, "soft_delete": True}
+
+    return {
+        "status": "deleted",
+        "file_deleted": image_id not in result.file_errors,
+        "soft_delete": True,
+        "not_found": result.not_found,
+        "file_errors": result.file_errors,
+    }
 
 # --- Specific Features from Sweet Tea Studio Repo (Preserved) ---
 
@@ -317,39 +303,33 @@ class BulkDeleteResult(BaseModel):
     file_errors: List[int]
 
 
-@router.post("/bulk_delete", response_model=BulkDeleteResult)
-def bulk_delete_images(req: BulkDeleteRequest, session: Session = Depends(get_session)):
-    """
-    Delete many images in a single transaction to avoid dozens of concurrent DELETE calls
-    (which can exhaust workers and lock SQLite). Performs soft-delete in the DB and tries
-    to remove the files; failure to delete a file no longer aborts the whole batch.
-    """
-    if not req.image_ids:
+def _bulk_soft_delete(image_ids: List[int], session: Session) -> BulkDeleteResult:
+    """Best-effort soft delete of images + file cleanup without blowing up the server."""
+    if not image_ids:
         return BulkDeleteResult(deleted=0, not_found=[], file_errors=[])
 
-    # Fetch existing images keyed by id for quick lookup
-    images = session.exec(select(Image).where(Image.id.in_(req.image_ids))).all()
+    images = session.exec(select(Image).where(Image.id.in_(image_ids))).all()
     images_by_id = {img.id: img for img in images}
 
-    not_found = [img_id for img_id in req.image_ids if img_id not in images_by_id]
+    not_found = [img_id for img_id in image_ids if img_id not in images_by_id]
     file_errors: List[int] = []
     deleted_count = 0
 
-    for img_id in req.image_ids:
+    for img_id in image_ids:
         image = images_by_id.get(img_id)
         if not image:
             continue
 
         # Delete files best-effort
-        if image.path and os.path.exists(image.path):
-            try:
+        try:
+            if image.path and isinstance(image.path, str) and os.path.exists(image.path):
                 os.remove(image.path)
                 json_path = os.path.splitext(image.path)[0] + ".json"
                 if os.path.exists(json_path):
                     os.remove(json_path)
-            except OSError:
-                file_errors.append(img_id)
-                logger.exception("Failed to delete file during bulk delete", extra={"path": image.path, "image_id": img_id})
+        except OSError:
+            file_errors.append(img_id)
+            logger.exception("Failed to delete file during bulk delete", extra={"path": image.path, "image_id": img_id})
 
         # Soft delete in DB
         image.is_deleted = True
@@ -358,8 +338,21 @@ def bulk_delete_images(req: BulkDeleteRequest, session: Session = Depends(get_se
         deleted_count += 1
 
     session.commit()
-
     return BulkDeleteResult(deleted=deleted_count, not_found=not_found, file_errors=file_errors)
+
+
+@router.post("/bulk_delete", response_model=BulkDeleteResult)
+def bulk_delete_images(req: BulkDeleteRequest, session: Session = Depends(get_session)):
+    """
+    Delete many images in a single transaction to avoid dozens of concurrent DELETE calls
+    (which can exhaust workers and lock SQLite). Performs soft-delete in the DB and tries
+    to remove the files; failure to delete a file no longer aborts the whole batch.
+    """
+    try:
+        return _bulk_soft_delete(req.image_ids, session)
+    except SQLAlchemyError:
+        logger.exception("Bulk delete failed at DB layer")
+        raise HTTPException(status_code=500, detail="Failed to delete images")
 
 
 @router.post("/cleanup")

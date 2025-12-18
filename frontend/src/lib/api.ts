@@ -589,10 +589,8 @@ export const api = {
     },
 
     deleteImage: async (imageId: number): Promise<void> => {
-        const res = await fetch(`${API_BASE}/gallery/${imageId}`, {
-            method: "DELETE",
-        });
-        if (!res.ok) throw new Error("Failed to delete image");
+        // Route through bulk delete for consistent behavior and to avoid DB lock storms
+        await api.bulkDeleteImages([imageId]);
     },
     bulkDeleteImages: async (imageIds: number[]): Promise<{ deleted: number; not_found: number[]; file_errors: number[] }> => {
         const res = await fetch(`${API_BASE}/gallery/bulk_delete`, {
