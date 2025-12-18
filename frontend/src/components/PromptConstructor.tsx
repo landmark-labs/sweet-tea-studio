@@ -916,7 +916,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
                     >
                         {/* Floating Controls pinned to top-right (outside canvas to avoid overlap) */}
                         {targetField && (
-                            <div className="absolute top-3 right-3 flex gap-2 z-20">
+                            <div className="absolute -top-1 right-2 flex gap-2 z-20 opacity-0 hover:opacity-100 transition-opacity duration-150">
                                 <Button
                                     variant="ghost"
                                     size="icon"
