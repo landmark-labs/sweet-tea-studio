@@ -135,7 +135,7 @@ export function findPromptFieldsInSchema(
     let positiveField: string | null = null;
     let negativeField: string | null = null;
 
-    const clipTextFields: Array<{ key: string; nodeId: string; title: string }> = [];
+    const clipTextFields: Array<{ key: string; nodeId: string; title: string; x_title: string }> = [];
 
     for (const [key, field] of Object.entries(schema)) {
         if (key.startsWith("__")) continue;
@@ -145,11 +145,16 @@ export function findPromptFieldsInSchema(
         // Look for CLIPTextEncode text fields
         if (lowerKey.includes("cliptextencode") && lowerKey.includes(".text")) {
             const nodeId = field.x_node_id !== undefined ? String(field.x_node_id) : key.split(".")[0];
-            clipTextFields.push({ key, nodeId, title: field.title || "" });
+            clipTextFields.push({
+                key,
+                nodeId,
+                title: (field.title as string) || "",
+                x_title: ((field as any).x_title as string) || ""
+            });
         }
     }
 
-    // Sort by node ID
+    // Sort by node ID (for fallback ordering only)
     clipTextFields.sort((a, b) => {
         const aNum = parseInt(a.nodeId, 10);
         const bNum = parseInt(b.nodeId, 10);
@@ -157,17 +162,31 @@ export function findPromptFieldsInSchema(
         return a.nodeId.localeCompare(b.nodeId);
     });
 
-    // Assign based on title hints first, then by order
+    // PRIORITY 1: Use x_title attribute (most reliable - from ComfyUI node metadata)
+    // x_title contains explicit labels like "Positive Prompt" or "Negative Prompt"
     for (const field of clipTextFields) {
-        const lowerTitle = field.title.toLowerCase();
-        if (lowerTitle.includes("positive") || lowerTitle.includes("prompt")) {
-            if (!positiveField) positiveField = field.key;
-        } else if (lowerTitle.includes("negative")) {
-            if (!negativeField) negativeField = field.key;
+        const lowerXTitle = field.x_title.toLowerCase();
+        if (!positiveField && lowerXTitle.includes("positive")) {
+            positiveField = field.key;
+        }
+        if (!negativeField && lowerXTitle.includes("negative")) {
+            negativeField = field.key;
         }
     }
 
-    // Fallback to order if titles didn't help
+    // PRIORITY 2: Use title attribute with strict matching
+    // Match "positive" explicitly, NOT generic "prompt" (which matches both)
+    for (const field of clipTextFields) {
+        const lowerTitle = field.title.toLowerCase();
+        if (!positiveField && lowerTitle.includes("positive")) {
+            positiveField = field.key;
+        }
+        if (!negativeField && lowerTitle.includes("negative")) {
+            negativeField = field.key;
+        }
+    }
+
+    // PRIORITY 3: Fallback to node order (first = positive, second = negative)
     if (!positiveField && clipTextFields.length >= 1) {
         positiveField = clipTextFields[0].key;
     }

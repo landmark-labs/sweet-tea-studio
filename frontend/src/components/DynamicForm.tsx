@@ -314,10 +314,6 @@ export const DynamicForm = React.memo(function DynamicForm({
 
         prompts.sort((a, b) => a.order - b.order);
 
-        // DEBUG: Log ordering info
-        console.log("[DynamicForm] nodeOrder prop:", nodeOrder);
-        console.log("[DynamicForm] prompts sorted:", prompts.map(p => ({ key: p.key, order: p.order, groupId: p.groupId })));
-
         return { inputs, prompts: prompts.map((prompt) => prompt.key), loras, nodes, placements };
 
     }, [schema, nodeOrder]);
@@ -383,8 +379,7 @@ export const DynamicForm = React.memo(function DynamicForm({
     }, [schema, strictCoreKeys, groups.placements, nodeOrder]);
 
 
-    // DEBUG: Log strictCoreGroups ordering
-    console.log("[DynamicForm] strictCoreGroups:", strictCoreGroups.map(g => ({ id: g.id, title: g.title, order: g.order })));
+
 
     // Re-calculate settingsFields using strictCoreKeys
     const strictSettingsFields = useMemo(() => {
@@ -613,6 +608,21 @@ export const DynamicForm = React.memo(function DynamicForm({
         );
     };
 
+    const sortedCoreGroups = useMemo(() => {
+        return strictCoreGroups
+            .map((group) => ({
+                ...group,
+                ...getBypassMeta(group),
+            }))
+            .sort((a, b) => {
+                // Normalize: treat undefined as false (not bypassed)
+                const aBypassed = a.isBypassed === true;
+                const bBypassed = b.isBypassed === true;
+                if (aBypassed !== bBypassed) return aBypassed ? 1 : -1;
+                return a.order - b.order;
+            });
+    }, [strictCoreGroups, formData, schema]);
+
     if (!schema) return null;
 
     return (
@@ -648,68 +658,52 @@ export const DynamicForm = React.memo(function DynamicForm({
                     </div>
                 ) : (
                     <div className="space-y-4">
-                        {(() => {
-                            const sorted = strictCoreGroups
-                                .map((group) => ({
-                                    ...group,
-                                    ...getBypassMeta(group),
-                                }))
-                                .sort((a, b) => {
-                                    // Normalize: treat undefined as false (not bypassed)
-                                    const aBypassed = a.isBypassed === true;
-                                    const bBypassed = b.isBypassed === true;
-                                    if (aBypassed !== bBypassed) return aBypassed ? 1 : -1;
-                                    return a.order - b.order;
-                                });
-                            console.log("[DynamicForm] RENDER ORDER:", sorted.map(g => ({ id: g.id, title: g.title, order: g.order, bypassed: g.isBypassed })));
-                            return sorted;
-                        })()
-                            .map((group) => {
+                        {sortedCoreGroups.map((group) => {
 
-                                const { bypassKey, hasBypass, isBypassed } = group;
-                                const fieldsToRender = group.keys.filter(k => k !== bypassKey);
+                            const { bypassKey, hasBypass, isBypassed } = group;
+                            const fieldsToRender = group.keys.filter(k => k !== bypassKey);
 
-                                return (
-                                    <div key={group.id} className="space-y-2">
-                                        {/* Always show header if multiple groups OR if we have a bypass toggle */}
-                                        {(strictCoreGroups.length > 1 || hasBypass) && (
-                                            <div className="flex items-center justify-between border-b border-slate-100 pb-1">
-                                                <h4 className="text-[11px] font-semibold uppercase text-slate-400 tracking-wide flex items-center gap-2">
-                                                    <span>{group.title}</span>
-                                                    {isBypassed && (
-                                                        <span className="text-[9px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5">
-                                                            Bypassed
-                                                        </span>
-                                                    )}
-                                                </h4>
-                                                {hasBypass && (
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="text-[9px] text-slate-300 uppercase  tracking-wider">
-                                                            {isBypassed ? "bypassed" : "active"}
-                                                        </span>
-                                                        <Switch
-                                                            checked={!!formData[bypassKey!]}
-                                                            onCheckedChange={(c) => handleChange(bypassKey!, c)}
-                                                            className={cn(
-                                                                "h-3.5 w-6 data-[state=checked]:bg-amber-500 data-[state=unchecked]:bg-slate-200"
-                                                            )}
-                                                        />
-                                                    </div>
+                            return (
+                                <div key={group.id} className="space-y-2">
+                                    {/* Always show header if multiple groups OR if we have a bypass toggle */}
+                                    {(strictCoreGroups.length > 1 || hasBypass) && (
+                                        <div className="flex items-center justify-between border-b border-slate-100 pb-1">
+                                            <h4 className="text-[11px] font-semibold uppercase text-slate-400 tracking-wide flex items-center gap-2">
+                                                <span>{group.title}</span>
+                                                {isBypassed && (
+                                                    <span className="text-[9px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5">
+                                                        Bypassed
+                                                    </span>
                                                 )}
-                                            </div>
-                                        )}
-                                        <div className="space-y-3">
-                                            {!isBypassed ? (
-                                                fieldsToRender.map(renderField)
-                                            ) : (
-                                                <div className="text-[10px] text-slate-400 italic px-1 opacity-60">
-                                                    Node bypassed. Parameters hidden.
+                                            </h4>
+                                            {hasBypass && (
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-[9px] text-slate-300 uppercase  tracking-wider">
+                                                        {isBypassed ? "bypassed" : "active"}
+                                                    </span>
+                                                    <Switch
+                                                        checked={!!formData[bypassKey!]}
+                                                        onCheckedChange={(c) => handleChange(bypassKey!, c)}
+                                                        className={cn(
+                                                            "h-3.5 w-6 data-[state=checked]:bg-amber-500 data-[state=unchecked]:bg-slate-200"
+                                                        )}
+                                                    />
                                                 </div>
                                             )}
                                         </div>
+                                    )}
+                                    <div className="space-y-3">
+                                        {!isBypassed ? (
+                                            fieldsToRender.map(renderField)
+                                        ) : (
+                                            <div className="text-[10px] text-slate-400 italic px-1 opacity-60">
+                                                Node bypassed. Parameters hidden.
+                                            </div>
+                                        )}
                                     </div>
-                                );
-                            })}
+                                </div>
+                            );
+                        })}
                     </div>
                 )}
             </div>

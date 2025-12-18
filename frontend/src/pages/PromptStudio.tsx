@@ -720,17 +720,44 @@ export default function PromptStudio() {
         baseParams[negativeTarget] = negativePrompt;
       }
 
-      // STEP 5: Find first image field in target schema and set up image injection
+      // STEP 5: Handle image injection - do it directly here instead of delegating to Effect 3
       const imageFields = findImageFieldsInSchema(schema);
       console.log("[LoadParams] Found image fields:", imageFields);
 
-      if (imageFields.length > 0) {
+      if (imageFields.length > 0 && loadParams.image?.path) {
         const imagePath = loadParams.image.path;
-        sessionStorage.setItem("ds_pending_image_inject", JSON.stringify({
-          imagePath,
-          imageField: imageFields[0],
-          workflowId: targetWorkflowId
-        }));
+        const imageField = imageFields[0];
+
+        // Check if image is already in ComfyUI input directory
+        const inputMatch = imagePath.match(/[/\\]input[/\\](.+)$/);
+        if (inputMatch) {
+          // Image already in input dir - use relative path directly
+          const relativePath = inputMatch[1].replace(/\\/g, "/");
+          console.log("[LoadParams] Reusing existing input path:", relativePath);
+          baseParams[imageField] = relativePath;
+        } else {
+          // Image is in output/other directory - need to upload it
+          console.log("[LoadParams] Uploading image to input dir:", imagePath);
+          try {
+            const url = `/api/v1/gallery/image/path?path=${encodeURIComponent(imagePath)}`;
+            const res = await fetch(url);
+            if (res.ok) {
+              const blob = await res.blob();
+              const filename = imagePath.split(/[\\/]/).pop() || "injected_image.png";
+              const file = new File([blob], filename, { type: blob.type });
+
+              const engineId = selectedEngineId ? parseInt(selectedEngineId) : undefined;
+              const result = await api.uploadFile(file, engineId, selectedProject?.slug, undefined);
+
+              console.log("[LoadParams] Image upload complete:", result.filename);
+              baseParams[imageField] = result.filename;
+            } else {
+              console.warn("[LoadParams] Failed to fetch image for upload");
+            }
+          } catch (err) {
+            console.warn("[LoadParams] Image upload failed:", err);
+          }
+        }
       }
 
       if (cancelled) return;
