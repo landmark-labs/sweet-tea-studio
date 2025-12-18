@@ -655,7 +655,10 @@ export const DynamicForm = React.memo(function DynamicForm({
                                     ...getBypassMeta(group),
                                 }))
                                 .sort((a, b) => {
-                                    if (a.isBypassed !== b.isBypassed) return a.isBypassed ? 1 : -1;
+                                    // Normalize: treat undefined as false (not bypassed)
+                                    const aBypassed = a.isBypassed === true;
+                                    const bBypassed = b.isBypassed === true;
+                                    if (aBypassed !== bBypassed) return aBypassed ? 1 : -1;
                                     return a.order - b.order;
                                 });
                             console.log("[DynamicForm] RENDER ORDER:", sorted.map(g => ({ id: g.id, title: g.title, order: g.order, bypassed: g.isBypassed })));
