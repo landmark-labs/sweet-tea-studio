@@ -314,7 +314,12 @@ export const DynamicForm = React.memo(function DynamicForm({
 
         prompts.sort((a, b) => a.order - b.order);
 
+        // DEBUG: Log ordering info
+        console.log("[DynamicForm] nodeOrder prop:", nodeOrder);
+        console.log("[DynamicForm] prompts sorted:", prompts.map(p => ({ key: p.key, order: p.order, groupId: p.groupId })));
+
         return { inputs, prompts: prompts.map((prompt) => prompt.key), loras, nodes, placements };
+
     }, [schema, nodeOrder]);
 
     const compareGroups = (a: { order: number; id?: string; title?: string }, b: { order: number; id?: string; title?: string }) => {
@@ -373,6 +378,9 @@ export const DynamicForm = React.memo(function DynamicForm({
             .map(([id, group]) => ({ id, ...group }))
             .sort(compareGroups);
     }, [schema, strictCoreKeys, groups.placements]);
+
+    // DEBUG: Log strictCoreGroups ordering
+    console.log("[DynamicForm] strictCoreGroups:", strictCoreGroups.map(g => ({ id: g.id, title: g.title, order: g.order })));
 
     // Re-calculate settingsFields using strictCoreKeys
     const strictSettingsFields = useMemo(() => {
