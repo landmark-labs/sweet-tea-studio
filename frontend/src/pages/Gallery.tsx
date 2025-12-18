@@ -366,7 +366,11 @@ export default function Gallery() {
             const path = item.image.path || '';
             // Check if the path contains the folder name as a directory segment
             const pathSegments = path.replace(/\\/g, '/').split('/');
-            return pathSegments.includes(selectedFolder);
+
+            // Fix: Check parent directory specifically to avoid partial matches
+            if (pathSegments.length < 2) return false;
+            const parentFolder = pathSegments[pathSegments.length - 2];
+            return parentFolder.toLowerCase() === selectedFolder.toLowerCase();
         })
         : items;
 
