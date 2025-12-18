@@ -307,6 +307,61 @@ class CleanupRequest(BaseModel):
     job_id: Optional[int] = None
 
 
+class BulkDeleteRequest(BaseModel):
+    image_ids: List[int]
+
+
+class BulkDeleteResult(BaseModel):
+    deleted: int
+    not_found: List[int]
+    file_errors: List[int]
+
+
+@router.post("/bulk_delete", response_model=BulkDeleteResult)
+def bulk_delete_images(req: BulkDeleteRequest, session: Session = Depends(get_session)):
+    """
+    Delete many images in a single transaction to avoid dozens of concurrent DELETE calls
+    (which can exhaust workers and lock SQLite). Performs soft-delete in the DB and tries
+    to remove the files; failure to delete a file no longer aborts the whole batch.
+    """
+    if not req.image_ids:
+        return BulkDeleteResult(deleted=0, not_found=[], file_errors=[])
+
+    # Fetch existing images keyed by id for quick lookup
+    images = session.exec(select(Image).where(Image.id.in_(req.image_ids))).all()
+    images_by_id = {img.id: img for img in images}
+
+    not_found = [img_id for img_id in req.image_ids if img_id not in images_by_id]
+    file_errors: List[int] = []
+    deleted_count = 0
+
+    for img_id in req.image_ids:
+        image = images_by_id.get(img_id)
+        if not image:
+            continue
+
+        # Delete files best-effort
+        if image.path and os.path.exists(image.path):
+            try:
+                os.remove(image.path)
+                json_path = os.path.splitext(image.path)[0] + ".json"
+                if os.path.exists(json_path):
+                    os.remove(json_path)
+            except OSError:
+                file_errors.append(img_id)
+                logger.exception("Failed to delete file during bulk delete", extra={"path": image.path, "image_id": img_id})
+
+        # Soft delete in DB
+        image.is_deleted = True
+        image.deleted_at = datetime.utcnow()
+        session.add(image)
+        deleted_count += 1
+
+    session.commit()
+
+    return BulkDeleteResult(deleted=deleted_count, not_found=not_found, file_errors=file_errors)
+
+
 @router.post("/cleanup")
 def cleanup_images(req: CleanupRequest, session: Session = Depends(get_session)):
     query = select(Image).where(Image.is_kept == False).where(Image.is_deleted == False)
@@ -543,4 +598,3 @@ def get_image_metadata_by_path(path: str, session: Session = Depends(get_session
                 }
     
     return result
-

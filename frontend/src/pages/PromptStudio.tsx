@@ -196,10 +196,20 @@ export default function PromptStudio() {
         return next;
       });
 
-      // API Call
-      await Promise.all(
-        Array.from(idsToDelete).map(id => api.deleteImage(id))
-      );
+      // Prefer bulk API to avoid hammering the backend (especially with many deletes)
+      const idsArr = Array.from(idsToDelete);
+      try {
+        await api.bulkDeleteImages(idsArr);
+      } catch (e) {
+        console.error("Bulk delete failed, falling back to sequential", e);
+        for (const id of idsArr) {
+          try {
+            await api.deleteImage(id);
+          } catch (err) {
+            console.error("Failed to delete image", id, err);
+          }
+        }
+      }
     } catch (e) {
       console.error("Failed to delete images", e);
       loadGallery(); // Revert on error

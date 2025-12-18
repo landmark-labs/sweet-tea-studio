@@ -594,6 +594,15 @@ export const api = {
         });
         if (!res.ok) throw new Error("Failed to delete image");
     },
+    bulkDeleteImages: async (imageIds: number[]): Promise<{ deleted: number; not_found: number[]; file_errors: number[] }> => {
+        const res = await fetch(`${API_BASE}/gallery/bulk_delete`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ image_ids: imageIds }),
+        });
+        if (!res.ok) throw new Error("Failed to delete images");
+        return res.json();
+    },
 
     updateImage: async (imageId: number, data: { caption?: string; tags?: string[] }): Promise<void> => {
         const res = await fetch(`${API_BASE}/gallery/${imageId}`, {

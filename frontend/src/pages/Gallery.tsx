@@ -190,12 +190,36 @@ export default function Gallery() {
         if (selectedIds.size === 0) return;
         if (!confirm(`Delete ${selectedIds.size} images?`)) return;
 
+        const ids = Array.from(selectedIds);
+
         try {
-            await Promise.all(Array.from(selectedIds).map(id => api.deleteImage(id)));
-            setItems(prev => prev.filter(i => !selectedIds.has(i.image.id)));
+            // Prefer single bulk call to avoid hammering the API and DB
+            const res = await api.bulkDeleteImages(ids);
+
+            // Update UI for all deleted IDs
+            const deletedSet = new Set(ids);
+            setItems(prev => prev.filter(i => !deletedSet.has(i.image.id)));
             setSelectedIds(new Set());
+
+            if (res.not_found.length || res.file_errors.length) {
+                alert(`Deleted ${res.deleted} images. Skipped ${res.not_found.length} missing. File errors: ${res.file_errors.length}.`);
+            }
         } catch (e) {
-            alert("Failed to delete some images");
+            console.error("Bulk delete failed, retrying sequentially", e);
+            // Fallback: delete sequentially to reduce concurrent load
+            let failed = 0;
+            for (const id of ids) {
+                try {
+                    await api.deleteImage(id);
+                } catch {
+                    failed += 1;
+                }
+            }
+            const deletedSet = new Set(ids);
+            setItems(prev => prev.filter(i => !deletedSet.has(i.image.id)));
+            setSelectedIds(new Set());
+
+            if (failed > 0) alert(`Failed to delete ${failed} images`);
         }
     };
 
