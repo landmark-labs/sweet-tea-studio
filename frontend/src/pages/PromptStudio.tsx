@@ -650,21 +650,31 @@ export default function PromptStudio() {
     const baseParams = { ...targetDefaults };
 
     // STEP 3: Extract prompts from source image
-    const extracted = extractPrompts(loadParams.job_params);
+    // First check top-level fields (most reliable source)
+    let positivePrompt = loadParams.prompt;
+    let negativePrompt = loadParams.negative_prompt;
+
+    // Fallback: extract from job_params if top-level fields are empty
+    if (!positivePrompt || !negativePrompt) {
+      const extracted = extractPrompts(loadParams.job_params);
+      if (!positivePrompt) positivePrompt = extracted.positive ?? undefined;
+      if (!negativePrompt) negativePrompt = extracted.negative ?? undefined;
+    }
+
     console.log("[LoadParams] Extracted prompts:", {
-      positive: extracted.positive?.substring(0, 50) + "...",
-      negative: extracted.negative?.substring(0, 50) + "..."
+      positive: positivePrompt?.substring(0, 50) + "...",
+      negative: negativePrompt?.substring(0, 50) + "..."
     });
 
     // STEP 4: Find prompt fields in target schema and inject
     const { positiveField, negativeField } = findPromptFieldsInSchema(schema);
     console.log("[LoadParams] Found prompt fields:", { positiveField, negativeField });
 
-    if (extracted.positive && positiveField) {
-      baseParams[positiveField] = extracted.positive;
+    if (positivePrompt && positiveField) {
+      baseParams[positiveField] = positivePrompt;
     }
-    if (extracted.negative && negativeField) {
-      baseParams[negativeField] = extracted.negative;
+    if (negativePrompt && negativeField) {
+      baseParams[negativeField] = negativePrompt;
     }
 
     // STEP 5: Find first image field in target schema and set up image injection
