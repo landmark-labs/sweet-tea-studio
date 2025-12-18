@@ -695,14 +695,29 @@ export default function PromptStudio() {
       }
 
       // STEP 4: Find prompt fields in target schema and inject
+      // Prefer mapping to the same node/field we extracted from (prevents swap)
       const { positiveField, negativeField } = findPromptFieldsInSchema(schema);
       console.log("[LoadParams] Found prompt fields:", { positiveField, negativeField });
 
-      if (positivePrompt && positiveField) {
-        baseParams[positiveField] = positivePrompt;
+      const resolveTarget = (extractedKey: string | null, fallback: string | null) => {
+        if (extractedKey && schema[extractedKey]) return extractedKey;
+        // Try matching by node id prefix before '.' if present
+        if (extractedKey && extractedKey.includes(".")) {
+          const nodeId = extractedKey.split(".")[0];
+          const match = Object.keys(schema).find(k => k.split(".")[0] === nodeId);
+          if (match) return match;
+        }
+        return fallback;
+      };
+
+      const positiveTarget = resolveTarget(extracted.positiveFieldKey, positiveField);
+      const negativeTarget = resolveTarget(extracted.negativeFieldKey, negativeField);
+
+      if (positivePrompt && positiveTarget) {
+        baseParams[positiveTarget] = positivePrompt;
       }
-      if (negativePrompt && negativeField) {
-        baseParams[negativeField] = negativePrompt;
+      if (negativePrompt && negativeTarget) {
+        baseParams[negativeTarget] = negativePrompt;
       }
 
       // STEP 5: Find first image field in target schema and set up image injection
@@ -754,6 +769,20 @@ export default function PromptStudio() {
 
         // Clear the pending item first to prevent re-processing
         sessionStorage.removeItem("ds_pending_image_inject");
+
+        // If the image already lives in ComfyUI/input, reuse its relative path
+        const inputMatch = imagePath.match(/[/\\]input[/\\](.+)$/);
+        if (inputMatch) {
+          const relativePath = inputMatch[1].replace(/\\/g, "/");
+          console.log("[ImageInject] Reusing existing input path:", relativePath);
+          const currentFormData = formDataRef.current;
+          const newFormData = { ...currentFormData, [imageField]: relativePath };
+          setFormData(newFormData);
+          try {
+            localStorage.setItem(`ds_pipe_params_${selectedWorkflowId}`, JSON.stringify(newFormData));
+          } catch (e) { /* ignore */ }
+          return;
+        }
 
         console.log("[ImageInject] Uploading image:", imagePath, "to field:", imageField);
 
