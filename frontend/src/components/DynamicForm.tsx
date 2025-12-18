@@ -648,16 +648,21 @@ export const DynamicForm = React.memo(function DynamicForm({
                     </div>
                 ) : (
                     <div className="space-y-4">
-                        {strictCoreGroups
-                            .map((group) => ({
-                                ...group,
-                                ...getBypassMeta(group),
-                            }))
-                            .sort((a, b) => {
-                                if (a.isBypassed !== b.isBypassed) return a.isBypassed ? 1 : -1;
-                                return a.order - b.order;
-                            })
+                        {(() => {
+                            const sorted = strictCoreGroups
+                                .map((group) => ({
+                                    ...group,
+                                    ...getBypassMeta(group),
+                                }))
+                                .sort((a, b) => {
+                                    if (a.isBypassed !== b.isBypassed) return a.isBypassed ? 1 : -1;
+                                    return a.order - b.order;
+                                });
+                            console.log("[DynamicForm] RENDER ORDER:", sorted.map(g => ({ id: g.id, title: g.title, order: g.order, bypassed: g.isBypassed })));
+                            return sorted;
+                        })()
                             .map((group) => {
+
                                 const { bypassKey, hasBypass, isBypassed } = group;
                                 const fieldsToRender = group.keys.filter(k => k !== bypassKey);
 
