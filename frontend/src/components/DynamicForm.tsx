@@ -361,9 +361,12 @@ export const DynamicForm = React.memo(function DynamicForm({
         Array.from(strictCoreKeys).forEach((key) => {
             const field = schema[key];
             const placement = groups.placements[key];
-            const nodeId = placement?.groupId || field?.x_node_id || "general";
+            const nodeId = String(field?.x_node_id || placement?.groupId || "general");
             const nodeTitle = placement?.groupTitle || field?.x_title || "General";
-            const order = placement?.order ?? 999;
+
+            // SIMPLE: Use direct position in nodeOrder array, fallback to 999 if not found
+            const orderIndex = (nodeOrder || []).indexOf(nodeId);
+            const order = orderIndex >= 0 ? orderIndex : 999;
 
             if (!groupMap[nodeId]) {
                 groupMap[nodeId] = { title: nodeTitle, keys: [], order };
@@ -376,8 +379,9 @@ export const DynamicForm = React.memo(function DynamicForm({
 
         return Object.entries(groupMap)
             .map(([id, group]) => ({ id, ...group }))
-            .sort(compareGroups);
-    }, [schema, strictCoreKeys, groups.placements]);
+            .sort((a, b) => a.order - b.order);
+    }, [schema, strictCoreKeys, groups.placements, nodeOrder]);
+
 
     // DEBUG: Log strictCoreGroups ordering
     console.log("[DynamicForm] strictCoreGroups:", strictCoreGroups.map(g => ({ id: g.id, title: g.title, order: g.order })));
@@ -386,16 +390,21 @@ export const DynamicForm = React.memo(function DynamicForm({
     const strictSettingsFields = useMemo(() => {
         const promptExtras = groups.prompts.filter((key) => !strictCoreKeys.has(key));
         const loraExtras = groups.loras.filter((key) => !strictCoreKeys.has(key));
-        const nodeEntries = Object.entries(groups.nodes).map(([id, group]) => ({
-            id,
-            title: group.title,
-            order: group.order,
-            keys: group.keys.filter((key) => !strictCoreKeys.has(key)),
-        }))
+        const orderArr = nodeOrder || [];
+        const nodeEntries = Object.entries(groups.nodes).map(([id, group]) => {
+            const orderIndex = orderArr.indexOf(String(id));
+            return {
+                id,
+                title: group.title,
+                order: orderIndex >= 0 ? orderIndex : 999,
+                keys: group.keys.filter((key) => !strictCoreKeys.has(key)),
+            };
+        })
             .filter((group) => group.keys.length > 0)
-            .sort(compareGroups);
+            .sort((a, b) => a.order - b.order);
         return { promptExtras, loraExtras, nodeEntries };
-    }, [compareGroups, groups.loras, groups.nodes, groups.prompts, strictCoreKeys]);
+    }, [groups.loras, groups.nodes, groups.prompts, strictCoreKeys, nodeOrder]);
+
 
     const [settingsOpen, setSettingsOpen] = useState(false);
 
