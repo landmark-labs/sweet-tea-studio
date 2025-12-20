@@ -105,6 +105,27 @@ def apply_params_to_graph(graph: dict, mapping: dict, params: dict):
                 current[field_path[-1]] = value
 
 
+def _create_thumbnail(image_path: str, max_px: int = 256, quality: int = 45) -> bytes | None:
+    """
+    Generate a compact JPEG thumbnail suitable for inline DB storage.
+    Returns the thumbnail as bytes, or None if generation fails.
+    Typically produces thumbnails of 5-15KB for 256px max dimension.
+    """
+    import io
+    try:
+        from PIL import Image as PILImage
+        with PILImage.open(image_path) as img:
+            img.thumbnail((max_px, max_px))
+            if img.mode in ("RGBA", "P"):
+                img = img.convert("RGB")
+            buf = io.BytesIO()
+            img.save(buf, format="JPEG", quality=quality)
+            return buf.getvalue()
+    except Exception as e:
+        print(f"[Thumbnail] Failed to create thumbnail for {image_path}: {e}")
+        return None
+
+
 def _process_single_image(
     img_data: dict,
     idx: int,
@@ -610,6 +631,27 @@ def process_job(job_id: int):
             # Sort by original index to maintain order
             processed_results.sort(key=lambda x: x[2])
             
+            # Verify files actually exist on disk and track failures
+            verified_results = []
+            failed_count = 0
+            for full_path, final_filename, idx in processed_results:
+                if os.path.exists(full_path):
+                    verified_results.append((full_path, final_filename, idx))
+                else:
+                    failed_count += 1
+                    print(f"[SAVE FAILED] File not found after save: {full_path}")
+            
+            # Alert if any saves failed
+            if failed_count > 0:
+                manager.broadcast_sync({
+                    "type": "save_failed",
+                    "job_id": job_id,
+                    "failed_count": failed_count,
+                    "saved_count": len(verified_results),
+                    "total_count": len(processed_results) + failed_count,
+                    "message": f"{failed_count} image(s) failed to save to disk. Check disk space and permissions."
+                }, str(job_id))
+            
             # Build prompt history metadata (shared)
             incoming_metadata = working_params.get("metadata", {})
             if isinstance(incoming_metadata, str):
@@ -644,14 +686,19 @@ def process_job(job_id: int):
                 if k != "metadata" and not k.startswith("__")
             }
             
-            # Create database records for each successfully processed image
-            for full_path, final_filename, idx in processed_results:
+            # Create database records for each VERIFIED image (file confirmed on disk)
+            for full_path, final_filename, idx in verified_results:
                 image_format = os.path.splitext(final_filename)[1].lstrip(".").lower() or "png"
+                
+                # Generate inline thumbnail for DB portability (allows viewing prompts without image files)
+                thumb_data = _create_thumbnail(full_path)
+                
                 new_image = Image(
                     job_id=job_id,
                     path=full_path,
                     filename=final_filename,
                     format=image_format,
+                    thumbnail_data=thumb_data,
                     extra_metadata=image_metadata,
                     is_kept=False
                 )

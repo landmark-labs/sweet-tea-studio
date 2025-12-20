@@ -1056,6 +1056,13 @@ export default function PromptStudio() {
         if (targetJobId && data.data?.blob) {
           updateFeed(targetJobId, { previewBlob: data.data.blob });
         }
+      } else if (data.type === "save_failed") {
+        // CRITICAL: Alert user that images failed to save
+        const msg = data.message || `${data.failed_count} image(s) failed to save!`;
+        console.error("[SAVE FAILED]", data);
+        setError(`⚠️ SAVE FAILED: ${msg}`);
+        // Keep the generation state as completed but show the error prominently
+        // The completed event will still arrive with any images that DID save
       } else if (data.type === "error") {
         setGenerationState("failed");
         setStatusLabel("failed");

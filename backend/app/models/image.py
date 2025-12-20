@@ -1,7 +1,7 @@
 from typing import Optional, Dict, Any
 from datetime import datetime
 from sqlmodel import Field, SQLModel
-from sqlalchemy import JSON, Column
+from sqlalchemy import JSON, Column, LargeBinary
 
 class ImageBase(SQLModel):
     job_id: int = Field(index=True)
@@ -9,6 +9,7 @@ class ImageBase(SQLModel):
     filename: str
     format: str = "png"
     thumbnail_path: Optional[str] = None
+    thumbnail_data: Optional[bytes] = Field(default=None, sa_column=Column(LargeBinary))  # Inline JPEG thumbnail for DB portability
     is_kept: bool = Field(default=False)
     is_deleted: bool = Field(default=False, index=True)  # Soft delete flag
     deleted_at: Optional[datetime] = Field(default=None)  # When soft-deleted
