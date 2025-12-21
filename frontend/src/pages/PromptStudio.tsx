@@ -61,7 +61,7 @@ export default function PromptStudio() {
   const [previewPath, setPreviewPath] = useState<string | null>(null);
   const [previewMetadata, setPreviewMetadata] = useState<any>(null);
   // Pending loadParams - holds the gallery item to inject until workflows are loaded
-  const [pendingLoadParams, setPendingLoadParams] = useState<GalleryItem | null>(null);
+  const [pendingLoadParams, setPendingLoadParams] = useState<(GalleryItem & { __isRegenerate?: boolean }) | null>(null);
   const handlePreviewSelect = (path: string, metadata?: any) => {
     setPreviewPath(path);
     setPreviewMetadata(metadata ?? null);
@@ -594,15 +594,16 @@ export default function PromptStudio() {
   // Effect 1: CAPTURE loadParams immediately when navigation happens
   // This grabs the data before it can be lost and stores it in state
   useEffect(() => {
-    const state = location.state as { loadParams?: GalleryItem } | null;
+    const state = location.state as { loadParams?: GalleryItem; isRegenerate?: boolean } | null;
     if (!state?.loadParams) return;
 
-    const { loadParams } = state;
+    const { loadParams, isRegenerate } = state;
 
     console.log("[LoadParams] Captured loadParams, storing for processing");
 
     // Store for later processing (when workflows are loaded)
-    setPendingLoadParams(loadParams);
+    // Include isRegenerate flag to differentiate from use-in-pipe
+    setPendingLoadParams({ ...loadParams, __isRegenerate: isRegenerate });
 
     // Set preview immediately (doesn't need workflows)
     setPreviewPath(`/api/v1/gallery/image/path?path=${encodeURIComponent(loadParams.image.path)}`);
@@ -739,12 +740,14 @@ export default function PromptStudio() {
       if (imageFields.length > 0) {
         const imageField = imageFields[0];
 
-        // PRIORITY 1: Check if job_params already has a value for this image field (original input)
-        const originalInputImage = loadParams.job_params?.[imageField];
+        // PRIORITY 1: For REGENERATION ONLY, check if job_params has original input image
+        // For use-in-pipe, we want to use the OUTPUT image (loadParams.image.path)
+        const isRegenerate = (loadParams as any).__isRegenerate;
+        const originalInputImage = isRegenerate ? loadParams.job_params?.[imageField] : null;
 
         if (originalInputImage && typeof originalInputImage === "string") {
-          // Use the original input image path from job_params
-          console.log("[LoadParams] Using original input image from job_params:", originalInputImage);
+          // Use the original input image path from job_params (regeneration)
+          console.log("[LoadParams] Regeneration - using original input image from job_params:", originalInputImage);
           baseParams[imageField] = originalInputImage;
         } else if (loadParams.image?.path) {
           // FALLBACK: Use the output image path (for non-i2i workflows or if original not found)

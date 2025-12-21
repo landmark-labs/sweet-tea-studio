@@ -419,7 +419,7 @@ export default function Gallery() {
     };
 
     const handleRegenerate = (item: GalleryItem) => {
-        navigate("/", { state: { loadParams: item } });
+        navigate("/", { state: { loadParams: item, isRegenerate: true } });
     };
 
     // Helper to extract relevant prompts
