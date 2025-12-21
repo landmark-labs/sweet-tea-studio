@@ -217,7 +217,14 @@ def read_gallery(
         raise HTTPException(status_code=500, detail="Unable to fetch gallery items")
 
     scored_items: List[tuple[float, GalleryItem]] = []
+    missing_ids: List[int] = []
     for img, job, prompt in results:
+        if img.path and isinstance(img.path, str) and not os.path.exists(img.path):
+            img.is_deleted = True
+            img.deleted_at = datetime.utcnow()
+            session.add(img)
+            missing_ids.append(img.id)
+            continue
         params = job.input_params if job and job.input_params else {}
         if isinstance(params, str):
             try:
@@ -317,6 +324,20 @@ def read_gallery(
             project_id=job.project_id if job else None,
         )
         scored_items.append((score, item))
+
+    if missing_ids:
+        try:
+            session.commit()
+            logger.info(
+                "Soft-deleted missing gallery files",
+                extra=_log_context(request, missing_count=len(missing_ids)),
+            )
+        except SQLAlchemyError:
+            session.rollback()
+            logger.exception(
+                "Failed to soft-delete missing gallery files",
+                extra=_log_context(request, missing_count=len(missing_ids)),
+            )
 
     if search:
         scored_items.sort(key=lambda r: (r[0], r[1].created_at), reverse=True)
