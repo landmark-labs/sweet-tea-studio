@@ -101,5 +101,36 @@ describe("DynamicForm grouping", () => {
             .filter(text => /Node [AB]/.test(text));
         expect(expandedTitles).toEqual(["Node B", "Node A"]);
     });
-});
 
+    it("applies bypass toggle defaults from schema", () => {
+        const bypassSchema = {
+            "controlnet_strength": {
+                title: "Strength",
+                type: "number",
+                default: 1.0,
+                x_node_id: "10",
+                x_core: true,
+                x_form: { section: "nodes", groupId: "10", groupTitle: "ControlNet" }
+            },
+            "__bypass_10": {
+                widget: "toggle",
+                type: "boolean",
+                title: "Bypass ControlNet",
+                default: true,  // This should be respected - node bypassed by default
+                x_node_id: "10"
+            }
+        };
+
+        const { getByText } = render(
+            <DynamicForm
+                schema={bypassSchema}
+                onSubmit={noop}
+                engineId="test-engine"
+            />
+        );
+
+        // The bypass toggle should render and show "Bypassed" state
+        // Look for the bypassed indicator in the UI
+        expect(getByText("Bypassed")).toBeTruthy();
+    });
+});

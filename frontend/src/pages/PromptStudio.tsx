@@ -347,7 +347,7 @@ export default function PromptStudio() {
     const hasExistingData = Object.keys(currentData).length > 0;
     const hasMissingDefaults = Object.entries(schema)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .filter(([key]: [string, any]) => !key.startsWith("__"))
+      .filter(([key]: [string, any]) => !key.startsWith("__") || key.startsWith("__bypass_"))
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .some(([key, field]: [string, any]) => field?.default !== undefined && currentData[key] === undefined);
 
@@ -649,7 +649,7 @@ export default function PromptStudio() {
       // STEP 1: Build defaults from target workflow schema
       const targetDefaults: Record<string, unknown> = {};
       Object.entries(schema).forEach(([k, field]: [string, any]) => {
-        if (!k.startsWith("__") && field?.default !== undefined) {
+        if ((!k.startsWith("__") || k.startsWith("__bypass_")) && field?.default !== undefined) {
           targetDefaults[k] = field.default;
         }
       });
