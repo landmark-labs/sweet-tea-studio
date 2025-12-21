@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { api, Project, FolderImage } from "@/lib/api";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight, FolderOpen, ImageIcon, Loader2, Download, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, FolderOpen, ImageIcon, Loader2, Download, Trash2, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ProjectGalleryProps {
@@ -29,6 +29,8 @@ export function ProjectGallery({ projects, className, onSelectImage }: ProjectGa
     const [images, setImages] = useState<FolderImage[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; image: FolderImage } | null>(null);
+    const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set());
+    const lastSelectedPath = useRef<string | null>(null);
 
     // Get selected project
     const selectedProject = projects.find(p => String(p.id) === selectedProjectId);
@@ -112,6 +114,49 @@ export function ProjectGallery({ projects, className, onSelectImage }: ProjectGa
         const imageUrl = `/api/v1/gallery/image/path?path=${encodeURIComponent(image.path)}`;
         e.dataTransfer.setData("text/plain", imageUrl);
         e.dataTransfer.effectAllowed = "copy";
+    };
+
+    // Multi-select handler
+    const handleImageClick = (image: FolderImage, e: React.MouseEvent) => {
+        if (e.ctrlKey || e.metaKey) {
+            // Toggle selection
+            setSelectedPaths(prev => {
+                const newSet = new Set(prev);
+                if (newSet.has(image.path)) newSet.delete(image.path);
+                else newSet.add(image.path);
+                return newSet;
+            });
+            lastSelectedPath.current = image.path;
+        } else if (e.shiftKey && lastSelectedPath.current) {
+            // Range selection
+            const startIdx = images.findIndex(img => img.path === lastSelectedPath.current);
+            const endIdx = images.findIndex(img => img.path === image.path);
+            if (startIdx !== -1 && endIdx !== -1) {
+                const low = Math.min(startIdx, endIdx);
+                const high = Math.max(startIdx, endIdx);
+                const newSet = new Set(selectedPaths);
+                images.slice(low, high + 1).forEach(img => newSet.add(img.path));
+                setSelectedPaths(newSet);
+            }
+        } else {
+            // Normal click - view image
+            onSelectImage?.(image.path);
+        }
+    };
+
+    // Bulk delete handler
+    const handleBulkDelete = async () => {
+        if (selectedPaths.size === 0 || !selectedProjectId || !selectedFolder) return;
+        if (!confirm(`Delete ${selectedPaths.size} images? This cannot be undone.`)) return;
+
+        try {
+            await api.deleteFolderImages(parseInt(selectedProjectId), selectedFolder, Array.from(selectedPaths));
+            setImages(prev => prev.filter(img => !selectedPaths.has(img.path)));
+            setSelectedPaths(new Set());
+        } catch (e) {
+            console.error("Bulk delete failed", e);
+            alert("Failed to delete some images");
+        }
     };
 
     // Context menu handlers
@@ -262,13 +307,24 @@ export function ProjectGallery({ projects, className, onSelectImage }: ProjectGa
                             {images.map((image) => (
                                 <div
                                     key={image.path}
-                                    className="aspect-square relative group cursor-pointer rounded overflow-hidden border border-slate-200 hover:border-blue-400 hover:shadow-md transition-all"
+                                    className={cn(
+                                        "aspect-square relative group cursor-pointer rounded overflow-hidden border transition-all",
+                                        selectedPaths.has(image.path)
+                                            ? "border-blue-500 ring-2 ring-blue-500 scale-[0.97]"
+                                            : "border-slate-200 hover:border-blue-400 hover:shadow-md"
+                                    )}
                                     draggable
                                     onDragStart={(e) => handleDragStart(e, image)}
-                                    onClick={() => onSelectImage?.(image.path)}
+                                    onClick={(e) => handleImageClick(image, e)}
                                     onContextMenu={(e) => handleContextMenu(e, image)}
-                                    title={`${image.filename}\nClick to view, drag to use as input, right-click for options`}
+                                    title={`${image.filename}\nClick to view, Ctrl+click to select, Shift+click for range`}
                                 >
+                                    {/* Selection indicator */}
+                                    {selectedPaths.has(image.path) && (
+                                        <div className="absolute top-1 left-1 z-20 bg-blue-500 text-white rounded-full p-0.5">
+                                            <Check className="w-3 h-3" />
+                                        </div>
+                                    )}
                                     <img
                                         src={`/api/v1/gallery/image/path?path=${encodeURIComponent(image.path)}`}
                                         alt={image.filename}
@@ -288,10 +344,28 @@ export function ProjectGallery({ projects, className, onSelectImage }: ProjectGa
                 </div>
             </ScrollArea>
 
-            {/* Footer hint */}
+            {/* Footer with selection or hint */}
             {images.length > 0 && (
-                <div className="flex-none p-2 border-t bg-slate-50 text-[10px] text-slate-400 text-center">
-                    Drag images to use as inputs
+                <div className="flex-none p-2 border-t bg-slate-50 text-[10px] text-slate-400">
+                    {selectedPaths.size > 0 ? (
+                        <div className="flex items-center justify-between gap-2">
+                            <span className="text-blue-600 font-medium">{selectedPaths.size} selected</span>
+                            <div className="flex items-center gap-1">
+                                <button
+                                    className="text-slate-500 hover:underline"
+                                    onClick={() => setSelectedPaths(new Set())}
+                                >clear</button>
+                                <button
+                                    className="text-red-600 hover:underline flex items-center gap-1"
+                                    onClick={handleBulkDelete}
+                                >
+                                    <Trash2 className="h-3 w-3" />delete
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="text-center">Ctrl+click to select, drag to use</div>
+                    )}
                 </div>
             )}
 

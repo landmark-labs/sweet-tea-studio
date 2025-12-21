@@ -18,6 +18,7 @@ from app.models.engine import Engine
 from app.models.image import Image, ImageRead
 from app.models.job import Job
 from app.models.prompt import Prompt
+from app.models.workflow import WorkflowTemplate
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -30,6 +31,9 @@ class GalleryItem(BaseModel):
     negative_prompt: Optional[str] = None
     prompt_history: List[Dict[str, Any]] = Field(default_factory=list)
     workflow_template_id: Optional[int] = None
+    workflow_name: Optional[str] = None
+    width: Optional[int] = None
+    height: Optional[int] = None
     created_at: datetime
     caption: Optional[str] = None
     prompt_tags: List[str] = Field(default_factory=list)
@@ -155,9 +159,10 @@ def read_gallery(
         fetch_limit = limit * 5 if search else limit
     
     stmt = (
-        select(Image, Job, Prompt)
+        select(Image, Job, Prompt, WorkflowTemplate)
         .join(Job, Image.job_id == Job.id, isouter=True)
         .join(Prompt, Job.prompt_id == Prompt.id, isouter=True)
+        .join(WorkflowTemplate, Job.workflow_template_id == WorkflowTemplate.id, isouter=True)
         .where(Image.is_deleted == False)  # Exclude soft-deleted images
         .order_by(Image.created_at.desc())
         .offset(skip)
@@ -218,7 +223,7 @@ def read_gallery(
 
     scored_items: List[tuple[float, GalleryItem]] = []
     missing_ids: List[int] = []
-    for img, job, prompt in results:
+    for img, job, prompt, workflow in results:
         if img.path and isinstance(img.path, str) and not os.path.exists(img.path):
             img.is_deleted = True
             img.deleted_at = datetime.utcnow()
@@ -308,6 +313,21 @@ def read_gallery(
             "created_at": img.created_at,
         }
 
+        # Get image dimensions
+        img_width = None
+        img_height = None
+        # Try from job params first (EmptyLatentImage or similar)
+        if isinstance(params, dict):
+            img_width = params.get("width") or params.get("empty_latent_width")
+            img_height = params.get("height") or params.get("empty_latent_height")
+        # Fallback to reading from actual image file
+        if (not img_width or not img_height) and img.path and os.path.exists(img.path):
+            try:
+                with PILImage.open(img.path) as pil_img:
+                    img_width, img_height = pil_img.size
+            except Exception:
+                pass
+
         item = GalleryItem(
             image=image_payload,
             job_params=params if isinstance(params, dict) else {},
@@ -315,6 +335,9 @@ def read_gallery(
             negative_prompt=negative_prompt,
             prompt_history=history,
             workflow_template_id=job.workflow_template_id if job else None,
+            workflow_name=workflow.name if workflow else None,
+            width=img_width,
+            height=img_height,
             created_at=img.created_at,
             caption=caption,
             prompt_tags=prompt_tags,

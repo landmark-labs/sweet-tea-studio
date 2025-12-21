@@ -637,10 +637,23 @@ export default function Gallery() {
                                                     </div>
                                                 </div>
 
-                                                <CardContent className="p-4 text-xs space-y-2 bg-white flex-1 relative z-10" onClick={(e) => {
+                                                <CardContent className="p-4 text-xs space-y-2 bg-white flex-1 relative z-10" onClick={() => {
                                                     // Ensure text selection works, but Card click (parent) handles row selection
                                                     // Stop prop if clicking buttons
                                                 }}>
+                                                    {/* Pipe and Dimensions info */}
+                                                    <div className="flex items-center gap-2 flex-wrap">
+                                                        {item.workflow_name && (
+                                                            <span className="px-1.5 py-0.5 bg-purple-50 text-purple-600 border border-purple-100 rounded text-[10px] font-medium">
+                                                                {item.workflow_name}
+                                                            </span>
+                                                        )}
+                                                        {item.width && item.height && (
+                                                            <span className="px-1.5 py-0.5 bg-slate-100 text-slate-600 border border-slate-200 rounded text-[10px]">
+                                                                {item.width}×{item.height}
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                     {/* Existing Content Preserved */}
                                                     <div className="flex items-center gap-2 text-slate-500">
                                                         <Calendar className="w-3 h-3" />

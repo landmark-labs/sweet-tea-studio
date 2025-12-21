@@ -169,6 +169,9 @@ export interface GalleryItem {
     negative_prompt?: string;
     prompt_history?: Record<string, unknown>[];
     workflow_template_id?: number;
+    workflow_name?: string;
+    width?: number;
+    height?: number;
     created_at: string;
     caption?: string;
     prompt_tags?: string[];
