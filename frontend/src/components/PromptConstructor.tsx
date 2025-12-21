@@ -373,6 +373,10 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
     const valuesRef = useRef(currentValues);
     useEffect(() => { valuesRef.current = currentValues; }, [currentValues]);
 
+    // Ref Pattern: Track fieldItems for library sync without triggering on every change
+    const fieldItemsRef = useRef(fieldItems);
+    useEffect(() => { fieldItemsRef.current = fieldItems; }, [fieldItems]);
+
     // Guard Ref: To prevent "Echo" loops where we parse what we just compiled
     const lastCompiledRef = useRef<{ field: string, value: string } | null>(null);
 
@@ -389,7 +393,10 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
     // running on a library edit before the parent prompt text is updated.
     useEffect(() => {
         if (!library || library.length === 0) return;
-        const fieldKeys = Object.keys(fieldItems);
+
+        // Use refs to access current state without dependencies
+        const currentFieldItems = fieldItemsRef.current;
+        const fieldKeys = Object.keys(currentFieldItems);
         if (fieldKeys.length === 0) return;
 
         const libraryById = new Map(library.map(s => [s.id, s]));
@@ -399,7 +406,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
         const valueUpdates: Record<string, string> = {};
 
         for (const fieldKey of fieldKeys) {
-            const existing = fieldItems[fieldKey] || [];
+            const existing = currentFieldItems[fieldKey] || [];
             let didChangeField = false;
 
             const updated = existing.map(item => {
@@ -430,7 +437,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
             if (!hasLinkedBlocks) continue;
 
             const compiled = updated.map(i => i.content).join(", ");
-            const currentRaw = (currentValues as any)?.[fieldKey];
+            const currentRaw = (valuesRef.current as any)?.[fieldKey];
             const currentVal = typeof currentRaw === "string" ? currentRaw : (currentRaw === null || currentRaw === undefined ? "" : String(currentRaw));
 
             if (compiled !== currentVal) {
@@ -462,7 +469,8 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
         setTimeout(() => {
             syncingLibraryRef.current = false;
         }, 0);
-    }, [library, fieldItems, currentValues, onUpdate, onUpdateMany, targetField]);
+        // Only depend on library - use refs for other values to avoid effect on every keystroke
+    }, [library]);
 
     // Reconciliation Logic (INPUT Channel: External Text -> Items)
     useEffect(() => {
