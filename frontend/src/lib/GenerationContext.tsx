@@ -272,7 +272,11 @@ export function GenerationProvider({ children }: GenerationProviderProps) {
             ws.onmessage = (event) => {
                 const data = JSON.parse(event.data);
                 if (data.type === "status") {
-                    updateFeed(job.id, { status: data.status });
+                    const statusUpdates: { status: string; previewBlob?: string | null } = { status: data.status };
+                    if (data.status === "failed" || data.status === "cancelled") {
+                        statusUpdates.previewBlob = null;
+                    }
+                    updateFeed(job.id, statusUpdates);
                 } else if (data.type === "progress") {
                     const pct = (data.data.value / data.data.max) * 100;
                     updateFeed(job.id, { progress: pct, status: "processing" });
@@ -282,7 +286,8 @@ export function GenerationProvider({ children }: GenerationProviderProps) {
                         status: "completed",
                         progress: 100,
                         previewPath: paths[0],
-                        previewPaths: paths
+                        previewPaths: paths,
+                        previewBlob: null,
                     });
                     ws.close();
                 } else if (data.type === "preview") {
@@ -292,12 +297,13 @@ export function GenerationProvider({ children }: GenerationProviderProps) {
                     lastPreviewUpdate = now;
                     if (data.data?.blob) updateFeed(job.id, { previewBlob: data.data.blob });
                 } else if (data.type === "error") {
-                    updateFeed(job.id, { status: "failed" });
+                    updateFeed(job.id, { status: "failed", previewBlob: null });
                     ws.close();
                 }
             };
             ws.onerror = () => {
-                updateFeed(job.id, { status: "failed" });
+                updateFeed(job.id, { status: "failed", previewBlob: null });
+                ws.close();
             };
         } catch (err) {
             console.error("Generation failed", err);

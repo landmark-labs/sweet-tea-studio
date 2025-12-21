@@ -28,7 +28,7 @@ class ConnectionManager:
                     await connection.send_json(message)
                 except Exception:
                     # Connection might be closed, we can clean it up later or rely on disconnect
-                    pass
+                    self.disconnect(connection, job_id)
 
     def broadcast_sync(self, message: dict, job_id: str):
         """Thread-safe broadcast for background tasks running in threads."""

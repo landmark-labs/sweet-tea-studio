@@ -39,6 +39,8 @@ from app.services.comfy_watchdog import watchdog
 
 # ===== DIAGNOSTIC MODE TOGGLE =====
 DIAGNOSTIC_MODE = False
+PREVIEW_DEBUG = os.getenv("SWEET_TEA_PREVIEW_DEBUG", "").lower() in ("1", "true", "yes")
+DUMP_GRAPH = os.getenv("SWEET_TEA_DUMP_GRAPH", "").lower() in ("1", "true", "yes")
 
 if DIAGNOSTIC_MODE:
     from app.core.comfy_diagnostics import DiagnosticComfyClient as ComfyClient
@@ -412,7 +414,8 @@ def process_job(job_id: int):
                 try:
                     if data.get('type') == 'preview':
                         # Log preview to debug missing frames
-                        print(f"[JobProcessor] Broadcasting preview for job {job_id}. Blob len: {len(data.get('data', {}).get('blob', ''))}")
+                        if PREVIEW_DEBUG:
+                            print(f"[JobProcessor] Broadcasting preview for job {job_id}. Blob len: {len(data.get('data', {}).get('blob', ''))}")
                     
                     data['job_id'] = job_id
                     manager.broadcast_sync(data, str(job_id))
@@ -420,12 +423,12 @@ def process_job(job_id: int):
                     print(f"WebSocket broadcast failed: {e}")
 
             # Debug: Dump graph to file
-            try:
-                import json
-                with open("debug_last_graph.json", "w") as f:
-                    json.dump(final_graph, f, indent=2)
-            except Exception as e:
-                print(f"Failed to dump debug graph: {e}")
+            if DUMP_GRAPH:
+                try:
+                    with open("debug_last_graph.json", "w") as f:
+                        json.dump(final_graph, f, indent=2)
+                except Exception as e:
+                    print(f"Failed to dump debug graph: {e}")
 
             # Race Condition Fix: Connect BEFORE queuing to catch fast/cached execution events
             client.connect()

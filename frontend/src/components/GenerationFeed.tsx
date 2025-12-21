@@ -29,11 +29,6 @@ interface GenerationFeedProps {
 export function GenerationFeed({ items, onSelectPreview, onGenerate }: GenerationFeedProps) {
   const activeItem = items[0];
 
-  // Debug: Log when component renders with preview blob
-  if (activeItem?.previewBlob) {
-    console.log("[GenerationFeed] Rendering with previewBlob:", activeItem.previewBlob.substring(0, 50) + "...");
-  }
-
   // Format stats for display
   const isRunning = activeItem?.status === 'running' || activeItem?.status === 'processing';
   const hasStats = activeItem && (activeItem.elapsedMs || activeItem.iterationsPerSecond);

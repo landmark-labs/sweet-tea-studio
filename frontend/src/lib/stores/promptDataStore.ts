@@ -50,10 +50,13 @@ export const useGenerationFeedStore = create<GenerationFeedState>()(
           previewPaths: [],
           startedAt: new Date().toISOString(),
         };
+        const trimmedExisting = existing
+          .filter((item) => item.jobId !== jobId)
+          .map(({ previewBlob, ...rest }) => rest);
         set({
           generationFeed: [
             nextItem,
-            ...existing.filter((item) => item.jobId !== jobId),
+            ...trimmedExisting,
           ].slice(0, 8),
         });
       },

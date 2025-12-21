@@ -20,8 +20,10 @@ import { ProjectSidebar } from "@/components/ProjectSidebar";
 export default function Gallery() {
     const [items, setItems] = useState<GalleryItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [isLoadingMore, setIsLoadingMore] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [search, setSearch] = useState("");
+    const [activeQuery, setActiveQuery] = useState("");
     const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
     const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
     const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -31,6 +33,8 @@ export default function Gallery() {
     const [selectionMode, setSelectionMode] = useState(false);
     const [fullscreenIndex, setFullscreenIndex] = useState<number | null>(null);
 
+    const PAGE_SIZE = 120;
+    const [hasMore, setHasMore] = useState(true);
 
     const clickTimeout = useRef<NodeJS.Timeout | null>(null);
 
@@ -81,18 +85,52 @@ export default function Gallery() {
         };
     }, []);
 
-    const loadGallery = async (query?: string, projectId?: number | null) => {
+    const loadGallery = async (
+        query?: string,
+        projectId?: number | null,
+        options?: { append?: boolean; loadAll?: boolean }
+    ) => {
+        const append = options?.append ?? false;
+        const loadAll = options?.loadAll ?? false;
+        const queryValue = append ? activeQuery : (query ?? search);
         try {
-            setIsLoading(true);
+            setError(null);
+            if (append) {
+                setIsLoadingMore(true);
+            } else {
+                setIsLoading(true);
+                setActiveQuery(queryValue);
+            }
             const target = projectId !== undefined ? projectId : selectedProjectId;
             const unassignedOnly = target === -1;
-            const data = await api.getGallery(query || search, undefined, unassignedOnly ? null : target, unassignedOnly);
-            setItems(data);
+            const skip = append ? items.length : 0;
+            const data = await api.getGallery({
+                search: queryValue,
+                skip,
+                limit: loadAll ? undefined : PAGE_SIZE,
+                projectId: unassignedOnly ? null : target,
+                unassignedOnly,
+                includeThumbnails: false,
+            });
+            setItems((prev) => (append ? [...prev, ...data] : data));
+            if (loadAll) {
+                setHasMore(false);
+            } else {
+                setHasMore(data.length === PAGE_SIZE);
+            }
+            if (!append) {
+                setSelectedIds(new Set());
+                setLastSelectedId(null);
+            }
         } catch (err) {
             console.error(err);
             setError(err instanceof Error ? err.message : "Failed to load gallery");
         } finally {
-            setIsLoading(false);
+            if (append) {
+                setIsLoadingMore(false);
+            } else {
+                setIsLoading(false);
+            }
         }
     };
 
@@ -108,6 +146,11 @@ export default function Gallery() {
     const handleSearch = (e: React.FormEvent) => {
         e.preventDefault();
         loadGallery(search, selectedProjectId);
+    };
+
+    const handleLoadMore = () => {
+        if (isLoadingMore || !hasMore) return;
+        loadGallery(search, selectedProjectId, { append: true });
     };
 
     // Selection & fullscreen logic
@@ -228,6 +271,12 @@ export default function Gallery() {
         setSelectedIds(new Set());
         setLastSelectedId(null);
         setSelectionMode(true);
+        loadGallery(search, selectedProjectId, { loadAll: true });
+    };
+
+    const handleCleanupStop = () => {
+        setCleanupMode(false);
+        loadGallery(search, selectedProjectId);
     };
 
     const handleCleanupPurge = async () => {
@@ -267,7 +316,7 @@ export default function Gallery() {
     const handleSelectProject = (id: number | null) => {
         setSelectedProjectId(id);
         setSelectedFolder(null); // Reset folder when project changes
-        loadGallery(search, id);
+        loadGallery(search, id, { loadAll: cleanupMode });
     };
 
     const handleSelectFolder = (folder: string | null) => {
@@ -283,7 +332,13 @@ export default function Gallery() {
         if (!confirm("Are you sure you want to delete this image?")) return;
         try {
             await api.deleteImage(id);
-            await loadGallery(search, selectedProjectId);
+            setItems((prev) => prev.filter((item) => item.image.id !== id));
+            setSelectedIds((prev) => {
+                if (!prev.has(id)) return prev;
+                const next = new Set(prev);
+                next.delete(id);
+                return next;
+            });
         } catch (err) {
             alert("Failed to delete image");
         }
@@ -427,7 +482,7 @@ export default function Gallery() {
                             <Button variant={selectionMode ? "default" : "outline"} onClick={() => setSelectionMode(!selectionMode)}>
                                 {selectionMode ? "selection mode on" : "selection mode off"}
                             </Button>
-                            <Button variant={cleanupMode ? "secondary" : "outline"} onClick={cleanupMode ? () => setCleanupMode(false) : handleCleanupStart}>
+                            <Button variant={cleanupMode ? "secondary" : "outline"} onClick={cleanupMode ? handleCleanupStop : handleCleanupStart}>
                                 {cleanupMode ? "done selecting" : "gallery cleanup"}
                             </Button>
                             {cleanupMode && (
@@ -474,70 +529,71 @@ export default function Gallery() {
                             {selectedFolder ? `No images in folder "${selectedFolder}"` : "No images generated yet. Go to New Generation to create some!"}
                         </div>
                     ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                            {displayItems.map((item) => (
-                                <ContextMenu key={item.image.id}>
-                                    <ContextMenuTrigger>
-                                        <Card
-                                            className={cn(
-                                                "group overflow-hidden flex flex-col relative transition-all duration-200 select-none",
-                                                selectedIds.has(item.image.id) ? "ring-2 ring-blue-500 shadow-lg scale-[0.98] bg-blue-50/50" : ""
-                                            )}
-                                            onClick={(e) => handleCardClick(item, e)}
-                                            onDoubleClick={() => handleCardDoubleClick(item)}
-                                        >
-                                            <div className="relative aspect-square bg-slate-100">
-                                                {/* Selection Overlay Checkbox */}
-                                                {selectedIds.has(item.image.id) && (
-                                                    <div className="absolute top-2 left-2 z-20 bg-blue-500 text-white rounded-full p-0.5 shadow-sm">
-                                                        <Check className="w-3 h-3" />
-                                                    </div>
+                        <>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                                {displayItems.map((item) => (
+                                    <ContextMenu key={item.image.id}>
+                                        <ContextMenuTrigger>
+                                            <Card
+                                                className={cn(
+                                                    "group overflow-hidden flex flex-col relative transition-all duration-200 select-none",
+                                                    selectedIds.has(item.image.id) ? "ring-2 ring-blue-500 shadow-lg scale-[0.98] bg-blue-50/50" : ""
                                                 )}
+                                                onClick={(e) => handleCardClick(item, e)}
+                                                onDoubleClick={() => handleCardDoubleClick(item)}
+                                            >
+                                                <div className="relative aspect-square bg-slate-100">
+                                                    {/* Selection Overlay Checkbox */}
+                                                    {selectedIds.has(item.image.id) && (
+                                                        <div className="absolute top-2 left-2 z-20 bg-blue-500 text-white rounded-full p-0.5 shadow-sm">
+                                                            <Check className="w-3 h-3" />
+                                                        </div>
+                                                    )}
 
-                                                <img
-                                                    src={`/api/v1/gallery/image/${item.image.id}`}
-                                                    alt={item.image.filename}
-                                                    className="w-full h-full object-cover transition-transform group-hover:scale-105"
-                                                    onError={(e) => {
-                                                        (e.target as HTMLImageElement).src = "https://placehold.co/400x400?text=Missing+File";
-                                                    }}
-                                                />
+                                                    <img
+                                                        src={`/api/v1/gallery/image/${item.image.id}`}
+                                                        alt={item.image.filename}
+                                                        className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                                                        onError={(e) => {
+                                                            (e.target as HTMLImageElement).src = "https://placehold.co/400x400?text=Missing+File";
+                                                        }}
+                                                    />
 
-                                                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                                                    {/* Keep existing overlay buttons but make them stop propagation so they don't trigger select */}
-                                                    <Button
-                                                        variant="secondary"
-                                                        size="icon"
-                                                        onClick={(e) => { e.stopPropagation(); handleSavePrompt(item); }}
-                                                        title="Save Prompt to Library"
-                                                    >
-                                                        <Save className="w-4 h-4" />
-                                                    </Button>
+                                                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                                                        {/* Keep existing overlay buttons but make them stop propagation so they don't trigger select */}
+                                                        <Button
+                                                            variant="secondary"
+                                                            size="icon"
+                                                            onClick={(e) => { e.stopPropagation(); handleSavePrompt(item); }}
+                                                            title="Save Prompt to Library"
+                                                        >
+                                                            <Save className="w-4 h-4" />
+                                                        </Button>
 
 
-                                                    <Button
-                                                        variant="secondary"
-                                                        size="icon"
-                                                        onClick={(e) => { e.stopPropagation(); handleRegenerate(item); }}
-                                                        title="Regenerate"
-                                                    >
-                                                        <RotateCcw className="w-4 h-4" />
-                                                    </Button>
-                                                    <Button
-                                                        variant="destructive"
-                                                        size="icon"
-                                                        onClick={(e) => { e.stopPropagation(); handleDelete(item.image.id); }}
-                                                        title="Delete"
-                                                    >
-                                                        <Trash2 className="w-4 h-4" />
-                                                    </Button>
+                                                        <Button
+                                                            variant="secondary"
+                                                            size="icon"
+                                                            onClick={(e) => { e.stopPropagation(); handleRegenerate(item); }}
+                                                            title="Regenerate"
+                                                        >
+                                                            <RotateCcw className="w-4 h-4" />
+                                                        </Button>
+                                                        <Button
+                                                            variant="destructive"
+                                                            size="icon"
+                                                            onClick={(e) => { e.stopPropagation(); handleDelete(item.image.id); }}
+                                                            title="Delete"
+                                                        >
+                                                            <Trash2 className="w-4 h-4" />
+                                                        </Button>
+                                                    </div>
                                                 </div>
-                                            </div>
 
-                                            <CardContent className="p-4 text-xs space-y-2 bg-white flex-1 relative z-10" onClick={(e) => {
-                                                // Ensure text selection works, but Card click (parent) handles row selection
-                                                // Stop prop if clicking buttons
-                                            }}>
+                                                <CardContent className="p-4 text-xs space-y-2 bg-white flex-1 relative z-10" onClick={(e) => {
+                                                    // Ensure text selection works, but Card click (parent) handles row selection
+                                                    // Stop prop if clicking buttons
+                                                }}>
                                                 {/* Existing Content Preserved */}
                                                 <div className="flex items-center gap-2 text-slate-500">
                                                     <Calendar className="w-3 h-3" />
@@ -617,7 +673,15 @@ export default function Gallery() {
                                 </ContextMenu>
                             ))}
                         </div>
-                    )}
+                        {!cleanupMode && hasMore && (
+                            <div className="flex justify-center pt-6">
+                                <Button variant="outline" onClick={handleLoadMore} disabled={isLoadingMore}>
+                                    {isLoadingMore ? "Loading..." : "Load more"}
+                                </Button>
+                            </div>
+                        )}
+                    </>
+                )}
                 </div>
             </div>
             {

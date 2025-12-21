@@ -8,6 +8,7 @@ import urllib.error
 import websocket
 import time
 import socket
+import os
 from typing import Dict, Any, List, Optional
 from app.models.engine import Engine
 
@@ -159,6 +160,20 @@ class ComfyClient:
         if not self.ws:
             self.connect()
 
+        debug_ws = os.getenv("SWEET_TEA_COMFY_DEBUG", "").lower() in ("1", "true", "yes")
+
+        def _debug(message: str):
+            if debug_ws:
+                print(message)
+
+        def _close_ws():
+            if self.ws:
+                try:
+                    self.ws.close()
+                except Exception:
+                    pass
+                self.ws = None
+
         print(f"Listening for completion of {prompt_id}...")
         backoff = self._default_backoff
         reconnect_attempts = 0
@@ -168,6 +183,7 @@ class ComfyClient:
         captured_images: List[Dict[str, Any]] = []
         # Track preview images as fallback when no SaveImage node exists
         preview_images: List[Dict[str, Any]] = []
+        max_preview_images = 3
         image_counter = 0
         preview_counter = 0
         execution_complete = False  # Track when node execution finishes
@@ -194,6 +210,7 @@ class ComfyClient:
                     # do not hammer a recovering ComfyUI instance.
                     reconnect_attempts += 1
                     if reconnect_attempts > max_reconnect_attempts:
+                        _close_ws()
                         raise ComfyConnectionError(
                             f"Lost connection to ComfyUI after {max_reconnect_attempts} reconnection attempts."
                         )
@@ -214,6 +231,7 @@ class ComfyClient:
                         node_id = data.get('node_id', 'unknown')
                         node_type = data.get('node_type', 'unknown')
                         exception_message = data.get('exception_message', 'Unknown error')
+                        _close_ws()
                         raise ComfyResponseError(
                             f"ComfyUI execution failed at node {node_id} ({node_type}): {exception_message}"
                         )
@@ -246,10 +264,10 @@ class ComfyClient:
                     image_format = struct.unpack('>I', out[4:8])[0]
                     image_data = out[8:]
                     
-                    print(f"[ComfyClient] Received BINARY frame. EventType: {event_type}, Format: {image_format}, DataLen: {len(image_data)}")
+                    _debug(f"[ComfyClient] Received BINARY frame. EventType: {event_type}, Format: {image_format}, DataLen: {len(image_data)}")
                     
                     if event_type == 1:  # PREVIEW_IMAGE
-                        print(f"[ComfyClient] Received PREVIEW_IMAGE (Event 1). Length: {len(image_data)} bytes")
+                        _debug(f"[ComfyClient] Received PREVIEW_IMAGE (Event 1). Length: {len(image_data)} bytes")
                         # Throttle previews to avoid overwhelming the WebSocket (max 10 FPS)
                         # Always process if execution is complete (to ensure we capture the final result)
                         current_time = time.time()
@@ -271,6 +289,8 @@ class ComfyClient:
                             "format": ext,
                             "source": "final_preview" if execution_complete else "ksampler_preview"
                         })
+                        if len(preview_images) > max_preview_images:
+                            preview_images = preview_images[-max_preview_images:]
                         
                         if progress_callback:
                             progress_callback({
@@ -300,7 +320,7 @@ class ComfyClient:
                             "source": "websocket"
                         })
                         
-                        print(f"Captured image from WebSocket: {filename} ({len(image_data)} bytes)")
+                        _debug(f"Captured image from WebSocket: {filename} ({len(image_data)} bytes)")
                         
                         # Also send preview to frontend
                         b64_img = base64.b64encode(image_data).decode('utf-8')
@@ -318,11 +338,16 @@ class ComfyClient:
                     continue  # Done processing binary message
                     
         except (websocket.WebSocketException, ConnectionResetError) as e:
+            _close_ws()
             raise ComfyConnectionError(f"WebSocket connection lost during execution.") from e
+        except Exception:
+            _close_ws()
+            raise
 
         # If we captured images via WebSocket, use those (no HTTP download needed)
         if captured_images:
             print(f"Using {len(captured_images)} images captured from WebSocket stream")
+            _close_ws()
             return captured_images
 
         def _history_output_images() -> List[Dict[str, Any]]:
@@ -371,6 +396,7 @@ class ComfyClient:
         for _attempt in range(5):
             output_images = _history_output_images()
             if output_images:
+                _close_ws()
                 return output_images
             time.sleep(0.2)
 
@@ -379,7 +405,7 @@ class ComfyClient:
         if preview_images:
             print(f"No history images detected. Using {len(preview_images)} preview image(s) as final output")
             last_preview = preview_images[-1]
-            return [
+            result = [
                 {
                     "filename": f"gen_{prompt_id[:8]}_{1:03d}.{last_preview['format']}",
                     "subfolder": "",
@@ -389,5 +415,8 @@ class ComfyClient:
                     "source": "preview_fallback",
                 }
             ]
+            _close_ws()
+            return result
 
+        _close_ws()
         return []

@@ -132,6 +132,15 @@ export interface TagPromptResponse {
     prompt_id?: number;
 }
 
+export interface GalleryQuery {
+    search?: string;
+    skip?: number;
+    limit?: number;
+    projectId?: number | null;
+    unassignedOnly?: boolean;
+    includeThumbnails?: boolean;
+}
+
 export interface PromptSuggestion {
     value: string;
     type: "tag" | "prompt";
@@ -557,33 +566,54 @@ export const api = {
 
     // --- Gallery ---
     getGallery: async (
-        searchOrSkip?: string | number,
+        searchOrSkip?: GalleryQuery | string | number,
         limit?: number,
         projectId?: number | null,
         unassignedOnly = false
     ): Promise<GalleryItem[]> => {
         const params = new URLSearchParams();
+        let usedNewParams = false;
 
-        // Handle both old (skip, limit) and new (search, limit) signatures
-        if (typeof searchOrSkip === 'string') {
-            if (searchOrSkip) params.append("search", searchOrSkip);
-            params.append("skip", "0");
+        if (searchOrSkip && typeof searchOrSkip === "object") {
+            usedNewParams = true;
+            const query = searchOrSkip as GalleryQuery;
+            if (query.search) params.append("search", query.search);
+            if (query.skip !== undefined) params.append("skip", String(query.skip));
+            if (query.limit !== undefined) params.append("limit", String(query.limit));
+            if (query.projectId !== undefined && query.projectId !== null) {
+                params.append("project_id", String(query.projectId));
+            }
+            if (query.unassignedOnly) params.append("unassigned_only", "true");
+            if (query.includeThumbnails !== undefined) {
+                params.append("include_thumbnails", query.includeThumbnails ? "true" : "false");
+            }
         } else {
-            params.append("skip", String(searchOrSkip ?? 0));
-        }
-        // Only send limit if explicitly provided - otherwise backend returns all
-        if (limit !== undefined) {
-            params.append("limit", String(limit));
+            // Handle both old (skip, limit) and new (search, limit) signatures
+            if (typeof searchOrSkip === "string") {
+                if (searchOrSkip) params.append("search", searchOrSkip);
+                params.append("skip", "0");
+            } else {
+                params.append("skip", String(searchOrSkip ?? 0));
+            }
+            // Only send limit if explicitly provided - otherwise backend returns all
+            if (limit !== undefined) {
+                params.append("limit", String(limit));
+            }
+
+            if (projectId !== undefined && projectId !== null) {
+                params.append("project_id", String(projectId));
+            }
+            if (unassignedOnly) {
+                params.append("unassigned_only", "true");
+            }
         }
 
-        if (projectId !== undefined && projectId !== null) {
-            params.append("project_id", String(projectId));
+        const baseUrl = `${API_BASE}/gallery/?${params.toString()}`;
+        let res = await fetch(baseUrl);
+        if (!res.ok && usedNewParams && params.has("include_thumbnails")) {
+            params.delete("include_thumbnails");
+            res = await fetch(`${API_BASE}/gallery/?${params.toString()}`);
         }
-        if (unassignedOnly) {
-            params.append("unassigned_only", "true");
-        }
-
-        const res = await fetch(`${API_BASE}/gallery/?${params.toString()}`);
         if (!res.ok) throw new Error("Failed to fetch gallery");
         return res.json();
     },

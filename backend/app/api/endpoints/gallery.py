@@ -11,6 +11,7 @@ from PIL import Image as PILImage, ExifTags
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session, func, or_, select
+from sqlalchemy.orm import defer
 
 from app.db.database import get_session
 from app.models.engine import Engine
@@ -141,6 +142,7 @@ def read_gallery(
     skip: int = Query(0, ge=0),
     limit: Optional[int] = Query(None, ge=1, description="Max items to return. If omitted, returns all."),
     search: Optional[str] = Query(None, description="Search by prompt text, tags, or caption"),
+    include_thumbnails: bool = Query(True, description="Include inline thumbnail bytes"),
     kept_only: bool = Query(False),
     collection_id: Optional[int] = Query(None),
     project_id: Optional[int] = Query(None),
@@ -160,6 +162,8 @@ def read_gallery(
         .order_by(Image.created_at.desc())
         .offset(skip)
     )
+    if not include_thumbnails:
+        stmt = stmt.options(defer(Image.thumbnail_data))
     if fetch_limit is not None:
         stmt = stmt.limit(fetch_limit)
 
@@ -280,8 +284,25 @@ def read_gallery(
         else:
             score = 1.0
 
+        image_payload: Dict[str, Any] = {
+            "id": img.id,
+            "job_id": img.job_id,
+            "path": img.path,
+            "filename": img.filename,
+            "format": img.format,
+            "thumbnail_path": img.thumbnail_path,
+            "thumbnail_data": img.thumbnail_data if include_thumbnails else None,
+            "is_kept": img.is_kept,
+            "is_deleted": img.is_deleted,
+            "deleted_at": img.deleted_at,
+            "caption": img.caption,
+            "collection_id": img.collection_id,
+            "extra_metadata": img.extra_metadata,
+            "created_at": img.created_at,
+        }
+
         item = GalleryItem(
-            image=img,
+            image=image_payload,
             job_params=params if isinstance(params, dict) else {},
             prompt=prompt_text,
             negative_prompt=negative_prompt,

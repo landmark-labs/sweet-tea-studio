@@ -27,6 +27,27 @@ export function ImageUpload({ value, onChange, engineId, options = [], projectSl
 
     // Mask Editor State
     const [isMaskEditorOpen, setIsMaskEditorOpen] = useState(false);
+    const objectUrlRef = useRef<string | null>(null);
+
+    useEffect(() => {
+        if (objectUrlRef.current && objectUrlRef.current !== preview) {
+            if (objectUrlRef.current.startsWith("blob:")) {
+                URL.revokeObjectURL(objectUrlRef.current);
+            }
+            objectUrlRef.current = null;
+        }
+        if (preview && preview.startsWith("blob:")) {
+            objectUrlRef.current = preview;
+        }
+    }, [preview]);
+
+    useEffect(() => {
+        return () => {
+            if (objectUrlRef.current && objectUrlRef.current.startsWith("blob:")) {
+                URL.revokeObjectURL(objectUrlRef.current);
+            }
+        };
+    }, []);
 
     useEffect(() => {
         // Load recent form local storage
@@ -39,7 +60,7 @@ export function ImageUpload({ value, onChange, engineId, options = [], projectSl
     useEffect(() => {
         if (isBrowseOpen) {
             // Load gallery images for the "Output" tab
-            api.getGallery().then(items => {
+            api.getGallery({ limit: 25, includeThumbnails: false }).then(items => {
                 // Sort by created_at desc (newest first)
                 const sorted = items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
                 setGalleryImages(sorted.slice(0, 25).map(i => i.image.path));

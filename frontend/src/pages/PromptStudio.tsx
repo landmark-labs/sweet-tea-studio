@@ -170,8 +170,13 @@ export default function PromptStudio() {
     try {
       const projectFilter = galleryScopeAll || !selectedProjectId ? null : parseInt(selectedProjectId);
       const unassignedOnly = galleryScopeAll ? false : !selectedProjectId;
-      const allImages = await api.getGallery(undefined, undefined, projectFilter, unassignedOnly);
-      setGalleryImages(allImages.slice(0, 50));
+      const images = await api.getGallery({
+        projectId: projectFilter,
+        unassignedOnly,
+        limit: 50,
+        includeThumbnails: false,
+      });
+      setGalleryImages(images);
     } catch (e) {
       console.error("Failed to load gallery", e);
     }
@@ -906,6 +911,13 @@ export default function PromptStudio() {
 
   const wsRef = useRef<WebSocket | null>(null);
   const lastPreviewUpdateRef = useRef<number>(0);
+  const wsDebug = useMemo(
+    () => import.meta.env.DEV && localStorage.getItem("ds_debug_ws") === "1",
+    []
+  );
+  const logWs = (...args: unknown[]) => {
+    if (wsDebug) console.log(...args);
+  };
 
   useEffect(() => {
     if (!lastJobId) return;
@@ -923,25 +935,25 @@ export default function PromptStudio() {
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsApiPath = window.location.pathname.startsWith('/studio') ? '/sts-api/api/v1' : '/api/v1';
     const wsUrl = `${wsProtocol}//${window.location.host}${wsApiPath}/jobs/${lastJobId}/ws`;
-    console.log(`[WS] Connecting to: ${wsUrl}`);
+    logWs(`[WS] Connecting to: ${wsUrl}`);
 
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
     ws.onopen = async () => {
-      console.log(`[WS] Connected to job ${lastJobId}`);
+      logWs(`[WS] Connected to job ${lastJobId}`);
 
       // Check if job already failed (race condition: error broadcast before WS connected)
       try {
         const job = await api.getJob(lastJobId);
         if (job.status === "failed" && job.error) {
-          console.log(`[WS] Job already failed before connection: ${job.error}`);
+          logWs(`[WS] Job already failed before connection: ${job.error}`);
           setGenerationState("failed");
           setStatusLabel("failed");
           setError(job.error);
-          updateFeed(lastJobId, { status: "failed" });
+          updateFeed(lastJobId, { status: "failed", previewBlob: null });
         } else if (job.status === "completed") {
-          console.log(`[WS] Job already completed before connection`);
+          logWs(`[WS] Job already completed before connection`);
           setGenerationState("completed");
           setStatusLabel("");
           setProgress(100);
@@ -954,13 +966,17 @@ export default function PromptStudio() {
 
     ws.onmessage = (event) => {
       const data = JSON.parse(event.data);
-      console.log(`[WS] Message received:`, data.type);
+      logWs(`[WS] Message received:`, data.type);
 
       if (data.type === "status") {
         const nextState = mapStatusToGenerationState(data.status);
         setGenerationState(nextState);
         setStatusLabel(data.status || "");
-        updateFeed(lastJobId, { status: data.status });
+        const statusUpdates: { status: string; previewBlob?: string | null } = { status: data.status };
+        if (data.status === "failed" || data.status === "cancelled") {
+          statusUpdates.previewBlob = null;
+        }
+        updateFeed(lastJobId, statusUpdates);
       } else if (data.type === "progress") {
         const { value, max } = data.data;
         const pct = (value / max) * 100;
@@ -988,7 +1004,7 @@ export default function PromptStudio() {
       } else if (data.type === "execution_complete" || data.type === "generation_done") {
         // ComfyUI finished rendering - reset button immediately
         // Don't wait for image download/saving (5-7s)
-        console.log(`[WS] Received ${data.type} - resetting button and clearing job state`);
+        logWs(`[WS] Received ${data.type} - resetting button and clearing job state`);
         setGenerationState("completed");  // Clear status to show "generate" button
         setStatusLabel("");
         setProgress(0);    // Reset progress
@@ -1000,7 +1016,7 @@ export default function PromptStudio() {
         // Check if this is the final "executing" message with node=null (ComfyUI finished)
         if (data.data?.node === null) {
           // ComfyUI finished rendering - reset button immediately!
-          console.log(`[WS] Received executing with node=null - ComfyUI done, resetting button`);
+          logWs(`[WS] Received executing with node=null - ComfyUI done, resetting button`);
           setGenerationState("completed");
           setStatusLabel("");
           setProgress(0);
@@ -1029,6 +1045,7 @@ export default function PromptStudio() {
             progress: 100,
             previewPath: imagePath,
             previewPaths: allPaths,
+            previewBlob: null,
           });
 
           handlePreviewSelect(imagePath, {
@@ -1038,7 +1055,7 @@ export default function PromptStudio() {
             job_params: params
           });
         } else {
-          updateFeed(lastJobId, { status: "completed", progress: 100 });
+          updateFeed(lastJobId, { status: "completed", progress: 100, previewBlob: null });
         }
         setGalleryRefresh(prev => prev + 1);
         // Cleanup - button was already reset by generation_done
@@ -1067,14 +1084,14 @@ export default function PromptStudio() {
         setGenerationState("failed");
         setStatusLabel("failed");
         setError(data.message);
-        updateFeed(lastJobId, { status: "failed" });
+        updateFeed(lastJobId, { status: "failed", previewBlob: null });
         // Reset button to idle on error
         setLastJobId(null);
       }
     };
 
     ws.onclose = (event) => {
-      console.log(`[WS] Closed for job ${lastJobId}. Code: ${event.code}, Reason: ${event.reason}, Clean: ${event.wasClean}`);
+      logWs(`[WS] Closed for job ${lastJobId}. Code: ${event.code}, Reason: ${event.reason}, Clean: ${event.wasClean}`);
     };
 
     ws.onerror = (errorEvent) => {
@@ -1093,7 +1110,7 @@ export default function PromptStudio() {
             setGenerationState(mapStatusToGenerationState(job.status));
             setStatusLabel(job.status);
             setError(job.error || "Job failed");
-            updateFeed(lastJobId, { status: job.status });
+            updateFeed(lastJobId, { status: job.status, previewBlob: null });
           } else {
             // Job might still be running, poll again
             setError("Connection lost - checking status...");
@@ -1103,7 +1120,7 @@ export default function PromptStudio() {
           setError("Connection lost during generation");
           setGenerationState("failed");
           setStatusLabel("failed");
-          updateFeed(lastJobId, { status: "failed" });
+          updateFeed(lastJobId, { status: "failed", previewBlob: null });
         }
       }, 1500);
     };
@@ -1111,7 +1128,7 @@ export default function PromptStudio() {
     return () => {
       // Only close if this is still the current WebSocket
       if (wsRef.current === ws) {
-        console.log(`[WS] Cleanup: closing connection for job ${lastJobId}`);
+        logWs(`[WS] Cleanup: closing connection for job ${lastJobId}`);
         ws.close();
         wsRef.current = null;
       }
