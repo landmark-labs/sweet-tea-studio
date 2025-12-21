@@ -462,7 +462,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
         setTimeout(() => {
             syncingLibraryRef.current = false;
         }, 0);
-    }, [library]);
+    }, [library, fieldItems, currentValues, onUpdate, onUpdateMany, targetField]);
 
     // Reconciliation Logic (INPUT Channel: External Text -> Items)
     useEffect(() => {
