@@ -846,6 +846,16 @@ export const api = {
         return res.json();
     },
 
+    deleteFolderImages: async (projectId: number, folderName: string, paths: string[]): Promise<{ deleted: number; errors: string[] }> => {
+        const res = await fetch(`${API_BASE}/projects/${projectId}/folders/${encodeURIComponent(folderName)}/delete-images`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ paths }),
+        });
+        if (!res.ok) throw new Error("Failed to delete folder images");
+        return res.json();
+    },
+
     // --- System Control ---
     restartBackend: async (): Promise<{ message: string; status: string }> => {
         const res = await fetch(`${API_BASE}/status/restart`, { method: "POST" });
@@ -929,6 +939,8 @@ export interface FolderImage {
     path: string;
     filename: string;
     mtime: string;
+    width?: number;
+    height?: number;
 }
 
 // --- Snippets (Backend-persisted prompt blocks) ---

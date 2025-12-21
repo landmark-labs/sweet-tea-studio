@@ -3,7 +3,7 @@ import { api, Project, FolderImage } from "@/lib/api";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight, FolderOpen, ImageIcon, Loader2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, FolderOpen, ImageIcon, Loader2, Download, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ProjectGalleryProps {
@@ -28,6 +28,7 @@ export function ProjectGallery({ projects, className, onSelectImage }: ProjectGa
     });
     const [images, setImages] = useState<FolderImage[]>([]);
     const [isLoading, setIsLoading] = useState(false);
+    const [contextMenu, setContextMenu] = useState<{ x: number; y: number; image: FolderImage } | null>(null);
 
     // Get selected project
     const selectedProject = projects.find(p => String(p.id) === selectedProjectId);
@@ -112,6 +113,57 @@ export function ProjectGallery({ projects, className, onSelectImage }: ProjectGa
         e.dataTransfer.setData("text/plain", imageUrl);
         e.dataTransfer.effectAllowed = "copy";
     };
+
+    // Context menu handlers
+    const handleContextMenu = (e: React.MouseEvent, image: FolderImage) => {
+        e.preventDefault();
+        setContextMenu({ x: e.clientX, y: e.clientY, image });
+    };
+
+    const handleDownload = async () => {
+        if (!contextMenu) return;
+        const { image } = contextMenu;
+        try {
+            const url = `/api/v1/gallery/image/path?path=${encodeURIComponent(image.path)}`;
+            const res = await fetch(url);
+            const blob = await res.blob();
+            const a = document.createElement("a");
+            a.href = URL.createObjectURL(blob);
+            a.download = image.filename;
+            a.click();
+            URL.revokeObjectURL(a.href);
+        } catch (e) {
+            console.error("Download failed", e);
+        }
+        setContextMenu(null);
+    };
+
+    const handleDelete = async () => {
+        if (!contextMenu || !selectedProjectId || !selectedFolder) return;
+        const { image } = contextMenu;
+
+        if (!confirm(`Delete "${image.filename}"? This cannot be undone.`)) {
+            setContextMenu(null);
+            return;
+        }
+
+        try {
+            await api.deleteFolderImages(parseInt(selectedProjectId), selectedFolder, [image.path]);
+            setImages(prev => prev.filter(img => img.path !== image.path));
+        } catch (e) {
+            console.error("Delete failed", e);
+            alert("Failed to delete image");
+        }
+        setContextMenu(null);
+    };
+
+    // Close context menu on click outside
+    useEffect(() => {
+        if (!contextMenu) return;
+        const close = () => setContextMenu(null);
+        window.addEventListener("click", close);
+        return () => window.removeEventListener("click", close);
+    }, [contextMenu]);
 
     if (collapsed) {
         return (
@@ -214,7 +266,8 @@ export function ProjectGallery({ projects, className, onSelectImage }: ProjectGa
                                     draggable
                                     onDragStart={(e) => handleDragStart(e, image)}
                                     onClick={() => onSelectImage?.(image.path)}
-                                    title={`${image.filename}\nClick to view, drag to use as input`}
+                                    onContextMenu={(e) => handleContextMenu(e, image)}
+                                    title={`${image.filename}\nClick to view, drag to use as input, right-click for options`}
                                 >
                                     <img
                                         src={`/api/v1/gallery/image/path?path=${encodeURIComponent(image.path)}`}
@@ -222,8 +275,11 @@ export function ProjectGallery({ projects, className, onSelectImage }: ProjectGa
                                         className="w-full h-full object-cover"
                                         loading="lazy"
                                     />
-                                    <div className="absolute inset-x-0 bottom-0 bg-black/70 text-white text-[8px] p-1 truncate opacity-0 group-hover:opacity-100 transition-opacity">
-                                        {image.filename}
+                                    <div className="absolute inset-x-0 bottom-0 bg-black/70 text-white text-[8px] p-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <div className="truncate">{image.filename}</div>
+                                        {image.width && image.height && (
+                                            <div className="text-[7px] text-slate-300">{image.width}×{image.height}</div>
+                                        )}
                                     </div>
                                 </div>
                             ))}
@@ -236,6 +292,30 @@ export function ProjectGallery({ projects, className, onSelectImage }: ProjectGa
             {images.length > 0 && (
                 <div className="flex-none p-2 border-t bg-slate-50 text-[10px] text-slate-400 text-center">
                     Drag images to use as inputs
+                </div>
+            )}
+
+            {/* Context Menu */}
+            {contextMenu && (
+                <div
+                    className="fixed z-50 bg-white border border-slate-200 rounded-md shadow-lg py-1 min-w-[140px]"
+                    style={{ left: contextMenu.x, top: contextMenu.y }}
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <button
+                        className="w-full px-3 py-1.5 text-left text-xs hover:bg-slate-100 flex items-center gap-2"
+                        onClick={handleDownload}
+                    >
+                        <Download className="h-3 w-3" />
+                        download
+                    </button>
+                    <button
+                        className="w-full px-3 py-1.5 text-left text-xs text-red-600 hover:bg-red-50 flex items-center gap-2"
+                        onClick={handleDelete}
+                    >
+                        <Trash2 className="h-3 w-3" />
+                        delete
+                    </button>
                 </div>
             )}
         </div>

@@ -3,7 +3,7 @@ import { api, Engine, ComfyLaunchConfig, ApiKeysSettings } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { AlertCircle, CheckCircle2, Loader2, Save, RefreshCw, Eye, EyeOff } from "lucide-react";
+import { AlertCircle, CheckCircle2, Loader2, Save, RefreshCw, Eye, EyeOff, Database } from "lucide-react";
 
 export default function Settings() {
     const [engines, setEngines] = useState<Engine[]>([]);
@@ -36,6 +36,7 @@ export default function Settings() {
     const [savingApiKeys, setSavingApiKeys] = useState(false);
     const [showCivitaiKey, setShowCivitaiKey] = useState(false);
     const [showRule34Key, setShowRule34Key] = useState(false);
+    const [isExportingDb, setIsExportingDb] = useState(false);
 
     useEffect(() => {
         loadEngines();
@@ -148,6 +149,20 @@ export default function Settings() {
             setError(e instanceof Error ? e.message : "Failed to save API keys");
         } finally {
             setSavingApiKeys(false);
+        }
+    };
+
+    const handleExportProfile = async () => {
+        setIsExportingDb(true);
+        try {
+            const result = await api.exportDatabaseToComfy();
+            setSuccess(`Profile exported to ${result.path}`);
+            setTimeout(() => setSuccess(null), 5000);
+        } catch (e) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            setError((e as any)?.message || "Failed to export profile");
+        } finally {
+            setIsExportingDb(false);
         }
     };
 
@@ -424,6 +439,26 @@ export default function Settings() {
                         <span className="text-xs text-muted-foreground">
                             leave fields empty to keep current values
                         </span>
+                    </div>
+                </div>
+
+                {/* Profile Export */}
+                <div className="space-y-6 bg-white rounded-xl p-6 border shadow-sm">
+                    <h2 className="text-lg font-medium border-b pb-2">profile export</h2>
+                    <p className="text-sm text-muted-foreground">
+                        export your profile database for backup or transfer to another installation.
+                        this creates a compressed zip file with your settings, workflows, and generation history.
+                    </p>
+
+                    <div className="flex items-center gap-3">
+                        <Button onClick={handleExportProfile} disabled={isExportingDb}>
+                            {isExportingDb ? (
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            ) : (
+                                <Database className="w-4 h-4 mr-2" />
+                            )}
+                            export profile
+                        </Button>
                     </div>
                 </div>
 

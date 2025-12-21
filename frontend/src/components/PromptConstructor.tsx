@@ -763,7 +763,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
                 color: COLORS[library.length % COLORS.length]
             };
 
-            setLibrary([newSnippet, ...library]);
+            setLibrary([...library, newSnippet]);
             setSnippetContent("");
             setSnippetTitle("");
         }

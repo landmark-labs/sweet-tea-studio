@@ -104,19 +104,6 @@ export function GenerationFeed({ items, onSelectPreview, onGenerate }: Generatio
 
             {/* Buttons */}
             <div className="space-y-1.5">
-              {(activeItem.previewPaths?.[0] || activeItem.previewPath) && !activeItem.previewBlob && (
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  className="h-7 w-full text-xs"
-                  onClick={() => {
-                    const path = activeItem.previewPaths?.[0] || activeItem.previewPath;
-                    if (path) onSelectPreview?.({ ...activeItem, selectedPath: path });
-                  }}
-                >
-                  view result
-                </Button>
-              )}
               {onGenerate && (
                 <Button
                   size="sm"
@@ -130,7 +117,7 @@ export function GenerationFeed({ items, onSelectPreview, onGenerate }: Generatio
                   <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                   </svg>
-                  Generate
+                  generate
                 </Button>
               )}
             </div>
@@ -157,7 +144,7 @@ export function GenerationFeed({ items, onSelectPreview, onGenerate }: Generatio
                 <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
-                Generate
+                generate
               </Button>
             )}
           </div>

@@ -197,6 +197,8 @@ export interface FolderImage {
     path: string;
     filename: string;
     mtime: string;
+    width?: number;
+    height?: number;
 }
 
 // ====================

@@ -35,6 +35,10 @@ export default function Gallery() {
     const [cleanupMode, setCleanupMode] = useState(false);
     const [selectionMode, setSelectionMode] = useState(false);
     const [fullscreenIndex, setFullscreenIndex] = useState<number | null>(null);
+    const [zoomScale, setZoomScale] = useState(1);
+    const [panPosition, setPanPosition] = useState({ x: 0, y: 0 });
+    const [isDragging, setIsDragging] = useState(false);
+    const dragStart = useRef({ x: 0, y: 0 });
 
     const PAGE_SIZE = 120;
     const [hasMore, setHasMore] = useState(true);
@@ -193,6 +197,39 @@ export default function Gallery() {
         if (fullscreenIndex === null || items.length === 0) return;
         const nextIndex = (fullscreenIndex + direction + items.length) % items.length;
         setFullscreenIndex(nextIndex);
+        // Reset zoom/pan when navigating
+        setZoomScale(1);
+        setPanPosition({ x: 0, y: 0 });
+    };
+
+    // Zoom with wheel
+    const handleFullscreenWheel = (e: React.WheelEvent) => {
+        e.preventDefault();
+        const delta = e.deltaY > 0 ? -0.15 : 0.15;
+        setZoomScale(prev => Math.max(0.5, Math.min(5, prev + delta)));
+    };
+
+    // Pan handlers
+    const handlePanStart = (e: React.MouseEvent) => {
+        if (zoomScale <= 1) return;
+        setIsDragging(true);
+        dragStart.current = { x: e.clientX - panPosition.x, y: e.clientY - panPosition.y };
+    };
+
+    const handlePanMove = (e: React.MouseEvent) => {
+        if (!isDragging) return;
+        setPanPosition({
+            x: e.clientX - dragStart.current.x,
+            y: e.clientY - dragStart.current.y
+        });
+    };
+
+    const handlePanEnd = () => setIsDragging(false);
+
+    // Reset zoom on double-click
+    const handleZoomReset = () => {
+        setZoomScale(1);
+        setPanPosition({ x: 0, y: 0 });
     };
 
     const handleImageError = (event: React.SyntheticEvent<HTMLImageElement>) => {
@@ -604,99 +641,105 @@ export default function Gallery() {
                                                     // Ensure text selection works, but Card click (parent) handles row selection
                                                     // Stop prop if clicking buttons
                                                 }}>
-                                                {/* Existing Content Preserved */}
-                                                <div className="flex items-center gap-2 text-slate-500">
-                                                    <Calendar className="w-3 h-3" />
-                                                    <span>{new Date(item.created_at).toLocaleString()}</span>
-                                                </div>
-
-
-
-                                                {item.caption && (
-                                                    <p className="text-slate-600 line-clamp-2">{item.caption}</p>
-                                                )}
-
-                                                {item.prompt_tags && item.prompt_tags.length > 0 && (
-                                                    <div className="flex flex-wrap gap-1 mt-1">
-                                                        {item.prompt_tags.slice(0, 6).map((tag) => (
-                                                            <span key={tag} className="px-1.5 py-0.5 bg-indigo-50 text-indigo-600 border border-indigo-100 rounded">#{tag}</span>
-                                                        ))}
+                                                    {/* Existing Content Preserved */}
+                                                    <div className="flex items-center gap-2 text-slate-500">
+                                                        <Calendar className="w-3 h-3" />
+                                                        <span>{new Date(item.created_at).toLocaleString()}</span>
                                                     </div>
-                                                )}
 
-                                                {(() => {
-                                                    const { positive, negative } = getPrompts(item.job_params);
-                                                    return (
-                                                        <div className="mt-2 space-y-2">
-                                                            {positive && (
-                                                                <div className="group/prompt">
-                                                                    <div className="flex items-center justify-between mb-1">
-                                                                        <span className="font-semibold text-green-600 block text-[10px] uppercase">Positive</span>
-                                                                        <Button variant="ghost" size="icon" className="h-4 w-4 opacity-0 group-hover/prompt:opacity-100" onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(positive); }}>
-                                                                            <Copy className="h-3 w-3 text-slate-400" />
-                                                                        </Button>
-                                                                    </div>
-                                                                    <HoverCard openDelay={200}>
-                                                                        <HoverCardTrigger asChild>
-                                                                            <p className="line-clamp-3 text-slate-700 leading-relaxed cursor-help select-text">{positive}</p>
-                                                                        </HoverCardTrigger>
-                                                                        <HoverCardContent className="w-[500px] max-h-[60vh] overflow-y-auto p-4 z-[100]" align="start">
-                                                                            <div className="space-y-4">
-                                                                                <div>
-                                                                                    <div className="flex items-center gap-2 mb-1">
-                                                                                        <span className="font-semibold text-green-600 text-xs uppercase">Positive Prompt</span>
-                                                                                    </div>
-                                                                                    <p className="text-sm text-slate-700 whitespace-pre-wrap font-mono text-[11px] leading-relaxed select-text">{positive}</p>
-                                                                                </div>
-                                                                                {negative && (
-                                                                                    <div className="border-t pt-3">
-                                                                                        <div className="flex items-center gap-2 mb-1">
-                                                                                            <span className="font-semibold text-red-500 text-xs uppercase">Negative Prompt</span>
-                                                                                        </div>
-                                                                                        <p className="text-sm text-slate-600 whitespace-pre-wrap font-mono text-[11px] leading-relaxed select-text">{negative}</p>
-                                                                                    </div>
-                                                                                )}
-                                                                            </div>
-                                                                        </HoverCardContent>
-                                                                    </HoverCard>
-                                                                </div>
-                                                            )}
-                                                            {!positive && !negative && (
-                                                                <div className="flex flex-wrap gap-1 mt-2">
-                                                                    {Object.entries(item.job_params).slice(0, 4).map(([k, v]) => (
-                                                                        <span key={k} className="px-1.5 py-0.5 bg-slate-100 rounded text-slate-500 border border-slate-200">{k}: {String(v)}</span>
-                                                                    ))}
-                                                                </div>
-                                                            )}
+
+
+                                                    {item.caption && (
+                                                        <p className="text-slate-600 line-clamp-2">{item.caption}</p>
+                                                    )}
+
+                                                    {item.prompt_tags && item.prompt_tags.length > 0 && (
+                                                        <div className="flex flex-wrap gap-1 mt-1">
+                                                            {item.prompt_tags.slice(0, 6).map((tag) => (
+                                                                <span key={tag} className="px-1.5 py-0.5 bg-indigo-50 text-indigo-600 border border-indigo-100 rounded">#{tag}</span>
+                                                            ))}
                                                         </div>
-                                                    );
-                                                })()}
-                                            </CardContent>
-                                        </Card>
-                                    </ContextMenuTrigger>
-                                    <ContextMenuContent>
-                                        <ContextMenuItem onSelect={() => handleRegenerate(item)}>regenerate</ContextMenuItem>
-                                        <ContextMenuItem onSelect={() => handleSavePrompt(item)}>save prompt</ContextMenuItem>
-                                        <ContextMenuSeparator />
-                                        <ContextMenuItem className="text-red-600" onSelect={() => handleDelete(item.image.id)}>delete</ContextMenuItem>
-                                    </ContextMenuContent>
-                                </ContextMenu>
-                            ))}
-                        </div>
-                        {!cleanupMode && hasMore && (
-                            <div className="flex justify-center pt-6">
-                                <Button variant="outline" onClick={handleLoadMore} disabled={isLoadingMore}>
-                                    {isLoadingMore ? "Loading..." : "Load more"}
-                                </Button>
+                                                    )}
+
+                                                    {(() => {
+                                                        const { positive, negative } = getPrompts(item.job_params);
+                                                        return (
+                                                            <div className="mt-2 space-y-2">
+                                                                {positive && (
+                                                                    <div className="group/prompt">
+                                                                        <div className="flex items-center justify-between mb-1">
+                                                                            <span className="font-semibold text-green-600 block text-[10px] uppercase">Positive</span>
+                                                                            <Button variant="ghost" size="icon" className="h-4 w-4 opacity-0 group-hover/prompt:opacity-100" onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(positive); }}>
+                                                                                <Copy className="h-3 w-3 text-slate-400" />
+                                                                            </Button>
+                                                                        </div>
+                                                                        <HoverCard openDelay={200}>
+                                                                            <HoverCardTrigger asChild>
+                                                                                <p className="line-clamp-3 text-slate-700 leading-relaxed cursor-help select-text">{positive}</p>
+                                                                            </HoverCardTrigger>
+                                                                            <HoverCardContent className="w-[500px] max-h-[60vh] overflow-y-auto p-4 z-[100]" align="start">
+                                                                                <div className="space-y-4">
+                                                                                    <div>
+                                                                                        <div className="flex items-center gap-2 mb-1">
+                                                                                            <span className="font-semibold text-green-600 text-xs uppercase">Positive Prompt</span>
+                                                                                        </div>
+                                                                                        <p className="text-sm text-slate-700 whitespace-pre-wrap font-mono text-[11px] leading-relaxed select-text">{positive}</p>
+                                                                                    </div>
+                                                                                    {negative && (
+                                                                                        <div className="border-t pt-3">
+                                                                                            <div className="flex items-center gap-2 mb-1">
+                                                                                                <span className="font-semibold text-red-500 text-xs uppercase">Negative Prompt</span>
+                                                                                            </div>
+                                                                                            <p className="text-sm text-slate-600 whitespace-pre-wrap font-mono text-[11px] leading-relaxed select-text">{negative}</p>
+                                                                                        </div>
+                                                                                    )}
+                                                                                </div>
+                                                                            </HoverCardContent>
+                                                                        </HoverCard>
+                                                                    </div>
+                                                                )}
+                                                                {!positive && !negative && (
+                                                                    <div className="flex flex-wrap gap-1 mt-2">
+                                                                        {Object.entries(item.job_params).slice(0, 4).map(([k, v]) => (
+                                                                            <span key={k} className="px-1.5 py-0.5 bg-slate-100 rounded text-slate-500 border border-slate-200">{k}: {String(v)}</span>
+                                                                        ))}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    })()}
+                                                </CardContent>
+                                            </Card>
+                                        </ContextMenuTrigger>
+                                        <ContextMenuContent>
+                                            <ContextMenuItem onSelect={() => handleRegenerate(item)}>regenerate</ContextMenuItem>
+                                            <ContextMenuItem onSelect={() => handleSavePrompt(item)}>save prompt</ContextMenuItem>
+                                            <ContextMenuSeparator />
+                                            <ContextMenuItem className="text-red-600" onSelect={() => handleDelete(item.image.id)}>delete</ContextMenuItem>
+                                        </ContextMenuContent>
+                                    </ContextMenu>
+                                ))}
                             </div>
-                        )}
-                    </>
-                )}
+                            {!cleanupMode && hasMore && (
+                                <div className="flex justify-center pt-6">
+                                    <Button variant="outline" onClick={handleLoadMore} disabled={isLoadingMore}>
+                                        {isLoadingMore ? "Loading..." : "Load more"}
+                                    </Button>
+                                </div>
+                            )}
+                        </>
+                    )}
                 </div>
             </div>
             {
                 fullscreenItem && (
-                    <div className="fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-center p-6 text-white">
+                    <div
+                        className="fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-center p-6 text-white"
+                        onWheel={handleFullscreenWheel}
+                        onMouseMove={handlePanMove}
+                        onMouseUp={handlePanEnd}
+                        onMouseLeave={handlePanEnd}
+                    >
                         <button
                             className="absolute top-4 right-4 rounded-full bg-white/10 hover:bg-white/20 transition p-2"
                             onClick={closeFullscreen}
@@ -704,6 +747,14 @@ export default function Gallery() {
                         >
                             <X className="w-5 h-5" />
                         </button>
+
+                        {/* Zoom indicator */}
+                        {zoomScale !== 1 && (
+                            <div className="absolute top-4 left-4 bg-white/10 rounded-full px-3 py-1 text-sm">
+                                {Math.round(zoomScale * 100)}%
+                                <button className="ml-2 text-xs underline" onClick={handleZoomReset}>reset</button>
+                            </div>
+                        )}
 
                         <button
                             className="absolute left-4 top-1/2 -translate-y-1/2 rounded-full bg-white/10 hover:bg-white/20 p-3"
@@ -721,16 +772,26 @@ export default function Gallery() {
                         </button>
 
                         <div className="max-w-6xl w-full flex flex-col items-center gap-4">
-                            <div className="relative w-full flex items-center justify-center">
+                            <div
+                                className="relative w-full flex items-center justify-center overflow-hidden"
+                                style={{ cursor: zoomScale > 1 ? (isDragging ? 'grabbing' : 'grab') : 'zoom-in' }}
+                                onMouseDown={handlePanStart}
+                                onDoubleClick={handleZoomReset}
+                            >
                                 {selectedIds.has(fullscreenItem.image.id) && (
-                                    <div className="absolute top-3 left-3 bg-blue-500 text-white rounded-full p-1 shadow-sm flex items-center gap-1 text-xs">
+                                    <div className="absolute top-3 left-3 z-10 bg-blue-500 text-white rounded-full p-1 shadow-sm flex items-center gap-1 text-xs">
                                         <Check className="w-3 h-3" /> Selected
                                     </div>
                                 )}
                                 <img
                                     src={`/api/v1/gallery/image/${fullscreenItem.image.id}`}
                                     alt={fullscreenItem.image.filename}
-                                    className="max-h-[80vh] w-auto object-contain rounded-lg shadow-2xl"
+                                    className="max-h-[80vh] w-auto object-contain rounded-lg shadow-2xl transition-transform select-none"
+                                    style={{
+                                        transform: `scale(${zoomScale}) translate(${panPosition.x / zoomScale}px, ${panPosition.y / zoomScale}px)`,
+                                        transformOrigin: 'center center'
+                                    }}
+                                    draggable={false}
                                 />
                             </div>
                             <div className="bg-white/5 rounded-lg px-4 py-2 text-sm w-full flex items-center justify-between">
@@ -738,7 +799,7 @@ export default function Gallery() {
                                     <span className="font-semibold">{fullscreenItem.prompt_name || fullscreenItem.image.filename}</span>
                                     <span className="text-xs text-slate-300">{new Date(fullscreenItem.created_at).toLocaleString()}</span>
                                 </div>
-                                <div className="text-xs text-slate-200">Use ← → arrows or on-screen controls to navigate. ESC closes.</div>
+                                <div className="text-xs text-slate-200">Scroll to zoom, drag to pan. ← → arrows navigate. ESC closes.</div>
                             </div>
                         </div>
                     </div>

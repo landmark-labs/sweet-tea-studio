@@ -403,6 +403,8 @@ class FolderImage(SQLModel):
     path: str
     filename: str
     mtime: str
+    width: Optional[int] = None
+    height: Optional[int] = None
 
 
 @router.get("/{project_id}/folders/{folder_name}/images", response_model=List[FolderImage])
@@ -477,6 +479,8 @@ def list_project_folder_images(
     
     images = []
     try:
+        from PIL import Image as PILImage
+        
         for entry in os.scandir(folder_path):
             if entry.is_file():
                 ext = os.path.splitext(entry.name)[1].lower()
@@ -485,10 +489,21 @@ def list_project_folder_images(
                     if entry.path in deleted_paths:
                         continue
                     stat = entry.stat()
+                    
+                    # Try to read image dimensions
+                    width, height = None, None
+                    try:
+                        with PILImage.open(entry.path) as img:
+                            width, height = img.size
+                    except Exception:
+                        pass  # Dimensions will remain None
+                    
                     images.append({
                         "path": entry.path,
                         "filename": entry.name,
-                        "mtime": dt.fromtimestamp(stat.st_mtime).isoformat()
+                        "mtime": dt.fromtimestamp(stat.st_mtime).isoformat(),
+                        "width": width,
+                        "height": height
                     })
     except Exception as e:
         print(f"Error scanning folder {folder_path}: {e}")
@@ -498,3 +513,91 @@ def list_project_folder_images(
     images.sort(key=lambda x: x["mtime"], reverse=True)
     
     return images
+
+
+class FolderImageDeleteRequest(SQLModel):
+    """Request schema for deleting folder images."""
+    paths: List[str]
+
+
+@router.post("/{project_id}/folders/{folder_name}/delete-images")
+def delete_folder_images(
+    project_id: int,
+    folder_name: str,
+    req: FolderImageDeleteRequest,
+    session: Session = Depends(get_session)
+):
+    """
+    Delete image files from a project folder.
+    
+    Permanently removes the files from disk. This is irreversible.
+    """
+    import os
+    
+    project = session.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Validate folder exists in project config
+    config = project.config_json or {"folders": ["inputs", "output", "masks"]}
+    folders = config.get("folders", [])
+    if folder_name not in folders:
+        raise HTTPException(status_code=404, detail=f"Folder '{folder_name}' not found in project")
+    
+    # Resolve folder path for validation
+    active_engine = session.exec(select(Engine).where(Engine.is_active == True)).first()
+    folder_path = None
+    
+    if active_engine:
+        if folder_name == "output":
+            if active_engine.output_dir:
+                folder_path = settings.get_project_output_dir_in_comfy(
+                    active_engine.output_dir, project.slug
+                )
+        else:
+            if active_engine.input_dir:
+                folder_path = settings.get_project_input_dir_in_comfy(
+                    active_engine.input_dir, project.slug
+                ) / folder_name
+                
+        if folder_path and not folder_path.exists() and active_engine.output_dir:
+            legacy_path = settings.get_project_dir_in_comfy(
+                active_engine.output_dir, project.slug
+            ) / folder_name
+            if legacy_path.exists():
+                folder_path = legacy_path
+    
+    if not folder_path or not folder_path.exists():
+        local_path = settings.get_project_dir(project.slug) / folder_name
+        if local_path.exists():
+            folder_path = local_path
+    
+    deleted = 0
+    errors = []
+    
+    for path in req.paths:
+        # Security: validate path is within the expected folder
+        try:
+            abs_path = os.path.abspath(path)
+            folder_abs = os.path.abspath(str(folder_path)) if folder_path else None
+            
+            if folder_abs and abs_path.startswith(folder_abs):
+                if os.path.exists(abs_path):
+                    os.remove(abs_path)
+                    deleted += 1
+                    
+                    # Also remove .json sidecar if exists
+                    json_path = os.path.splitext(abs_path)[0] + ".json"
+                    if os.path.exists(json_path):
+                        os.remove(json_path)
+                else:
+                    errors.append(f"File not found: {path}")
+            else:
+                errors.append(f"Access denied: {path}")
+        except Exception as e:
+            errors.append(f"Failed to delete {path}: {str(e)}")
+    
+    return {
+        "deleted": deleted,
+        "errors": errors
+    }

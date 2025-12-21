@@ -731,41 +731,54 @@ export default function PromptStudio() {
       }
 
       // STEP 5: Handle image injection - do it directly here instead of delegating to Effect 3
+      // FIX: For i2i regeneration, prioritize the ORIGINAL input image from job_params
+      // instead of uploading the output image (which would use the generated image as input)
       const imageFields = findImageFieldsInSchema(schema);
       console.log("[LoadParams] Found image fields:", imageFields);
 
-      if (imageFields.length > 0 && loadParams.image?.path) {
-        const imagePath = loadParams.image.path;
+      if (imageFields.length > 0) {
         const imageField = imageFields[0];
 
-        // Check if image is already in ComfyUI input directory
-        const inputMatch = imagePath.match(/[/\\]input[/\\](.+)$/);
-        if (inputMatch) {
-          // Image already in input dir - use relative path directly
-          const relativePath = inputMatch[1].replace(/\\/g, "/");
-          console.log("[LoadParams] Reusing existing input path:", relativePath);
-          baseParams[imageField] = relativePath;
-        } else {
-          // Image is in output/other directory - need to upload it
-          console.log("[LoadParams] Uploading image to input dir:", imagePath);
-          try {
-            const url = `/api/v1/gallery/image/path?path=${encodeURIComponent(imagePath)}`;
-            const res = await fetch(url);
-            if (res.ok) {
-              const blob = await res.blob();
-              const filename = imagePath.split(/[\\/]/).pop() || "injected_image.png";
-              const file = new File([blob], filename, { type: blob.type });
+        // PRIORITY 1: Check if job_params already has a value for this image field (original input)
+        const originalInputImage = loadParams.job_params?.[imageField];
 
-              const engineId = selectedEngineId ? parseInt(selectedEngineId) : undefined;
-              const result = await api.uploadFile(file, engineId, selectedProject?.slug, undefined);
+        if (originalInputImage && typeof originalInputImage === "string") {
+          // Use the original input image path from job_params
+          console.log("[LoadParams] Using original input image from job_params:", originalInputImage);
+          baseParams[imageField] = originalInputImage;
+        } else if (loadParams.image?.path) {
+          // FALLBACK: Use the output image path (for non-i2i workflows or if original not found)
+          const imagePath = loadParams.image.path;
 
-              console.log("[LoadParams] Image upload complete:", result.filename);
-              baseParams[imageField] = result.filename;
-            } else {
-              console.warn("[LoadParams] Failed to fetch image for upload");
+          // Check if image is already in ComfyUI input directory
+          const inputMatch = imagePath.match(/[/\\]input[/\\](.+)$/);
+          if (inputMatch) {
+            // Image already in input dir - use relative path directly
+            const relativePath = inputMatch[1].replace(/\\/g, "/");
+            console.log("[LoadParams] Reusing existing input path:", relativePath);
+            baseParams[imageField] = relativePath;
+          } else {
+            // Image is in output/other directory - need to upload it
+            console.log("[LoadParams] Uploading image to input dir:", imagePath);
+            try {
+              const url = `/api/v1/gallery/image/path?path=${encodeURIComponent(imagePath)}`;
+              const res = await fetch(url);
+              if (res.ok) {
+                const blob = await res.blob();
+                const filename = imagePath.split(/[\\/]/).pop() || "injected_image.png";
+                const file = new File([blob], filename, { type: blob.type });
+
+                const engineId = selectedEngineId ? parseInt(selectedEngineId) : undefined;
+                const result = await api.uploadFile(file, engineId, selectedProject?.slug, undefined);
+
+                console.log("[LoadParams] Image upload complete:", result.filename);
+                baseParams[imageField] = result.filename;
+              } else {
+                console.warn("[LoadParams] Failed to fetch image for upload");
+              }
+            } catch (err) {
+              console.warn("[LoadParams] Image upload failed:", err);
             }
-          } catch (err) {
-            console.warn("[LoadParams] Image upload failed:", err);
           }
         }
       }

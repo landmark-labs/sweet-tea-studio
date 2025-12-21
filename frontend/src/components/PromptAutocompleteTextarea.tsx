@@ -90,6 +90,8 @@ export function PromptAutocompleteTextarea({
     const [suggestions, setSuggestions] = useState<TagSuggestion[]>([]);
     const [highlightIndex, setHighlightIndex] = useState(0);
     const [isOpen, setIsOpen] = useState(false);
+    const [isFocused, setIsFocused] = useState(false);
+    const [isTyping, setIsTyping] = useState(false);
     const [dropdownRect, setDropdownRect] = useState<{ top: number; left: number; width: number } | null>(null);
 
     useEffect(() => {
@@ -148,9 +150,15 @@ export function PromptAutocompleteTextarea({
 
     const currentToken = useMemo(() => {
         const before = value.slice(0, cursor);
-        const lastComma = before.lastIndexOf(",");
-        const segment = lastComma === -1 ? before : before.slice(lastComma + 1);
-        return segment.trim();
+        // Treat commas and parentheses as delimiters
+        const lastDelimiter = Math.max(
+            before.lastIndexOf(","),
+            before.lastIndexOf("("),
+            before.lastIndexOf(")")
+        );
+        const segment = lastDelimiter === -1 ? before : before.slice(lastDelimiter + 1);
+        // Strip any remaining parentheses from the segment
+        return segment.replace(/[()]/g, "").trim();
     }, [value, cursor]);
 
     // Defer token resolution to keep typing smooth under heavy render load
@@ -169,9 +177,9 @@ export function PromptAutocompleteTextarea({
         const token = deferredToken.trim();
         const normalizedToken = token.replace(/\s+/g, "_");
 
-        // Only check token length, NOT focus state - blur shouldn't stop autocomplete
-        // Require 3+ chars to reduce noise and aggressive triggering
-        if (normalizedToken.length < 3) {
+        // Require focus, active typing, and 3+ chars
+        // Autocomplete only triggers on actual typing, not clicks or cursor moves
+        if (!isFocused || !isTyping || normalizedToken.length < 3) {
             setIsOpen(false);
             setSuggestions([]);
             return;
@@ -216,7 +224,7 @@ export function PromptAutocompleteTextarea({
                 abortControllerRef.current.abort();
             }
         };
-    }, [deferredToken, autocompleteEnabled]); // Removed isFocused dependency
+    }, [deferredToken, autocompleteEnabled, isFocused, isTyping]);
 
     // Keep dropdown aligned without forcing layout thrash on every render
     useEffect(() => {
@@ -431,31 +439,35 @@ export function PromptAutocompleteTextarea({
                     onChange={(e) => {
                         const newCursor = e.target.selectionStart || 0;
                         intendedCursorRef.current = newCursor;
+                        setIsTyping(true); // Mark that user is actively typing
                         onValueChange(e.target.value);
                         setCursor((prev) => (prev === newCursor ? prev : newCursor));
                         props.onChange?.(e);
                     }}
                     onFocus={(e) => {
                         updateCursor();
+                        setIsFocused(true);
                         setTextInputFocused(true); // Segregated undo: let browser handle text undo
                         props.onFocus?.(e);
                     }}
                     onBlur={(e) => {
                         // Segregated undo: restore global undo handling
                         setTextInputFocused(false);
+                        setIsFocused(false);
+                        setIsTyping(false); // Reset typing flag on blur
                         // Close dropdown after delay to allow clicking on dropdown items
-                        // We use a longer delay and only close if user truly left the component
                         setTimeout(() => {
                             // Only close if focus is truly outside (not on dropdown buttons either)
                             const active = document.activeElement;
                             if (active !== textareaRef.current) {
                                 setIsOpen(false);
                             }
-                        }, 300);
+                        }, 150);
                         props.onBlur?.(e);
                     }}
                     onClick={(e) => {
                         updateCursor();
+                        setIsTyping(false); // Clicking doesn't count as typing
                         props.onClick?.(e);
                     }}
                     onKeyUp={(e) => {
