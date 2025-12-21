@@ -17,6 +17,9 @@ import {
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { ProjectSidebar } from "@/components/ProjectSidebar";
 
+const MISSING_IMAGE_SRC =
+    "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MDAiIGhlaWdodD0iNDAwIiB2aWV3Qm94PSIwIDAgNDAwIDQwMCI+PHJlY3Qgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsbD0iI2UyZThmMCIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjOTRhM2I4IiBmb250LWZhbWlseT0iQXJpYWwsIHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMjQiPk1pc3NpbmcgRmlsZTwvdGV4dD48L3N2Zz4=";
+
 export default function Gallery() {
     const [items, setItems] = useState<GalleryItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -190,6 +193,13 @@ export default function Gallery() {
         if (fullscreenIndex === null || items.length === 0) return;
         const nextIndex = (fullscreenIndex + direction + items.length) % items.length;
         setFullscreenIndex(nextIndex);
+    };
+
+    const handleImageError = (event: React.SyntheticEvent<HTMLImageElement>) => {
+        const img = event.currentTarget;
+        if (img.dataset.fallbackApplied === "true") return;
+        img.dataset.fallbackApplied = "true";
+        img.src = MISSING_IMAGE_SRC;
     };
 
     const handleImageInteraction = (item: GalleryItem, e: React.MouseEvent) => {
@@ -554,9 +564,9 @@ export default function Gallery() {
                                                         src={`/api/v1/gallery/image/${item.image.id}`}
                                                         alt={item.image.filename}
                                                         className="w-full h-full object-cover transition-transform group-hover:scale-105"
-                                                        onError={(e) => {
-                                                            (e.target as HTMLImageElement).src = "https://placehold.co/400x400?text=Missing+File";
-                                                        }}
+                                                        loading="lazy"
+                                                        decoding="async"
+                                                        onError={handleImageError}
                                                     />
 
                                                     <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
