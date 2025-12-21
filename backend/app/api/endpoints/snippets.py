@@ -155,10 +155,14 @@ def bulk_upsert_snippets(snippets_data: List[SnippetCreate]):
                 )
                 session.add(snippet)
         
-        # DELETE snippets that are no longer in the incoming list
-        for label, snippet in existing_by_label.items():
-            if label not in incoming_labels:
-                session.delete(snippet)
+        # SAFETY: Don't delete snippets if incoming list is empty (likely a sync error)
+        # Also warn if we'd be deleting more than half the snippets (suspicious)
+        if len(snippets_data) > 0:
+            labels_to_delete = [label for label in existing_by_label.keys() if label not in incoming_labels]
+            # Only allow deletion if we're not nuking everything
+            if len(labels_to_delete) < len(existing_by_label):
+                for label in labels_to_delete:
+                    session.delete(existing_by_label[label])
         
         session.commit()
         

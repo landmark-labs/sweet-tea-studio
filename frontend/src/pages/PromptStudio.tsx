@@ -145,6 +145,11 @@ export default function PromptStudio() {
     // Debounce saves to avoid hammering the API
     if (pendingSaveRef.current) clearTimeout(pendingSaveRef.current);
     pendingSaveRef.current = setTimeout(async () => {
+      // SAFETY: Don't sync empty library to avoid nuking backend data
+      if (library.length === 0) {
+        console.warn("[Snippets] Skipping sync - library is empty (would delete all backend snippets)");
+        return;
+      }
       try {
         const { snippetApi } = await import("@/lib/api");
         await snippetApi.bulkUpsert(library.map(item => ({
