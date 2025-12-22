@@ -1686,7 +1686,7 @@ export default function PromptStudio() {
                   {workflows.find(w => String(w.id) === String(selectedWorkflowId))?.name || "select a pipe..."}
                 </SelectValue>
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="max-h-[300px] overflow-y-auto">
                 {isLoading ? (
                   <SelectItem value="__loading" disabled>loading pipes...</SelectItem>
                 ) : (workflows.length === 0 && error) ? (
