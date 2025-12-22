@@ -18,6 +18,7 @@ interface ImageViewerProps {
     onRegenerate?: (item: any) => void;
     onDelete?: (imageId: number) => void;
     selectedImagePath?: string;
+    onLoadMore?: () => void;  // Callback to load more images when near end
 }
 
 export const ImageViewer = React.memo(function ImageViewer({
@@ -30,7 +31,8 @@ export const ImageViewer = React.memo(function ImageViewer({
     onImageUpdate,
     onRegenerate,
     onDelete,
-    selectedImagePath
+    selectedImagePath,
+    onLoadMore
 }: ImageViewerProps) {
     const [copyState, setCopyState] = React.useState<{ positive: boolean; negative: boolean }>({ positive: false, negative: false });
     const [selectedIndex, setSelectedIndex] = React.useState<number>(0);
@@ -87,6 +89,7 @@ export const ImageViewer = React.memo(function ImageViewer({
     React.useEffect(() => {
         if (displayImages.length > 0) {
             if (selectedIndex >= displayImages.length) {
+                console.log('[ImageViewer] BOUNDS: Resetting index', selectedIndex, 'to 0 because length is', displayImages.length);
                 setSelectedIndex(0);
             }
         }
@@ -106,7 +109,11 @@ export const ImageViewer = React.memo(function ImageViewer({
         }
 
         // Only re-align if selectedImagePath actually changed (not just displayImages reference)
-        if (lastSelectedImagePathRef.current === selectedImagePath) return;
+        if (lastSelectedImagePathRef.current === selectedImagePath) {
+            console.log('[ImageViewer] ALIGN: Skipping - same path', selectedImagePath?.slice(-30));
+            return;
+        }
+        console.log('[ImageViewer] ALIGN: Path changed from', lastSelectedImagePathRef.current?.slice(-30), 'to', selectedImagePath?.slice(-30));
         lastSelectedImagePathRef.current = selectedImagePath;
 
         const selectedRawPath = extractRawPath(selectedImagePath);
@@ -115,6 +122,7 @@ export const ImageViewer = React.memo(function ImageViewer({
             return imgRawPath === selectedRawPath || img.path === selectedImagePath;
         });
         if (idx >= 0) {
+            console.log('[ImageViewer] ALIGN: Setting index to', idx);
             setSelectedIndex(idx);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -209,6 +217,24 @@ export const ImageViewer = React.memo(function ImageViewer({
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
     }, []);
+
+    // Load more images when navigating near the end
+    const loadMoreTriggeredRef = React.useRef(false);
+    React.useEffect(() => {
+        // Reset trigger when images change (more were loaded)
+        loadMoreTriggeredRef.current = false;
+    }, [displayImages.length]);
+
+    React.useEffect(() => {
+        if (!onLoadMore) return;
+        // Trigger when within 5 images of the end
+        const threshold = 5;
+        if (selectedIndex >= displayImages.length - threshold && !loadMoreTriggeredRef.current) {
+            loadMoreTriggeredRef.current = true;
+            console.log('[ImageViewer] Near end, triggering loadMore. Index:', selectedIndex, 'of', displayImages.length);
+            onLoadMore();
+        }
+    }, [selectedIndex, displayImages.length, onLoadMore]);
 
     // Close menu on global click
     React.useEffect(() => {
