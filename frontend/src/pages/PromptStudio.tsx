@@ -743,18 +743,19 @@ export default function PromptStudio() {
       const baseParams: Record<string, unknown> = { ...targetDefaults, ...storedParams };
 
       // STEP 3: Extract prompts from source image with multiple fallbacks
+      const jobParams = (loadParams.job_params || {}) as Record<string, unknown>;
       let positivePrompt =
         loadParams.prompt ||
-        (loadParams.job_params as any)?.prompt ||
-        (loadParams.job_params as any)?.positive ||
+        (jobParams as any)?.prompt ||
+        (jobParams as any)?.positive ||
         null;
       let negativePrompt =
         loadParams.negative_prompt ||
-        (loadParams.job_params as any)?.negative_prompt ||
-        (loadParams.job_params as any)?.negative ||
+        (jobParams as any)?.negative_prompt ||
+        (jobParams as any)?.negative ||
         null;
 
-      const extracted = extractPrompts(loadParams.job_params);
+      const extracted = extractPrompts(jobParams);
       if (!positivePrompt && extracted.positive) positivePrompt = extracted.positive;
       if (!negativePrompt && extracted.negative) negativePrompt = extracted.negative;
 
@@ -796,31 +797,36 @@ export default function PromptStudio() {
       const positiveTarget = resolveTarget(extracted.positiveFieldKey, positiveField);
       const negativeTarget = resolveTarget(extracted.negativeFieldKey, negativeField);
 
-      if (positivePrompt && positiveTarget) {
-        baseParams[positiveTarget] = positivePrompt;
+      if (positiveTarget) {
+        const directPositive = typeof jobParams[positiveTarget] === "string" ? jobParams[positiveTarget] as string : null;
+        if (directPositive && directPositive.trim()) {
+          baseParams[positiveTarget] = directPositive;
+        } else if (positivePrompt) {
+          baseParams[positiveTarget] = positivePrompt;
+        }
       }
-      if (negativePrompt && negativeTarget) {
-        baseParams[negativeTarget] = negativePrompt;
+      if (negativeTarget) {
+        const directNegative = typeof jobParams[negativeTarget] === "string" ? jobParams[negativeTarget] as string : null;
+        if (directNegative && directNegative.trim()) {
+          baseParams[negativeTarget] = directNegative;
+        } else if (negativePrompt) {
+          baseParams[negativeTarget] = negativePrompt;
+        }
       }
 
       // STEP 5: Handle image injection - do it directly here instead of delegating to Effect 3
-      // FIX: For i2i regeneration, prioritize the ORIGINAL input image from job_params
-      // instead of uploading the output image (which would use the generated image as input)
+      // Prefer the original input image from job params to avoid temp uploads when possible.
       const imageFields = findImageFieldsInSchema(schema);
       console.log("[LoadParams] Found image fields:", imageFields);
 
       if (imageFields.length > 0) {
         const imageField = imageFields[0];
 
-        // PRIORITY 1: For REGENERATION ONLY, check if job_params has original input image
-        // For use-in-pipe, we want to use the OUTPUT image (loadParams.image.path)
-        const isRegenerate = (loadParams as any).__isRegenerate;
-        const originalInputImage = isRegenerate ? loadParams.job_params?.[imageField] : null;
-
-        if (originalInputImage && typeof originalInputImage === "string") {
-          // Use the original input image path from job_params (regeneration)
-          console.log("[LoadParams] Regeneration - using original input image from job_params:", originalInputImage);
-          baseParams[imageField] = originalInputImage;
+        // PRIORITY 1: Use original input image from job params if available
+        const jobImage = typeof jobParams[imageField] === "string" ? jobParams[imageField] as string : null;
+        if (jobImage && jobImage.trim()) {
+          console.log("[LoadParams] Using image from job params:", jobImage);
+          baseParams[imageField] = jobImage;
         } else if (loadParams.image?.path) {
           // FALLBACK: Use the output image path (for non-i2i workflows or if original not found)
           const imagePath = loadParams.image.path;
