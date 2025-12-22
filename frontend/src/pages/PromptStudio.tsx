@@ -1154,6 +1154,8 @@ export default function PromptStudio() {
             created_at: new Date().toISOString(),
             job_params: params
           });
+          // Clear ProjectGallery images so navigation uses the updated galleryImages
+          setProjectGalleryImages([]);
         } else {
           updateFeed(lastJobId, { status: "completed", progress: 100, previewBlob: null });
         }
