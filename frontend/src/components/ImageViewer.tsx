@@ -54,6 +54,16 @@ export const ImageViewer = React.memo(function ImageViewer({
         return pathStr;
     }, []);
 
+    // Check if selected image exists in the gallery (for synthetic image detection)
+    const hasSyntheticImage = React.useMemo(() => {
+        if (!selectedImagePath) return false;
+        const selectedRawPath = extractRawPath(selectedImagePath);
+        return !images.some((img) => {
+            const imgRawPath = extractRawPath(img.path);
+            return imgRawPath === selectedRawPath || img.path === selectedImagePath;
+        });
+    }, [images, selectedImagePath, extractRawPath]);
+
     const displayImages = React.useMemo(() => {
         if (!selectedImagePath) return images;
 
@@ -65,6 +75,15 @@ export const ImageViewer = React.memo(function ImageViewer({
             const imgRawPath = extractRawPath(img.path);
             return imgRawPath === selectedRawPath || img.path === selectedImagePath;
         });
+
+        // Debug: Log first few image paths to compare
+        if (!existsInImages && images.length > 0) {
+            console.log('[ImageViewer] PATH MISMATCH DEBUG:');
+            console.log('  selectedImagePath:', selectedImagePath);
+            console.log('  selectedRawPath:', selectedRawPath);
+            console.log('  First 3 images[].path:', images.slice(0, 3).map(i => i.path));
+            console.log('  First 3 extractRawPath:', images.slice(0, 3).map(i => extractRawPath(i.path)));
+        }
 
         console.log('[ImageViewer] DISPLAY: existsInImages=', existsInImages, 'images.length=', images.length, 'selectedRawPath=', selectedRawPath?.slice(-40));
 
