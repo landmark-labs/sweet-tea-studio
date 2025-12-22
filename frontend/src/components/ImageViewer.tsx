@@ -180,6 +180,12 @@ export const ImageViewer = React.memo(function ImageViewer({
     } : metadata;
 
 
+    // Track displayImages length in a ref for keyboard navigation
+    const displayImagesLengthRef = React.useRef(displayImages.length);
+    React.useEffect(() => {
+        displayImagesLengthRef.current = displayImages.length;
+    }, [displayImages.length]);
+
     // Keyboard Shortcuts
     React.useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -191,16 +197,17 @@ export const ImageViewer = React.memo(function ImageViewer({
                 return;
             }
 
+            const maxIndex = displayImagesLengthRef.current - 1;
             if (e.key === "ArrowLeft") {
                 setSelectedIndex(prev => Math.max(0, prev - 1));
             }
             if (e.key === "ArrowRight") {
-                setSelectedIndex(prev => Math.min(displayImages.length - 1, prev + 1));
+                setSelectedIndex(prev => Math.min(maxIndex, prev + 1));
             }
         };
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [currentImage, displayImages]);
+    }, []);
 
     // Close menu on global click
     React.useEffect(() => {
