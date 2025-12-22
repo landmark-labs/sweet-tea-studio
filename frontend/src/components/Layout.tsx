@@ -26,6 +26,7 @@ import { GenerationFeed } from "@/components/GenerationFeed";
 import { PromptLibraryQuickPanel } from "@/components/PromptLibraryQuickPanel";
 import { useGenerationFeedStore, usePromptLibraryStore } from "@/lib/stores/promptDataStore";
 import { useGeneration } from "@/lib/GenerationContext";
+import { initClientDiagnostics } from "@/lib/clientDiagnostics";
 
 export default function Layout() {
   const [collapsed, setCollapsed] = useState(false);
@@ -47,6 +48,9 @@ export default function Layout() {
   }, [feedOpen, clearPreviewBlobs]);
   useEffect(() => localStorage.setItem("ds_library_open", String(libraryOpen)), [libraryOpen]);
   useEffect(() => localStorage.setItem("ds_perf_hud_open", String(perfHudOpen)), [perfHudOpen]);
+  useEffect(() => {
+    initClientDiagnostics();
+  }, []);
 
   const handleRestartBackend = async () => {
     if (!confirm("Are you sure you want to restart the backend? This will temporarily disconnect all services.")) {

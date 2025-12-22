@@ -1,7 +1,12 @@
-from fastapi import APIRouter
-from typing import List
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
+from typing import Any, List
+from pathlib import Path
+import json
 import os
 import psutil
+import threading
+import time
 
 from app.services.monitoring import monitor
 from app.services.comfy_watchdog import watchdog
@@ -10,6 +15,16 @@ from app.services.job_processor import get_sequence_cache_stats
 
 
 router = APIRouter()
+_client_log_lock = threading.Lock()
+_client_log_dir = Path(__file__).parent.parent.parent / "logs"
+_client_log_path = _client_log_dir / "client_diagnostics.jsonl"
+_client_log_max_mb = float(os.getenv("SWEET_TEA_CLIENT_LOG_MAX_MB", "20"))
+_client_log_enabled = os.getenv("SWEET_TEA_CLIENT_LOG_ENABLED", "true").lower() not in ("0", "false", "no")
+
+
+class ClientLogPayload(BaseModel):
+    session_id: str
+    entries: List[dict]
 
 
 def _process_diagnostics() -> dict:
@@ -31,6 +46,25 @@ def _process_diagnostics() -> dict:
         "threads": proc.num_threads(),
         "open_fds": open_fds,
     }
+
+
+def _rotate_client_log_if_needed() -> None:
+    if not _client_log_path.exists():
+        return
+    max_bytes = int(_client_log_max_mb * 1024 * 1024)
+    try:
+        size = _client_log_path.stat().st_size
+    except OSError:
+        return
+    if size < max_bytes:
+        return
+
+    timestamp = time.strftime("%Y%m%d-%H%M%S")
+    rotated = _client_log_path.with_name(f"client_diagnostics-{timestamp}.jsonl")
+    try:
+        _client_log_path.rename(rotated)
+    except OSError:
+        return
 
 
 @router.get("/metrics")
@@ -73,6 +107,29 @@ def get_diagnostics():
         "websockets": manager.get_stats(),
         "sequence_cache": get_sequence_cache_stats(),
     }
+
+
+@router.post("/client-logs")
+def log_client_diagnostics(payload: ClientLogPayload):
+    if not _client_log_enabled:
+        raise HTTPException(status_code=403, detail="Client diagnostics disabled")
+
+    if not payload.entries:
+        return {"status": "ok", "received": 0}
+
+    entries = payload.entries[:200]
+    _client_log_dir.mkdir(parents=True, exist_ok=True)
+
+    with _client_log_lock:
+        _rotate_client_log_if_needed()
+        with open(_client_log_path, "a", encoding="utf-8") as handle:
+            for entry in entries:
+                if not isinstance(entry, dict):
+                    continue
+                entry.setdefault("session_id", payload.session_id)
+                handle.write(json.dumps(entry, ensure_ascii=True, separators=(",", ":")) + "\n")
+
+    return {"status": "ok", "received": len(entries)}
 
 
 @router.get("/status/summary")

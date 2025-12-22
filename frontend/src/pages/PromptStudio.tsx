@@ -20,6 +20,7 @@ import { useUndoRedo } from "@/lib/undoRedo";
 import { ProjectGallery } from "@/components/ProjectGallery";
 import { useGenerationFeedStore, usePromptLibraryStore } from "@/lib/stores/promptDataStore";
 import { useGeneration } from "@/lib/GenerationContext";
+import { logClientEventThrottled } from "@/lib/clientDiagnostics";
 
 export default function PromptStudio() {
   const [engines, setEngines] = useState<Engine[]>([]);
@@ -501,6 +502,17 @@ export default function PromptStudio() {
     const focusedValue = textFocused ? newData[focusedKey] : null;
     const skipUndo = textFocused && typeof focusedValue === "string" && focusedValue.length > MAX_TEXT_UNDO_LEN;
     const category = textFocused ? "text" : "structure";
+    logClientEventThrottled(
+      "form_change",
+      "form_change",
+      {
+        field: focusedKey || null,
+        len: typeof focusedValue === "string" ? focusedValue.length : null,
+        fields: Object.keys(newData || {}).length,
+        skip_undo: skipUndo,
+      },
+      2000
+    );
 
     // Only register undo after edits settle to avoid per-keystroke snapshots
     if (immediateHistory) {
