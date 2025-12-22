@@ -37,7 +37,14 @@ export default function Layout() {
   const [perfHudOpen, setPerfHudOpen] = useState(() => localStorage.getItem("ds_perf_hud_open") === "true");
 
   // Persist effects
+  const { clearPreviewBlobs } = useGenerationFeedStore();
+
   useEffect(() => localStorage.setItem("ds_feed_open", String(feedOpen)), [feedOpen]);
+  useEffect(() => {
+    if (!feedOpen) {
+      clearPreviewBlobs();
+    }
+  }, [feedOpen, clearPreviewBlobs]);
   useEffect(() => localStorage.setItem("ds_library_open", String(libraryOpen)), [libraryOpen]);
   useEffect(() => localStorage.setItem("ds_perf_hud_open", String(perfHudOpen)), [perfHudOpen]);
 

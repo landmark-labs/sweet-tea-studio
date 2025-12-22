@@ -11,6 +11,7 @@ interface GenerationFeedState {
   setGenerationFeed: (items: GenerationFeedItem[]) => void;
   trackFeedStart: (jobId: number) => void;
   updateFeed: (jobId: number, updates: Partial<GenerationFeedItem>) => void;
+  clearPreviewBlobs: () => void;
   clearFeed: () => void;
 }
 
@@ -89,6 +90,10 @@ export const useGenerationFeedStore = create<GenerationFeedState>()(
           return { generationFeed: nextFeed };
         });
       },
+      clearPreviewBlobs: () =>
+        set((state) => ({
+          generationFeed: state.generationFeed.map(({ previewBlob, ...rest }) => rest),
+        })),
       clearFeed: () => set({ generationFeed: [] }),
     }),
     {

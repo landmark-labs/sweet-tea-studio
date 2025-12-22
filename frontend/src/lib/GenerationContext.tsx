@@ -302,6 +302,12 @@ export function GenerationProvider({ children }: GenerationProviderProps) {
                     const now = Date.now();
                     if (now - lastPreviewUpdate < 100) return;
                     lastPreviewUpdate = now;
+                    const feedOpen = typeof window !== "undefined"
+                        ? window.localStorage.getItem("ds_feed_open") !== "false"
+                        : true;
+                    if (!feedOpen || (typeof document !== "undefined" && document.visibilityState === "hidden")) {
+                        return;
+                    }
                     if (data.data?.blob) updateFeed(job.id, { previewBlob: data.data.blob });
                 } else if (data.type === "error") {
                     updateFeed(job.id, { status: "failed", previewBlob: null });

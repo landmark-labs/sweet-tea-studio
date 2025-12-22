@@ -1030,7 +1030,7 @@ export default function PromptStudio() {
         setStatusLabel("");
         setProgress(0);    // Reset progress
         // Update feed to prevent sync effects from re-setting status
-        updateFeed(lastJobId, { status: "completed", progress: 100 });
+        updateFeed(lastJobId, { status: "completed", progress: 100, previewBlob: null });
         // Note: Keep lastJobId so the 'completed' message can still update gallery
         // but the button is already reset
       } else if (data.type === "executing") {
@@ -1084,6 +1084,9 @@ export default function PromptStudio() {
       } else if (data.type === "preview") {
         // Live Preview from KSampler - THROTTLED to prevent main thread blocking
         // Large base64 blobs cause React state updates that freeze the UI (Chrome "message handler took Xms" warnings)
+        if (!feedOpen || (typeof document !== "undefined" && document.visibilityState === "hidden")) {
+          return;
+        }
         const now = Date.now();
         if (now - lastPreviewUpdateRef.current < 100) {
           return; // Skip this preview, update at most every 100ms

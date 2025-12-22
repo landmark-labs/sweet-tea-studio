@@ -188,6 +188,13 @@ class ComfyClient:
         preview_counter = 0
         execution_complete = False  # Track when node execution finishes
         self._last_preview_time = 0
+        preview_stream_enabled = os.getenv("SWEET_TEA_PREVIEW_STREAM", "true").lower() not in ("0", "false", "no")
+        preview_max_fps_raw = os.getenv("SWEET_TEA_PREVIEW_MAX_FPS", "2").strip()
+        try:
+            preview_max_fps = float(preview_max_fps_raw)
+        except ValueError:
+            preview_max_fps = 2.0
+        preview_min_interval = (1 / preview_max_fps) if preview_max_fps > 0 else None
 
         try:
             while True:
@@ -268,17 +275,14 @@ class ComfyClient:
                     
                     if event_type == 1:  # PREVIEW_IMAGE
                         _debug(f"[ComfyClient] Received PREVIEW_IMAGE (Event 1). Length: {len(image_data)} bytes")
-                        # Throttle previews to avoid overwhelming the WebSocket (max 10 FPS)
+                        # Throttle previews to avoid overwhelming the WebSocket
                         # Always process if execution is complete (to ensure we capture the final result)
                         current_time = time.time()
-                        if not execution_complete and (current_time - self._last_preview_time < 0.1):
-                            continue
+                        if not execution_complete and preview_min_interval is not None:
+                            if (current_time - self._last_preview_time) < preview_min_interval:
+                                continue
                         self._last_preview_time = current_time
 
-                        # Convert to base64 for frontend preview
-                        b64_img = base64.b64encode(image_data).decode('utf-8')
-                        prefix = "data:image/jpeg;base64," if image_format == 1 else "data:image/png;base64,"
-                        
                         # Store preview image - will be cleared when execution completes
                         # Post-completion previews are the FINAL output from PreviewImage node
                         preview_counter += 1
@@ -292,7 +296,10 @@ class ComfyClient:
                         if len(preview_images) > max_preview_images:
                             preview_images = preview_images[-max_preview_images:]
                         
-                        if progress_callback:
+                        if preview_stream_enabled and progress_callback:
+                            # Convert to base64 for frontend preview
+                            b64_img = base64.b64encode(image_data).decode('utf-8')
+                            prefix = "data:image/jpeg;base64," if image_format == 1 else "data:image/png;base64,"
                             progress_callback({
                                 "type": "preview",
                                 "data": {
@@ -322,11 +329,10 @@ class ComfyClient:
                         
                         _debug(f"Captured image from WebSocket: {filename} ({len(image_data)} bytes)")
                         
-                        # Also send preview to frontend
-                        b64_img = base64.b64encode(image_data).decode('utf-8')
-                        prefix = "data:image/jpeg;base64," if image_format == 1 else "data:image/png;base64,"
-                        
-                        if progress_callback:
+                        if preview_stream_enabled and progress_callback:
+                            # Also send preview to frontend
+                            b64_img = base64.b64encode(image_data).decode('utf-8')
+                            prefix = "data:image/jpeg;base64," if image_format == 1 else "data:image/png;base64,"
                             progress_callback({
                                 "type": "preview",
                                 "data": {
