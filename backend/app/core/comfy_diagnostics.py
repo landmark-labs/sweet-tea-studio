@@ -42,6 +42,7 @@ LOG_DIR = Path(__file__).parent.parent.parent / "logs"
 GRAPH_DIR = LOG_DIR / "sent_graphs"
 WS_DIR = LOG_DIR / "ws_messages"
 MAIN_LOG = LOG_DIR / "comfy_diagnostics.log"
+MAX_WS_MESSAGES = int(os.getenv("SWEET_TEA_DIAG_MAX_WS_MESSAGES", "2000"))
 
 # Ensure directories exist
 LOG_DIR.mkdir(exist_ok=True)
@@ -195,6 +196,8 @@ class DiagnosticComfyClient(ComfyClient):
                 "data": data
             }
             self._ws_messages.append(msg_record)
+            if len(self._ws_messages) > MAX_WS_MESSAGES:
+                self._ws_messages = self._ws_messages[-MAX_WS_MESSAGES:]
             
             msg_type = data.get("type", "unknown")
             

@@ -97,6 +97,7 @@ def cancel_job(job_id: int):
         session.refresh(job)
         
         manager.broadcast_sync({"type": "status", "status": "cancelled", "job_id": job_id}, str(job_id))
+        manager.close_job_sync(str(job_id))
         return job
 
 
@@ -128,5 +129,6 @@ async def websocket_endpoint(websocket: WebSocket, job_id: str):
         while True:
             # Keep connection alive
             await websocket.receive_text()
+            manager.mark_seen(websocket)
     except WebSocketDisconnect:
         manager.disconnect(websocket, job_id)

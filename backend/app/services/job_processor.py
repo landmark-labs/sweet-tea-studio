@@ -21,6 +21,7 @@ import hashlib
 import json
 import re
 import threading
+import time
 from pathlib import Path
 from datetime import datetime
 from typing import List, Optional
@@ -49,9 +50,62 @@ else:
     from app.core.comfy_client import ComfyClient, ComfyConnectionError, ComfyResponseError
 # ===================================
 
-_sequence_cache: dict[str, int] = {}
+_sequence_cache: dict[str, dict[str, float | int]] = {}
 _sequence_lock = threading.Lock()
-_sequence_pattern_cache: dict[str, re.Pattern[str]] = {}
+_sequence_pattern_cache: dict[str, dict[str, object]] = {}
+_sequence_cache_last_prune = 0.0
+_sequence_cache_max = int(os.getenv("SWEET_TEA_SEQ_CACHE_MAX", "512"))
+_sequence_pattern_cache_max = int(os.getenv("SWEET_TEA_SEQ_PATTERN_CACHE_MAX", "512"))
+_sequence_cache_ttl_s = int(os.getenv("SWEET_TEA_SEQ_CACHE_TTL_S", "3600"))
+_sequence_cache_prune_interval_s = int(os.getenv("SWEET_TEA_SEQ_CACHE_PRUNE_INTERVAL_S", "60"))
+
+
+def _prune_sequence_caches(now: float) -> None:
+    global _sequence_cache_last_prune
+    if now - _sequence_cache_last_prune < _sequence_cache_prune_interval_s:
+        return
+
+    _sequence_cache_last_prune = now
+
+    def prune(cache: dict[str, dict[str, object]], max_items: int) -> None:
+        expired = [
+            key for key, entry in cache.items()
+            if now - float(entry.get("last_used", now)) > _sequence_cache_ttl_s
+        ]
+        for key in expired:
+            cache.pop(key, None)
+
+        if len(cache) <= max_items:
+            return
+
+        ordered = sorted(
+            cache.items(),
+            key=lambda item: float(item[1].get("last_used", now)),
+        )
+        for key, _entry in ordered[: max(0, len(cache) - max_items)]:
+            cache.pop(key, None)
+
+    prune(_sequence_cache, _sequence_cache_max)
+    prune(_sequence_pattern_cache, _sequence_pattern_cache_max)
+
+
+def get_sequence_cache_stats() -> dict:
+    with _sequence_lock:
+        now = time.time()
+        def stats(cache: dict[str, dict[str, object]]) -> dict:
+            if not cache:
+                return {"count": 0, "oldest_age_s": None, "newest_age_s": None}
+            ages = [now - float(entry.get("last_used", now)) for entry in cache.values()]
+            return {
+                "count": len(cache),
+                "oldest_age_s": int(max(ages)),
+                "newest_age_s": int(min(ages)),
+            }
+
+        return {
+            "sequence_cache": stats(_sequence_cache),
+            "pattern_cache": stats(_sequence_pattern_cache),
+        }
 
 
 def _get_next_sequence_start(session: Session, filename_prefix: str, reserve: int) -> int:
@@ -64,16 +118,26 @@ def _get_next_sequence_start(session: Session, filename_prefix: str, reserve: in
         return 0
 
     with _sequence_lock:
+        now = time.time()
+        _prune_sequence_caches(now)
+
         cached = _sequence_cache.get(filename_prefix)
         if cached is not None:
-            start = cached
-            _sequence_cache[filename_prefix] = cached + reserve
+            start = int(cached.get("next", 0))
+            cached["next"] = start + reserve
+            cached["last_used"] = now
             return start
 
-        pattern = _sequence_pattern_cache.get(filename_prefix)
-        if pattern is None:
+        pattern_entry = _sequence_pattern_cache.get(filename_prefix)
+        if pattern_entry is None:
             pattern = re.compile(rf"^{re.escape(filename_prefix)}-(\d+)\.(jpg|jpeg|png)$", re.IGNORECASE)
-            _sequence_pattern_cache[filename_prefix] = pattern
+            _sequence_pattern_cache[filename_prefix] = {"pattern": pattern, "last_used": now}
+        else:
+            pattern_entry["last_used"] = now
+            pattern = pattern_entry.get("pattern")
+            if not pattern:
+                pattern = re.compile(rf"^{re.escape(filename_prefix)}-(\d+)\.(jpg|jpeg|png)$", re.IGNORECASE)
+                _sequence_pattern_cache[filename_prefix] = {"pattern": pattern, "last_used": now}
 
         max_seq = -1
         stmt = (
@@ -90,7 +154,7 @@ def _get_next_sequence_start(session: Session, filename_prefix: str, reserve: in
                     break
 
         start = (max_seq + 1) if max_seq >= 0 else 0
-        _sequence_cache[filename_prefix] = start + reserve
+        _sequence_cache[filename_prefix] = {"next": start + reserve, "last_used": now}
         return start
 
 def apply_params_to_graph(graph: dict, mapping: dict, params: dict):
@@ -317,6 +381,7 @@ def process_job(job_id: int):
             job.error = "Engine or Workflow not found during execution"
             session.commit()
             manager.broadcast_sync({"type": "error", "message": job.error}, str(job_id))
+            manager.close_job_sync(str(job_id))
             return
 
         try:
@@ -732,6 +797,7 @@ def process_job(job_id: int):
                 "prompt": pos_embed,
                 "negative_prompt": neg_embed
             }, str(job_id))
+            manager.close_job_sync(str(job_id))
             
             # Auto-Save Prompt
             if saved_images:
@@ -776,6 +842,7 @@ def process_job(job_id: int):
             session.add(job)
             session.commit()
             manager.broadcast_sync({"type": "error", "message": str(e)}, str(job_id))
+            manager.close_job_sync(str(job_id))
 
         except Exception as e:
             job.status = "failed"
@@ -783,3 +850,4 @@ def process_job(job_id: int):
             session.add(job)
             session.commit()
             manager.broadcast_sync({"type": "error", "message": str(e)}, str(job_id))
+            manager.close_job_sync(str(job_id))

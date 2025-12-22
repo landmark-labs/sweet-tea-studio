@@ -8,6 +8,8 @@ import { useUndoRedo } from "@/lib/undoRedo";
 
 const AUTOCOMPLETE_STORAGE_KEY = "sts_autocomplete_enabled";
 const AUTOCOMPLETE_EVENT_NAME = "sts-autocomplete-enabled-changed";
+const AUTOCOMPLETE_CACHE_MAX = 200;
+const AUTOCOMPLETE_CACHE_TTL_MS = 10 * 60 * 1000;
 
 interface PromptAutocompleteTextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
     value: string;
@@ -81,7 +83,7 @@ export function PromptAutocompleteTextarea({
         if (raw === null) return true;
         return raw === "true";
     });
-    const cacheRef = useRef<Map<string, TagSuggestion[]>>(new Map());
+    const cacheRef = useRef<Map<string, { data: TagSuggestion[]; ts: number }>>(new Map());
     const abortControllerRef = useRef<AbortController | null>(null);
     // Track intended cursor position to restore after external value changes add delimiters
     const intendedCursorRef = useRef<number | null>(null);
@@ -93,6 +95,20 @@ export function PromptAutocompleteTextarea({
     const [isFocused, setIsFocused] = useState(false);
     const [isTyping, setIsTyping] = useState(false);
     const [dropdownRect, setDropdownRect] = useState<{ top: number; left: number; width: number } | null>(null);
+
+    const pruneCache = (now: number) => {
+        for (const [key, entry] of cacheRef.current) {
+            if (now - entry.ts > AUTOCOMPLETE_CACHE_TTL_MS) {
+                cacheRef.current.delete(key);
+            }
+        }
+
+        while (cacheRef.current.size > AUTOCOMPLETE_CACHE_MAX) {
+            const oldestKey = cacheRef.current.keys().next().value;
+            if (oldestKey === undefined) break;
+            cacheRef.current.delete(oldestKey);
+        }
+    };
 
     useEffect(() => {
         const onToggle = (event: Event) => {
@@ -193,18 +209,28 @@ export function PromptAutocompleteTextarea({
         abortControllerRef.current = controller;
 
         const load = async () => {
-            if (cacheRef.current.has(normalizedToken)) {
-                setSuggestions(cacheRef.current.get(normalizedToken) || []);
+            const now = Date.now();
+            pruneCache(now);
+            const cached = cacheRef.current.get(normalizedToken);
+            if (cached && now - cached.ts <= AUTOCOMPLETE_CACHE_TTL_MS) {
+                cacheRef.current.delete(normalizedToken);
+                cacheRef.current.set(normalizedToken, { data: cached.data, ts: now });
+                setSuggestions(cached.data);
                 setIsOpen(true);
                 setHighlightIndex(0);
                 return;
+            }
+            if (cached) {
+                cacheRef.current.delete(normalizedToken);
             }
 
             try {
                 const data = await api.getTagSuggestions(normalizedToken, 25, controller.signal);
                 if (controller.signal.aborted) return;
 
-                cacheRef.current.set(normalizedToken, data);
+                const writeTime = Date.now();
+                cacheRef.current.set(normalizedToken, { data, ts: writeTime });
+                pruneCache(writeTime);
                 setSuggestions(data);
                 setIsOpen(true);
                 setHighlightIndex(0);

@@ -1113,6 +1113,9 @@ export default function PromptStudio() {
 
     ws.onclose = (event) => {
       logWs(`[WS] Closed for job ${lastJobId}. Code: ${event.code}, Reason: ${event.reason}, Clean: ${event.wasClean}`);
+      if (wsRef.current === ws) {
+        wsRef.current = null;
+      }
     };
 
     ws.onerror = (errorEvent) => {

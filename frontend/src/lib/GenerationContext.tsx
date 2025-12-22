@@ -89,6 +89,7 @@ export function GenerationProvider({ children }: GenerationProviderProps) {
     // Persisted stores
     const { trackFeedStart, updateFeed } = useGenerationFeedStore();
     const { prompts, searchQuery: promptSearch, setSearchQuery: setPromptSearch, setPrompts, shouldRefetch } = usePromptLibraryStore();
+    const wsRef = useRef<WebSocket | null>(null);
 
     // Persist selections
     useEffect(() => {
@@ -267,7 +268,12 @@ export function GenerationProvider({ children }: GenerationProviderProps) {
             // Start WebSocket to track progress
             const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             const wsApiPath = window.location.pathname.startsWith('/studio') ? '/sts-api/api/v1' : '/api/v1';
+            if (wsRef.current && wsRef.current.readyState !== WebSocket.CLOSED) {
+                wsRef.current.close();
+            }
+
             const ws = new WebSocket(`${wsProtocol}//${window.location.host}${wsApiPath}/jobs/${job.id}/ws`);
+            wsRef.current = ws;
             let lastPreviewUpdate = 0;
             ws.onmessage = (event) => {
                 const data = JSON.parse(event.data);
@@ -275,6 +281,7 @@ export function GenerationProvider({ children }: GenerationProviderProps) {
                     const statusUpdates: { status: string; previewBlob?: string | null } = { status: data.status };
                     if (data.status === "failed" || data.status === "cancelled") {
                         statusUpdates.previewBlob = null;
+                        ws.close();
                     }
                     updateFeed(job.id, statusUpdates);
                 } else if (data.type === "progress") {
@@ -304,6 +311,11 @@ export function GenerationProvider({ children }: GenerationProviderProps) {
             ws.onerror = () => {
                 updateFeed(job.id, { status: "failed", previewBlob: null });
                 ws.close();
+            };
+            ws.onclose = () => {
+                if (wsRef.current === ws) {
+                    wsRef.current = null;
+                }
             };
         } catch (err) {
             console.error("Generation failed", err);

@@ -1,11 +1,36 @@
 from fastapi import APIRouter
 from typing import List
+import os
+import psutil
 
 from app.services.monitoring import monitor
 from app.services.comfy_watchdog import watchdog
+from app.core.websockets import manager
+from app.services.job_processor import get_sequence_cache_stats
 
 
 router = APIRouter()
+
+
+def _process_diagnostics() -> dict:
+    proc = psutil.Process(os.getpid())
+    mem = proc.memory_info()
+    open_fds = None
+    try:
+        open_fds = proc.num_fds()
+    except AttributeError:
+        try:
+            open_fds = proc.num_handles()
+        except AttributeError:
+            open_fds = None
+
+    return {
+        "pid": proc.pid,
+        "rss_mb": round(mem.rss / 1024 / 1024, 2),
+        "vms_mb": round(mem.vms / 1024 / 1024, 2),
+        "threads": proc.num_threads(),
+        "open_fds": open_fds,
+    }
 
 
 @router.get("/metrics")
@@ -39,6 +64,15 @@ def get_engine_health() -> List[dict]:
         })
     
     return health_list
+
+
+@router.get("/diagnostics")
+def get_diagnostics():
+    return {
+        "process": _process_diagnostics(),
+        "websockets": manager.get_stats(),
+        "sequence_cache": get_sequence_cache_stats(),
+    }
 
 
 @router.get("/status/summary")
