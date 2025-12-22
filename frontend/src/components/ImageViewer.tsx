@@ -83,13 +83,17 @@ export function ImageViewer({
     }, [displayImages, selectedIndex]);
 
     // Align selection when a specific image path is provided
+    // NOTE: selectedIndex is intentionally NOT in deps - we only want to sync
+    // when displayImages or selectedImagePath changes externally, not when
+    // the user manually navigates with arrows
     React.useEffect(() => {
         if (!selectedImagePath) return;
         const idx = displayImages.findIndex((img) => img.path === selectedImagePath);
-        if (idx >= 0 && idx !== selectedIndex) {
+        if (idx >= 0) {
             setSelectedIndex(idx);
         }
-    }, [displayImages, selectedImagePath, selectedIndex]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [displayImages, selectedImagePath]);
 
     const currentImage = displayImages[selectedIndex];
     const imagePath = currentImage?.path;
