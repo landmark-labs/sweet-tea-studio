@@ -96,11 +96,10 @@ export default function Gallery() {
     const loadGallery = async (
         query?: string,
         projectId?: number | null,
-        options?: { append?: boolean; loadAll?: boolean; folder?: string | null }
+        options?: { append?: boolean; loadAll?: boolean }
     ) => {
         const append = options?.append ?? false;
         const loadAll = options?.loadAll ?? false;
-        const folderValue = options?.folder !== undefined ? options.folder : selectedFolder;
         const queryValue = append ? activeQuery : (query ?? search);
         try {
             setError(null);
@@ -118,7 +117,6 @@ export default function Gallery() {
                 skip,
                 limit: loadAll ? undefined : PAGE_SIZE,
                 projectId: unassignedOnly ? null : target,
-                folder: folderValue,
                 unassignedOnly,
                 includeThumbnails: false,
             });
@@ -371,8 +369,7 @@ export default function Gallery() {
 
     const handleSelectFolder = (folder: string | null) => {
         setSelectedFolder(folder);
-        // Reload with server-side folder filtering
-        loadGallery(search, selectedProjectId, { loadAll: cleanupMode, folder });
+        // Folder filtering now happens client-side via displayItems
     };
 
     // Get folders for the selected project
@@ -466,8 +463,19 @@ export default function Gallery() {
 
     const cleanupDeleteCount = Math.max(items.length - selectedIds.size, 0);
 
-    // Folder filtering now happens server-side - just use items directly
-    const displayItems = items;
+    // Filter items by selected folder - match folder name in image path
+    const displayItems = selectedFolder
+        ? items.filter(item => {
+            const path = item.image.path || '';
+            // Check if the path contains the folder name as a directory segment
+            const pathSegments = path.replace(/\\/g, '/').split('/');
+
+            // Fix: Check parent directory specifically to avoid partial matches
+            if (pathSegments.length < 2) return false;
+            const parentFolder = pathSegments[pathSegments.length - 2];
+            return parentFolder.toLowerCase() === selectedFolder.toLowerCase();
+        })
+        : items;
 
     const fullscreenItem = fullscreenIndex !== null ? displayItems[fullscreenIndex] : null;
 

@@ -464,6 +464,15 @@ def list_project_folder_images(
         if local_path.exists():
             folder_path = local_path
     
+    # Debug: log path resolution
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"[ProjectGallery] project={project.slug}, folder={folder_name}")
+    logger.info(f"[ProjectGallery] active_engine={active_engine.name if active_engine else 'None'}")
+    if active_engine:
+        logger.info(f"[ProjectGallery] input_dir='{active_engine.input_dir}', output_dir='{active_engine.output_dir}'")
+    logger.info(f"[ProjectGallery] folder_path={folder_path}, exists={folder_path.exists() if folder_path else False}")
+    
     if not folder_path or not folder_path.exists():
         return []
     

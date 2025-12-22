@@ -195,7 +195,6 @@ def read_gallery(
     kept_only: bool = Query(False),
     collection_id: Optional[int] = Query(None),
     project_id: Optional[int] = Query(None),
-    folder: Optional[str] = Query(None, description="Filter by folder name (parent directory in image path)"),
     unassigned_only: bool = Query(False, description="Return only images with no project assignment"),
     session: Session = Depends(get_session),
 ):
@@ -228,20 +227,6 @@ def read_gallery(
         stmt = stmt.where(Job.project_id == project_id)
     elif unassigned_only:
         stmt = stmt.where(Job.project_id == None)
-    
-    # Filter by folder: match the parent directory of the image path
-    # Pattern: .../folder/filename.ext - we match paths ending with /folder/something
-    if folder:
-        # Use SQL LIKE to match paths where the parent folder is the specified folder
-        # This matches both Unix and Windows paths
-        folder_pattern = f"%/{folder}/%"
-        folder_pattern_win = f"%\\{folder}\\%"
-        stmt = stmt.where(
-            or_(
-                Image.path.like(folder_pattern),
-                Image.path.like(folder_pattern_win),
-            )
-        )
 
     if search:
         fts_used = False
