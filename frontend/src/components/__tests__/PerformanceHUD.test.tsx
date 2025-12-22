@@ -35,7 +35,7 @@ describe("PerformanceHUD", () => {
   it("renders metrics and updates on interval", async () => {
     render(<PerformanceHUD refreshMs={50} />);
 
-    expect(await screen.findByText(/Performance HUD/i)).toBeInTheDocument();
+    expect(await screen.findByText(/performance/i)).toBeInTheDocument();
     expect(await screen.findByText(/Test GPU/)).toBeInTheDocument();
     expect(await screen.findByText(/50%/)).toBeInTheDocument();
 

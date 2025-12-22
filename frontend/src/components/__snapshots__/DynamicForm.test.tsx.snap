@@ -38,13 +38,13 @@ exports[`DynamicForm grouping > falls back to heuristic grouping 1`] = `
           data-state="closed"
         >
           <button
-            aria-controls="radix-_r_d_"
+            aria-controls="radix-_r_9_"
             aria-expanded="false"
             class="flex flex-1 items-center justify-between transition-all [&[data-state=open]>svg]:rotate-180 text-xs font-semibold uppercase text-slate-500 hover:no-underline py-2"
             data-orientation="vertical"
             data-radix-collection-item=""
             data-state="closed"
-            id="radix-_r_c_"
+            id="radix-_r_8_"
             type="button"
           >
             EXPANDED CONTROLS
@@ -68,12 +68,255 @@ exports[`DynamicForm grouping > falls back to heuristic grouping 1`] = `
           </button>
         </h3>
         <div
-          aria-labelledby="radix-_r_c_"
+          aria-labelledby="radix-_r_8_"
           class="overflow-hidden text-sm transition-all data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down"
           data-orientation="vertical"
           data-state="closed"
           hidden=""
-          id="radix-_r_d_"
+          id="radix-_r_9_"
+          role="region"
+          style="--radix-accordion-content-height: var(--radix-collapsible-content-height); --radix-accordion-content-width: var(--radix-collapsible-content-width);"
+        />
+      </div>
+    </div>
+  </form>
+</div>
+`;
+
+exports[`DynamicForm grouping > respects explicit x_form annotations for custom nodes 1`] = `
+<div>
+  <form
+    class="space-y-6 pb-20"
+  >
+    <div
+      class="space-y-4 p-4 bg-slate-50 rounded-lg border border-slate-200"
+    >
+      <h3
+        class="text-sm font-bold text-slate-700 uppercase tracking-wider"
+      >
+        input images
+      </h3>
+      <div
+        class="space-y-4"
+      >
+        <div
+          class="space-y-2"
+        >
+          <label
+            class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+            for="image_input"
+          >
+            Load Image
+          </label>
+          <div
+            class="space-y-3"
+          >
+            <div
+              class="flex flex-col items-center justify-center border-2 border-dashed rounded-lg p-6 transition-colors gap-4 border-slate-200 hover:bg-slate-50"
+            >
+              <div
+                class="flex flex-col items-center gap-2 text-center"
+              >
+                <svg
+                  aria-hidden="true"
+                  class="lucide lucide-upload h-8 w-8 text-slate-300"
+                  fill="none"
+                  height="24"
+                  stroke="currentColor"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  viewBox="0 0 24 24"
+                  width="24"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    d="M12 3v12"
+                  />
+                  <path
+                    d="m17 8-5-5-5 5"
+                  />
+                  <path
+                    d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"
+                  />
+                </svg>
+                <div
+                  class="text-sm text-slate-600"
+                >
+                  Click to upload or drag & drop
+                </div>
+              </div>
+              <button
+                class="inline-flex items-center justify-center whitespace-nowrap text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-slate-200 bg-background hover:bg-slate-100 hover:text-slate-900 h-9 rounded-md px-3"
+                type="button"
+              >
+                Select File
+              </button>
+              <input
+                accept="image/*"
+                class="hidden"
+                id="file-upload"
+                type="file"
+              />
+              <div
+                class="w-full pt-2"
+              >
+                <button
+                  class="inline-flex items-center justify-center whitespace-nowrap text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-slate-200 bg-background hover:bg-slate-100 hover:text-slate-900 h-9 rounded-md px-3 w-full"
+                  type="button"
+                >
+                  <svg
+                    aria-hidden="true"
+                    class="lucide lucide-grid3x3 lucide-grid-3x3 w-3 h-3 mr-2"
+                    fill="none"
+                    height="24"
+                    stroke="currentColor"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    viewBox="0 0 24 24"
+                    width="24"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <rect
+                      height="18"
+                      rx="2"
+                      width="18"
+                      x="3"
+                      y="3"
+                    />
+                    <path
+                      d="M3 9h18"
+                    />
+                    <path
+                      d="M3 15h18"
+                    />
+                    <path
+                      d="M9 3v18"
+                    />
+                    <path
+                      d="M15 3v18"
+                    />
+                  </svg>
+                   Browse Library
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div
+      class="space-y-4 p-4 bg-white rounded-lg border border-slate-200"
+    >
+      <div
+        class="flex items-center justify-between"
+      >
+        <h3
+          class="text-sm font-bold text-slate-700 uppercase tracking-wider"
+        >
+          core pipe controls
+        </h3>
+      </div>
+      <div
+        class="flex flex-col gap-4"
+      >
+        <div
+          class="space-y-2"
+          style="order: 999;"
+        >
+          <div
+            class="space-y-3"
+          >
+            <div
+              class="space-y-2"
+            >
+              <label
+                class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                for="story_prompt"
+              >
+                Story Prompt
+              </label>
+              <div
+                class="flex flex-col gap-1 w-full group/container"
+              >
+                <div
+                  class="flex justify-end px-1"
+                >
+                  <button
+                    class="rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                    title="Disable autocomplete"
+                    type="button"
+                  >
+                    Autocomplete
+                  </button>
+                </div>
+                <div
+                  class="relative w-full"
+                >
+                  <textarea
+                    class="flex w-full rounded-md border border-input ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 text-xs font-mono transition-all min-h-[150px] relative z-10 bg-transparent focus:bg-transparent p-3"
+                    id="story_prompt"
+                    placeholder=""
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div
+      class="w-full"
+      data-orientation="vertical"
+    >
+      <div
+        class="border rounded-lg px-2 bg-white"
+        data-orientation="vertical"
+        data-state="closed"
+      >
+        <h3
+          class="flex"
+          data-orientation="vertical"
+          data-state="closed"
+        >
+          <button
+            aria-controls="radix-_r_7_"
+            aria-expanded="false"
+            class="flex flex-1 items-center justify-between transition-all [&[data-state=open]>svg]:rotate-180 text-xs font-semibold uppercase text-slate-500 hover:no-underline py-2"
+            data-orientation="vertical"
+            data-radix-collection-item=""
+            data-state="closed"
+            id="radix-_r_6_"
+            type="button"
+          >
+            EXPANDED CONTROLS
+            <svg
+              aria-hidden="true"
+              class="lucide lucide-chevron-down h-4 w-4 shrink-0 transition-transform duration-200"
+              fill="none"
+              height="24"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+              width="24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                d="m6 9 6 6 6-6"
+              />
+            </svg>
+          </button>
+        </h3>
+        <div
+          aria-labelledby="radix-_r_6_"
+          class="overflow-hidden text-sm transition-all data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down"
+          data-orientation="vertical"
+          data-state="closed"
+          hidden=""
+          id="radix-_r_7_"
           role="region"
           style="--radix-accordion-content-height: var(--radix-collapsible-content-height); --radix-accordion-content-width: var(--radix-collapsible-content-width);"
         />

@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useAtomValue, useSetAtom, useStore } from "jotai";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { PromptAutocompleteTextarea } from "@/components/PromptAutocompleteTextarea";
 import { api } from "@/lib/api";
 import { PromptItem } from "@/lib/types";
+import { formDataAtom, formFieldAtom, setFormDataAtom } from "@/lib/atoms/formAtoms";
 
 type FormSection = "inputs" | "prompts" | "loras" | "nodes";
 
@@ -30,6 +32,329 @@ interface GroupMap {
     order: number;
 }
 
+interface FieldRendererProps {
+    fieldKey: string;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    field: any;
+    isActive: boolean;
+    isPromptField: boolean;
+    dynamicOptions: Record<string, string[]>;
+    onFieldFocus?: (key: string) => void;
+    onFieldBlur?: (key: string, relatedTarget: Element | null) => void;
+    onValueChange: (key: string, value: string | number | boolean) => void;
+    onToggleChange: (key: string, value: boolean) => void;
+    snippets: PromptItem[];
+    engineId?: string;
+    projectSlug?: string;
+    destinationFolder?: string;
+}
+
+const BYPASS_PLACEHOLDER_KEY = "__sts_bypass_placeholder__";
+
+const FieldRenderer = React.memo(function FieldRenderer({
+    fieldKey,
+    field,
+    isActive,
+    isPromptField,
+    dynamicOptions,
+    onFieldFocus,
+    onFieldBlur,
+    onValueChange,
+    onToggleChange,
+    snippets,
+    engineId,
+    projectSlug,
+    destinationFolder,
+}: FieldRendererProps) {
+    const value = useAtomValue(formFieldAtom(fieldKey));
+    const isImageUpload = field.widget === "upload" || field.widget === "image_upload" || (field.title && field.title.includes("LoadImage"));
+
+    if (isImageUpload) {
+        return (
+            <div className="space-y-2">
+                <Label htmlFor={fieldKey}>{field.title || fieldKey}</Label>
+                <ImageUpload
+                    value={value as string | undefined}
+                    onChange={(val) => onValueChange(fieldKey, val)}
+                    engineId={engineId}
+                    options={field.enum}
+                    projectSlug={projectSlug}
+                    destinationFolder={destinationFolder}
+                />
+            </div>
+        );
+    }
+
+    if (field.widget === "textarea") {
+        return (
+            <div className="space-y-2">
+                <Label htmlFor={fieldKey} className={cn(isActive && "text-blue-600 font-semibold")}>{field.title || fieldKey}</Label>
+                {isPromptField ? (
+                    <PromptAutocompleteTextarea
+                        id={fieldKey}
+                        value={typeof value === "string" ? value : ""}
+                        onValueChange={(val) => onValueChange(fieldKey, val)}
+                        onFocus={() => onFieldFocus?.(fieldKey)}
+                        onBlur={(e) => onFieldBlur?.(fieldKey, e.relatedTarget as Element)}
+                        placeholder=""
+                        isActive={isActive}
+                        snippets={snippets}
+                        highlightSnippets={true}
+                    />
+                ) : (
+                    <Textarea
+                        id={fieldKey}
+                        value={typeof value === "string" ? value : ""}
+                        onChange={(e) => onValueChange(fieldKey, e.target.value)}
+                        onFocus={() => onFieldFocus?.(fieldKey)}
+                        onBlur={(e) => onFieldBlur?.(fieldKey, e.relatedTarget as Element)}
+                        placeholder=""
+                        rows={6}
+                        className={cn(
+                            "text-xs font-mono transition-all min-h-[150px]",
+                            isActive && "ring-2 ring-blue-400 border-blue-400 bg-blue-50/20"
+                        )}
+                    />
+                )}
+            </div>
+        );
+    }
+
+    if (field.widget === "toggle") {
+        return (
+            <div className="flex items-center justify-between py-2">
+                <Label htmlFor={fieldKey} className={cn("text-xs text-slate-500", isActive && "text-blue-600 font-semibold")}>
+                    {field.title || fieldKey}
+                </Label>
+                <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-slate-400 uppercase">{value ? "Bypassed" : "Active"}</span>
+                    <Switch
+                        checked={!!value}
+                        onCheckedChange={(c) => onToggleChange(fieldKey, Boolean(c))}
+                        className={cn(value ? "bg-amber-500" : "bg-slate-200")}
+                    />
+                </div>
+            </div>
+        );
+    }
+
+    // Inline layout for non-prompt fields (label on left)
+    const isNumberType = field.type === "integer" || field.type === "number" || field.type === "float";
+    const currentVal = String(value ?? "");
+
+    return (
+        <div className="flex items-center gap-2 py-0.5">
+            <Label htmlFor={fieldKey} className={cn("text-xs text-slate-500 w-24 flex-shrink-0 text-right", isActive && "text-blue-600 font-semibold")}>{field.title || fieldKey}</Label>
+            {field.enum || dynamicOptions[fieldKey] ? (
+                (() => {
+                    const rawOptions = dynamicOptions[fieldKey] || field.enum || [];
+                    const options = currentVal && !rawOptions.includes(currentVal)
+                        ? [currentVal, ...rawOptions]
+                        : rawOptions;
+
+                    return (
+                        <Select
+                            value={currentVal}
+                            onValueChange={(val) => {
+                                onValueChange(fieldKey, val);
+                            }}
+                        >
+                            <SelectTrigger id={fieldKey} className={cn("h-7 text-xs flex-1 min-w-0 overflow-hidden", isActive && "ring-1 ring-blue-400 border-blue-400")}>
+                                <span className="truncate block w-full text-left">
+                                    {currentVal || "Select..."}
+                                </span>
+                            </SelectTrigger>
+                            <SelectContent position="popper" sideOffset={5} className="max-h-[300px] max-w-[320px] overflow-y-auto z-50">
+                                {options.map((opt: string) => (
+                                    <SelectItem key={opt} value={opt} className="text-xs">
+                                        <span className="block truncate max-w-[280px]" title={opt}>
+                                            {opt}
+                                        </span>
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    );
+                })()
+            ) : (
+                <Input
+                    id={fieldKey}
+                    type="text"
+                    inputMode={isNumberType ? "decimal" : "text"}
+                    value={currentVal}
+                    onChange={(e) => {
+                        const val = e.target.value;
+                        // For number fields, allow typing raw values including "-", ".", "-."
+                        // Don't parse until blur to allow natural typing of negatives and decimals
+                        onValueChange(fieldKey, val);
+                    }}
+                    onBlur={(e) => {
+                        // Parse number on blur for number types
+                        if (isNumberType) {
+                            const val = e.target.value;
+                            if (val === "" || val === "-" || val === "." || val === "-.") {
+                                // Leave as-is or clear incomplete values
+                                return;
+                            }
+                            const parsed = field.type === "integer" ? parseInt(val) : parseFloat(val);
+                            if (!isNaN(parsed)) {
+                                onValueChange(fieldKey, parsed);
+                            }
+                        }
+                    }}
+                    onFocus={() => onFieldFocus?.(fieldKey)}
+                    placeholder=""
+                    className={cn("h-7 text-xs flex-1", isActive && "ring-1 ring-blue-400 border-blue-400")}
+                    step={field.step || (field.type === "integer" ? 1 : 0.01)}
+                    min={field.minimum}
+                    max={field.maximum}
+                />
+            )}
+        </div>
+    );
+});
+
+interface GroupWithBypass {
+    id: string;
+    title: string;
+    keys: string[];
+    order: number;
+    bypassKey?: string;
+    hasBypass: boolean;
+}
+
+interface CoreGroupSectionProps {
+    group: GroupWithBypass;
+    renderField: (key: string) => JSX.Element;
+    onToggleChange: (key: string, value: boolean) => void;
+    showHeader: boolean;
+}
+
+const CoreGroupSection = React.memo(function CoreGroupSection({
+    group,
+    renderField,
+    onToggleChange,
+    showHeader,
+}: CoreGroupSectionProps) {
+    const bypassValue = useAtomValue(formFieldAtom(group.bypassKey ?? BYPASS_PLACEHOLDER_KEY));
+    const isBypassed = group.hasBypass && Boolean(bypassValue);
+    const fieldsToRender = group.keys.filter(k => k !== group.bypassKey);
+    const orderBase = Number.isFinite(group.order) ? group.order : 999;
+    const order = isBypassed ? orderBase + 1000 : orderBase;
+
+    return (
+        <div key={group.id} className="space-y-2" style={{ order }}>
+            {(showHeader || group.hasBypass) && (
+                <div className="flex items-center justify-between border-b border-slate-100 pb-1">
+                    <h4 className="text-[11px] font-semibold uppercase text-slate-400 tracking-wide flex items-center gap-2">
+                        <span>{group.title}</span>
+                        {isBypassed && (
+                            <span className="text-[9px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5">
+                                Bypassed
+                            </span>
+                        )}
+                    </h4>
+                    {group.hasBypass && group.bypassKey && (
+                        <div className="flex items-center gap-2">
+                            <span className="text-[9px] text-slate-300 uppercase  tracking-wider">
+                                {isBypassed ? "bypassed" : "active"}
+                            </span>
+                            <Switch
+                                checked={Boolean(bypassValue)}
+                                onCheckedChange={(c) => onToggleChange(group.bypassKey!, Boolean(c))}
+                                className={cn(
+                                    "h-3.5 w-6 data-[state=checked]:bg-amber-500 data-[state=unchecked]:bg-slate-200"
+                                )}
+                            />
+                        </div>
+                    )}
+                </div>
+            )}
+            <div className="space-y-3">
+                {!isBypassed ? (
+                    fieldsToRender.map(renderField)
+                ) : (
+                    <div className="text-[10px] text-slate-400 italic px-1 opacity-60">
+                        Node bypassed. Parameters hidden.
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+});
+
+interface SettingsGroupSectionProps {
+    group: GroupWithBypass;
+    renderField: (key: string) => JSX.Element;
+    onToggleChange: (key: string, value: boolean) => void;
+}
+
+const SettingsGroupSection = React.memo(function SettingsGroupSection({
+    group,
+    renderField,
+    onToggleChange,
+}: SettingsGroupSectionProps) {
+    const bypassValue = useAtomValue(formFieldAtom(group.bypassKey ?? BYPASS_PLACEHOLDER_KEY));
+    const isBypassed = group.hasBypass && Boolean(bypassValue);
+    const fieldsToRender = group.keys.filter(k => k !== group.bypassKey);
+    const orderBase = Number.isFinite(group.order) ? group.order : 999;
+    const order = isBypassed ? orderBase + 1000 : orderBase;
+
+    return (
+        <AccordionItem
+            key={group.id}
+            value={group.id}
+            className={cn(
+                "border rounded-lg px-2 bg-white transition-opacity",
+                isBypassed && "opacity-60"
+            )}
+            style={{ order }}
+        >
+            <AccordionTrigger
+                className="text-xs font-semibold uppercase text-slate-500 hover:no-underline py-2 [&>svg]:ml-auto"
+                aria-label={`${group.title} controls (${isBypassed ? "bypassed" : "active"})`}
+            >
+                <div className="flex items-center gap-3">
+                    <span className="flex items-center gap-2">
+                        <span>{group.title}</span>
+                        {isBypassed && (
+                            <span className="text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5">
+                                Bypassed
+                            </span>
+                        )}
+                    </span>
+                    {group.hasBypass && group.bypassKey && (
+                        <div
+                            className="flex items-center gap-2"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <span className="text-[9px] text-slate-300 uppercase tracking-wider">
+                                {isBypassed ? "bypassed" : "active"}
+                            </span>
+                            <Switch
+                                checked={Boolean(bypassValue)}
+                                onCheckedChange={(c) => onToggleChange(group.bypassKey!, Boolean(c))}
+                                className={cn(
+                                    "h-3.5 w-6 data-[state=checked]:bg-amber-500 data-[state=unchecked]:bg-slate-200"
+                                )}
+                            />
+                        </div>
+                    )}
+                </div>
+            </AccordionTrigger>
+            <AccordionContent className="space-y-4 pt-0 pb-4">
+                {!isBypassed ? (
+                    fieldsToRender.map(renderField)
+                ) : (
+                    <div className="text-[10px] text-slate-400 italic px-1">
+                        Node bypassed. Parameters hidden.
+                    </div>
+                )}
+            </AccordionContent>
+        </AccordionItem>
+    );
+});
+
 interface DynamicFormProps {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     schema: any;
@@ -38,9 +363,6 @@ interface DynamicFormProps {
     nodeOrder?: string[];
     persistenceKey?: string;
     engineId?: string;
-    // specific controlled props
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    formData?: any;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     onChange?: (data: any) => void;
     onFieldFocus?: (key: string) => void;
@@ -50,6 +372,9 @@ interface DynamicFormProps {
     snippets?: PromptItem[];
     projectSlug?: string; // If set, uploads go to project-specific input folder
     destinationFolder?: string; // If set with projectSlug, uploads go to /input/<project>/<folder>/
+    submitLabel?: string;
+    isLoading?: boolean;
+    submitDisabled?: boolean;
 }
 
 export const DynamicForm = React.memo(function DynamicForm({
@@ -58,7 +383,6 @@ export const DynamicForm = React.memo(function DynamicForm({
     nodeOrder,
     persistenceKey,
     engineId,
-    formData: externalData,
     onChange: externalOnChange,
     onFieldFocus,
     onFieldBlur,
@@ -68,46 +392,45 @@ export const DynamicForm = React.memo(function DynamicForm({
     projectSlug,
     destinationFolder
 }: DynamicFormProps) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const [internalData, setInternalData] = useState<any>({});
     const [dynamicOptions, setDynamicOptions] = useState<Record<string, string[]>>({});
+    const store = useStore();
+    const setFormData = useSetAtom(setFormDataAtom);
 
-    const isControlled = externalData !== undefined;
-    const formData = isControlled ? externalData : internalData;
-
-    // Initialize defaults or load from storage
+    // Initialize defaults or load from storage (fallback for uncontrolled usage)
     useEffect(() => {
-        if (schema && !isControlled) {
-            let storedData = null;
-            if (persistenceKey) {
-                try {
-                    const item = localStorage.getItem(persistenceKey);
-                    if (item) storedData = JSON.parse(item);
-                } catch (e) {
-                    console.error("Failed to load form data", e);
-                }
+        if (!schema || externalOnChange) return;
+
+        let storedData = null;
+        if (persistenceKey) {
+            try {
+                const item = localStorage.getItem(persistenceKey);
+                if (item) storedData = JSON.parse(item);
+            } catch (e) {
+                console.error("Failed to load form data", e);
             }
-
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const defaults: any = {};
-            Object.keys(schema).forEach((key) => {
-                if (schema[key].default !== undefined) {
-                    defaults[key] = schema[key].default;
-                }
-            });
-
-            setInternalData({ ...defaults, ...(storedData || {}) });
         }
-    }, [schema, persistenceKey, isControlled]);
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const defaults: any = {};
+        Object.keys(schema).forEach((key) => {
+            if (schema[key].default !== undefined) {
+                defaults[key] = schema[key].default;
+            }
+        });
+
+        setFormData({ ...defaults, ...(storedData || {}) });
+    }, [schema, persistenceKey, externalOnChange, setFormData]);
 
     // Load dynamic options from Engine
     useEffect(() => {
         if (!engineId || !schema) return;
+        const parsedEngineId = parseInt(engineId, 10);
+        if (!Number.isFinite(parsedEngineId)) return;
 
         const loadDynamicOptions = async () => {
             try {
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                const info = await api.getEngineObjectInfo(parseInt(engineId));
+                const info = await api.getEngineObjectInfo(parsedEngineId);
                 const newOptions: Record<string, string[]> = {};
 
                 Object.keys(schema).forEach(key => {
@@ -153,19 +476,26 @@ export const DynamicForm = React.memo(function DynamicForm({
         return initial;
     }, [schema, nodeOrder]);
 
-    const handleChange = (key: string, value: string | number | boolean) => {
-        const next = { ...formData, [key]: value };
-
+    const applyData = useCallback((next: Record<string, any>) => {
+        if (externalOnChange) {
+            externalOnChange(next);
+            return;
+        }
         if (persistenceKey) {
             localStorage.setItem(persistenceKey, JSON.stringify(next));
         }
+        setFormData(next);
+    }, [externalOnChange, persistenceKey, setFormData]);
 
-        if (isControlled) {
-            externalOnChange?.(next);
-        } else {
-            setInternalData(next);
-        }
-    };
+    const handleUpdate = useCallback((updates: Record<string, any>) => {
+        const current = store.get(formDataAtom) || {};
+        const next = { ...current, ...updates };
+        applyData(next);
+    }, [applyData, store]);
+
+    const handleChange = useCallback((key: string, value: string | number | boolean) => {
+        handleUpdate({ [key]: value });
+    }, [handleUpdate]);
 
     // Group fields
     const groups = useMemo<{
@@ -405,10 +735,11 @@ export const DynamicForm = React.memo(function DynamicForm({
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        onSubmit(formData);
+        onSubmit(store.get(formDataAtom));
     };
 
     const getBypassMeta = (group: { id?: string; keys: string[] }) => {
+        if (!schema) return { bypassKey: undefined, hasBypass: false };
         let bypassKey = group.keys.find(k => {
             const f = schema[k];
             return f?.widget === "toggle" && (
@@ -423,205 +754,88 @@ export const DynamicForm = React.memo(function DynamicForm({
         }
 
         const hasBypass = !!bypassKey;
-        const isBypassed = hasBypass && formData[bypassKey!];
-
-        return { bypassKey, hasBypass, isBypassed };
+        return { bypassKey, hasBypass };
     };
 
-    const renderField = (key: string) => {
+    const handleToggleChange = useCallback((key: string, checked: boolean) => {
+        // If enabling bypass, auto-fill any empty required enum fields in the same group
+        // This prevents "Value not in list" errors from ComfyUI validation
+        const updates: Record<string, any> = { [key]: checked };
+
+        if (checked === true) {
+            const placement = groups.placements[key];
+            if (placement && placement.groupId) {
+                const groupKeys = groups.nodes[placement.groupId]?.keys || [];
+                const currentData = store.get(formDataAtom) || {};
+                groupKeys.forEach(siblingKey => {
+                    if (siblingKey === key) return;
+                    const siblingField = schema[siblingKey];
+                    const currentValue = currentData[siblingKey];
+
+                    // Check if it's an enum field and currently empty
+                    if (siblingField?.enum && Array.isArray(siblingField.enum) && siblingField.enum.length > 0) {
+                        if (currentValue === "" || currentValue === undefined || currentValue === null) {
+                            updates[siblingKey] = siblingField.enum[0];
+                        }
+                    }
+                });
+            }
+        }
+
+        handleUpdate(updates);
+    }, [groups.nodes, groups.placements, handleUpdate, schema, store]);
+
+    const renderField = useCallback((key: string) => {
         const field = schema[key];
-        const isImageUpload = field.widget === "upload" || field.widget === "image_upload" || (field.title && field.title.includes("LoadImage"));
         const isActive = key === activeField;
         const isPromptField = groups.prompts.includes(key);
 
-        if (isImageUpload) {
-            return (
-                <div key={key} className="space-y-2">
-                    <Label htmlFor={key}>{field.title || key}</Label>
-                    <ImageUpload
-                        value={formData[key]}
-                        onChange={(val) => handleChange(key, val)}
-                        engineId={engineId}
-                        options={field.enum}
-                        projectSlug={projectSlug}
-                        destinationFolder={destinationFolder}
-                    />
-                </div>
-            );
-        }
-
-        if (field.widget === "textarea") {
-            return (
-                <div key={key} className="space-y-2">
-                    <Label htmlFor={key} className={cn(isActive && "text-blue-600 font-semibold")}>{field.title || key}</Label>
-                    {isPromptField ? (
-                        <PromptAutocompleteTextarea
-                            id={key}
-                            value={formData[key] || ""}
-                            onValueChange={(val) => handleChange(key, val)}
-                            onFocus={() => onFieldFocus?.(key)}
-                            onBlur={(e) => onFieldBlur?.(key, e.relatedTarget as Element)}
-                            placeholder=""
-                            isActive={isActive}
-                            snippets={snippets}
-                            highlightSnippets={true}
-                        />
-                    ) : (
-                        <Textarea
-                            id={key}
-                            value={formData[key] || ""}
-                            onChange={(e) => handleChange(key, e.target.value)}
-                            onFocus={() => onFieldFocus?.(key)}
-                            onBlur={(e) => onFieldBlur?.(key, e.relatedTarget as Element)}
-                            placeholder=""
-                            rows={6}
-                            className={cn(
-                                "text-xs font-mono transition-all min-h-[150px]",
-                                isActive && "ring-2 ring-blue-400 border-blue-400 bg-blue-50/20"
-                            )}
-                        />
-                    )}
-                </div>
-            );
-        }
-
-        if (field.widget === "toggle") {
-            return (
-                <div key={key} className="flex items-center justify-between py-2">
-                    <Label htmlFor={key} className={cn("text-xs text-slate-500", isActive && "text-blue-600 font-semibold")}>
-                        {field.title || key}
-                    </Label>
-                    <div className="flex items-center gap-2">
-                        <span className="text-[10px] text-slate-400 uppercase">{formData[key] ? "Bypassed" : "Active"}</span>
-                        <Switch
-                            checked={!!formData[key]}
-                            onCheckedChange={(c) => {
-                                // If enabling bypass, auto-fill any empty required enum fields in the same group
-                                // This prevents "Value not in list" errors from ComfyUI validation
-                                const updates: Record<string, any> = { [key]: c };
-
-                                if (c === true) {
-                                    const placement = groups.placements[key];
-                                    if (placement && placement.groupId) {
-                                        const groupKeys = groups.nodes[placement.groupId]?.keys || [];
-                                        groupKeys.forEach(siblingKey => {
-                                            if (siblingKey === key) return;
-                                            const siblingField = schema[siblingKey];
-                                            const currentValue = formData[siblingKey];
-
-                                            // Check if it's an enum field and currently empty
-                                            if (siblingField?.enum && Array.isArray(siblingField.enum) && siblingField.enum.length > 0) {
-                                                if (currentValue === "" || currentValue === undefined || currentValue === null) {
-                                                    updates[siblingKey] = siblingField.enum[0];
-                                                }
-                                            }
-                                        });
-                                    }
-                                }
-
-                                const next = { ...formData, ...updates };
-                                if (persistenceKey) localStorage.setItem(persistenceKey, JSON.stringify(next));
-                                if (isControlled) externalOnChange?.(next);
-                                else setInternalData(next);
-                            }}
-                            className={cn(formData[key] ? "bg-amber-500" : "bg-slate-200")}
-                        />
-                    </div>
-                </div>
-            );
-        }
-
-        // Inline layout for non-prompt fields (label on left)
-        const isNumberType = field.type === "integer" || field.type === "number" || field.type === "float";
-
         return (
-            <div key={key} className="flex items-center gap-2 py-0.5">
-                <Label htmlFor={key} className={cn("text-xs text-slate-500 w-24 flex-shrink-0 text-right", isActive && "text-blue-600 font-semibold")}>{field.title || key}</Label>
-                {field.enum || dynamicOptions[key] ? (
-                    (() => {
-                        const rawOptions = dynamicOptions[key] || field.enum || [];
-                        const currentVal = String(formData[key] ?? "");
-                        // Ensure the current value is always an option to prevent auto-reset/invalidation
-                        const options = currentVal && !rawOptions.includes(currentVal)
-                            ? [currentVal, ...rawOptions]
-                            : rawOptions;
-
-                        return (
-                            <Select
-                                value={currentVal}
-                                onValueChange={(val) => {
-                                    handleChange(key, val);
-                                }}
-                            >
-                                <SelectTrigger id={key} className={cn("h-7 text-xs flex-1 min-w-0 overflow-hidden", isActive && "ring-1 ring-blue-400 border-blue-400")}>
-                                    <span className="truncate block w-full text-left">
-                                        {currentVal || "Select..."}
-                                    </span>
-                                </SelectTrigger>
-                                <SelectContent position="popper" sideOffset={5} className="max-h-[300px] max-w-[320px] overflow-y-auto z-50">
-                                    {options.map((opt: string) => (
-                                        <SelectItem key={opt} value={opt} className="text-xs">
-                                            <span className="block truncate max-w-[280px]" title={opt}>
-                                                {opt}
-                                            </span>
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        );
-                    })()
-                ) : (
-                    <Input
-                        id={key}
-                        type="text"
-                        inputMode={isNumberType ? "decimal" : "text"}
-                        value={formData[key] ?? ""}
-                        onChange={(e) => {
-                            const val = e.target.value;
-                            // For number fields, allow typing raw values including "-", ".", "-."
-                            // Don't parse until blur to allow natural typing of negatives and decimals
-                            handleChange(key, val);
-                        }}
-                        onBlur={(e) => {
-                            // Parse number on blur for number types
-                            if (isNumberType) {
-                                const val = e.target.value;
-                                if (val === "" || val === "-" || val === "." || val === "-.") {
-                                    // Leave as-is or clear incomplete values
-                                    return;
-                                }
-                                const parsed = field.type === "integer" ? parseInt(val) : parseFloat(val);
-                                if (!isNaN(parsed)) {
-                                    handleChange(key, parsed);
-                                }
-                            }
-                        }}
-                        onFocus={() => onFieldFocus?.(key)}
-                        placeholder=""
-                        className={cn("h-7 text-xs flex-1", isActive && "ring-1 ring-blue-400 border-blue-400")}
-                        step={field.step || (field.type === "integer" ? 1 : 0.01)}
-                        min={field.minimum}
-                        max={field.maximum}
-                    />
-                )}
-            </div>
+            <FieldRenderer
+                key={key}
+                fieldKey={key}
+                field={field}
+                isActive={isActive}
+                isPromptField={isPromptField}
+                dynamicOptions={dynamicOptions}
+                onFieldFocus={onFieldFocus}
+                onFieldBlur={onFieldBlur}
+                onValueChange={handleChange}
+                onToggleChange={handleToggleChange}
+                snippets={snippets}
+                engineId={engineId}
+                projectSlug={projectSlug}
+                destinationFolder={destinationFolder}
+            />
         );
-    };
+    }, [
+        activeField,
+        destinationFolder,
+        dynamicOptions,
+        engineId,
+        groups.prompts,
+        handleChange,
+        handleToggleChange,
+        onFieldBlur,
+        onFieldFocus,
+        projectSlug,
+        schema,
+        snippets
+    ]);
 
-    const sortedCoreGroups = useMemo(() => {
-        return strictCoreGroups
-            .map((group) => ({
-                ...group,
-                ...getBypassMeta(group),
-            }))
-            .sort((a, b) => {
-                // Normalize: treat undefined as false (not bypassed)
-                const aBypassed = a.isBypassed === true;
-                const bBypassed = b.isBypassed === true;
-                if (aBypassed !== bBypassed) return aBypassed ? 1 : -1;
-                return a.order - b.order;
-            });
-    }, [strictCoreGroups, formData, schema]);
+    const coreGroups = useMemo(() => {
+        return strictCoreGroups.map((group) => ({
+            ...group,
+            ...getBypassMeta(group),
+        }));
+    }, [strictCoreGroups, schema]);
+
+    const settingsGroups = useMemo(() => {
+        return strictSettingsFields.nodeEntries.map((group) => ({
+            ...group,
+            ...getBypassMeta(group),
+        }));
+    }, [strictSettingsFields.nodeEntries, schema]);
 
     if (!schema) return null;
 
@@ -657,53 +871,16 @@ export const DynamicForm = React.memo(function DynamicForm({
                         No core controls configured. Edit the pipe to add nodes to this section.
                     </div>
                 ) : (
-                    <div className="space-y-4">
-                        {sortedCoreGroups.map((group) => {
-
-                            const { bypassKey, hasBypass, isBypassed } = group;
-                            const fieldsToRender = group.keys.filter(k => k !== bypassKey);
-
-                            return (
-                                <div key={group.id} className="space-y-2">
-                                    {/* Always show header if multiple groups OR if we have a bypass toggle */}
-                                    {(strictCoreGroups.length > 1 || hasBypass) && (
-                                        <div className="flex items-center justify-between border-b border-slate-100 pb-1">
-                                            <h4 className="text-[11px] font-semibold uppercase text-slate-400 tracking-wide flex items-center gap-2">
-                                                <span>{group.title}</span>
-                                                {isBypassed && (
-                                                    <span className="text-[9px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5">
-                                                        Bypassed
-                                                    </span>
-                                                )}
-                                            </h4>
-                                            {hasBypass && (
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-[9px] text-slate-300 uppercase  tracking-wider">
-                                                        {isBypassed ? "bypassed" : "active"}
-                                                    </span>
-                                                    <Switch
-                                                        checked={!!formData[bypassKey!]}
-                                                        onCheckedChange={(c) => handleChange(bypassKey!, c)}
-                                                        className={cn(
-                                                            "h-3.5 w-6 data-[state=checked]:bg-amber-500 data-[state=unchecked]:bg-slate-200"
-                                                        )}
-                                                    />
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
-                                    <div className="space-y-3">
-                                        {!isBypassed ? (
-                                            fieldsToRender.map(renderField)
-                                        ) : (
-                                            <div className="text-[10px] text-slate-400 italic px-1 opacity-60">
-                                                Node bypassed. Parameters hidden.
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                            );
-                        })}
+                    <div className="flex flex-col gap-4">
+                        {coreGroups.map((group) => (
+                            <CoreGroupSection
+                                key={group.id}
+                                group={group}
+                                renderField={renderField}
+                                onToggleChange={handleToggleChange}
+                                showHeader={strictCoreGroups.length > 1}
+                            />
+                        ))}
                     </div>
                 )}
             </div>
@@ -732,75 +909,15 @@ export const DynamicForm = React.memo(function DynamicForm({
                         )}
 
                         {strictSettingsFields.nodeEntries.length > 0 && (
-                            <Accordion type="multiple" className="w-full space-y-2">
-                                {strictSettingsFields.nodeEntries
-                                    .map((group) => ({
-                                        ...group,
-                                        ...getBypassMeta(group),
-                                    }))
-                                    .sort((a, b) => {
-                                        if (a.isBypassed !== b.isBypassed) return a.isBypassed ? 1 : -1;
-                                        return a.order - b.order;
-                                    })
-                                    .map((group) => {
-                                        const { bypassKey, hasBypass, isBypassed } = group;
-
-                                        // Filter out bypass key from rendered fields
-                                        const fieldsToRender = group.keys.filter(k => k !== bypassKey);
-
-                                        return (
-                                            <AccordionItem
-                                                key={group.id}
-                                                value={group.id}
-                                                className={cn(
-                                                    "border rounded-lg px-2 bg-white transition-opacity",
-                                                    isBypassed && "opacity-60"
-                                                )}
-                                            >
-                                                <AccordionTrigger
-                                                    className="text-xs font-semibold uppercase text-slate-500 hover:no-underline py-2 [&>svg]:ml-auto"
-                                                    aria-label={`${group.title} controls (${isBypassed ? "bypassed" : "active"})`}
-                                                >
-                                                    <div className="flex items-center gap-3">
-                                                        <span className="flex items-center gap-2">
-                                                            <span>{group.title}</span>
-                                                            {isBypassed && (
-                                                                <span className="text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5">
-                                                                    Bypassed
-                                                                </span>
-                                                            )}
-                                                        </span>
-                                                        {hasBypass && (
-                                                            <div
-                                                                className="flex items-center gap-2"
-                                                                onClick={(e) => e.stopPropagation()}
-                                                            >
-                                                                <span className="text-[9px] text-slate-300 uppercase tracking-wider">
-                                                                    {isBypassed ? "bypassed" : "active"}
-                                                                </span>
-                                                                <Switch
-                                                                    checked={!!formData[bypassKey!]}
-                                                                    onCheckedChange={(c) => handleChange(bypassKey!, c)}
-                                                                    className={cn(
-                                                                        "h-3.5 w-6 data-[state=checked]:bg-amber-500 data-[state=unchecked]:bg-slate-200"
-                                                                    )}
-                                                                />
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                </AccordionTrigger>
-                                                <AccordionContent className="space-y-4 pt-0 pb-4">
-                                                    {!isBypassed ? (
-                                                        fieldsToRender.map(renderField)
-                                                    ) : (
-                                                        <div className="text-[10px] text-slate-400 italic px-1">
-                                                            Node bypassed. Parameters hidden.
-                                                        </div>
-                                                    )}
-                                                </AccordionContent>
-                                            </AccordionItem>
-                                        );
-                                    })}
+                            <Accordion type="multiple" className="w-full flex flex-col gap-2">
+                                {settingsGroups.map((group) => (
+                                    <SettingsGroupSection
+                                        key={group.id}
+                                        group={group}
+                                        renderField={renderField}
+                                        onToggleChange={handleToggleChange}
+                                    />
+                                ))}
                             </Accordion>
                         )}
 

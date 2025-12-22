@@ -1,9 +1,19 @@
+import type { PropsWithChildren, ReactElement } from "react";
 import { render, fireEvent } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
+import { Provider as JotaiProvider } from "jotai";
 import { DynamicForm } from "./DynamicForm";
-
+import { UndoRedoProvider } from "@/lib/undoRedo";
 
 const noop = () => undefined;
+
+const Providers = ({ children }: PropsWithChildren) => (
+    <JotaiProvider>
+        <UndoRedoProvider>{children}</UndoRedoProvider>
+    </JotaiProvider>
+);
+
+const renderForm = (ui: ReactElement) => render(ui, { wrapper: Providers });
 
 describe("DynamicForm grouping", () => {
     beforeEach(() => {
@@ -31,8 +41,8 @@ describe("DynamicForm grouping", () => {
             }
         };
 
-        const { container } = render(
-            <DynamicForm schema={annotatedSchema} onSubmit={noop} engineId="test-engine" submitLabel="Submit" />
+        const { container } = renderForm(
+            <DynamicForm schema={annotatedSchema} onSubmit={noop} submitLabel="Submit" />
         );
 
         expect(container).toMatchSnapshot();
@@ -44,8 +54,8 @@ describe("DynamicForm grouping", () => {
             unexplained_text: { widget: "textarea", title: "Unknown Text" }
         };
 
-        const { container } = render(
-            <DynamicForm schema={heuristicSchema} onSubmit={noop} engineId="test-engine" submitLabel="Submit" />
+        const { container } = renderForm(
+            <DynamicForm schema={heuristicSchema} onSubmit={noop} submitLabel="Submit" />
         );
 
         expect(container).toMatchSnapshot();
@@ -79,12 +89,11 @@ describe("DynamicForm grouping", () => {
 
         const nodeOrder = ["node-b", "node-a"]; // B should render before A everywhere
 
-        const { container, getByText } = render(
+        const { container, getByText } = renderForm(
             <DynamicForm
                 schema={orderedSchema}
                 nodeOrder={nodeOrder}
                 onSubmit={noop}
-                engineId="test-engine"
                 submitLabel="Submit"
             />
         );
@@ -121,11 +130,10 @@ describe("DynamicForm grouping", () => {
             }
         };
 
-        const { getByText } = render(
+        const { getByText } = renderForm(
             <DynamicForm
                 schema={bypassSchema}
                 onSubmit={noop}
-                engineId="test-engine"
             />
         );
 

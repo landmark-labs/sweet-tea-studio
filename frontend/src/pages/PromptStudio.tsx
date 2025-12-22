@@ -1,4 +1,5 @@
-import { useEffect, useState, useRef, useMemo, useCallback } from "react";
+import { useEffect, useState, useRef, useMemo, useCallback, memo, type ComponentProps } from "react";
+import { useAtomValue, useSetAtom, useStore } from "jotai";
 import { addProgressEntry, calculateProgressStats, mapStatusToGenerationState, type GenerationState, type ProgressHistoryEntry } from "@/lib/generationState";
 import { useLocation, useNavigate, useOutletContext } from "react-router-dom";
 import { api, Engine, WorkflowTemplate, GalleryItem, EngineHealth, Project, Image as ApiImage, FolderImage } from "@/lib/api";
@@ -21,6 +22,14 @@ import { ProjectGallery } from "@/components/ProjectGallery";
 import { useGenerationFeedStore, usePromptLibraryStore } from "@/lib/stores/promptDataStore";
 import { useGeneration } from "@/lib/GenerationContext";
 import { logClientEventThrottled } from "@/lib/clientDiagnostics";
+import { formDataAtom, setFormDataAtom } from "@/lib/atoms/formAtoms";
+
+type PromptConstructorPanelProps = Omit<ComponentProps<typeof PromptConstructor>, "currentValues">;
+
+const PromptConstructorPanel = memo(function PromptConstructorPanel(props: PromptConstructorPanelProps) {
+  const currentValues = useAtomValue(formDataAtom) as Record<string, string>;
+  return <PromptConstructor {...props} currentValues={currentValues} />;
+});
 
 export default function PromptStudio() {
   const [engines, setEngines] = useState<Engine[]>([]);
@@ -68,15 +77,11 @@ export default function PromptStudio() {
     setPreviewMetadata(metadata ?? null);
   };
 
-  // Form Data State
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [formData, setFormData] = useState<any>({});
+  // Form Data State (Jotai)
+  const store = useStore();
+  const setFormData = useSetAtom(setFormDataAtom);
   const [focusedField, setFocusedField] = useState<string>("");
-  const formDataRef = useRef<any>({});
   const selectedWorkflowIdRef = useRef<string | null>(selectedWorkflowId);
-  useEffect(() => {
-    formDataRef.current = formData;
-  }, [formData]);
   useEffect(() => {
     selectedWorkflowIdRef.current = selectedWorkflowId || null;
   }, [selectedWorkflowId]);
@@ -110,7 +115,7 @@ export default function PromptStudio() {
   const [library, setLibrary] = useState<PromptItem[]>([]);
   const [snippetsLoaded, setSnippetsLoaded] = useState(false);
   const pendingSaveRef = useRef<NodeJS.Timeout | null>(null);
-  const persistTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const persistHandleRef = useRef<{ id: number | NodeJS.Timeout; type: "idle" | "timeout" } | null>(null);
   const pendingPersistRef = useRef<{ workflowId: string; data: any } | null>(null);
 
   // Load snippets from backend on mount
@@ -355,7 +360,7 @@ export default function PromptStudio() {
 
     const schema = visibleSchema;
     const workflowKey = String(selectedWorkflow.id);
-    const currentData = formDataRef.current || {};
+    const currentData = store.get(formDataAtom) || {};
     const hasExistingData = Object.keys(currentData).length > 0;
     const hasMissingDefaults = Object.entries(schema)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -384,7 +389,7 @@ export default function PromptStudio() {
     } catch (e) { /* ignore */ }
     setFormData(initialData);
     initializedWorkflowsRef.current.add(workflowKey);
-  }, [selectedWorkflow, visibleSchema]);
+  }, [selectedWorkflow, visibleSchema, setFormData, store]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { registerStateChange } = useUndoRedo();
@@ -398,18 +403,24 @@ export default function PromptStudio() {
       console.warn("Failed to persist form data", e);
     }
     pendingPersistRef.current = null;
-    if (persistTimerRef.current) {
-      clearTimeout(persistTimerRef.current);
-      persistTimerRef.current = null;
+    if (persistHandleRef.current) {
+      const handle = persistHandleRef.current;
+      if (handle.type === "idle" && typeof window.cancelIdleCallback === "function") {
+        window.cancelIdleCallback(handle.id as number);
+      } else {
+        clearTimeout(handle.id as NodeJS.Timeout);
+      }
+      persistHandleRef.current = null;
     }
   };
 
   const persistForm = (data: any) => {
+    const currentData = store.get(formDataAtom) || {};
     // Safety: Don't persist if checkpoint got wiped (common init race condition)
     Object.keys(data)
       .filter((key) => key.includes("CheckpointLoaderSimple") && key.endsWith(".ckpt_name"))
       .forEach((key) => {
-        const previous = formData[key];
+        const previous = currentData[key];
         if (data[key] === "" && typeof previous === "string" && previous.length > 0) {
           console.warn("[SafeGuard] Prevented overwriting checkpoint with empty string");
           data[key] = previous;
@@ -420,8 +431,16 @@ export default function PromptStudio() {
     if (selectedWorkflowId) {
       const workflowId = selectedWorkflowId;
       pendingPersistRef.current = { workflowId, data };
-      if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
-      persistTimerRef.current = setTimeout(() => {
+      if (persistHandleRef.current) {
+        const handle = persistHandleRef.current;
+        if (handle.type === "idle" && typeof window.cancelIdleCallback === "function") {
+          window.cancelIdleCallback(handle.id as number);
+        } else {
+          clearTimeout(handle.id as NodeJS.Timeout);
+        }
+        persistHandleRef.current = null;
+      }
+      const persistNow = () => {
         const pending = pendingPersistRef.current;
         if (!pending) return;
         try {
@@ -430,8 +449,15 @@ export default function PromptStudio() {
           console.warn("Failed to persist form data", e);
         }
         pendingPersistRef.current = null;
-        persistTimerRef.current = null;
-      }, 150);
+        persistHandleRef.current = null;
+      };
+      if (typeof window.requestIdleCallback === "function") {
+        const id = window.requestIdleCallback(persistNow, { timeout: 500 });
+        persistHandleRef.current = { id, type: "idle" };
+      } else {
+        const id = setTimeout(persistNow, 150);
+        persistHandleRef.current = { id, type: "timeout" };
+      }
     }
   };
 
@@ -453,7 +479,7 @@ export default function PromptStudio() {
       const workflowId = selectedWorkflowIdRef.current;
       if (workflowId) {
         try {
-          localStorage.setItem(`ds_pipe_params_${workflowId}`, JSON.stringify(formDataRef.current));
+          localStorage.setItem(`ds_pipe_params_${workflowId}`, JSON.stringify(store.get(formDataAtom)));
         } catch (e) {
           console.warn("Failed to persist form data on unload", e);
         }
@@ -469,7 +495,7 @@ export default function PromptStudio() {
       window.removeEventListener("beforeunload", handleBeforeUnload);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, []);
+  }, [store]);
 
   const handleResetDefaults = () => {
     if (!selectedWorkflow) return;
@@ -503,7 +529,7 @@ export default function PromptStudio() {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleFormChange = (newData: any, { immediateHistory }: { immediateHistory?: boolean } = {}) => {
-    const previous = formData;
+    const previous = store.get(formDataAtom);
     persistForm(newData);
     const focusedKey = focusedField || "";
     const textFocused = focusedKey ? isTextField(focusedKey) : false;
@@ -556,12 +582,14 @@ export default function PromptStudio() {
   };
 
   const handlePromptUpdate = (field: string, value: string) => {
-    handleFormChange({ ...formData, [field]: value });
+    const currentData = store.get(formDataAtom) || {};
+    handleFormChange({ ...currentData, [field]: value });
   };
 
   const handlePromptUpdateMany = (updates: Record<string, string>) => {
     if (!updates || Object.keys(updates).length === 0) return;
-    handleFormChange({ ...formData, ...updates });
+    const currentData = store.get(formDataAtom) || {};
+    handleFormChange({ ...currentData, ...updates });
   };
 
   const handleUseInPipe = ({ workflowId, imagePath, galleryItem }: { workflowId: string; imagePath: string; galleryItem: GalleryItem }) => {
@@ -872,7 +900,7 @@ export default function PromptStudio() {
         if (inputMatch) {
           const relativePath = inputMatch[1].replace(/\\/g, "/");
           console.log("[ImageInject] Reusing existing input path:", relativePath);
-          const currentFormData = formDataRef.current;
+          const currentFormData = store.get(formDataAtom) || {};
           const newFormData = { ...currentFormData, [imageField]: relativePath };
           setFormData(newFormData);
           try {
@@ -895,8 +923,8 @@ export default function PromptStudio() {
 
         console.log("[ImageInject] Upload complete:", result.filename);
 
-        // Update the form with the uploaded image filename - use ref for latest formData
-        const currentFormData = formDataRef.current;
+        // Update the form with the uploaded image filename - use latest store state
+        const currentFormData = store.get(formDataAtom) || {};
         const newFormData = { ...currentFormData, [imageField]: result.filename };
         setFormData(newFormData);
 
@@ -1218,12 +1246,12 @@ export default function PromptStudio() {
         }
 
         if (!selectedWorkflowId || isBusy || engineOffline) return;
-        handleGenerate(formData);
+        handleGenerate(store.get(formDataAtom));
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectedWorkflowId, isBusy, engineOffline, formData]);
+  }, [selectedWorkflowId, isBusy, engineOffline, store]);
 
   // Use data from GenerationContext if available to avoid duplicate API calls
   const generation = useGeneration();
@@ -1405,13 +1433,14 @@ export default function PromptStudio() {
     if (!generation) return;
     const handler = async () => {
       // Use latest refs to ensure we catch current state without re-binding
-      if (formDataRef.current) {
-        await handleGenerateRef.current(formDataRef.current);
+      const currentData = store.get(formDataAtom);
+      if (currentData) {
+        await handleGenerateRef.current(currentData);
       }
     };
     generation.registerGenerateHandler(handler);
     return () => generation.unregisterGenerateHandler();
-  }, [generation]);
+  }, [generation, store]);
 
   const handleCancel = async () => {
     if (!lastJobId) return;
@@ -1485,7 +1514,7 @@ export default function PromptStudio() {
       {/* 1. Left Column - Prompt Constructor */}
       <div className="w-[380px] flex-none bg-white border-r hidden xl:block overflow-hidden">
         {selectedWorkflow ? (
-          <PromptConstructor
+          <PromptConstructorPanel
             // Filter out hidden parameters if the new editor logic flagged them
             schema={
               Object.fromEntries(
@@ -1494,7 +1523,6 @@ export default function PromptStudio() {
                 )
               )
             }
-            currentValues={formData}
             onUpdate={handlePromptUpdate}
             onUpdateMany={handlePromptUpdateMany}
             targetField={focusedField}
@@ -1583,7 +1611,7 @@ export default function PromptStudio() {
               size="lg"
               className="w-full relative overflow-hidden transition-all active:scale-[0.98] shadow-sm hover:shadow-md"
               disabled={!selectedWorkflowId || engineOffline || isBusy}
-              onClick={() => handleGenerate(formData)}
+              onClick={() => handleGenerate(store.get(formDataAtom))}
               style={{
                 background: isBusy
                   ? `linear-gradient(90deg, #3b82f6 ${progress}%, #1e40af ${progress}%)`
@@ -1685,7 +1713,6 @@ export default function PromptStudio() {
               nodeOrder={nodeOrder}
               isLoading={isBusy}
               submitLabel="generate"
-              formData={formData}
               onChange={handleFormChange}
               onFieldFocus={setFocusedField}
               activeField={focusedField}

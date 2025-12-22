@@ -9,8 +9,8 @@ Targets: P95 input-to-paint < 50ms for ~2000-char prompts, 60fps during snippet 
 [x] Log snippet action latency (drag/add/remove) in `frontend/src/components/PromptConstructor.tsx`.
 [x] Log prompt reconciliation duration in `frontend/src/components/PromptConstructor.tsx`.
 [x] Capture baseline P50/P95 for prompt input and snippet actions.
-[ ] Capture React Profiler traces for PromptStudio during typing and snippet drag.
-[ ] Identify top 3 slow commits and document them here.
+[ ] Capture React Profiler traces for PromptStudio during typing and snippet drag (deferred).
+[ ] Identify top 3 slow commits and document them here (deferred).
 
 ### Baseline snapshot (client_diagnostics.jsonl)
 - perf_prompt_input_latency: n=66 min=22ms p50=130ms p90=446ms p95=702ms p99=1323ms max=1473ms
@@ -18,10 +18,10 @@ Targets: P95 input-to-paint < 50ms for ~2000-char prompts, 60fps during snippet 
 - perf_prompt_reconcile: no samples yet (needs more usage)
 
 ## Phase 1 - Jotai state isolation
-[ ] Introduce form state atoms (atomFamily) keyed by field.
-[ ] Migrate DynamicForm to field-level subscriptions (no full-form updates on keystroke).
-[ ] Add atom persistence (idle or batched) for per-field values.
-[ ] Ensure undo/redo registration still works with Jotai updates.
+[x] Introduce form state atoms (atomFamily) keyed by field.
+[x] Migrate DynamicForm to field-level subscriptions (no full-form updates on keystroke).
+[x] Add atom persistence (idle or batched) for per-field values.
+[x] Ensure undo/redo registration still works with Jotai updates.
 
 ## Phase 2 - PromptConstructor + Highlighting
 [ ] Pre-index snippet library for reconciliation (avoid O(n*m) per keystroke).
