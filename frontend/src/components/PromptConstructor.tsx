@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import { useUndoRedo } from "@/lib/undoRedo";
 import { PromptAutocompleteTextarea } from "./PromptAutocompleteTextarea";
 import { PromptItem } from "@/lib/types";
+import { logClientFrameLatency, logClientPerfSample } from "@/lib/clientDiagnostics";
 
 
 interface PromptConstructorProps {
@@ -366,6 +367,23 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
         useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
     );
 
+    const trackSnippetAction = (action: string, extra: Record<string, unknown> = {}) => {
+        if (typeof performance === "undefined") return;
+        const start = performance.now();
+        logClientFrameLatency(
+            "perf_snippet_action_latency",
+            "perf_snippet_action_latency",
+            start,
+            {
+                action,
+                items: items.length,
+                library: library.length,
+                ...extra,
+            },
+            { sampleRate: 0.1, throttleMs: 2000, minMs: 4 }
+        );
+    };
+
     // --- Effects ---
 
     useEffect(() => {
@@ -494,6 +512,8 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
         if (lastCompiledRef.current?.field === targetField && lastCompiledRef.current?.value === currentVal) {
             return;
         }
+
+        const perfStart = typeof performance !== "undefined" ? performance.now() : null;
 
         // AUTO-DISCOVERY ALGORITHM
 
@@ -627,6 +647,19 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
             }
         }
 
+        if (perfStart !== null) {
+            logClientPerfSample(
+                "perf_prompt_reconcile",
+                "perf_prompt_reconcile",
+                performance.now() - perfStart,
+                {
+                    len: safeVal.length,
+                    items: items.length,
+                    library: library.length,
+                },
+                { sampleRate: 0.05, throttleMs: 3000, minMs: 4 }
+            );
+        }
     }, [currentValues[targetField], targetField, library, isTargetValid]);
 
 
@@ -671,6 +704,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
             const oldIndex = items.findIndex((i) => i.id === active.id);
             const newIndex = items.findIndex((i) => i.id === over.id);
             const newArr = arrayMove(items, oldIndex, newIndex);
+            trackSnippetAction("drag_canvas", { from: oldIndex, to: newIndex });
             setItems(newArr);
         }
     };
@@ -685,6 +719,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
         if (!isTargetValid) return;
         const id = `text-${nextInstanceId()}`;
         const nextIndex = items.filter(i => i.type === 'text').length + 1;
+        trackSnippetAction("add_text");
         setItems([...items, { id, type: 'text', content: ", ", label: `Text ${nextIndex}` }]);
     };
 
@@ -694,6 +729,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
         const alreadyExists = items.some(item => item.sourceId === snippet.id);
         if (alreadyExists) return;
         const id = `instance-${nextInstanceId()}`;
+        trackSnippetAction("add_snippet", { snippet_id: snippet.id });
         setItems([...items, { ...snippet, id, sourceId: snippet.id }]);
     };
 
@@ -704,6 +740,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
         const oldIndex = library.findIndex((s) => s.id === active.id);
         const newIndex = library.findIndex((s) => s.id === over.id);
         if (oldIndex !== -1 && newIndex !== -1) {
+            trackSnippetAction("drag_library", { from: oldIndex, to: newIndex });
             setLibrary(arrayMove(library, oldIndex, newIndex));
         }
     };
@@ -803,6 +840,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
 
     const clearCanvas = () => {
         if (confirm("Clear the constructor canvas for this field?")) {
+            trackSnippetAction("clear_canvas");
             setItems([]);
         }
     };
@@ -831,6 +869,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
     const handleRemoveItem = (id: string, e: React.MouseEvent) => {
         e.stopPropagation();
         e.preventDefault();
+        trackSnippetAction("remove_item", { target_id: id });
         setItems(items.filter(i => i.id !== id));
     };
 

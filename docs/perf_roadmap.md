@@ -1,0 +1,38 @@
+# Performance Roadmap
+
+Goal: keep prompt typing and snippet actions (drag, add, reorder) responsive and stable.
+Targets: P95 input-to-paint < 50ms for ~2000-char prompts, 60fps during snippet interactions.
+
+## Phase 0 - Baseline and instrumentation
+[x] Add perf sampling helpers in `frontend/src/lib/clientDiagnostics.ts`.
+[x] Log prompt input latency (input to next frame) in `frontend/src/components/PromptAutocompleteTextarea.tsx`.
+[x] Log snippet action latency (drag/add/remove) in `frontend/src/components/PromptConstructor.tsx`.
+[x] Log prompt reconciliation duration in `frontend/src/components/PromptConstructor.tsx`.
+[ ] Capture baseline P50/P95 for prompt input and snippet actions.
+[ ] Capture React Profiler traces for PromptStudio during typing and snippet drag.
+[ ] Identify top 3 slow commits and document them here.
+
+## Phase 1 - Jotai state isolation
+[ ] Introduce form state atoms (atomFamily) keyed by field.
+[ ] Migrate DynamicForm to field-level subscriptions (no full-form updates on keystroke).
+[ ] Add atom persistence (idle or batched) for per-field values.
+[ ] Ensure undo/redo registration still works with Jotai updates.
+
+## Phase 2 - PromptConstructor + Highlighting
+[ ] Pre-index snippet library for reconciliation (avoid O(n*m) per keystroke).
+[ ] Defer or workerize reconcile work (idle or Web Worker).
+[ ] Move highlight computation to idle or worker; cap work for long prompts.
+
+## Phase 3 - UI interaction perf
+[ ] Virtualize snippet library and gallery lists.
+[ ] Stabilize handlers/props to minimize re-render cascades.
+[ ] Reduce large prop churn in PromptStudio (memoized subcomponents).
+
+## Phase 4 - Backend perf
+[ ] Persist width/height and file-exists at ingest time (avoid per-request IO).
+[ ] Add gallery indexes / FTS for search.
+[ ] Cache monitoring metrics server-side (avoid per-request nvidia-smi).
+
+## Notes / Decisions
+- Jotai will own UI state only; persisted project/job data continues to live in SQLite via backend APIs.
+- Instrumentation is throttled and sampled to avoid adding overhead during typing.

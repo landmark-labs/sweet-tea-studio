@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { api, TagSuggestion } from "@/lib/api";
 import { PromptItem } from "@/lib/types";
 import { useUndoRedo } from "@/lib/undoRedo";
+import { logClientFrameLatency } from "@/lib/clientDiagnostics";
 
 const AUTOCOMPLETE_STORAGE_KEY = "sts_autocomplete_enabled";
 const AUTOCOMPLETE_EVENT_NAME = "sts-autocomplete-enabled-changed";
@@ -469,11 +470,26 @@ export function PromptAutocompleteTextarea({
                     ref={textareaRef}
                     value={value}
                     onChange={(e) => {
+                        const inputStart = typeof performance !== "undefined" ? performance.now() : null;
+                        const nextValue = e.target.value;
                         const newCursor = e.target.selectionStart || 0;
                         intendedCursorRef.current = newCursor;
                         setIsTyping(true); // Mark that user is actively typing
-                        onValueChange(e.target.value);
+                        onValueChange(nextValue);
                         setCursor((prev) => (prev === newCursor ? prev : newCursor));
+                        if (inputStart !== null) {
+                            logClientFrameLatency(
+                                "perf_prompt_input_latency",
+                                "perf_prompt_input_latency",
+                                inputStart,
+                                {
+                                    len: nextValue.length,
+                                    autocomplete: autocompleteEnabled,
+                                    highlight: Boolean(highlightSnippets),
+                                },
+                                { sampleRate: 0.1, throttleMs: 2000, minMs: 4 }
+                            );
+                        }
                         props.onChange?.(e);
                     }}
                     onFocus={(e) => {

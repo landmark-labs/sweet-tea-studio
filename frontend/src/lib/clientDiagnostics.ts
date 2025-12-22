@@ -19,6 +19,9 @@ const STORAGE_SESSION_KEY = "sts_client_session_id";
 const MAX_QUEUE = 200;
 const FLUSH_INTERVAL_MS = 30000;
 const MAX_BATCH = 50;
+const DEFAULT_PERF_SAMPLE_RATE = 0.1;
+const DEFAULT_PERF_THROTTLE_MS = 2000;
+const DEFAULT_PERF_MIN_MS = 4;
 
 let initialized = false;
 let queue: ClientLogEntry[] = [];
@@ -59,6 +62,12 @@ function enqueue(entry: ClientLogEntry) {
   if (queue.length > MAX_QUEUE) {
     queue = queue.slice(queue.length - MAX_QUEUE);
   }
+}
+
+function shouldSample(rate: number) {
+  if (rate >= 1) return true;
+  if (rate <= 0) return false;
+  return Math.random() < rate;
 }
 
 async function send(entries: ClientLogEntry[], preferBeacon = false) {
@@ -117,6 +126,55 @@ export function logClientEventThrottled(key: string, type: string, data: Record<
   if (now - last < intervalMs) return;
   throttles.set(key, now);
   logClientEvent(type, data);
+}
+
+type PerfSampleOptions = {
+  sampleRate?: number;
+  throttleMs?: number;
+  minMs?: number;
+};
+
+export function logClientPerfSample(
+  key: string,
+  type: string,
+  durationMs: number,
+  data: Record<string, unknown> = {},
+  options: PerfSampleOptions = {}
+) {
+  if (!isEnabled()) return;
+  const sampleRate = options.sampleRate ?? DEFAULT_PERF_SAMPLE_RATE;
+  if (!shouldSample(sampleRate)) return;
+  const minMs = options.minMs ?? DEFAULT_PERF_MIN_MS;
+  if (durationMs < minMs) return;
+  const throttleMs = options.throttleMs ?? DEFAULT_PERF_THROTTLE_MS;
+  logClientEventThrottled(
+    key,
+    type,
+    {
+      duration_ms: Math.round(durationMs),
+      ...data,
+    },
+    throttleMs
+  );
+}
+
+export function logClientFrameLatency(
+  key: string,
+  type: string,
+  startMs: number,
+  data: Record<string, unknown> = {},
+  options: PerfSampleOptions = {}
+) {
+  if (!isEnabled()) return;
+  if (typeof window === "undefined" || typeof requestAnimationFrame !== "function" || typeof performance === "undefined") {
+    return;
+  }
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      const duration = performance.now() - startMs;
+      logClientPerfSample(key, type, duration, data, options);
+    });
+  });
 }
 
 export function initClientDiagnostics() {
