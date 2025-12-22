@@ -89,11 +89,19 @@ IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tif", ".
 VIDEO_EXTENSIONS = {".mp4", ".webm", ".mov", ".mkv", ".avi"}
 
 
-def _infer_media_kind(val_type: Any, config: Optional[Dict[str, Any]]) -> Optional[str]:
+def _infer_media_kind(
+    val_type: Any,
+    config: Optional[Dict[str, Any]],
+    input_name: Optional[str],
+    class_type: Optional[str],
+) -> Optional[str]:
     if isinstance(val_type, str):
+        upper_type = val_type.upper()
         kind = MEDIA_KIND_BY_TYPE.get(val_type.upper())
         if kind:
             return kind
+        if "VIDEO" in upper_type:
+            return "video"
 
     if isinstance(config, dict):
         config_type = config.get("type") or config.get("input_type") or config.get("media_type")
@@ -110,6 +118,17 @@ def _infer_media_kind(val_type: Any, config: Optional[Dict[str, Any]]) -> Option
             if ext in IMAGE_EXTENSIONS:
                 return "image"
             if ext in VIDEO_EXTENSIONS:
+                return "video"
+
+    if input_name or class_type:
+        lower_input = (input_name or "").lower()
+        lower_class = (class_type or "").lower()
+        if "video" in lower_input:
+            if (
+                "video" in lower_class
+                or "load" in lower_class
+                or "vhs" in lower_class
+            ):
                 return "video"
 
     return None
@@ -201,7 +220,7 @@ def generate_schema_from_graph(graph: Dict[str, Any], object_info: Dict[str, Any
                 "x_instance": count,
             }
             
-            media_kind = _infer_media_kind(val_type, config)
+            media_kind = _infer_media_kind(val_type, config, input_name, class_type)
             if media_kind:
                 schema[field_key] = {
                     "type": "string",
