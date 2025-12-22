@@ -6,6 +6,8 @@ import { api, TagSuggestion } from "@/lib/api";
 import { PromptItem } from "@/lib/types";
 import { useUndoRedo } from "@/lib/undoRedo";
 import { logClientFrameLatency } from "@/lib/clientDiagnostics";
+import { cancelIdle, scheduleIdle, type IdleHandle } from "@/lib/idleScheduler";
+import { buildSnippetIndex, findSnippetMatches, selectNonOverlappingMatches } from "@/lib/snippetMatcher";
 
 const AUTOCOMPLETE_STORAGE_KEY = "sts_autocomplete_enabled";
 const AUTOCOMPLETE_EVENT_NAME = "sts-autocomplete-enabled-changed";
@@ -352,6 +354,10 @@ export function PromptAutocompleteTextarea({
 
     // --- Highlighting Logic (debounced for performance) ---
     const [debouncedValue, setDebouncedValue] = useState(value);
+    const snippetIndex = useMemo(() => buildSnippetIndex(snippets), [snippets]);
+    const [highlightedContent, setHighlightedContent] = useState<React.ReactNode[] | null>(null);
+    const highlightHandleRef = useRef<IdleHandle | null>(null);
+    const highlightTokenRef = useRef(0);
 
     // Debounce value updates for highlighting (doesn't affect typing)
     useEffect(() => {
@@ -359,66 +365,64 @@ export function PromptAutocompleteTextarea({
         return () => clearTimeout(timer);
     }, [value]);
 
-    const highlightedContent = useMemo(() => {
-        if (!highlightSnippets || !snippets || snippets.length === 0 || !debouncedValue) return null;
-        if (debouncedValue.length > MAX_HIGHLIGHT_LENGTH) return null;
+    useEffect(() => {
+        highlightTokenRef.current += 1;
+        const token = highlightTokenRef.current;
 
-        interface Match { start: number; end: number; color: string; }
-        const matches: Match[] = [];
+        if (!highlightSnippets || !debouncedValue || debouncedValue.length > MAX_HIGHLIGHT_LENGTH || snippetIndex.entries.length === 0) {
+            cancelIdle(highlightHandleRef.current);
+            highlightHandleRef.current = null;
+            setHighlightedContent(null);
+            return;
+        }
 
-        // Only process block-type snippets with content
-        const blockSnippets = snippets.filter(s => s.type === 'block' && s.content);
+        cancelIdle(highlightHandleRef.current);
+        highlightHandleRef.current = scheduleIdle(() => {
+            if (token !== highlightTokenRef.current) return;
 
-        for (const snippet of blockSnippets) {
-            const term = snippet.content!;
-            let pos = debouncedValue.indexOf(term);
-            while (pos !== -1) {
-                matches.push({ start: pos, end: pos + term.length, color: snippet.color || "bg-slate-200" });
-                if (matches.length > MAX_HIGHLIGHT_MATCHES) {
-                    return null;
+            const matches = findSnippetMatches(debouncedValue, snippetIndex, { maxMatches: MAX_HIGHLIGHT_MATCHES });
+            if (!matches || matches.length === 0) {
+                setHighlightedContent(null);
+                return;
+            }
+
+            const selectedMatches = selectNonOverlappingMatches(matches);
+            if (selectedMatches.length === 0) {
+                setHighlightedContent(null);
+                return;
+            }
+
+            const nodes: React.ReactNode[] = [];
+            let cursor = 0;
+
+            selectedMatches.forEach((m, idx) => {
+                if (m.start > cursor) {
+                    nodes.push(debouncedValue.slice(cursor, m.start));
                 }
-                pos = debouncedValue.indexOf(term, pos + 1);
+                nodes.push(
+                    <span
+                        key={`${m.start}-${idx}`}
+                        className={cn(m.snippet.color || "bg-slate-200", "rounded-sm opacity-70 text-transparent select-none")}
+                    >
+                        {debouncedValue.slice(m.start, m.end)}
+                    </span>
+                );
+                cursor = m.end;
+            });
+
+            if (cursor < debouncedValue.length) {
+                nodes.push(debouncedValue.slice(cursor));
             }
-        }
 
-        if (matches.length === 0) return null;
+            setHighlightedContent(nodes);
+            highlightHandleRef.current = null;
+        }, { timeout: 300 });
 
-        matches.sort((a, b) => a.start - b.start);
-
-        // Filter overlaps (greedy: first match wins)
-        const uniqueMatches: Match[] = [];
-        let lastEnd = 0;
-        for (const m of matches) {
-            if (m.start >= lastEnd) {
-                uniqueMatches.push(m);
-                lastEnd = m.end;
-            }
-        }
-
-        const nodes: React.ReactNode[] = [];
-        let cursor = 0;
-
-        for (let i = 0; i < uniqueMatches.length; i++) {
-            const m = uniqueMatches[i];
-            // Text before
-            if (m.start > cursor) {
-                nodes.push(debouncedValue.slice(cursor, m.start));
-            }
-            // Highlighted segment
-            nodes.push(
-                <span key={`${m.start}-${i}`} className={cn(m.color, "rounded-sm opacity-70 text-transparent select-none")}>
-                    {debouncedValue.slice(m.start, m.end)}
-                </span>
-            );
-            cursor = m.end;
-        }
-
-        if (cursor < debouncedValue.length) {
-            nodes.push(debouncedValue.slice(cursor));
-        }
-
-        return nodes;
-    }, [debouncedValue, snippets, highlightSnippets]);
+        return () => {
+            cancelIdle(highlightHandleRef.current);
+            highlightHandleRef.current = null;
+        };
+    }, [debouncedValue, highlightSnippets, snippetIndex]);
 
 
     return (

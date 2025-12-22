@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, rectSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -15,6 +15,8 @@ import { useUndoRedo } from "@/lib/undoRedo";
 import { PromptAutocompleteTextarea } from "./PromptAutocompleteTextarea";
 import { PromptItem } from "@/lib/types";
 import { logClientFrameLatency, logClientPerfSample } from "@/lib/clientDiagnostics";
+import { cancelIdle, scheduleIdle, type IdleHandle } from "@/lib/idleScheduler";
+import { buildSnippetIndex, findSnippetMatches, selectNonOverlappingMatches } from "@/lib/snippetMatcher";
 
 
 interface PromptConstructorProps {
@@ -414,6 +416,9 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
 
     // Helper to validate target
     const isTargetValid = targetField && schema && schema[targetField] && schema[targetField].type === 'string';
+    const snippetIndex = useMemo(() => buildSnippetIndex(library), [library]);
+    const reconcileHandleRef = useRef<IdleHandle | null>(null);
+    const reconcileTokenRef = useRef(0);
 
     // Sync Library: keep linked blocks + prompt text aligned when snippets change.
     // Important: reconciliation depends on `library`, so we must guard against it
@@ -501,10 +506,19 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
 
     // Reconciliation Logic (INPUT Channel: External Text -> Items)
     useEffect(() => {
-        if (!isTargetValid) return;
+        cancelIdle(reconcileHandleRef.current);
+        reconcileHandleRef.current = null;
+
+        reconcileTokenRef.current += 1;
+        const token = reconcileTokenRef.current;
+
+        if (!isTargetValid) {
+            return;
+        }
         if (syncingLibraryRef.current) return;
 
-        const currentVal = currentValues[targetField] || "";
+        const rawVal = currentValues[targetField];
+        const currentVal = typeof rawVal === "string" ? rawVal : (rawVal === null || rawVal === undefined ? "" : String(rawVal));
 
         // GUARD: If this value matches exactly what we just compiled for this field,
         // it is an "Echo" from the parent. We trust our local state (items) is legally correct
@@ -513,154 +527,125 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
             return;
         }
 
-        const perfStart = typeof performance !== "undefined" ? performance.now() : null;
-
-        // AUTO-DISCOVERY ALGORITHM
-
-        // 1. Find all potential matches
-        interface Match { start: number; end: number; snippet: PromptItem; }
-        const matches: Match[] = [];
-
-        library.forEach(snippet => {
-            if (!snippet.content || snippet.content.length === 0) return;
-
-            // Safety check for currentVal being string
-            if (typeof currentVal !== 'string') return;
-
-            let pos = currentVal.indexOf(snippet.content);
-            while (pos !== -1) {
-                matches.push({ start: pos, end: pos + snippet.content.length, snippet });
-                pos = currentVal.indexOf(snippet.content, pos + 1);
+        reconcileHandleRef.current = scheduleIdle(() => {
+            if (token !== reconcileTokenRef.current) return;
+            if (!isTargetValid) return;
+            if (syncingLibraryRef.current) return;
+            if (lastCompiledRef.current?.field === targetField && lastCompiledRef.current?.value === currentVal) {
+                return;
             }
-        });
 
-        matches.sort((a, b) => {
-            if (a.start !== b.start) return a.start - b.start;
-            return b.snippet.content.length - a.snippet.content.length;
-        });
+            const perfStart = typeof performance !== "undefined" ? performance.now() : null;
 
-        const selectedMatches: Match[] = [];
-        let lastEnd = 0;
+            const matches = findSnippetMatches(currentVal, snippetIndex);
+            if (matches === null) return;
+            const selectedMatches = selectNonOverlappingMatches(matches, { preferLongest: true });
 
-        matches.forEach(m => {
-            if (m.start >= lastEnd) {
-                selectedMatches.push(m);
-                lastEnd = m.end;
-            }
-        });
+            const newItems: PromptItem[] = [];
+            let cursor = 0;
 
-        const newItems: PromptItem[] = [];
-        let cursor = 0;
+            const safeVal = currentVal;
 
-        // Safety cast
-        const safeVal = String(currentVal);
+            selectedMatches.forEach((m) => {
+                if (m.start > cursor) {
+                    let gap = safeVal.substring(cursor, m.start);
 
-        selectedMatches.forEach((m, idx) => {
-            if (m.start > cursor) {
-                let gap = safeVal.substring(cursor, m.start);
+                    // Smart logic: Strip the implicit ", " separators from the gap
+                    // consistently so we don't spawn "Text" items for them.
+                    if (newItems.length > 0 && gap.startsWith(", ")) {
+                        gap = gap.substring(2);
+                    }
+                    if (gap.endsWith(", ")) {
+                        gap = gap.substring(0, gap.length - 2);
+                    }
 
-                // Smart logic: Strip the implicit ", " separators from the gap
-                // consistently so we don't spawn "Text" items for them.
+                    if (gap.length > 0) {
+                        newItems.push({
+                            id: `text-${cursor}`,
+                            type: 'text',
+                            content: gap
+                        });
+                    }
+                }
+                newItems.push({
+                    ...m.snippet,
+                    id: `instance-${m.start}`,
+                    sourceId: m.snippet.id
+                });
+                cursor = m.end;
+            });
 
-                // If this is NOT the first item, strip leading separator
-                if (newItems.length > 0 && gap.startsWith(", ")) {
-                    gap = gap.substring(2);
+            if (cursor < safeVal.length) {
+                let tail = safeVal.substring(cursor);
+                if (newItems.length > 0 && tail.startsWith(", ")) {
+                    tail = tail.substring(2);
                 }
 
-                // If this is NOT the last item (which we don't know yet, but we know we are before `m`), 
-                // strip trailing separator. 
-                // Actually, the join puts separator AFTER the previous item. 
-                // So if we have `Prev, Gap, Next`, the string is `Prev` + `, ` + `Gap` + `, ` + `Next`.
-                // The gap captured is `, Gap, `.
-
-                // Leading strip handles the first comma. 
-                // Trailing strip handles the second comma.
-                if (gap.endsWith(", ")) {
-                    gap = gap.substring(0, gap.length - 2);
-                }
-
-                if (gap.length > 0) {
+                if (tail.length > 0) {
                     newItems.push({
-                        id: `text-${cursor}`, // Stable ID based on position
+                        id: `text-${cursor}`,
                         type: 'text',
-                        content: gap
+                        content: tail
                     });
                 }
             }
-            newItems.push({
-                ...m.snippet,
-                id: `instance-${m.start}`,
-                sourceId: m.snippet.id
+
+            const mergedItems: PromptItem[] = [];
+            newItems.forEach(item => {
+                if (mergedItems.length > 0) {
+                    const last = mergedItems[mergedItems.length - 1];
+                    if (last.type === 'text' && item.type === 'text') {
+                        last.content += item.content;
+                        return;
+                    }
+                }
+                mergedItems.push(item);
             });
-            cursor = m.end;
-        });
 
-        if (cursor < safeVal.length) {
-            let tail = safeVal.substring(cursor);
-            // Handle tail: If previous item exists, strip leading separator
-            if (newItems.length > 0 && tail.startsWith(", ")) {
-                tail = tail.substring(2);
-            }
+            let textLabelCounter = 0;
+            const labeledItems = mergedItems.map(item => {
+                if (item.type === 'text') {
+                    textLabelCounter += 1;
+                    return { ...item, label: item.label || `Text ${textLabelCounter}` };
+                }
+                return item;
+            });
 
-            if (tail.length > 0) {
-                newItems.push({
-                    id: `text-${cursor}`,
-                    type: 'text',
-                    content: tail
-                });
-            }
-        }
+            const currentItems = fieldItemsRef.current[targetField] || [];
+            const normalizeItem = (i: PromptItem) => `${i.type}|${i.content}|${i.label || ''}|${i.sourceId || ''}`;
+            const labeledStr = labeledItems.map(normalizeItem).join('~');
+            const itemsStr = currentItems.map(normalizeItem).join('~');
+            const isDifferent = labeledStr !== itemsStr;
 
-        // Merge adjacent
-        const mergedItems: PromptItem[] = [];
-        newItems.forEach(item => {
-            if (mergedItems.length > 0) {
-                const last = mergedItems[mergedItems.length - 1];
-                if (last.type === 'text' && item.type === 'text') {
-                    last.content += item.content;
-                    return;
+            if (isDifferent) {
+                if (mergedItems.length === 0 && currentVal === "") {
+                    if (currentItems.length > 0) setItems([], "Prompt cleared", false);
+                } else {
+                    setItems(labeledItems, "Prompt reconstructed", false);
                 }
             }
-            mergedItems.push(item);
-        });
 
-        let textLabelCounter = 0;
-        const labeledItems = mergedItems.map(item => {
-            if (item.type === 'text') {
-                textLabelCounter += 1;
-                return { ...item, label: item.label || `Text ${textLabelCounter}` };
+            if (perfStart !== null) {
+                logClientPerfSample(
+                    "perf_prompt_reconcile",
+                    "perf_prompt_reconcile",
+                    performance.now() - perfStart,
+                    {
+                        len: safeVal.length,
+                        items: currentItems.length,
+                        library: snippetIndex.entries.length,
+                    },
+                    { sampleRate: 0.05, throttleMs: 3000, minMs: 4 }
+                );
             }
-            return item;
-        });
+            reconcileHandleRef.current = null;
+        }, { timeout: 200 });
 
-        // Efficient comparison helper - avoids JSON.stringify serialization overhead
-        const normalizeItem = (i: PromptItem) => `${i.type}|${i.content}|${i.label || ''}|${i.sourceId || ''}`;
-        const labeledStr = labeledItems.map(normalizeItem).join('~');
-        const itemsStr = items.map(normalizeItem).join('~');
-        const isDifferent = labeledStr !== itemsStr;
-
-        if (isDifferent) {
-            if (mergedItems.length === 0 && currentVal === "") {
-                if (items.length > 0) setItems([], "Prompt cleared", false);
-            } else {
-                setItems(labeledItems, "Prompt reconstructed", false);
-            }
-        }
-
-        if (perfStart !== null) {
-            logClientPerfSample(
-                "perf_prompt_reconcile",
-                "perf_prompt_reconcile",
-                performance.now() - perfStart,
-                {
-                    len: safeVal.length,
-                    items: items.length,
-                    library: library.length,
-                },
-                { sampleRate: 0.05, throttleMs: 3000, minMs: 4 }
-            );
-        }
-    }, [currentValues[targetField], targetField, library, isTargetValid]);
+        return () => {
+            cancelIdle(reconcileHandleRef.current);
+            reconcileHandleRef.current = null;
+        };
+    }, [currentValues[targetField], targetField, snippetIndex, isTargetValid]);
 
 
     // Compile (OUTPUT Channel: Items -> Parent)

@@ -24,9 +24,9 @@ Targets: P95 input-to-paint < 50ms for ~2000-char prompts, 60fps during snippet 
 [x] Ensure undo/redo registration still works with Jotai updates.
 
 ## Phase 2 - PromptConstructor + Highlighting
-[ ] Pre-index snippet library for reconciliation (avoid O(n*m) per keystroke).
-[ ] Defer or workerize reconcile work (idle or Web Worker).
-[ ] Move highlight computation to idle or worker; cap work for long prompts.
+[x] Pre-index snippet library for reconciliation (avoid O(n*m) per keystroke).
+[x] Defer or workerize reconcile work (idle or Web Worker).
+[x] Move highlight computation to idle or worker; cap work for long prompts.
 
 ## Phase 3 - UI interaction perf
 [ ] Virtualize snippet library and gallery lists.
