@@ -319,13 +319,16 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
 
     const [fieldItems, setFieldItems] = useState<Record<string, PromptItem[]>>({});
     const items = fieldItems[targetField] || [];
+    const initializedFieldsRef = useRef<Set<string>>(new Set());
 
     const applyItems = (target: string, value: PromptItem[]) => {
+        if (target) initializedFieldsRef.current.add(target);
         setFieldItems(prev => ({ ...prev, [target]: value }));
     };
 
     const setItems = (newItems: PromptItem[] | ((prev: PromptItem[]) => PromptItem[]), label = "Prompt items updated", record = true) => {
         if (!targetField) return;
+        initializedFieldsRef.current.add(targetField);
         // Collect values for undo/redo registration AFTER the state update
         let previousItems: PromptItem[] = [];
         let resolvedItems: PromptItem[] = [];
@@ -659,7 +662,14 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
         // Only update parent if local change differs from parent value
         // Use implicit ", " separator for cleaner linking
         const compiled = items.map(i => i.content).join(", ");
-        const currentVal = valuesRef.current[targetField] || "";
+        const currentRaw = valuesRef.current[targetField];
+        const currentVal = typeof currentRaw === "string" ? currentRaw : (currentRaw === null || currentRaw === undefined ? "" : String(currentRaw));
+        const isInitialized = initializedFieldsRef.current.has(targetField);
+
+        // Prevent clearing a non-empty field before reconciliation builds items.
+        if (!isInitialized && items.length === 0 && currentVal.trim()) {
+            return;
+        }
 
         // NEW: Compare semantic content, not exact strings
         // This prevents cursor jump when the only difference is delimiter formatting

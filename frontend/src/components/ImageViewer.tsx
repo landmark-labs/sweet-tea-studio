@@ -151,6 +151,7 @@ export const ImageViewer = React.memo(function ImageViewer({
         source: string;
     } | null>(null);
     const [metadataLoading, setMetadataLoading] = React.useState(false);
+    const [useInPipeMenuOpen, setUseInPipeMenuOpen] = React.useState(false);
 
     // Fetch metadata from PNG when image path changes
     React.useEffect(() => {
@@ -598,12 +599,24 @@ export const ImageViewer = React.memo(function ImageViewer({
                         {/* Left: Actions */}
                         <div className="flex items-center gap-2">
                             {imgWorkflows.length > 0 && (
-                                <div className="relative group/wf">
-                                    <Button variant="outline" size="sm" className="h-7 text-xs gap-1 border-blue-200 hover:bg-blue-50 text-blue-700">
+                                <div
+                                    className="relative"
+                                    onMouseEnter={() => setUseInPipeMenuOpen(true)}
+                                    onMouseLeave={() => setUseInPipeMenuOpen(false)}
+                                >
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-7 text-xs gap-1 border-blue-200 hover:bg-blue-50 text-blue-700"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setUseInPipeMenuOpen((open) => !open);
+                                        }}
+                                    >
                                         use in pipe ▶
                                     </Button>
                                     {/* pt-2 + -mt-2 creates an invisible hover bridge between button and menu */}
-                                    <div className="absolute left-0 top-full pt-2 -mt-1 hidden group-hover/wf:block z-50">
+                                    <div className={`absolute left-0 top-full pt-2 -mt-1 z-50 ${useInPipeMenuOpen ? "block" : "hidden"}`}>
                                         <div className="bg-white border border-slate-200 rounded-md shadow-lg py-1 w-48 max-h-64 overflow-y-auto">
                                             {imgWorkflows.map(w => (
                                                 <div key={w.id} className="px-3 py-2 hover:bg-slate-100 cursor-pointer truncate text-xs" onClick={() => {
@@ -634,6 +647,7 @@ export const ImageViewer = React.memo(function ImageViewer({
                                                             project_id: undefined,
                                                         }
                                                     });
+                                                    setUseInPipeMenuOpen(false);
                                                     setLightboxOpen?.(false);
                                                     setContextMenu(null);
                                                 }}>
