@@ -87,7 +87,7 @@ export function GenerationProvider({ children }: GenerationProviderProps) {
     }, [selectedWorkflowId]);
 
     // Persisted stores
-    const { trackFeedStart, updateFeed } = useGenerationFeedStore();
+    const { trackFeedStart, updateFeed, updatePreviewBlob } = useGenerationFeedStore();
     const { prompts, searchQuery: promptSearch, setSearchQuery: setPromptSearch, setPrompts, shouldRefetch } = usePromptLibraryStore();
     const wsRef = useRef<WebSocket | null>(null);
 
@@ -298,9 +298,9 @@ export function GenerationProvider({ children }: GenerationProviderProps) {
                     });
                     ws.close();
                 } else if (data.type === "preview") {
-                    // Throttle preview updates to prevent main thread blocking
+                    // Throttle preview updates and use RAF-optimized method
                     const now = Date.now();
-                    if (now - lastPreviewUpdate < 100) return;
+                    if (now - lastPreviewUpdate < 150) return;
                     lastPreviewUpdate = now;
                     const feedOpen = typeof window !== "undefined"
                         ? window.localStorage.getItem("ds_feed_open") !== "false"
@@ -308,7 +308,7 @@ export function GenerationProvider({ children }: GenerationProviderProps) {
                     if (!feedOpen || (typeof document !== "undefined" && document.visibilityState === "hidden")) {
                         return;
                     }
-                    if (data.data?.blob) updateFeed(job.id, { previewBlob: data.data.blob });
+                    if (data.data?.blob) updatePreviewBlob(job.id, data.data.blob);
                 } else if (data.type === "error") {
                     updateFeed(job.id, { status: "failed", previewBlob: null });
                     ws.close();

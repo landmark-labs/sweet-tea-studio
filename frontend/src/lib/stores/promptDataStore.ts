@@ -6,11 +6,16 @@ import { PromptLibraryItem } from "@/lib/api";
 export const PROMPT_LIBRARY_STALE_MS = 5 * 60 * 1000;
 const PROGRESS_UPDATE_STEP = 2; // minimum percent change before persisting progress
 
+// Performance: Track pending preview updates to avoid queuing duplicates
+let pendingPreviewUpdate: { jobId: number; blob: string } | null = null;
+let rafScheduled = false;
+
 interface GenerationFeedState {
   generationFeed: GenerationFeedItem[];
   setGenerationFeed: (items: GenerationFeedItem[]) => void;
   trackFeedStart: (jobId: number) => void;
   updateFeed: (jobId: number, updates: Partial<GenerationFeedItem>) => void;
+  updatePreviewBlob: (jobId: number, blob: string) => void;
   clearPreviewBlobs: () => void;
   clearFeed: () => void;
 }
@@ -88,6 +93,31 @@ export const useGenerationFeedStore = create<GenerationFeedState>()(
 
           if (!mutated) return state;
           return { generationFeed: nextFeed };
+        });
+      },
+      // Performance-optimized preview blob updates using RAF to avoid main thread blocking
+      updatePreviewBlob: (jobId: number, blob: string) => {
+        // Coalesce updates: only keep the latest pending update per job
+        pendingPreviewUpdate = { jobId, blob };
+
+        if (rafScheduled) return; // Already have a frame scheduled
+        rafScheduled = true;
+
+        requestAnimationFrame(() => {
+          rafScheduled = false;
+          const update = pendingPreviewUpdate;
+          if (!update) return;
+          pendingPreviewUpdate = null;
+
+          set((state) => {
+            const nextFeed = state.generationFeed.map((item) => {
+              if (item.jobId !== update.jobId) return item;
+              // Skip if blob is the same (avoid unnecessary re-renders)
+              if (item.previewBlob === update.blob) return item;
+              return { ...item, previewBlob: update.blob };
+            });
+            return { generationFeed: nextFeed };
+          });
         });
       },
       clearPreviewBlobs: () =>

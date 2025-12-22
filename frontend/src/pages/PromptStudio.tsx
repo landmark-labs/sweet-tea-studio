@@ -77,7 +77,7 @@ export default function PromptStudio() {
   }, [formData]);
   const initializedWorkflowsRef = useRef<Set<string>>(new Set());
 
-  const { generationFeed, trackFeedStart, updateFeed } = useGenerationFeedStore();
+  const { generationFeed, trackFeedStart, updateFeed, updatePreviewBlob } = useGenerationFeedStore();
 
   // Prompt Library State
   const { setPrompts, clearPrompts, shouldRefetch: shouldRefetchPrompts } = usePromptLibraryStore();
@@ -1112,14 +1112,15 @@ export default function PromptStudio() {
           return;
         }
         const now = Date.now();
-        if (now - lastPreviewUpdateRef.current < 100) {
-          return; // Skip this preview, update at most every 100ms
+        if (now - lastPreviewUpdateRef.current < 150) {
+          return; // Skip this preview, update at most every 150ms
         }
         lastPreviewUpdateRef.current = now;
 
         const targetJobId = data.job_id ?? lastJobId;
         if (targetJobId && data.data?.blob) {
-          updateFeed(targetJobId, { previewBlob: data.data.blob });
+          // Use RAF-optimized method to avoid main thread blocking
+          updatePreviewBlob(targetJobId, data.data.blob);
         }
       } else if (data.type === "save_failed") {
         // CRITICAL: Alert user that images failed to save
