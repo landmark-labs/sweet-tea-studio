@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api, GalleryItem, Project } from "@/lib/api";
+import { isVideoFile } from "@/lib/media";
 import { Card, CardContent } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -597,14 +598,24 @@ export default function Gallery() {
                                                         </div>
                                                     )}
 
-                                                    <img
-                                                        src={`/api/v1/gallery/image/${item.image.id}`}
-                                                        alt={item.image.filename}
-                                                        className="w-full h-full object-cover transition-transform group-hover:scale-105"
-                                                        loading="lazy"
-                                                        decoding="async"
-                                                        onError={handleImageError}
-                                                    />
+                                                    {isVideoFile(item.image.path, item.image.filename) ? (
+                                                        <video
+                                                            src={`/api/v1/gallery/image/${item.image.id}`}
+                                                            className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                                                            preload="metadata"
+                                                            muted
+                                                            playsInline
+                                                        />
+                                                    ) : (
+                                                        <img
+                                                            src={`/api/v1/gallery/image/${item.image.id}`}
+                                                            alt={item.image.filename}
+                                                            className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                                                            loading="lazy"
+                                                            decoding="async"
+                                                            onError={handleImageError}
+                                                        />
+                                                    )}
 
                                                     <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                                                         {/* Keep existing overlay buttons but make them stop propagation so they don't trigger select */}
@@ -796,16 +807,31 @@ export default function Gallery() {
                                         <Check className="w-3 h-3" /> Selected
                                     </div>
                                 )}
-                                <img
-                                    src={`/api/v1/gallery/image/${fullscreenItem.image.id}`}
-                                    alt={fullscreenItem.image.filename}
-                                    className="max-h-[80vh] w-auto object-contain rounded-lg shadow-2xl transition-transform select-none"
-                                    style={{
-                                        transform: `scale(${zoomScale}) translate(${panPosition.x / zoomScale}px, ${panPosition.y / zoomScale}px)`,
-                                        transformOrigin: 'center center'
-                                    }}
-                                    draggable={false}
-                                />
+                                {isVideoFile(fullscreenItem.image.path, fullscreenItem.image.filename) ? (
+                                    <video
+                                        src={`/api/v1/gallery/image/${fullscreenItem.image.id}`}
+                                        className="max-h-[80vh] w-auto object-contain rounded-lg shadow-2xl transition-transform select-none"
+                                        style={{
+                                            transform: `scale(${zoomScale}) translate(${panPosition.x / zoomScale}px, ${panPosition.y / zoomScale}px)`,
+                                            transformOrigin: 'center center'
+                                        }}
+                                        controls
+                                        preload="metadata"
+                                        playsInline
+                                        draggable={false}
+                                    />
+                                ) : (
+                                    <img
+                                        src={`/api/v1/gallery/image/${fullscreenItem.image.id}`}
+                                        alt={fullscreenItem.image.filename}
+                                        className="max-h-[80vh] w-auto object-contain rounded-lg shadow-2xl transition-transform select-none"
+                                        style={{
+                                            transform: `scale(${zoomScale}) translate(${panPosition.x / zoomScale}px, ${panPosition.y / zoomScale}px)`,
+                                            transformOrigin: 'center center'
+                                        }}
+                                        draggable={false}
+                                    />
+                                )}
                             </div>
                             <div className="bg-white/5 rounded-lg px-4 py-2 text-sm w-full flex items-center justify-between">
                                 <div className="flex items-center gap-2 text-slate-100">

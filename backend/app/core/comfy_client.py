@@ -324,7 +324,8 @@ class ComfyClient:
                             "type": "output",
                             "image_bytes": image_data,  # Raw bytes for direct save
                             "format": ext,
-                            "source": "websocket"
+                            "source": "websocket",
+                            "kind": "image",
                         })
                         
                         _debug(f"Captured image from WebSocket: {filename} ({len(image_data)} bytes)")
@@ -372,38 +373,58 @@ class ComfyClient:
             if not isinstance(outputs, dict):
                 return []
 
-            output_images: List[Dict[str, Any]] = []
+            output_items: List[Dict[str, Any]] = []
             for node_output in outputs.values():
                 if not isinstance(node_output, dict):
                     continue
                 images = node_output.get("images") or []
-                if not isinstance(images, list):
-                    continue
-                for image in images:
-                    if not isinstance(image, dict):
-                        continue
-                    filename = image.get("filename")
-                    if not filename:
-                        continue
-                    subfolder = image.get("subfolder") or ""
-                    image_type = image.get("type") or "output"
-                    img = dict(image)
-                    img["url"] = self._get_url(
-                        f"/view?filename={urllib.parse.quote(str(filename))}"
-                        f"&subfolder={urllib.parse.quote(str(subfolder))}"
-                        f"&type={urllib.parse.quote(str(image_type))}"
-                    )
-                    output_images.append(img)
-            return output_images
+                if isinstance(images, list):
+                    for image in images:
+                        if not isinstance(image, dict):
+                            continue
+                        filename = image.get("filename")
+                        if not filename:
+                            continue
+                        subfolder = image.get("subfolder") or ""
+                        image_type = image.get("type") or "output"
+                        img = dict(image)
+                        img["url"] = self._get_url(
+                            f"/view?filename={urllib.parse.quote(str(filename))}"
+                            f"&subfolder={urllib.parse.quote(str(subfolder))}"
+                            f"&type={urllib.parse.quote(str(image_type))}"
+                        )
+                        img["kind"] = "image"
+                        output_items.append(img)
+
+                videos = node_output.get("videos") or []
+                if isinstance(videos, list):
+                    for video in videos:
+                        if not isinstance(video, dict):
+                            continue
+                        filename = video.get("filename")
+                        if not filename:
+                            continue
+                        subfolder = video.get("subfolder") or ""
+                        video_type = video.get("type") or "output"
+                        vid = dict(video)
+                        vid["url"] = self._get_url(
+                            f"/view?filename={urllib.parse.quote(str(filename))}"
+                            f"&subfolder={urllib.parse.quote(str(subfolder))}"
+                            f"&type={urllib.parse.quote(str(video_type))}"
+                        )
+                        vid["kind"] = "video"
+                        output_items.append(vid)
+
+            return output_items
 
         # Prefer history outputs whenever possible so we preserve the true ComfyUI
         # filenames (including `type=temp` previews stored under ComfyUI/temp).
         # History can lag slightly behind the websocket completion signal, so retry briefly.
         for _attempt in range(5):
-            output_images = _history_output_images()
-            if output_images:
+            output_items = _history_output_images()
+            if output_items:
                 _close_ws()
-                return output_images
+                return output_items
             time.sleep(0.2)
 
         # Fallback: Use the last preview image(s) as output when no history images exist.
@@ -419,6 +440,7 @@ class ComfyClient:
                     "image_bytes": last_preview["image_bytes"],
                     "format": last_preview["format"],
                     "source": "preview_fallback",
+                    "kind": "image",
                 }
             ]
             _close_ws()

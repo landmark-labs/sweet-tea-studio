@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { GalleryItem } from "@/lib/api";
+import { isVideoFile } from "@/lib/media";
 import { Card } from "@/components/ui/card";
 import { RefreshCw, Trash2, Check, CheckCircle2, RotateCcw } from "lucide-react";
 import { Button } from "./ui/button";
@@ -98,6 +99,8 @@ export function RunningGallery({
             <div className="flex-1 overflow-y-auto p-2 flex flex-col gap-2">
                 {images.map((item) => {
                     const isSelected = selectedIds.has(item.image.id);
+                    const isVideo = isVideoFile(item.image.path, item.image.filename);
+                    const mediaUrl = `/api/v1/gallery/image/path?path=${encodeURIComponent(item.image.path)}`;
                     return (
                         <Card
                             key={item.image.id}
@@ -106,17 +109,27 @@ export function RunningGallery({
                             onContextMenu={(e) => handleContextMenu(e, item)}
                             draggable
                             onDragStart={(e) => {
-                                const url = `/api/v1/gallery/image/path?path=${encodeURIComponent(item.image.path)}`;
+                                const url = mediaUrl;
                                 e.dataTransfer.setData("text/plain", url);
                                 e.dataTransfer.setData("text/uri-list", url);
                             }}
                         >
                             <div className="aspect-square bg-slate-200 relative">
-                                <img
-                                    src={`/api/v1/gallery/image/path?path=${encodeURIComponent(item.image.path)}`}
-                                    className="w-full h-full object-cover"
-                                    loading="lazy"
-                                />
+                                {isVideo ? (
+                                    <video
+                                        src={mediaUrl}
+                                        className="w-full h-full object-cover"
+                                        preload="metadata"
+                                        muted
+                                        playsInline
+                                    />
+                                ) : (
+                                    <img
+                                        src={mediaUrl}
+                                        className="w-full h-full object-cover"
+                                        loading="lazy"
+                                    />
+                                )}
                                 {item.image.is_kept && (
                                     <div className="absolute top-1 right-1 bg-green-500 text-white rounded-full p-0.5 shadow-sm">
                                         <Check className="w-3 h-3" />

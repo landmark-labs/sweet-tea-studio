@@ -1,5 +1,6 @@
 import json
 import logging
+import mimetypes
 import os
 from datetime import datetime
 from difflib import SequenceMatcher
@@ -24,6 +25,8 @@ from app.models.workflow import WorkflowTemplate
 router = APIRouter()
 logger = logging.getLogger(__name__)
 _fts_cache: Dict[str, Optional[bool]] = {"available": None}
+
+VIDEO_EXTENSIONS = {".mp4", ".webm", ".mov", ".mkv", ".avi"}
 
 
 def _fts_available(session: Session) -> bool:
@@ -162,6 +165,24 @@ def _log_context(request: Optional[Request], **extra: Any) -> Dict[str, Any]:
     }
     context.update({k: v for k, v in extra.items() if v is not None})
     return context
+
+
+def _guess_media_type(path: str) -> str:
+    guessed = mimetypes.guess_type(path)[0]
+    if guessed:
+        return guessed
+    ext = os.path.splitext(path)[1].lower()
+    if ext in VIDEO_EXTENSIONS:
+        if ext == ".webm":
+            return "video/webm"
+        if ext == ".mov":
+            return "video/quicktime"
+        if ext == ".mkv":
+            return "video/x-matroska"
+        if ext == ".avi":
+            return "video/x-msvideo"
+        return "video/mp4"
+    return "application/octet-stream"
 
 
 @router.get("/", response_model=List[GalleryItem])
@@ -556,7 +577,7 @@ def cleanup_images(req: CleanupRequest, session: Session = Depends(get_session))
 def serve_image_by_path(path: str, session: Session = Depends(get_session)):
     # 1. Try absolute/direct path
     if os.path.exists(path):
-        return FileResponse(path, media_type="image/png")
+        return FileResponse(path, media_type=_guess_media_type(path))
 
     # 2. Try looking in Engine directories (Input/Output)
     # We fetch the first active engine or "Local ComfyUI"
@@ -570,13 +591,13 @@ def serve_image_by_path(path: str, session: Session = Depends(get_session)):
         if engine.input_dir:
             input_path = os.path.join(engine.input_dir, path)
             if os.path.exists(input_path):
-                return FileResponse(input_path, media_type="image/png")
+                return FileResponse(input_path, media_type=_guess_media_type(input_path))
 
         # Check Output Dir
         if engine.output_dir:
             output_path = os.path.join(engine.output_dir, path)
             if os.path.exists(output_path):
-                return FileResponse(output_path, media_type="image/png")
+                return FileResponse(output_path, media_type=_guess_media_type(output_path))
 
     logger.warning("Serve Path: Missing file", extra={"path": path})
     raise HTTPException(status_code=404, detail=f"File not found: {path}")
@@ -594,7 +615,7 @@ def serve_image(image_id: int, session: Session = Depends(get_session)):
         raise HTTPException(status_code=404, detail=f"File not found on disk: {image.path}")
 
     logger.info("Serving image", extra={"image_id": image_id, "path": image.path})
-    return FileResponse(image.path, media_type="image/png")
+    return FileResponse(image.path, media_type=_guess_media_type(image.path))
 
 
 @router.get("/image/path/metadata")

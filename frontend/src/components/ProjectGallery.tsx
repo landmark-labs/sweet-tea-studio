@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { api, Project, FolderImage } from "@/lib/api";
+import { isVideoFile } from "@/lib/media";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, FolderOpen, ImageIcon, Loader2, Download, Trash2, Check } from "lucide-react";
@@ -344,12 +345,22 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
                                 <Check className="w-3 h-3" />
                             </div>
                         )}
-                        <img
-                            src={`/api/v1/gallery/image/path?path=${encodeURIComponent(image.path)}`}
-                            alt={image.filename}
-                            className="w-full h-full object-cover"
-                            loading="lazy"
-                        />
+                        {isVideoFile(image.path, image.filename) ? (
+                            <video
+                                src={`/api/v1/gallery/image/path?path=${encodeURIComponent(image.path)}`}
+                                className="w-full h-full object-cover"
+                                preload="metadata"
+                                muted
+                                playsInline
+                            />
+                        ) : (
+                            <img
+                                src={`/api/v1/gallery/image/path?path=${encodeURIComponent(image.path)}`}
+                                alt={image.filename}
+                                className="w-full h-full object-cover"
+                                loading="lazy"
+                            />
+                        )}
                         <div className="absolute inset-x-0 bottom-0 bg-black/70 text-white text-[8px] p-1 opacity-0 group-hover:opacity-100 transition-opacity">
                             <div className="truncate">{image.filename}</div>
                             {image.width && image.height && (

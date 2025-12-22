@@ -363,11 +363,21 @@ export function ImageUpload({
                                             </button>
                                         </HoverCardTrigger>
                                         <HoverCardContent className="w-48 p-0 overflow-hidden rounded-md border shadow-lg">
-                                            <img
-                                                src={`/api/v1/gallery/image/path?path=${encodeURIComponent(r)}`}
-                                                alt={r}
-                                                className="w-full h-auto object-contain bg-slate-950"
-                                            />
+                                            {guessKindFromFilename(r) === "video" ? (
+                                                <video
+                                                    src={`/api/v1/gallery/image/path?path=${encodeURIComponent(r)}`}
+                                                    className="w-full h-auto object-contain bg-slate-950"
+                                                    preload="metadata"
+                                                    muted
+                                                    playsInline
+                                                />
+                                            ) : (
+                                                <img
+                                                    src={`/api/v1/gallery/image/path?path=${encodeURIComponent(r)}`}
+                                                    alt={r}
+                                                    className="w-full h-auto object-contain bg-slate-950"
+                                                />
+                                            )}
                                             <div className="p-2 bg-white text-[10px] text-center truncate">
                                                 {r}
                                             </div>
@@ -484,12 +494,22 @@ export function ImageUpload({
                                                 onClick={() => selectOption(opt)}
                                                 className="aspect-square relative group bg-white border rounded-md overflow-hidden hover:ring-2 hover:ring-blue-500 focus:outline-none"
                                             >
-                                                <img
-                                                    loading="lazy"
-                                                    src={`/api/v1/gallery/image/path?path=${encodeURIComponent(opt)}`}
-                                                    alt={opt}
-                                                    className="w-full h-full object-cover"
-                                                />
+                                                {guessKindFromFilename(opt) === "video" ? (
+                                                    <video
+                                                        src={`/api/v1/gallery/image/path?path=${encodeURIComponent(opt)}`}
+                                                        className="w-full h-full object-cover"
+                                                        preload="metadata"
+                                                        muted
+                                                        playsInline
+                                                    />
+                                                ) : (
+                                                    <img
+                                                        loading="lazy"
+                                                        src={`/api/v1/gallery/image/path?path=${encodeURIComponent(opt)}`}
+                                                        alt={opt}
+                                                        className="w-full h-full object-cover"
+                                                    />
+                                                )}
                                                 <div className="absolute inset-x-0 bottom-0 bg-black/70 text-white text-[10px] p-1 truncate opacity-0 group-hover:opacity-100 transition-opacity">
                                                     {opt}
                                                 </div>
@@ -509,12 +529,22 @@ export function ImageUpload({
                                             onClick={() => selectGalleryImage(path)}
                                             className="aspect-square relative group bg-white border rounded-md overflow-hidden hover:ring-2 hover:ring-green-500 focus:outline-none"
                                         >
-                                            <img
-                                                loading="lazy"
-                                                src={`/api/v1/gallery/image/path?path=${encodeURIComponent(path)}`}
-                                                alt="Gallery"
-                                                className="w-full h-full object-cover"
-                                            />
+                                            {guessKindFromFilename(path) === "video" ? (
+                                                <video
+                                                    src={`/api/v1/gallery/image/path?path=${encodeURIComponent(path)}`}
+                                                    className="w-full h-full object-cover"
+                                                    preload="metadata"
+                                                    muted
+                                                    playsInline
+                                                />
+                                            ) : (
+                                                <img
+                                                    loading="lazy"
+                                                    src={`/api/v1/gallery/image/path?path=${encodeURIComponent(path)}`}
+                                                    alt="Gallery"
+                                                    className="w-full h-full object-cover"
+                                                />
+                                            )}
                                             <div className="absolute inset-x-0 bottom-0 bg-black/70 text-white text-[10px] p-1 truncate opacity-0 group-hover:opacity-100 transition-opacity">
                                                 {path.split(/[\\/]/).pop()}
                                             </div>

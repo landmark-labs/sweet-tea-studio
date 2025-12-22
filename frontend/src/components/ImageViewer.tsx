@@ -2,6 +2,7 @@ import React from "react";
 import { Download, ExternalLink, X, Check, ArrowLeft, ArrowRight, RotateCcw, Copy, Trash2 } from "lucide-react";
 import { Button } from "./ui/button";
 import { api, Image as ApiImage, GalleryItem } from "@/lib/api";
+import { isVideoFile } from "@/lib/media";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 
 
@@ -129,6 +130,7 @@ export const ImageViewer = React.memo(function ImageViewer({
         ? displayImages[selectedIndex]
         : (lockedImage || displayImages[0]);
     const imagePath = currentImage?.path;
+    const isVideo = isVideoFile(imagePath, currentImage?.filename);
 
     // State for PNG-sourced metadata (fetched from the image file itself)
     const [pngMetadata, setPngMetadata] = React.useState<{
@@ -270,6 +272,23 @@ export const ImageViewer = React.memo(function ImageViewer({
         // Otherwise, construct the API URL
         return `/api/v1/gallery/image/path?path=${encodeURIComponent(imagePath)}`;
     }, [imagePath]);
+
+    const handleMediaDragStart = (e: React.DragEvent) => {
+        // Extract raw file path for drag transfer
+        let rawPath = imagePath || "";
+        if (rawPath.includes('/api/') && rawPath.includes('?path=')) {
+            try {
+                const url = new URL(rawPath, window.location.origin);
+                const pathParam = url.searchParams.get('path');
+                if (pathParam) rawPath = pathParam;
+            } catch { /* use as-is */ }
+        }
+
+        // Set effect to allow copy operations
+        e.dataTransfer.effectAllowed = "copy";
+        e.dataTransfer.setData("application/x-sweet-tea-image", rawPath);
+        e.dataTransfer.setData("text/plain", rawPath);
+    };
 
     // Reset zoom on close
     React.useEffect(() => {
@@ -471,29 +490,25 @@ export const ImageViewer = React.memo(function ImageViewer({
                         </>
                     )}
 
-                    <img
-                        src={imageUrl}
-                        className="max-w-full max-h-full object-contain shadow-2xl rounded-lg transition-all"
-                        alt="Preview"
-                        draggable
-                        onDragStart={(e) => {
-                            // Extract raw file path for drag transfer
-                            // This ensures full-resolution images are used, not browser-cached versions
-                            let rawPath = imagePath || "";
-                            if (rawPath.includes('/api/') && rawPath.includes('?path=')) {
-                                try {
-                                    const url = new URL(rawPath, window.location.origin);
-                                    const pathParam = url.searchParams.get('path');
-                                    if (pathParam) rawPath = pathParam;
-                                } catch { /* use as-is */ }
-                            }
-
-                            // Set effect to allow copy operations
-                            e.dataTransfer.effectAllowed = "copy";
-                            e.dataTransfer.setData("application/x-sweet-tea-image", rawPath);
-                            e.dataTransfer.setData("text/plain", rawPath);
-                        }}
-                    />
+                    {isVideo ? (
+                        <video
+                            src={imageUrl}
+                            className="max-w-full max-h-full object-contain shadow-2xl rounded-lg transition-all"
+                            controls
+                            preload="metadata"
+                            playsInline
+                            draggable
+                            onDragStart={handleMediaDragStart}
+                        />
+                    ) : (
+                        <img
+                            src={imageUrl}
+                            className="max-w-full max-h-full object-contain shadow-2xl rounded-lg transition-all"
+                            alt="Preview"
+                            draggable
+                            onDragStart={handleMediaDragStart}
+                        />
+                    )}
 
 
                 </div>
@@ -790,7 +805,23 @@ export const ImageViewer = React.memo(function ImageViewer({
                             <button onClick={() => setLightboxOpen(false)} className="text-white hover:text-red-400"><X className="w-8 h-8" /></button>
                         </div>
                         <div className="w-full h-full flex items-center justify-center" onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp} style={{ cursor: scale > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default' }}>
-                            <img src={imageUrl} alt="Full Screen" style={{ transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`, transition: isDragging ? 'none' : 'transform 0.1s ease-out', maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} draggable={false} />
+                            {isVideo ? (
+                                <video
+                                    src={imageUrl}
+                                    style={{ transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`, transition: isDragging ? 'none' : 'transform 0.1s ease-out', maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+                                    controls
+                                    preload="metadata"
+                                    playsInline
+                                    draggable={false}
+                                />
+                            ) : (
+                                <img
+                                    src={imageUrl}
+                                    alt="Full Screen"
+                                    style={{ transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`, transition: isDragging ? 'none' : 'transform 0.1s ease-out', maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+                                    draggable={false}
+                                />
+                            )}
                         </div>
                     </div>
                 )}

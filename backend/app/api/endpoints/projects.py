@@ -467,8 +467,9 @@ def list_project_folder_images(
     if not folder_path or not folder_path.exists():
         return []
     
-    # Supported image extensions
+    # Supported media extensions
     image_extensions = {".png", ".jpg", ".jpeg", ".webp"}
+    video_extensions = {".mp4", ".webm", ".mov", ".mkv", ".avi"}
     
     # Get paths of soft-deleted images to exclude from results
     deleted_paths = set(
@@ -484,7 +485,7 @@ def list_project_folder_images(
         for entry in os.scandir(folder_path):
             if entry.is_file():
                 ext = os.path.splitext(entry.name)[1].lower()
-                if ext in image_extensions:
+                if ext in image_extensions or ext in video_extensions:
                     # Skip soft-deleted images
                     if entry.path in deleted_paths:
                         continue
@@ -493,8 +494,9 @@ def list_project_folder_images(
                     # Try to read image dimensions
                     width, height = None, None
                     try:
-                        with PILImage.open(entry.path) as img:
-                            width, height = img.size
+                        if ext in image_extensions:
+                            with PILImage.open(entry.path) as img:
+                                width, height = img.size
                     except Exception:
                         pass  # Dimensions will remain None
                     

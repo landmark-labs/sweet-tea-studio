@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { api, PromptSuggestion, WorkflowTemplate } from "@/lib/api";
+import { isVideoFile } from "@/lib/media";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Trash2, Search, LayoutTemplate, Sparkles, Copy, Loader2, Wand2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -233,11 +234,21 @@ export default function PromptLibrary() {
                             {/* Thumbnail */}
                             <div className="w-16 h-16 flex-none bg-slate-100 rounded overflow-hidden relative">
                                 {prompt.preview_path ? (
-                                    <img
-                                        src={`/api/v1/gallery/image/path?path=${encodeURIComponent(prompt.preview_path)}`}
-                                        className="w-full h-full object-cover"
-                                        alt="Prompt preview"
-                                    />
+                                    isVideoFile(prompt.preview_path) ? (
+                                        <video
+                                            src={`/api/v1/gallery/image/path?path=${encodeURIComponent(prompt.preview_path)}`}
+                                            className="w-full h-full object-cover"
+                                            preload="metadata"
+                                            muted
+                                            playsInline
+                                        />
+                                    ) : (
+                                        <img
+                                            src={`/api/v1/gallery/image/path?path=${encodeURIComponent(prompt.preview_path)}`}
+                                            className="w-full h-full object-cover"
+                                            alt="Prompt preview"
+                                        />
+                                    )
                                 ) : (
                                     <div className="flex items-center justify-center h-full text-slate-300">
                                         <LayoutTemplate className="w-5 h-5" />

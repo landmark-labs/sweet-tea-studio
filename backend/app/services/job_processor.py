@@ -131,13 +131,19 @@ def _get_next_sequence_start(session: Session, filename_prefix: str, reserve: in
 
         pattern_entry = _sequence_pattern_cache.get(filename_prefix)
         if pattern_entry is None:
-            pattern = re.compile(rf"^{re.escape(filename_prefix)}-(\d+)\.(jpg|jpeg|png)$", re.IGNORECASE)
+            pattern = re.compile(
+                rf"^{re.escape(filename_prefix)}-(\d+)\.(jpg|jpeg|png|webp|gif|mp4|webm|mov|mkv|avi)$",
+                re.IGNORECASE
+            )
             _sequence_pattern_cache[filename_prefix] = {"pattern": pattern, "last_used": now}
         else:
             pattern_entry["last_used"] = now
             pattern = pattern_entry.get("pattern")
             if not pattern:
-                pattern = re.compile(rf"^{re.escape(filename_prefix)}-(\d+)\.(jpg|jpeg|png)$", re.IGNORECASE)
+                pattern = re.compile(
+                    rf"^{re.escape(filename_prefix)}-(\d+)\.(jpg|jpeg|png|webp|gif|mp4|webm|mov|mkv|avi)$",
+                    re.IGNORECASE
+                )
                 _sequence_pattern_cache[filename_prefix] = {"pattern": pattern, "last_used": now}
 
         max_seq = -1
@@ -384,6 +390,70 @@ def _process_single_image(
     
     return (full_path, final_filename, idx)
 
+
+def _process_single_video(
+    video_data: dict,
+    idx: int,
+    save_dir: str,
+    filename: str,
+    provenance_json: str,
+    engine_output_dir: str | None,
+    engine_root_dir: str | None,
+) -> tuple[str, str, int] | None:
+    """
+    Process a single video: copy from ComfyUI output/temp or download via URL.
+    Returns (full_path, final_filename, idx) on success, None on failure.
+    """
+    import urllib.request
+
+    orig_filename = os.path.basename(video_data.get("filename") or filename)
+    subfolder = video_data.get("subfolder", "")
+    video_type = video_data.get("type")  # e.g. "output", "temp"
+
+    base_dir = None
+    if engine_root_dir and video_type:
+        candidate = os.path.join(engine_root_dir, str(video_type))
+        if os.path.isdir(candidate):
+            base_dir = candidate
+    if not base_dir and engine_output_dir:
+        base_dir = engine_output_dir
+
+    full_path = os.path.join(save_dir, filename)
+
+    if base_dir:
+        src_path = os.path.join(base_dir, subfolder, orig_filename) if subfolder else os.path.join(base_dir, orig_filename)
+        if os.path.exists(src_path):
+            try:
+                shutil.copy2(src_path, full_path)
+            except Exception as e:
+                print(f"[Video] Failed to copy {src_path} to {full_path}: {e}")
+                return None
+        else:
+            src_path = None
+    else:
+        src_path = None
+
+    if not src_path:
+        video_url = video_data.get("url")
+        if not video_url:
+            return None
+        try:
+            with urllib.request.urlopen(video_url, timeout=60) as response:
+                with open(full_path, "wb") as f:
+                    f.write(response.read())
+        except Exception as e:
+            print(f"[Video] Failed to download video from {video_url}: {e}")
+            return None
+
+    if provenance_json:
+        try:
+            sidecar_path = full_path.rsplit(".", 1)[0] + ".json"
+            with open(sidecar_path, "w", encoding="utf-8") as sf:
+                sf.write(provenance_json)
+        except Exception as e:
+            print(f"[Video] Failed to write sidecar for {full_path}: {e}")
+
+    return (full_path, filename, idx)
 def process_job(job_id: int):
     with Session(db_engine) as session:
         # Re-fetch objects within session
@@ -534,11 +604,19 @@ def process_job(job_id: int):
             
             manager.broadcast_sync({"type": "started", "prompt_id": prompt_id}, str(job_id))
             
-            images = client.get_images(prompt_id, progress_callback=on_progress)
+            outputs = client.get_images(prompt_id, progress_callback=on_progress)
+            image_outputs = [item for item in outputs if item.get("kind") != "video"]
+            video_outputs = [item for item in outputs if item.get("kind") == "video"]
             
             # Immediately signal that ComfyUI is done - frontend can reset button now
             # Post-processing (image saving, metadata embedding) happens below in background
-            manager.broadcast_sync({"type": "generation_done", "job_id": job_id, "image_count": len(images)}, str(job_id))
+            manager.broadcast_sync({
+                "type": "generation_done",
+                "job_id": job_id,
+                "image_count": len(image_outputs),
+                "video_count": len(video_outputs),
+                "output_count": len(outputs),
+            }, str(job_id))
             
             job.status = "completed"
             job.completed_at = datetime.utcnow()
@@ -590,7 +668,7 @@ def process_job(job_id: int):
             else:
                 target_output_dir = job.output_dir
             
-            saved_images = []
+            saved_media = []
             
             # Extract positive/negative prompts ONCE before the loop
             # Check working_params for common prompt keys, then fall back to CLIPTextEncode nodes
@@ -630,9 +708,9 @@ def process_job(job_id: int):
             else:
                 filename_prefix = f"gen_{job_id}"
 
-            next_seq = _get_next_sequence_start(session, filename_prefix, len(images))
+            next_seq = _get_next_sequence_start(session, filename_prefix, len(outputs))
             
-            # Build provenance data once (shared across all images)
+            # Build provenance data once (shared across all outputs)
             provenance_data = {
                 "positive_prompt": pos_embed,
                 "negative_prompt": neg_embed,
@@ -647,6 +725,9 @@ def process_job(job_id: int):
             # repeating JSON serialization + UTF-16 encoding in every worker thread.
             provenance_json = json.dumps(provenance_data, ensure_ascii=False)
             xp_comment_bytes = provenance_json.encode("utf-16le") + b"\x00\x00"
+            video_provenance = dict(provenance_data)
+            video_provenance["media_kind"] = "video"
+            video_provenance_json = json.dumps(video_provenance, ensure_ascii=False)
 
             xp_title_bytes: bytes | None = None
             if 'project' in locals() and project and project.name:
@@ -679,24 +760,45 @@ def process_job(job_id: int):
             
             # Prepare tasks for parallel processing
             image_tasks = []
-            for idx, img_data in enumerate(images):
+            video_tasks = []
+            for idx, output in enumerate(outputs):
                 seq_num = next_seq + idx
-                original_ext = img_data['filename'].rsplit('.', 1)[-1].lower() if '.' in img_data['filename'] else 'jpg'
-                filename = f"{filename_prefix}-{seq_num:04d}.{original_ext}"
-                image_tasks.append(
-                    (
-                        img_data,
-                        idx,
-                        save_dir,
-                        filename,
-                        provenance_json,
-                        xp_comment_bytes,
-                        engine.output_dir,
-                        engine_root_dir,
-                        xp_title_bytes,
-                        xp_subject_bytes,
+                original_name = os.path.basename(output.get("filename") or "")
+                original_ext = original_name.rsplit('.', 1)[-1].lower() if '.' in original_name else ""
+                if not original_ext:
+                    original_ext = "mp4" if output.get("kind") == "video" else "jpg"
+
+                if output.get("kind") == "video":
+                    preferred_name = original_name or f"{filename_prefix}-{seq_num:04d}.{original_ext}"
+                    if os.path.exists(os.path.join(save_dir, preferred_name)):
+                        preferred_name = f"{filename_prefix}-{seq_num:04d}.{original_ext}"
+                    video_tasks.append(
+                        (
+                            output,
+                            idx,
+                            save_dir,
+                            preferred_name,
+                            video_provenance_json,
+                            engine.output_dir,
+                            engine_root_dir,
+                        )
                     )
-                )
+                else:
+                    filename = f"{filename_prefix}-{seq_num:04d}.{original_ext}"
+                    image_tasks.append(
+                        (
+                            output,
+                            idx,
+                            save_dir,
+                            filename,
+                            provenance_json,
+                            xp_comment_bytes,
+                            engine.output_dir,
+                            engine_root_dir,
+                            xp_title_bytes,
+                            xp_subject_bytes,
+                        )
+                    )
              
             # Process images in parallel using ThreadPoolExecutor
             processed_results = []
@@ -714,13 +816,16 @@ def process_job(job_id: int):
             cpu_workers = os.cpu_count() or 4
             default_workers = min(32, cpu_workers)
             max_workers = configured_workers if configured_workers and configured_workers > 0 else default_workers
-            max_workers = max(1, min(max_workers, len(image_tasks) or 1))
+            total_tasks = len(image_tasks) + len(video_tasks)
+            max_workers = max(1, min(max_workers, total_tasks or 1))
 
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                futures = {
-                    executor.submit(_process_single_image, *task): task[1]  # task[1] = idx
-                    for task in image_tasks
-                }
+                futures = {}
+                for task in image_tasks:
+                    futures[executor.submit(_process_single_image, *task)] = task[1]
+                for task in video_tasks:
+                    futures[executor.submit(_process_single_video, *task)] = task[1]
+
                 for future in as_completed(futures):
                     result = future.result()
                     if result:
@@ -790,39 +895,48 @@ def process_job(job_id: int):
                 param_width = working_params.get("width") or working_params.get("empty_latent_width")
                 param_height = working_params.get("height") or working_params.get("empty_latent_height")
             
-            # Create database records for each VERIFIED image (file confirmed on disk)
+            # Create database records for each VERIFIED output (file confirmed on disk)
             for full_path, final_filename, idx in verified_results:
-                image_format = os.path.splitext(final_filename)[1].lstrip(".").lower() or "png"
-                
-                # Generate inline thumbnail for DB portability (allows viewing prompts without image files)
-                thumb_data, thumb_width, thumb_height = _create_thumbnail(full_path)
-                img_width = thumb_width or param_width
-                img_height = thumb_height or param_height
-                
+                file_ext = os.path.splitext(final_filename)[1].lstrip(".").lower() or "png"
+                is_video = file_ext in {"mp4", "webm", "mov", "mkv", "avi"}
+
+                thumb_data = None
+                img_width = param_width
+                img_height = param_height
+                if not is_video:
+                    # Generate inline thumbnail for DB portability (allows viewing prompts without image files)
+                    thumb_data, thumb_width, thumb_height = _create_thumbnail(full_path)
+                    img_width = thumb_width or param_width
+                    img_height = thumb_height or param_height
+
+                metadata = image_metadata
+                if is_video:
+                    metadata = {**image_metadata, "media_kind": "video"}
+
                 new_image = Image(
                     job_id=job_id,
                     path=full_path,
                     filename=final_filename,
-                    format=image_format,
+                    format=file_ext,
                     width=img_width,
                     height=img_height,
                     file_exists=True,
                     thumbnail_data=thumb_data,
-                    extra_metadata=image_metadata,
+                    extra_metadata=metadata,
                     is_kept=False
                 )
                 session.add(new_image)
-                saved_images.append(new_image)
+                saved_media.append(new_image)
             
             session.commit()
             
-            for img in saved_images:
+            for img in saved_media:
                 session.refresh(img)
 
             fts_updated = False
             search_text = build_search_text(pos_embed, neg_embed, None, None, stacked_history)
             if search_text:
-                for img in saved_images:
+                for img in saved_media:
                     if img.id is None:
                         continue
                     if update_gallery_fts(session, img.id, search_text):
@@ -839,7 +953,7 @@ def process_job(job_id: int):
                     "created_at": img.created_at.isoformat(),
                     "is_kept": img.is_kept
                 } 
-                for img in saved_images
+                for img in saved_media
             ]
             
             manager.broadcast_sync({
@@ -852,7 +966,7 @@ def process_job(job_id: int):
             manager.close_job_sync(str(job_id))
             
             # Auto-Save Prompt
-            if saved_images:
+            if saved_media:
                 content_str = f"{pos_embed}|{neg_embed}".encode('utf-8')
                 content_hash = hashlib.md5(content_str).hexdigest()
                 
@@ -866,6 +980,14 @@ def process_job(job_id: int):
                     session.add(existing_prompt) 
                     final_prompt_id = existing_prompt.id
                 else:
+                    preview_path = None
+                    for img in saved_media:
+                        if img.format and img.format.lower() not in {"mp4", "webm", "mov", "mkv", "avi"}:
+                            preview_path = img.path
+                            break
+                    if not preview_path:
+                        preview_path = saved_media[0].path
+
                     new_prompt = Prompt(
                         workflow_id=workflow.id,
                         name=f"Auto-Saved: {pos_embed[:30]}..." if pos_embed else f"Auto-Saved #{job_id}",
@@ -874,7 +996,7 @@ def process_job(job_id: int):
                         negative_text=neg_embed,
                         content_hash=content_hash,
                         parameters=working_params,
-                        preview_image_path=saved_images[0].path,
+                        preview_image_path=preview_path,
                         created_at=datetime.utcnow(),
                         updated_at=datetime.utcnow()
                     )
