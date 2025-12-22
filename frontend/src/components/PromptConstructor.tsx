@@ -323,14 +323,23 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
 
     const setItems = (newItems: PromptItem[] | ((prev: PromptItem[]) => PromptItem[]), label = "Prompt items updated", record = true) => {
         if (!targetField) return;
+        // Collect values for undo/redo registration AFTER the state update
+        let previousItems: PromptItem[] = [];
+        let resolvedItems: PromptItem[] = [];
+
         setFieldItems(prev => {
-            const previousItems = prev[targetField] || [];
-            const resolved = typeof newItems === 'function' ? newItems(previousItems) : newItems;
-            if (record) {
-                registerStateChange(label, previousItems, resolved, (val) => applyItems(targetField, val));
-            }
-            return { ...prev, [targetField]: resolved };
+            previousItems = prev[targetField] || [];
+            resolvedItems = typeof newItems === 'function' ? newItems(previousItems) : newItems;
+            return { ...prev, [targetField]: resolvedItems };
         });
+
+        // Register undo/redo AFTER setFieldItems to avoid setState during render
+        if (record) {
+            // Use queueMicrotask to ensure this runs after the current render
+            queueMicrotask(() => {
+                registerStateChange(label, previousItems, resolvedItems, (val) => applyItems(targetField, val));
+            });
+        }
     };
 
     // Library now comes from props (aliasing 'snippets' to 'library' in arg destructuring)
