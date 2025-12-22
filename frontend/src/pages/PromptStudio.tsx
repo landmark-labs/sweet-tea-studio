@@ -73,9 +73,13 @@ export default function PromptStudio() {
   const [formData, setFormData] = useState<any>({});
   const [focusedField, setFocusedField] = useState<string>("");
   const formDataRef = useRef<any>({});
+  const selectedWorkflowIdRef = useRef<string | null>(selectedWorkflowId);
   useEffect(() => {
     formDataRef.current = formData;
   }, [formData]);
+  useEffect(() => {
+    selectedWorkflowIdRef.current = selectedWorkflowId || null;
+  }, [selectedWorkflowId]);
   const initializedWorkflowsRef = useRef<Set<string>>(new Set());
 
   const { generationFeed, trackFeedStart, updateFeed, updatePreviewBlob } = useGenerationFeedStore();
@@ -444,24 +448,26 @@ export default function PromptStudio() {
   useEffect(() => {
     const handleBeforeUnload = () => {
       flushPendingPersist();
-      if (selectedWorkflowId) {
+      const workflowId = selectedWorkflowIdRef.current;
+      if (workflowId) {
         try {
-          localStorage.setItem(`ds_pipe_params_${selectedWorkflowId}`, JSON.stringify(formData));
+          localStorage.setItem(`ds_pipe_params_${workflowId}`, JSON.stringify(formDataRef.current));
         } catch (e) {
           console.warn("Failed to persist form data on unload", e);
         }
       }
     };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") handleBeforeUnload();
+    };
 
     window.addEventListener("beforeunload", handleBeforeUnload);
-    document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "hidden") handleBeforeUnload();
-    });
+    document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => {
       window.removeEventListener("beforeunload", handleBeforeUnload);
-      document.removeEventListener("visibilitychange", handleBeforeUnload);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [formData, selectedWorkflowId]);
+  }, []);
 
   const handleResetDefaults = () => {
     if (!selectedWorkflow) return;
