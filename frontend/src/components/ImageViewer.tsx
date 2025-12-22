@@ -92,12 +92,23 @@ export const ImageViewer = React.memo(function ImageViewer({
         }
     }, [displayImages, selectedIndex]);
 
+    // Track the last selectedImagePath to avoid resetting on unrelated re-renders
+    const lastSelectedImagePathRef = React.useRef<string | undefined>(undefined);
+
     // Align selection when a specific image path is provided
     // NOTE: selectedIndex is intentionally NOT in deps - we only want to sync
-    // when displayImages or selectedImagePath changes externally, not when
-    // the user manually navigates with arrows
+    // when selectedImagePath changes externally, not when the user manually
+    // navigates with arrows or when displayImages reference changes
     React.useEffect(() => {
-        if (!selectedImagePath) return;
+        if (!selectedImagePath) {
+            lastSelectedImagePathRef.current = undefined;
+            return;
+        }
+
+        // Only re-align if selectedImagePath actually changed (not just displayImages reference)
+        if (lastSelectedImagePathRef.current === selectedImagePath) return;
+        lastSelectedImagePathRef.current = selectedImagePath;
+
         const selectedRawPath = extractRawPath(selectedImagePath);
         const idx = displayImages.findIndex((img) => {
             const imgRawPath = extractRawPath(img.path);
