@@ -183,8 +183,9 @@ export const ImageViewer = React.memo(function ImageViewer({
     // Track displayImages length in a ref for keyboard navigation
     const displayImagesLengthRef = React.useRef(displayImages.length);
     React.useEffect(() => {
+        console.log('[ImageViewer] displayImages.length updated:', displayImages.length, 'images prop length:', images.length);
         displayImagesLengthRef.current = displayImages.length;
-    }, [displayImages.length]);
+    }, [displayImages.length, images.length]);
 
     // Keyboard Shortcuts
     React.useEffect(() => {
