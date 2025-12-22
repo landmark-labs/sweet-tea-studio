@@ -61,32 +61,37 @@ function enqueue(entry: ClientLogEntry) {
   }
 }
 
-async function send(entries: ClientLogEntry[]) {
-  if (!entries.length) return;
+async function send(entries: ClientLogEntry[], preferBeacon = false) {
+  if (!entries.length) return true;
   const endpoint = `${getApiBase()}/monitoring/client-logs`;
   const payload = JSON.stringify({ session_id: getSessionId(), entries });
 
-  if (typeof navigator !== "undefined" && typeof navigator.sendBeacon === "function") {
+  if (preferBeacon && typeof navigator !== "undefined" && typeof navigator.sendBeacon === "function") {
     const blob = new Blob([payload], { type: "application/json" });
-    navigator.sendBeacon(endpoint, blob);
-    return;
+    if (navigator.sendBeacon(endpoint, blob)) {
+      return true;
+    }
   }
 
   if (typeof fetch === "function") {
-    await fetch(endpoint, {
+    const res = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: payload,
       keepalive: true,
     });
+    return res.ok;
   }
+
+  return false;
 }
 
-async function flush() {
+async function flush({ preferBeacon = false }: { preferBeacon?: boolean } = {}) {
   if (!queue.length) return;
   const batch = queue.splice(0, MAX_BATCH);
   try {
-    await send(batch);
+    const ok = await send(batch, preferBeacon);
+    if (!ok) throw new Error("client diagnostics send failed");
   } catch {
     queue = batch.concat(queue);
   }
@@ -136,6 +141,13 @@ export function initClientDiagnostics() {
     flush();
   }, FLUSH_INTERVAL_MS);
 
+  logClientEvent("init", {
+    ua: typeof navigator !== "undefined" ? navigator.userAgent : undefined,
+    device_memory_gb: typeof navigator !== "undefined" && "deviceMemory" in navigator ? (navigator as any).deviceMemory : undefined,
+    cpu_cores: typeof navigator !== "undefined" ? navigator.hardwareConcurrency : undefined,
+  });
+  flush();
+
   window.addEventListener("error", (event) => {
     logClientEvent("error", {
       message: event.message,
@@ -155,10 +167,10 @@ export function initClientDiagnostics() {
 
   window.addEventListener("visibilitychange", () => {
     logClientEvent("visibility", { state: document.visibilityState });
-    flush();
+    flush({ preferBeacon: document.visibilityState === "hidden" });
   });
 
   window.addEventListener("pagehide", () => {
-    flush();
+    flush({ preferBeacon: true });
   });
 }
