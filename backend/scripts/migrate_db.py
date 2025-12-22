@@ -108,6 +108,68 @@ def migrate():
             cursor.execute("ALTER TABLE image ADD COLUMN file_exists BOOLEAN DEFAULT NULL")
             conn.commit()
             print("Migration successful: Added file_exists column.")
+
+        # Add indexes to speed up gallery ordering and filtering.
+        cursor.execute("CREATE INDEX IF NOT EXISTS ix_image_created_at ON image (created_at)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS ix_image_job_id ON image (job_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS ix_job_project_id ON job (project_id)")
+        conn.commit()
+
+        # Create FTS table for gallery search.
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='gallery_fts'")
+        if not cursor.fetchone():
+            print("Creating gallery_fts table...")
+            cursor.execute(
+                "CREATE VIRTUAL TABLE gallery_fts USING fts5(search_text, image_id UNINDEXED)"
+            )
+            conn.commit()
+            print("Migration successful: Created gallery_fts table.")
+
+        # Backfill FTS from existing data.
+        print("Backfilling gallery_fts from existing images...")
+        try:
+            cursor.execute(
+                """
+                INSERT OR REPLACE INTO gallery_fts(rowid, image_id, search_text)
+                SELECT
+                    image.id,
+                    image.id,
+                    lower(
+                        coalesce(json_extract(job.input_params, '$.prompt'), '') || ' ' ||
+                        coalesce(json_extract(job.input_params, '$.negative_prompt'), '') || ' ' ||
+                        coalesce(prompt.positive_text, '') || ' ' ||
+                        coalesce(prompt.negative_text, '') || ' ' ||
+                        coalesce(image.caption, '') || ' ' ||
+                        coalesce(prompt.tags, '')
+                    )
+                FROM image
+                LEFT JOIN job ON image.job_id = job.id
+                LEFT JOIN prompt ON job.prompt_id = prompt.id
+                WHERE image.is_deleted = 0
+                """
+            )
+        except Exception as e:
+            print(f"FTS backfill with json_extract failed ({e}); falling back to raw params.")
+            cursor.execute(
+                """
+                INSERT OR REPLACE INTO gallery_fts(rowid, image_id, search_text)
+                SELECT
+                    image.id,
+                    image.id,
+                    lower(
+                        coalesce(job.input_params, '') || ' ' ||
+                        coalesce(prompt.positive_text, '') || ' ' ||
+                        coalesce(prompt.negative_text, '') || ' ' ||
+                        coalesce(image.caption, '') || ' ' ||
+                        coalesce(prompt.tags, '')
+                    )
+                FROM image
+                LEFT JOIN job ON image.job_id = job.id
+                LEFT JOIN prompt ON job.prompt_id = prompt.id
+                WHERE image.is_deleted = 0
+                """
+            )
+        conn.commit()
             
             
     except Exception as e:

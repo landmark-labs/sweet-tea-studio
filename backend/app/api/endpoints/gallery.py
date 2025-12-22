@@ -10,6 +10,7 @@ from fastapi.responses import FileResponse
 from PIL import Image as PILImage, ExifTags
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy import text
 from sqlmodel import Session, func, or_, select
 from sqlalchemy.orm import defer
 
@@ -22,6 +23,29 @@ from app.models.workflow import WorkflowTemplate
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+_fts_cache: Dict[str, Optional[bool]] = {"available": None}
+
+
+def _fts_available(session: Session) -> bool:
+    cached = _fts_cache.get("available")
+    if cached is not None:
+        return cached
+    try:
+        result = session.exec(
+            text("SELECT name FROM sqlite_master WHERE type='table' AND name='gallery_fts' LIMIT 1")
+        ).first()
+        available = result is not None
+    except Exception:
+        available = False
+    _fts_cache["available"] = available
+    return available
+
+
+def _fts_query(search: str) -> str:
+    tokens = [t for t in search.replace('"', " ").replace("'", " ").split() if t]
+    if not tokens:
+        return ""
+    return " ".join(f"{token}*" for token in tokens)
 
 
 class GalleryItem(BaseModel):
@@ -184,26 +208,43 @@ def read_gallery(
         stmt = stmt.where(Job.project_id == None)
 
     if search:
-        like = f"%{search.lower()}%"
-        try:
-            prompt_field = func.lower(func.coalesce(func.json_extract(Job.input_params, '$.prompt'), ""))
-            negative_field = func.lower(func.coalesce(func.json_extract(Job.input_params, '$.negative_prompt'), ""))
-            tag_field = func.lower(func.coalesce(func.json_extract(Prompt.tags, '$'), ""))
-        except AttributeError:
-            prompt_field = func.lower(func.coalesce(Job.input_params, ""))
-            negative_field = func.lower(func.coalesce(Job.input_params, ""))
-            tag_field = func.lower(func.coalesce(Prompt.tags, ""))
+        fts_used = False
+        if _fts_available(session):
+            fts_query = _fts_query(search)
+            if fts_query:
+                try:
+                    rows = session.exec(
+                        text("SELECT image_id FROM gallery_fts WHERE gallery_fts MATCH :query"),
+                        {"query": fts_query},
+                    ).all()
+                    fts_ids = [row[0] for row in rows if row and row[0] is not None]
+                    if fts_ids:
+                        stmt = stmt.where(Image.id.in_(fts_ids))
+                        fts_used = True
+                except Exception:
+                    fts_used = False
 
-        stmt = stmt.where(
-            or_(
-                prompt_field.like(like),
-                negative_field.like(like),
-                func.lower(func.coalesce(Prompt.positive_text, "")).like(like),
-                func.lower(func.coalesce(Prompt.negative_text, "")).like(like),
-                func.lower(func.coalesce(Image.caption, "")).like(like),
-                tag_field.like(like),
+        if not fts_used:
+            like = f"%{search.lower()}%"
+            try:
+                prompt_field = func.lower(func.coalesce(func.json_extract(Job.input_params, '$.prompt'), ""))
+                negative_field = func.lower(func.coalesce(func.json_extract(Job.input_params, '$.negative_prompt'), ""))
+                tag_field = func.lower(func.coalesce(func.json_extract(Prompt.tags, '$'), ""))
+            except AttributeError:
+                prompt_field = func.lower(func.coalesce(Job.input_params, ""))
+                negative_field = func.lower(func.coalesce(Job.input_params, ""))
+                tag_field = func.lower(func.coalesce(Prompt.tags, ""))
+
+            stmt = stmt.where(
+                or_(
+                    prompt_field.like(like),
+                    negative_field.like(like),
+                    func.lower(func.coalesce(Prompt.positive_text, "")).like(like),
+                    func.lower(func.coalesce(Prompt.negative_text, "")).like(like),
+                    func.lower(func.coalesce(Image.caption, "")).like(like),
+                    tag_field.like(like),
+                )
             )
-        )
 
     try:
         results = session.exec(stmt).all()

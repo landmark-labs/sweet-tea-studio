@@ -8,6 +8,7 @@ from app.db.engine import engine as db_engine
 from app.models.image import Image
 from app.models.prompt import Prompt
 from app.services.vlm import vlm_service
+from app.services.gallery_search import build_search_text_from_image, update_gallery_fts
 
 router = APIRouter()
 
@@ -57,6 +58,10 @@ async def caption_image(
         session.add(db_image)
         session.commit()
         session.refresh(db_image)
+        if db_image.id is not None:
+            search_text = build_search_text_from_image(db_image)
+            if update_gallery_fts(session, db_image.id, search_text):
+                session.commit()
 
     return {**result, "image_id": image_id}
 

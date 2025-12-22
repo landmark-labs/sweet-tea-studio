@@ -37,6 +37,7 @@ from app.models.prompt import Prompt
 from app.db.engine import engine as db_engine
 from app.core.websockets import manager
 from app.services.comfy_watchdog import watchdog
+from app.services.gallery_search import build_search_text, update_gallery_fts
 
 # ===== DIAGNOSTIC MODE TOGGLE =====
 DIAGNOSTIC_MODE = False
@@ -789,6 +790,17 @@ def process_job(job_id: int):
             
             for img in saved_images:
                 session.refresh(img)
+
+            fts_updated = False
+            search_text = build_search_text(pos_embed, neg_embed, None, None, stacked_history)
+            if search_text:
+                for img in saved_images:
+                    if img.id is None:
+                        continue
+                    if update_gallery_fts(session, img.id, search_text):
+                        fts_updated = True
+            if fts_updated:
+                session.commit()
                 
             images_payload = [
                 {

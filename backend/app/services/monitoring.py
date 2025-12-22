@@ -1,4 +1,5 @@
 import subprocess
+import threading
 import time
 from typing import Any, Dict, List, Optional
 
@@ -22,6 +23,8 @@ class SystemMonitor:
         self._last_sample = 0.0
         self._last_disk_total = 0
         self._last_disk_time = 0.0
+        self._lock = threading.Lock()
+        self._refreshing = False
 
     def _estimate_pcie_bandwidth(self, generation: int, width: int) -> Optional[float]:
         per_lane = PCIE_GENERATION_BANDWIDTH.get(generation)
@@ -98,18 +101,15 @@ class SystemMonitor:
 
         return round(delta_bytes / delta_time / 1024 / 1024, 2)
 
-    def get_metrics(self) -> Dict[str, Any]:
+    def _collect_metrics(self) -> Dict[str, Any]:
         now = time.monotonic()
-        if self._cache and now - self._last_sample < self.sample_interval:
-            return self._cache
-
         cpu_percent = psutil.cpu_percent(interval=None)
         memory = psutil.virtual_memory()
         disk = psutil.disk_io_counters()
 
         disk_bw = self._disk_bandwidth(now, disk.read_bytes, disk.write_bytes)
 
-        metrics = {
+        return {
             "timestamp": time.time(),
             "cpu": {"percent": cpu_percent, "count": psutil.cpu_count() or 0},
             "memory": {
@@ -127,8 +127,36 @@ class SystemMonitor:
             "gpus": self._gpu_metrics(),
         }
 
-        self._cache = metrics
-        self._last_sample = now
+    def _refresh_cache(self) -> None:
+        metrics = self._collect_metrics()
+        with self._lock:
+            self._cache = metrics
+            self._last_sample = time.monotonic()
+            self._refreshing = False
+
+    def get_metrics(self) -> Dict[str, Any]:
+        now = time.monotonic()
+        with self._lock:
+            cache = self._cache
+            last_sample = self._last_sample
+            refreshing = self._refreshing
+
+        if cache and now - last_sample < self.sample_interval:
+            return cache
+
+        if cache:
+            if not refreshing:
+                with self._lock:
+                    if not self._refreshing:
+                        self._refreshing = True
+                        threading.Thread(target=self._refresh_cache, daemon=True).start()
+            return cache
+
+        metrics = self._collect_metrics()
+        with self._lock:
+            self._cache = metrics
+            self._last_sample = now
+            self._refreshing = False
         return metrics
 
 

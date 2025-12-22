@@ -35,8 +35,8 @@ Targets: P95 input-to-paint < 50ms for ~2000-char prompts, 60fps during snippet 
 
 ## Phase 4 - Backend perf
 [x] Persist width/height and file-exists at ingest time (avoid per-request IO).
-[ ] Add gallery indexes / FTS for search.
-[ ] Cache monitoring metrics server-side (avoid per-request nvidia-smi).
+[x] Add gallery indexes / FTS for search.
+[x] Cache monitoring metrics server-side (avoid per-request nvidia-smi).
 
 ## Notes / Decisions
 - Jotai will own UI state only; persisted project/job data continues to live in SQLite via backend APIs.
