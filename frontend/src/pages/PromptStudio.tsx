@@ -1148,12 +1148,16 @@ export default function PromptStudio() {
             previewBlob: null,
           });
 
-          handlePreviewSelect(imagePath, {
+          // Store metadata for potential use but don't trigger navigation
+          // The gallery refresh will show the new image naturally at index 0
+          setPreviewMetadata({
             prompt: mainPrompt,
             negative_prompt: data.negative_prompt,
             created_at: new Date().toISOString(),
             job_params: params
           });
+          // Clear previewPath so ImageViewer doesn't try to align to it
+          setPreviewPath(null);
           // Clear ProjectGallery images so navigation uses the updated galleryImages
           setProjectGalleryImages([]);
         } else {
