@@ -51,6 +51,36 @@ interface FieldRendererProps {
 
 const BYPASS_PLACEHOLDER_KEY = "__sts_bypass_placeholder__";
 
+const resolveMediaKind = (fieldKey: string, field: Record<string, unknown>) => {
+    const explicit = typeof field.x_media_kind === "string" ? field.x_media_kind.toLowerCase() : null;
+    if (explicit === "image" || explicit === "video") {
+        return explicit;
+    }
+
+    const key = fieldKey.toLowerCase();
+    const title = String(field.title || "").toLowerCase();
+    const classType = String(field.x_class_type || "").toLowerCase();
+    if (classType.includes("video") || title.includes("loadvideo") || key.includes(".video")) {
+        return "video";
+    }
+    return "image";
+};
+
+const isMediaUploadField = (fieldKey: string, field: Record<string, unknown>) => {
+    const key = fieldKey.toLowerCase();
+    const title = String(field.title || "").toLowerCase();
+    const classType = String(field.x_class_type || "").toLowerCase();
+    const isExplicit =
+        field.widget === "upload" ||
+        field.widget === "image_upload" ||
+        field.widget === "media_upload";
+    const isLoadImage = title.includes("loadimage");
+    const isVideoNode = classType.includes("video") || title.includes("loadvideo") || key.includes(".video");
+    const isStringLike = field.type === "string" || Array.isArray(field.enum);
+
+    return (isExplicit || isLoadImage || isVideoNode) && isStringLike;
+};
+
 const FieldRenderer = React.memo(function FieldRenderer({
     fieldKey,
     field,
@@ -67,15 +97,10 @@ const FieldRenderer = React.memo(function FieldRenderer({
     destinationFolder,
 }: FieldRendererProps) {
     const value = useAtomValue(formFieldAtom(fieldKey));
-    const isMediaUpload = field.widget === "upload"
-        || field.widget === "image_upload"
-        || field.widget === "media_upload"
-        || (field.title && field.title.includes("LoadImage"));
+    const isMediaUpload = isMediaUploadField(fieldKey, field);
 
     if (isMediaUpload) {
-        const mediaKind = field.widget === "media_upload" && typeof field.x_media_kind === "string"
-            ? field.x_media_kind
-            : "image";
+        const mediaKind = resolveMediaKind(fieldKey, field);
 
         return (
             <div className="space-y-2">
@@ -555,16 +580,14 @@ export const DynamicForm = React.memo(function DynamicForm({
                 };
             }
 
-            const isMediaUpload = field.widget === "upload"
-                || field.widget === "image_upload"
-                || field.widget === "media_upload"
-                || (field.title && field.title.includes("LoadImage"));
+            const isMediaUpload = isMediaUploadField(key, field);
             if (isMediaUpload) {
+                const mediaKind = resolveMediaKind(key, field);
                 return {
                     key,
                     section: "inputs",
                     groupId: "inputs",
-                    groupTitle: field.title || (field.widget === "media_upload" ? "Input Media" : "Input Images"),
+                    groupTitle: field.title || (mediaKind === "video" ? "Input Videos" : "Input Images"),
                     order: nodeOrderPosition ?? parseOrder(field.x_node_id, 0),
                     source: "heuristic",
                     reason: "media_upload"

@@ -172,6 +172,26 @@ def apply_params_to_graph(graph: dict, mapping: dict, params: dict):
                 current[field_path[-1]] = value
 
 
+def _build_node_mapping_from_schema(schema: dict) -> dict:
+    mapping: dict[str, dict[str, str]] = {}
+    for key, field_def in schema.items():
+        if not isinstance(key, str) or key.startswith("__"):
+            continue
+        if not isinstance(field_def, dict):
+            continue
+        node_id = field_def.get("x_node_id")
+        if node_id is None:
+            continue
+        input_name = field_def.get("mock_field")
+        if not isinstance(input_name, str) or not input_name.strip():
+            input_name = key.split(".")[-1]
+        mapping[key] = {
+            "node_id": str(node_id),
+            "field": f"inputs.{input_name}",
+        }
+    return mapping
+
+
 def _create_thumbnail(image_path: str, max_px: int = 256, quality: int = 45) -> tuple[bytes | None, int | None, int | None]:
     """
     Generate a compact JPEG thumbnail suitable for inline DB storage.
@@ -474,8 +494,16 @@ def process_job(job_id: int):
                     # Step 3: Remove the bypassed node from the graph
                     del final_graph[node_id]
 
-            if workflow.node_mapping:
-                apply_params_to_graph(final_graph, workflow.node_mapping, working_params)
+            node_mapping = workflow.node_mapping if isinstance(workflow.node_mapping, dict) else {}
+            node_mapping = dict(node_mapping) if node_mapping else {}
+            schema = workflow.input_schema or {}
+            if schema:
+                fallback_mapping = _build_node_mapping_from_schema(schema)
+                for key, mapping in fallback_mapping.items():
+                    node_mapping.setdefault(key, mapping)
+
+            if node_mapping:
+                apply_params_to_graph(final_graph, node_mapping, working_params)
             
             def on_progress(data):
                 try:

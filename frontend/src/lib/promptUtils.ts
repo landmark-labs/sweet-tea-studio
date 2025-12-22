@@ -241,7 +241,7 @@ const resolveMediaKind = (field: { x_media_kind?: unknown }): MediaKind | null =
 };
 
 export function findMediaFieldsInSchema(
-    schema: Record<string, { widget?: string; title?: string; x_media_kind?: unknown;[k: string]: unknown }>,
+    schema: Record<string, { widget?: string; title?: string; x_media_kind?: unknown; x_class_type?: unknown;[k: string]: unknown }>,
     kind: MediaKind = "image"
 ): string[] {
     const mediaFields: string[] = [];
@@ -254,17 +254,27 @@ export function findMediaFieldsInSchema(
             continue;
         }
 
+        const lowerKey = key.toLowerCase();
+        const lowerTitle = String(field.title || "").toLowerCase();
+        const lowerClass = String(field.x_class_type || "").toLowerCase();
+
         if (!resolvedKind && kind === "video") {
-            continue;
+            const looksVideo = lowerClass.includes("video") || lowerTitle.includes("loadvideo") || lowerKey.includes(".video");
+            if (!looksVideo) {
+                continue;
+            }
         }
 
-        const lowerKey = key.toLowerCase();
         const isMediaUpload =
             field.widget === "upload" ||
             field.widget === "image_upload" ||
             field.widget === "media_upload" ||
             lowerKey.includes("loadimage") ||
-            (field.title && field.title.toLowerCase().includes("loadimage"));
+            lowerTitle.includes("loadimage") ||
+            lowerClass.includes("loadimage") ||
+            lowerClass.includes("loadvideo") ||
+            lowerClass.includes("video") ||
+            lowerKey.includes(".video");
 
         if (isMediaUpload) {
             mediaFields.push(key);

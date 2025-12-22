@@ -447,11 +447,11 @@ def create_workflow(workflow_in: WorkflowTemplateCreate):
                 continue
             if not isinstance(field_def, dict) or "x_node_id" not in field_def:
                 continue
-                # We preserve x_ metadata in the schema for UI grouping!
-                workflow_in.node_mapping[key] = {
-                    "node_id": field_def["x_node_id"],
-                    "field": f"inputs.{field_def.get('mock_field', key.split('.')[-1])}" # fallback logic
-                }
+            # We preserve x_ metadata in the schema for UI grouping!
+            workflow_in.node_mapping[key] = {
+                "node_id": field_def["x_node_id"],
+                "field": f"inputs.{field_def.get('mock_field', key.split('.')[-1])}" # fallback logic
+            }
 
         workflow_in.description = _clean_description(workflow_in.description)
 
