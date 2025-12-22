@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 interface ProjectGalleryProps {
     projects: Project[];
     className?: string;
-    onSelectImage?: (imagePath: string) => void;
+    onSelectImage?: (imagePath: string, images: FolderImage[]) => void;
 }
 
 export const ProjectGallery = React.memo(function ProjectGallery({ projects, className, onSelectImage }: ProjectGalleryProps) {
@@ -139,8 +139,8 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
                 setSelectedPaths(newSet);
             }
         } else {
-            // Normal click - view image
-            onSelectImage?.(image.path);
+            // Normal click - view image and pass images array for navigation
+            onSelectImage?.(image.path, images);
         }
     };
 

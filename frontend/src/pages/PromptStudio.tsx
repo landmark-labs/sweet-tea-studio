@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { addProgressEntry, calculateProgressStats, mapStatusToGenerationState, type GenerationState, type ProgressHistoryEntry } from "@/lib/generationState";
 import { useLocation, useNavigate, useOutletContext } from "react-router-dom";
-import { api, Engine, WorkflowTemplate, GalleryItem, EngineHealth, Project, Image as ApiImage } from "@/lib/api";
+import { api, Engine, WorkflowTemplate, GalleryItem, EngineHealth, Project, Image as ApiImage, FolderImage } from "@/lib/api";
 import { extractPrompts, findPromptFieldsInSchema, findImageFieldsInSchema } from "@/lib/promptUtils";
 import { DynamicForm } from "@/components/DynamicForm";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -93,6 +93,8 @@ export default function PromptStudio() {
   // Add a refresh key for gallery
   const [galleryRefresh, setGalleryRefresh] = useState(0);
   const [galleryImages, setGalleryImages] = useState<GalleryItem[]>([]);
+  // Images from ProjectGallery - used for navigation when clicking from there
+  const [projectGalleryImages, setProjectGalleryImages] = useState<FolderImage[]>([]);
   const [, setSelectedGalleryIds] = useState<Set<number>>(new Set());
   const [unsavedJobIds, setUnsavedJobIds] = useState<number[]>(() => {
     try {
@@ -1717,7 +1719,10 @@ export default function PromptStudio() {
       <div className="flex-1 overflow-hidden relative bg-slate-50 flex flex-col">
         <ErrorBoundary>
           <ImageViewer
-            images={galleryImages.map(gi => gi.image)}
+            images={projectGalleryImages.length > 0
+              ? projectGalleryImages.map(fi => ({ id: -1, job_id: -1, path: fi.path, filename: fi.filename, created_at: '' } as ApiImage))
+              : galleryImages.map(gi => gi.image)
+            }
             galleryItems={galleryImages}
             metadata={previewMetadata}
             selectedImagePath={previewPath || undefined}
@@ -1737,9 +1742,10 @@ export default function PromptStudio() {
       {/* 4. Project Gallery (Right Side) */}
       <ProjectGallery
         projects={projects}
-        onSelectImage={(imagePath) => {
-          // Show clicked image in the viewer
+        onSelectImage={(imagePath, pgImages) => {
+          // Show clicked image in the viewer and use ProjectGallery's images for navigation
           setPreviewPath(`/api/v1/gallery/image/path?path=${encodeURIComponent(imagePath)}`);
+          setProjectGalleryImages(pgImages);
           setPreviewMetadata(null); // Clear old metadata, will be fetched by ImageViewer
         }}
       />

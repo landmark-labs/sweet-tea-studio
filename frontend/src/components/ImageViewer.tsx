@@ -54,16 +54,6 @@ export const ImageViewer = React.memo(function ImageViewer({
         return pathStr;
     }, []);
 
-    // Check if selected image exists in the gallery (for synthetic image detection)
-    const hasSyntheticImage = React.useMemo(() => {
-        if (!selectedImagePath) return false;
-        const selectedRawPath = extractRawPath(selectedImagePath);
-        return !images.some((img) => {
-            const imgRawPath = extractRawPath(img.path);
-            return imgRawPath === selectedRawPath || img.path === selectedImagePath;
-        });
-    }, [images, selectedImagePath, extractRawPath]);
-
     const displayImages = React.useMemo(() => {
         if (!selectedImagePath) return images;
 
