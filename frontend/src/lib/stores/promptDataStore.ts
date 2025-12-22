@@ -8,7 +8,11 @@ const PROGRESS_UPDATE_STEP = 2; // minimum percent change before persisting prog
 
 // Performance: Track pending preview updates to avoid queuing duplicates
 let pendingPreviewUpdate: { jobId: number; blob: string } | null = null;
-let rafScheduled = false;
+let rafScheduledPreview = false;
+
+// Performance: Track pending progress updates to avoid queuing duplicates
+let pendingProgressUpdate: { jobId: number; progress: number; status?: string } | null = null;
+let rafScheduledProgress = false;
 
 interface GenerationFeedState {
   generationFeed: GenerationFeedItem[];
@@ -16,6 +20,7 @@ interface GenerationFeedState {
   trackFeedStart: (jobId: number) => void;
   updateFeed: (jobId: number, updates: Partial<GenerationFeedItem>) => void;
   updatePreviewBlob: (jobId: number, blob: string) => void;
+  updateProgress: (jobId: number, progress: number, status?: string) => void;
   clearPreviewBlobs: () => void;
   clearFeed: () => void;
 }
@@ -100,11 +105,11 @@ export const useGenerationFeedStore = create<GenerationFeedState>()(
         // Coalesce updates: only keep the latest pending update per job
         pendingPreviewUpdate = { jobId, blob };
 
-        if (rafScheduled) return; // Already have a frame scheduled
-        rafScheduled = true;
+        if (rafScheduledPreview) return; // Already have a frame scheduled
+        rafScheduledPreview = true;
 
         requestAnimationFrame(() => {
-          rafScheduled = false;
+          rafScheduledPreview = false;
           const update = pendingPreviewUpdate;
           if (!update) return;
           pendingPreviewUpdate = null;
@@ -115,6 +120,37 @@ export const useGenerationFeedStore = create<GenerationFeedState>()(
               // Skip if blob is the same (avoid unnecessary re-renders)
               if (item.previewBlob === update.blob) return item;
               return { ...item, previewBlob: update.blob };
+            });
+            return { generationFeed: nextFeed };
+          });
+        });
+      },
+      // Performance-optimized progress updates using RAF to avoid main thread blocking
+      updateProgress: (jobId: number, progress: number, status?: string) => {
+        // Coalesce updates: only keep the latest pending update
+        pendingProgressUpdate = { jobId, progress, status };
+
+        if (rafScheduledProgress) return; // Already have a frame scheduled
+        rafScheduledProgress = true;
+
+        requestAnimationFrame(() => {
+          rafScheduledProgress = false;
+          const update = pendingProgressUpdate;
+          if (!update) return;
+          pendingProgressUpdate = null;
+
+          set((state) => {
+            const nextFeed = state.generationFeed.map((item) => {
+              if (item.jobId !== update.jobId) return item;
+              // Skip if values are the same (avoid unnecessary re-renders)
+              if (item.progress === update.progress && (!update.status || item.status === update.status)) {
+                return item;
+              }
+              return {
+                ...item,
+                progress: update.progress,
+                ...(update.status && { status: update.status })
+              };
             });
             return { generationFeed: nextFeed };
           });

@@ -613,9 +613,11 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
             return item;
         });
 
-        // Deep Compare
-        const normalize = (list: PromptItem[]) => list.map(i => ({ type: i.type, content: i.content, label: i.label, sourceId: i.sourceId }));
-        const isDifferent = JSON.stringify(normalize(labeledItems)) !== JSON.stringify(normalize(items));
+        // Efficient comparison helper - avoids JSON.stringify serialization overhead
+        const normalizeItem = (i: PromptItem) => `${i.type}|${i.content}|${i.label || ''}|${i.sourceId || ''}`;
+        const labeledStr = labeledItems.map(normalizeItem).join('~');
+        const itemsStr = items.map(normalizeItem).join('~');
+        const isDifferent = labeledStr !== itemsStr;
 
         if (isDifferent) {
             if (mergedItems.length === 0 && currentVal === "") {

@@ -1,0 +1,122 @@
+import { create } from "zustand";
+import { getApiBase } from "@/lib/api";
+
+/**
+ * Centralized Status Polling Store
+ * 
+ * Consolidates multiple polling intervals into a single 5-second interval.
+ * Components subscribe to the slices they need instead of each running their own polling.
+ */
+
+interface EngineStatus {
+    state: "ok" | "warn" | "error";
+    detail: string;
+    is_connected?: boolean;
+    can_launch?: boolean;
+    is_process_running?: boolean;
+    launcher_error?: string | null;
+    launcher_cooldown?: number | null;
+    pid?: number | null;
+}
+
+interface QueueStatus {
+    state: "ok" | "warn" | "error";
+    detail: string;
+    pending_jobs: number;
+    oldest_job_age_s: number;
+}
+
+interface ModelsStatus {
+    state: "ok" | "warn" | "error";
+    detail: string;
+    missing_models: number;
+    missing_model_names?: string[];
+}
+
+interface IOStatus {
+    state: "ok" | "warn" | "error";
+    detail: string;
+}
+
+interface StatusSummary {
+    engine: EngineStatus;
+    queue: QueueStatus;
+    io: IOStatus;
+    models: ModelsStatus;
+}
+
+interface StatusPollingState {
+    status: StatusSummary | null;
+    lastFetchedAt: number | null;
+    isPolling: boolean;
+    error: string | null;
+
+    // Actions
+    startPolling: () => void;
+    stopPolling: () => void;
+    fetchStatus: () => Promise<void>;
+}
+
+let pollingInterval: NodeJS.Timeout | null = null;
+const POLL_INTERVAL_MS = 5000;
+
+export const useStatusPollingStore = create<StatusPollingState>()((set, get) => ({
+    status: null,
+    lastFetchedAt: null,
+    isPolling: false,
+    error: null,
+
+    fetchStatus: async () => {
+        try {
+            const res = await fetch(`${getApiBase()}/monitoring/status/summary`);
+            if (res.ok) {
+                const data = await res.json();
+                set({
+                    status: data,
+                    lastFetchedAt: Date.now(),
+                    error: null
+                });
+            } else {
+                set({ error: `HTTP ${res.status}` });
+            }
+        } catch (e) {
+            console.error("[StatusPolling] Failed to fetch status:", e);
+            set({
+                error: "Cannot reach backend",
+                status: {
+                    engine: { state: "error", detail: "cannot reach backend", is_connected: false, can_launch: false },
+                    queue: { state: "error", detail: "unknown", pending_jobs: 0, oldest_job_age_s: 0 },
+                    io: { state: "error", detail: "unknown" },
+                    models: { state: "error", detail: "unknown", missing_models: 0 },
+                }
+            });
+        }
+    },
+
+    startPolling: () => {
+        if (pollingInterval) return; // Already polling
+
+        const state = get();
+        state.fetchStatus(); // Initial fetch
+
+        pollingInterval = setInterval(() => {
+            get().fetchStatus();
+        }, POLL_INTERVAL_MS);
+
+        set({ isPolling: true });
+    },
+
+    stopPolling: () => {
+        if (pollingInterval) {
+            clearInterval(pollingInterval);
+            pollingInterval = null;
+        }
+        set({ isPolling: false });
+    },
+}));
+
+// Selector hooks for specific slices (prevents unnecessary re-renders)
+export const useEngineStatus = () => useStatusPollingStore((state) => state.status?.engine);
+export const useQueueStatus = () => useStatusPollingStore((state) => state.status?.queue);
+export const useModelsStatus = () => useStatusPollingStore((state) => state.status?.models);
+export const useIOStatus = () => useStatusPollingStore((state) => state.status?.io);
