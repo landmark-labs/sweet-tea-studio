@@ -41,6 +41,11 @@ export const ImageViewer = React.memo(function ImageViewer({
     const [contextMenu, setContextMenu] = React.useState<{ x: number, y: number } | null>(null);
     const containerRef = React.useRef<HTMLDivElement>(null);
 
+    // Mode-based navigation:
+    // - Locked Mode (false): Show selectedImagePath directly, ignore array index
+    // - Navigation Mode (true): Use displayImages[selectedIndex] for arrow navigation
+    const [navigationMode, setNavigationMode] = React.useState(false);
+
     // Helper to extract raw file path from API URL or return path as-is
     const extractRawPath = React.useCallback((pathStr?: string | null): string => {
         if (!pathStr) return "";
@@ -56,102 +61,73 @@ export const ImageViewer = React.memo(function ImageViewer({
         return pathStr;
     }, []);
 
+    // Create a "locked" image object from selectedImagePath for display in locked mode
+    const lockedImage = React.useMemo((): ApiImage | null => {
+        if (!selectedImagePath) return null;
+        const rawPath = extractRawPath(selectedImagePath);
+        const isApiUrl = selectedImagePath.includes('/api/') && selectedImagePath.includes('?path=');
+        return {
+            id: -1,
+            job_id: -1,
+            path: selectedImagePath,
+            filename: rawPath.split(/[\\/]/).pop() || "preview.png",
+            created_at: new Date().toISOString(),
+            // @ts-expect-error - custom property to flag API URLs
+            _isApiUrl: isApiUrl
+        };
+    }, [selectedImagePath, extractRawPath]);
+
+    // displayImages is used for array-based navigation
     const displayImages = React.useMemo(() => {
-        if (!selectedImagePath) return images;
-
-        // Extract raw path for comparison (works for both API URLs and raw paths)
-        const selectedRawPath = extractRawPath(selectedImagePath);
-
-        // Check if the selected image already exists in the images array
-        const existsInImages = images.some((img) => {
-            const imgRawPath = extractRawPath(img.path);
-            return imgRawPath === selectedRawPath || img.path === selectedImagePath;
-        });
-
-        // Debug: Log first few image paths to compare
-        if (!existsInImages && images.length > 0) {
-            console.log('[ImageViewer] PATH MISMATCH DEBUG:');
-            console.log('  selectedImagePath:', selectedImagePath);
-            console.log('  selectedRawPath:', selectedRawPath);
-            console.log('  First 3 images[].path:', images.slice(0, 3).map(i => i.path));
-            console.log('  First 3 extractRawPath:', images.slice(0, 3).map(i => extractRawPath(i.path)));
-        }
-
-        console.log('[ImageViewer] DISPLAY: existsInImages=', existsInImages, 'images.length=', images.length, 'selectedRawPath=', selectedRawPath?.slice(-40));
-
-        if (!existsInImages) {
-            // Create synthetic image for paths not in the gallery
-            console.log('[ImageViewer] DISPLAY: Creating SYNTHETIC image at index 0!');
-            const isApiUrl = selectedImagePath.includes('/api/') && selectedImagePath.includes('?path=');
-
-            const synthetic: ApiImage = {
-                id: -1,
-                job_id: -1,
-                // Store the original selectedImagePath for display purposes
-                path: selectedImagePath,
-                filename: selectedRawPath.split(/[\\/]/).pop() || "preview.png",
-                created_at: new Date().toISOString(),
-                // @ts-expect-error - custom property to flag API URLs
-                _isApiUrl: isApiUrl
-            };
-            return [synthetic, ...images];
-        }
+        // Just return images as-is for navigation mode
         return images;
-    }, [images, selectedImagePath, extractRawPath]);
+    }, [images]);
 
-    // Sync selected index with images length if it changes
+    // When selectedImagePath changes, switch back to locked mode
+    const lastSelectedImagePathRef = React.useRef<string | undefined>(undefined);
     React.useEffect(() => {
-        if (displayImages.length > 0) {
-            if (selectedIndex >= displayImages.length) {
-                console.log('[ImageViewer] BOUNDS: Resetting index', selectedIndex, 'to 0 because length is', displayImages.length);
+        if (selectedImagePath !== lastSelectedImagePathRef.current) {
+            lastSelectedImagePathRef.current = selectedImagePath;
+            // New image selected externally - switch to locked mode
+            setNavigationMode(false);
+        }
+    }, [selectedImagePath]);
+
+    // Function to enter navigation mode and align index to current image
+    const enterNavigationMode = React.useCallback(() => {
+        if (navigationMode) return; // Already in navigation mode
+
+        setNavigationMode(true);
+
+        // Try to find current locked image in the array
+        if (lockedImage) {
+            const lockedRawPath = extractRawPath(lockedImage.path);
+            const idx = displayImages.findIndex((img) => {
+                const imgRawPath = extractRawPath(img.path);
+                return imgRawPath === lockedRawPath || img.path === lockedImage.path;
+            });
+            if (idx >= 0) {
+                setSelectedIndex(idx);
+            } else {
+                // Image not in array, start at 0
                 setSelectedIndex(0);
             }
         }
-    }, [displayImages, selectedIndex]);
+    }, [navigationMode, lockedImage, displayImages, extractRawPath]);
 
-    // Reset to first image when resetKey changes (e.g., new generation)
-    const lastResetKeyRef = React.useRef(resetKey);
+    // Sync selected index bounds in navigation mode
     React.useEffect(() => {
-        if (resetKey !== undefined && resetKey !== lastResetKeyRef.current) {
-            lastResetKeyRef.current = resetKey;
-            setSelectedIndex(0);
+        if (navigationMode && displayImages.length > 0) {
+            if (selectedIndex >= displayImages.length) {
+                setSelectedIndex(Math.max(0, displayImages.length - 1));
+            }
         }
-    }, [resetKey]);
+    }, [navigationMode, displayImages.length, selectedIndex]);
 
-    // Track the last selectedImagePath to avoid resetting on unrelated re-renders
-    const lastSelectedImagePathRef = React.useRef<string | undefined>(undefined);
-
-    // Align selection when a specific image path is provided
-    // NOTE: selectedIndex is intentionally NOT in deps - we only want to sync
-    // when selectedImagePath changes externally, not when the user manually
-    // navigates with arrows or when displayImages reference changes
-    React.useEffect(() => {
-        if (!selectedImagePath) {
-            lastSelectedImagePathRef.current = undefined;
-            return;
-        }
-
-        // Only re-align if selectedImagePath actually changed (not just displayImages reference)
-        if (lastSelectedImagePathRef.current === selectedImagePath) {
-            console.log('[ImageViewer] ALIGN: Skipping - same path', selectedImagePath?.slice(-30));
-            return;
-        }
-        console.log('[ImageViewer] ALIGN: Path changed from', lastSelectedImagePathRef.current?.slice(-30), 'to', selectedImagePath?.slice(-30));
-        lastSelectedImagePathRef.current = selectedImagePath;
-
-        const selectedRawPath = extractRawPath(selectedImagePath);
-        const idx = displayImages.findIndex((img) => {
-            const imgRawPath = extractRawPath(img.path);
-            return imgRawPath === selectedRawPath || img.path === selectedImagePath;
-        });
-        if (idx >= 0) {
-            console.log('[ImageViewer] ALIGN: Setting index to', idx);
-            setSelectedIndex(idx);
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [displayImages, selectedImagePath, extractRawPath]);
-
-    const currentImage = displayImages[selectedIndex];
+    // Determine current image based on mode
+    const currentImage = navigationMode
+        ? displayImages[selectedIndex]
+        : (lockedImage || displayImages[0]);
     const imagePath = currentImage?.path;
 
     // State for PNG-sourced metadata (fetched from the image file itself)
@@ -215,9 +191,14 @@ export const ImageViewer = React.memo(function ImageViewer({
     // Track displayImages length in a ref for keyboard navigation
     const displayImagesLengthRef = React.useRef(displayImages.length);
     React.useEffect(() => {
-        console.log('[ImageViewer] displayImages.length updated:', displayImages.length, 'images prop length:', images.length);
         displayImagesLengthRef.current = displayImages.length;
-    }, [displayImages.length, images.length]);
+    }, [displayImages.length]);
+
+    // Ref for enterNavigationMode to use in keyboard handler
+    const enterNavigationModeRef = React.useRef(enterNavigationMode);
+    React.useEffect(() => {
+        enterNavigationModeRef.current = enterNavigationMode;
+    }, [enterNavigationMode]);
 
     // Keyboard Shortcuts
     React.useEffect(() => {
@@ -230,12 +211,17 @@ export const ImageViewer = React.memo(function ImageViewer({
                 return;
             }
 
-            const maxIndex = displayImagesLengthRef.current - 1;
-            if (e.key === "ArrowLeft") {
-                setSelectedIndex(prev => Math.max(0, prev - 1));
-            }
-            if (e.key === "ArrowRight") {
-                setSelectedIndex(prev => Math.min(maxIndex, prev + 1));
+            if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+                // Enter navigation mode first (aligns index to current image)
+                enterNavigationModeRef.current();
+
+                const maxIndex = displayImagesLengthRef.current - 1;
+                if (e.key === "ArrowLeft") {
+                    setSelectedIndex(prev => Math.max(0, prev - 1));
+                }
+                if (e.key === "ArrowRight") {
+                    setSelectedIndex(prev => Math.min(maxIndex, prev + 1));
+                }
             }
         };
         window.addEventListener("keydown", handleKeyDown);
@@ -427,7 +413,8 @@ export const ImageViewer = React.memo(function ImageViewer({
         return pathStr;
     };
 
-    if (!displayImages || displayImages.length === 0) {
+    // Show empty state only if no image to display at all
+    if (!currentImage) {
         return (
             <div className="h-full flex items-center justify-center bg-slate-100 text-slate-400">
                 Select a job or image to view
@@ -450,14 +437,19 @@ export const ImageViewer = React.memo(function ImageViewer({
                     onContextMenu={handleContextMenu}
                 >
                     {/* (Image Area Content Omitted for Brevity - Unchanged) */}
-                    {displayImages.length > 1 && (
+                    {/* Show navigation arrows when in navigation mode or when there are multiple images */}
+                    {(navigationMode || displayImages.length > 1) && displayImages.length > 0 && (
                         <>
                             <Button
                                 variant="ghost"
                                 size="icon"
                                 className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/50 hover:bg-white/80 rounded-full"
-                                onClick={(e) => { e.stopPropagation(); setSelectedIndex(p => Math.max(0, p - 1)); }}
-                                disabled={selectedIndex === 0}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    enterNavigationMode();
+                                    setSelectedIndex(p => Math.max(0, p - 1));
+                                }}
+                                disabled={navigationMode && selectedIndex === 0}
                             >
                                 <ArrowLeft className="w-5 h-5 text-slate-800" />
                             </Button>
@@ -465,8 +457,12 @@ export const ImageViewer = React.memo(function ImageViewer({
                                 variant="ghost"
                                 size="icon"
                                 className="absolute right-4 top-1/2 -translate-y-1/2 bg-white/50 hover:bg-white/80 rounded-full"
-                                onClick={(e) => { e.stopPropagation(); setSelectedIndex(p => Math.min(displayImages.length - 1, p + 1)); }}
-                                disabled={selectedIndex === displayImages.length - 1}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    enterNavigationMode();
+                                    setSelectedIndex(p => Math.min(displayImages.length - 1, p + 1));
+                                }}
+                                disabled={navigationMode && selectedIndex === displayImages.length - 1}
                             >
                                 <ArrowRight className="w-5 h-5 text-slate-800" />
                             </Button>

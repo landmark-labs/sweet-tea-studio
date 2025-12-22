@@ -1160,6 +1160,19 @@ export default function PromptStudio() {
           setPreviewPath(null);
           // Clear ProjectGallery images so navigation uses the updated galleryImages
           setProjectGalleryImages([]);
+
+          // Optimistically add new image to galleryImages immediately
+          // This ensures index 0 has the new image when resetKey effect runs
+          const newGalleryItem: GalleryItem = {
+            image: data.images[0],
+            job_params: params,
+            prompt: mainPrompt,
+            negative_prompt: data.negative_prompt,
+            prompt_history: [],
+            workflow_template_id: selectedWorkflow?.id,
+            created_at: new Date().toISOString(),
+          };
+          setGalleryImages(prev => [newGalleryItem, ...prev]);
         } else {
           updateFeed(lastJobId, { status: "completed", progress: 100, previewBlob: null });
         }
