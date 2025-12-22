@@ -67,9 +67,16 @@ const FieldRenderer = React.memo(function FieldRenderer({
     destinationFolder,
 }: FieldRendererProps) {
     const value = useAtomValue(formFieldAtom(fieldKey));
-    const isImageUpload = field.widget === "upload" || field.widget === "image_upload" || (field.title && field.title.includes("LoadImage"));
+    const isMediaUpload = field.widget === "upload"
+        || field.widget === "image_upload"
+        || field.widget === "media_upload"
+        || (field.title && field.title.includes("LoadImage"));
 
-    if (isImageUpload) {
+    if (isMediaUpload) {
+        const mediaKind = field.widget === "media_upload" && typeof field.x_media_kind === "string"
+            ? field.x_media_kind
+            : "image";
+
         return (
             <div className="space-y-2">
                 <Label htmlFor={fieldKey}>{field.title || fieldKey}</Label>
@@ -80,6 +87,7 @@ const FieldRenderer = React.memo(function FieldRenderer({
                     options={field.enum}
                     projectSlug={projectSlug}
                     destinationFolder={destinationFolder}
+                    mediaKind={mediaKind}
                 />
             </div>
         );
@@ -547,16 +555,19 @@ export const DynamicForm = React.memo(function DynamicForm({
                 };
             }
 
-            const isImageUpload = field.widget === "upload" || field.widget === "image_upload" || (field.title && field.title.includes("LoadImage"));
-            if (isImageUpload) {
+            const isMediaUpload = field.widget === "upload"
+                || field.widget === "image_upload"
+                || field.widget === "media_upload"
+                || (field.title && field.title.includes("LoadImage"));
+            if (isMediaUpload) {
                 return {
                     key,
                     section: "inputs",
                     groupId: "inputs",
-                    groupTitle: field.title || "Input Images",
+                    groupTitle: field.title || (field.widget === "media_upload" ? "Input Media" : "Input Images"),
                     order: nodeOrderPosition ?? parseOrder(field.x_node_id, 0),
                     source: "heuristic",
-                    reason: "image_upload"
+                    reason: "media_upload"
                 };
             }
 

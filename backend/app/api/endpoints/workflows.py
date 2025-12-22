@@ -1,5 +1,6 @@
 import hashlib
 import json
+import os
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException
@@ -77,6 +78,41 @@ class WorkflowImportRequest(BaseModel):
     data: Dict[str, Any]
     name: Optional[str] = None
     description: Optional[str] = None
+
+
+MEDIA_KIND_BY_TYPE = {
+    "IMAGE": "image",
+    "MASK": "image",
+    "VIDEO": "video",
+}
+IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tif", ".tiff"}
+VIDEO_EXTENSIONS = {".mp4", ".webm", ".mov", ".mkv", ".avi"}
+
+
+def _infer_media_kind(val_type: Any, config: Optional[Dict[str, Any]]) -> Optional[str]:
+    if isinstance(val_type, str):
+        kind = MEDIA_KIND_BY_TYPE.get(val_type.upper())
+        if kind:
+            return kind
+
+    if isinstance(config, dict):
+        config_type = config.get("type") or config.get("input_type") or config.get("media_type")
+        if isinstance(config_type, str):
+            kind = MEDIA_KIND_BY_TYPE.get(config_type.upper())
+            if kind:
+                return kind
+
+    if isinstance(val_type, list):
+        for entry in val_type:
+            if not isinstance(entry, str):
+                continue
+            ext = os.path.splitext(entry)[1].lower()
+            if ext in IMAGE_EXTENSIONS:
+                return "image"
+            if ext in VIDEO_EXTENSIONS:
+                return "video"
+
+    return None
 
 
 def generate_schema_from_graph(graph: Dict[str, Any], object_info: Dict[str, Any]) -> Dict[str, Any]:
@@ -165,6 +201,21 @@ def generate_schema_from_graph(graph: Dict[str, Any], object_info: Dict[str, Any
                 "x_instance": count,
             }
             
+            media_kind = _infer_media_kind(val_type, config)
+            if media_kind:
+                schema[field_key] = {
+                    "type": "string",
+                    "title": f"{input_name} ({class_type}{'' if count == 1 else f' #{node_id}'})",
+                    "default": current_val if current_val is not None else "",
+                    "widget": "media_upload",
+                    "x_media_kind": media_kind,
+                    **base_field,
+                }
+                if isinstance(val_type, list):
+                    schema[field_key]["enum"] = val_type
+                fields_added = True
+                continue
+
             # Simple mapping logic
             if val_type == "INT":
                 # Special case: Allow -1 for seed fields (randomize on each run)
@@ -206,26 +257,14 @@ def generate_schema_from_graph(graph: Dict[str, Any], object_info: Dict[str, Any
                 fields_added = True
             elif isinstance(val_type, list):
                 # Enum
-                # Special case for LoadImage nodes
-                if class_type == "LoadImage" and input_name == "image":
-                    schema[field_key] = {
-                        "type": "string",
-                        "title": f"Image ({class_type}{'' if count == 1 else f' #{node_id}'})",
-                        "default": current_val if current_val is not None else (val_type[0] if val_type else ""),
-                        "widget": "image_upload", # Force specialized widget
-                        "enum": val_type, # Pass available files as options
-                        **base_field,
-                    }
-                    fields_added = True
-                else:
-                    schema[field_key] = {
-                        "type": "string",
-                        "title": f"{input_name} ({class_type}{'' if count == 1 else f' #{node_id}'})",
-                        "default": current_val if current_val is not None else val_type[0],
-                        "enum": val_type,
-                        **base_field,
-                    }
-                    fields_added = True
+                schema[field_key] = {
+                    "type": "string",
+                    "title": f"{input_name} ({class_type}{'' if count == 1 else f' #{node_id}'})",
+                    "default": current_val if current_val is not None else (val_type[0] if val_type else ""),
+                    "enum": val_type,
+                    **base_field,
+                }
+                fields_added = True
 
         if not fields_added and node_meta[node_id]["skipped"] is None:
             node_meta[node_id]["skipped"] = "no_exposed_inputs"

@@ -227,25 +227,55 @@ export function findPromptFieldsInSchema(
  * Find schema fields that are image uploads (LoadImage nodes).
  * Used to map source images to the correct form fields in a workflow.
  */
-export function findImageFieldsInSchema(
-    schema: Record<string, { widget?: string; title?: string;[k: string]: unknown }>
+export type MediaKind = "image" | "video";
+
+const resolveMediaKind = (field: { x_media_kind?: unknown }): MediaKind | null => {
+    if (typeof field.x_media_kind !== "string") {
+        return null;
+    }
+    const normalized = field.x_media_kind.toLowerCase();
+    if (normalized === "image" || normalized === "video") {
+        return normalized;
+    }
+    return null;
+};
+
+export function findMediaFieldsInSchema(
+    schema: Record<string, { widget?: string; title?: string; x_media_kind?: unknown;[k: string]: unknown }>,
+    kind: MediaKind = "image"
 ): string[] {
-    const imageFields: string[] = [];
+    const mediaFields: string[] = [];
 
     for (const [key, field] of Object.entries(schema)) {
         if (key.startsWith("__")) continue;
 
+        const resolvedKind = resolveMediaKind(field);
+        if (resolvedKind && resolvedKind !== kind) {
+            continue;
+        }
+
+        if (!resolvedKind && kind === "video") {
+            continue;
+        }
+
         const lowerKey = key.toLowerCase();
-        const isImageUpload =
+        const isMediaUpload =
             field.widget === "upload" ||
             field.widget === "image_upload" ||
+            field.widget === "media_upload" ||
             lowerKey.includes("loadimage") ||
             (field.title && field.title.toLowerCase().includes("loadimage"));
 
-        if (isImageUpload) {
-            imageFields.push(key);
+        if (isMediaUpload) {
+            mediaFields.push(key);
         }
     }
 
-    return imageFields;
+    return mediaFields;
+}
+
+export function findImageFieldsInSchema(
+    schema: Record<string, { widget?: string; title?: string; x_media_kind?: unknown;[k: string]: unknown }>
+): string[] {
+    return findMediaFieldsInSchema(schema, "image");
 }

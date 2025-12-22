@@ -549,7 +549,7 @@ export const api = {
         return res.json();
     },
 
-    uploadFile: async (file: File, engineId?: number, projectSlug?: string, subfolder?: string): Promise<{ filename: string; path: string }> => {
+    uploadFile: async (file: File, engineId?: number, projectSlug?: string, subfolder?: string): Promise<{ filename: string; path: string; mime_type?: string; size_bytes?: number }> => {
         const formData = new FormData();
         formData.append("file", file);
         if (engineId) formData.append("engine_id", String(engineId));

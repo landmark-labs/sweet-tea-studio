@@ -4,12 +4,65 @@ from app.db.database import get_session
 from app.models.engine import Engine
 from app.models.project import Project
 from app.core.config import settings
-import shutil
+import mimetypes
 import os
-import uuid
 from typing import Optional
 
 router = APIRouter()
+
+DEFAULT_MAX_UPLOAD_BYTES = 100 * 1024 * 1024
+try:
+    MAX_UPLOAD_BYTES = int(os.getenv("SWEET_TEA_UPLOAD_MAX_BYTES", str(DEFAULT_MAX_UPLOAD_BYTES)))
+except ValueError:
+    MAX_UPLOAD_BYTES = DEFAULT_MAX_UPLOAD_BYTES
+
+ALLOWED_IMAGE_MIME = {
+    "image/png",
+    "image/jpeg",
+    "image/webp",
+    "image/gif",
+    "image/bmp",
+    "image/tiff",
+}
+ALLOWED_VIDEO_MIME = {
+    "video/mp4",
+    "video/webm",
+    "video/quicktime",
+    "video/x-matroska",
+    "video/x-msvideo",
+}
+ALLOWED_UPLOAD_MIME = ALLOWED_IMAGE_MIME | ALLOWED_VIDEO_MIME
+ALLOWED_UPLOAD_EXT = {
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".webp",
+    ".gif",
+    ".bmp",
+    ".tif",
+    ".tiff",
+    ".mp4",
+    ".webm",
+    ".mov",
+    ".mkv",
+    ".avi",
+}
+
+
+def _resolve_mime_type(file: UploadFile, filename: str) -> str:
+    content_type = (file.content_type or "").lower().strip()
+    if content_type:
+        return content_type
+    guessed = mimetypes.guess_type(filename)[0]
+    return (guessed or "application/octet-stream").lower()
+
+
+def _validate_upload(filename: str, mime_type: str) -> None:
+    ext = os.path.splitext(filename)[1].lower()
+    allowed_by_ext = ext in ALLOWED_UPLOAD_EXT
+    allowed_by_mime = mime_type in ALLOWED_UPLOAD_MIME
+    if not allowed_by_ext and not allowed_by_mime:
+        raise HTTPException(status_code=400, detail="Unsupported file type.")
 
 @router.post("/upload")
 def upload_file(
@@ -61,14 +114,37 @@ def upload_file(
     # Generate filename with timestamp prefix for temporal sorting
     from datetime import datetime
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    filename = f"{timestamp}_{file.filename}"
+    safe_name = os.path.basename(file.filename) if file.filename else "upload"
+    filename = f"{timestamp}_{safe_name}"
     file_path = os.path.join(target_dir, filename)
 
     try:
+        mime_type = _resolve_mime_type(file, safe_name)
+        _validate_upload(safe_name, mime_type)
+
+        bytes_written = 0
         with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+            while True:
+                chunk = file.file.read(1024 * 1024)
+                if not chunk:
+                    break
+                bytes_written += len(chunk)
+                if bytes_written > MAX_UPLOAD_BYTES:
+                    raise HTTPException(status_code=413, detail="File exceeds the maximum upload size.")
+                buffer.write(chunk)
+    except HTTPException:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        raise
     except Exception as e:
+        if os.path.exists(file_path):
+            os.remove(file_path)
         raise HTTPException(status_code=500, detail=f"Failed to save file: {str(e)}")
+    finally:
+        try:
+            file.file.close()
+        except Exception:
+            pass
 
     # Return ComfyUI-compatible filename
     # For project uploads, LoadImage needs: "<project>/<subfolder>/<filename>" or "<project>/<filename>"
@@ -80,7 +156,12 @@ def upload_file(
     else:
         comfy_filename = filename
 
-    return {"filename": comfy_filename, "path": file_path}
+    return {
+        "filename": comfy_filename,
+        "path": file_path,
+        "mime_type": mime_type,
+        "size_bytes": bytes_written,
+    }
 
 @router.get("/tree")
 def get_file_tree(

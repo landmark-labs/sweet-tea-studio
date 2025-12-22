@@ -1502,10 +1502,8 @@ export default function PromptStudio() {
 
         const targetSchema = workflows.find(w => String(w.id) === workflowId)?.input_schema;
         if (targetSchema) {
-          const imageFieldKey = Object.keys(targetSchema).find(key => {
-            const f = targetSchema[key];
-            return f.widget === "upload" || f.widget === "image_upload" || (f.title && f.title.includes("LoadImage"));
-          });
+          const imageFields = findImageFieldsInSchema(targetSchema);
+          const imageFieldKey = imageFields[0];
 
           if (imageFieldKey) {
             // Use the standardized persistence key to ensure this image selection survives reloads

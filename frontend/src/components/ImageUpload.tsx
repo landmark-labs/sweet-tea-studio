@@ -15,11 +15,42 @@ interface ImageUploadProps {
     options?: string[]; // List of available files from ComfyUI
     projectSlug?: string; // If provided, uploads go to /ComfyUI/input/<project>/
     destinationFolder?: string; // If provided with projectSlug, uploads go to /ComfyUI/input/<project>/<folder>/
+    mediaKind?: "image" | "video" | "any";
 }
 
-export function ImageUpload({ value, onChange, engineId, options = [], projectSlug, destinationFolder }: ImageUploadProps) {
+const IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tif", ".tiff"]);
+const VIDEO_EXTENSIONS = new Set([".mp4", ".webm", ".mov", ".mkv", ".avi"]);
+
+const getExtension = (name: string) => {
+    const dot = name.lastIndexOf(".");
+    return dot >= 0 ? name.slice(dot).toLowerCase() : "";
+};
+
+const guessKindFromFilename = (name: string) => {
+    const ext = getExtension(name);
+    if (VIDEO_EXTENSIONS.has(ext)) return "video";
+    if (IMAGE_EXTENSIONS.has(ext)) return "image";
+    return null;
+};
+
+const detectFileKind = (file: File) => {
+    if (file.type.startsWith("video/")) return "video";
+    if (file.type.startsWith("image/")) return "image";
+    return guessKindFromFilename(file.name);
+};
+
+export function ImageUpload({
+    value,
+    onChange,
+    engineId,
+    options = [],
+    projectSlug,
+    destinationFolder,
+    mediaKind = "image",
+}: ImageUploadProps) {
     const [isUploading, setIsUploading] = useState(false);
     const [preview, setPreview] = useState<string | null>(null);
+    const [previewKind, setPreviewKind] = useState<"image" | "video" | null>(null);
     const [isDragging, setIsDragging] = useState(false);
     const [isBrowseOpen, setIsBrowseOpen] = useState(false);
     const [recent, setRecent] = useState<string[]>([]);
@@ -50,6 +81,13 @@ export function ImageUpload({ value, onChange, engineId, options = [], projectSl
     }, []);
 
     useEffect(() => {
+        const currentKind = previewKind || (value ? guessKindFromFilename(value) : null);
+        if (currentKind === "video" && isMaskEditorOpen) {
+            setIsMaskEditorOpen(false);
+        }
+    }, [previewKind, value, isMaskEditorOpen]);
+
+    useEffect(() => {
         // Load recent form local storage
         try {
             const history = JSON.parse(localStorage.getItem("ds_recent_images") || "[]");
@@ -76,9 +114,20 @@ export function ImageUpload({ value, onChange, engineId, options = [], projectSl
     };
 
     const processFile = async (file: File) => {
+        const fileKind = detectFileKind(file);
+        if (mediaKind === "image" && fileKind === "video") {
+            console.warn("Video uploads are not allowed for this field.");
+            return;
+        }
+        if (mediaKind === "video" && fileKind === "image") {
+            console.warn("Image uploads are not allowed for this field.");
+            return;
+        }
+
         // Create local preview
         const objectUrl = URL.createObjectURL(file);
         setPreview(objectUrl);
+        setPreviewKind(fileKind || (mediaKind === "video" ? "video" : "image"));
 
         setIsUploading(true);
         try {
@@ -153,6 +202,7 @@ export function ImageUpload({ value, onChange, engineId, options = [], projectSl
                 console.log(`[ImageUpload] Using existing input path: ${relativePath}`);
                 onChange(relativePath);
                 addToRecent(relativePath);
+                setPreviewKind(guessKindFromFilename(relativePath));
 
                 // Set preview from the original path
                 const previewUrl = `/api/v1/gallery/image/path?path=${encodeURIComponent(sweetTeaPath)}`;
@@ -204,10 +254,12 @@ export function ImageUpload({ value, onChange, engineId, options = [], projectSl
         addToRecent(filename);
         setIsBrowseOpen(false);
         setPreview(null); // Clear local preview forcing usage of filename
+        setPreviewKind(guessKindFromFilename(filename));
     };
 
     const clear = () => {
         setPreview(null);
+        setPreviewKind(null);
         onChange("");
     };
 
@@ -248,8 +300,14 @@ export function ImageUpload({ value, onChange, engineId, options = [], projectSl
         ? recent.filter(r => options.includes(r))
         : recent).slice(0, 5);
 
-    // Calculate current image URL for editor
-    const currentImageUrl = preview || (value ? `/api/v1/gallery/image/path?path=${encodeURIComponent(value)}` : "");
+    const accept = mediaKind === "video" ? "video/*" : mediaKind === "any" ? "image/*,video/*" : "image/*";
+    const browseTitle = mediaKind === "video" ? "Browse Videos" : mediaKind === "any" ? "Browse Media" : "Browse Images";
+    const resolvedKind = previewKind || (value ? guessKindFromFilename(value) : null) || (mediaKind === "video" ? "video" : "image");
+    const isVideoPreview = resolvedKind === "video";
+
+    // Calculate current media URL for editor
+    const currentMediaUrl = preview || (value ? `/api/v1/gallery/image/path?path=${encodeURIComponent(value)}` : "");
+    const currentImageUrl = isVideoPreview ? "" : currentMediaUrl;
 
     return (
         <div className="space-y-3">
@@ -284,7 +342,7 @@ export function ImageUpload({ value, onChange, engineId, options = [], projectSl
                         id="file-upload"
                         type="file"
                         className="hidden"
-                        accept="image/*"
+                        accept={accept}
                         onChange={handleFileChange}
                     />
 
@@ -353,28 +411,43 @@ export function ImageUpload({ value, onChange, engineId, options = [], projectSl
                     )}
 
                     {/* If we have a preview (local blob) use it, otherwise use API path */}
-                    <img
-                        src={currentImageUrl}
-                        alt="Input"
-                        className="w-full h-full object-contain pointer-events-none"
-                        draggable={false}
-                        onError={(e) => {
-                            // Fallback if image load fails
-                            (e.target as HTMLImageElement).src = "";
-                        }}
-                    />
+                    {isVideoPreview ? (
+                        <video
+                            src={currentMediaUrl}
+                            className="w-full h-full object-contain"
+                            preload="metadata"
+                            controls
+                            playsInline
+                            onError={(e) => {
+                                (e.target as HTMLVideoElement).src = "";
+                            }}
+                        />
+                    ) : (
+                        <img
+                            src={currentMediaUrl}
+                            alt="Input"
+                            className="w-full h-full object-contain pointer-events-none"
+                            draggable={false}
+                            onError={(e) => {
+                                // Fallback if image load fails
+                                (e.target as HTMLImageElement).src = "";
+                            }}
+                        />
+                    )}
 
                     {/* Actions Overlay */}
                     <div className="absolute top-2 right-2 flex gap-1 z-20">
                         {/* Mask Editor Trigger */}
-                        <button
-                            type="button"
-                            onClick={() => setIsMaskEditorOpen(true)}
-                            className="bg-white/90 text-slate-700 p-1.5 rounded-full shadow hover:bg-blue-50 hover:text-blue-600 transition-colors"
-                            title="Draw Mask (In-Painting)"
-                        >
-                            <PenTool className="w-4 h-4" />
-                        </button>
+                        {!isVideoPreview && (
+                            <button
+                                type="button"
+                                onClick={() => setIsMaskEditorOpen(true)}
+                                className="bg-white/90 text-slate-700 p-1.5 rounded-full shadow hover:bg-blue-50 hover:text-blue-600 transition-colors"
+                                title="Draw Mask (In-Painting)"
+                            >
+                                <PenTool className="w-4 h-4" />
+                            </button>
+                        )}
 
                         <button
                             type="button"
@@ -395,7 +468,7 @@ export function ImageUpload({ value, onChange, engineId, options = [], projectSl
             <Dialog open={isBrowseOpen} onOpenChange={setIsBrowseOpen}>
                 <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col">
                     <DialogHeader>
-                        <DialogTitle>Browse Images</DialogTitle>
+                        <DialogTitle>{browseTitle}</DialogTitle>
                     </DialogHeader>
 
                     <div className="flex-1 min-h-[400px] flex flex-col gap-4">
