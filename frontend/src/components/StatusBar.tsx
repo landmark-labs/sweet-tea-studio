@@ -3,7 +3,7 @@
  * Displays system health indicators at the bottom of the app
  * Includes ComfyUI connection state and launch button
  */
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { getApiBase } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { labels } from "@/ui/labels";
@@ -110,7 +110,7 @@ function StatusPill({ label, status, extraInfo, onClick, actionLabel, actionLoad
     );
 }
 
-export function StatusBar({ collapsed }: { collapsed?: boolean }) {
+export const StatusBar = React.memo(function StatusBar({ collapsed }: { collapsed?: boolean }) {
     const [status, setStatus] = useState<StatusSummary | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isLaunching, setIsLaunching] = useState(false);
@@ -280,4 +280,4 @@ export function StatusBar({ collapsed }: { collapsed?: boolean }) {
             />
         </div>
     );
-}
+});

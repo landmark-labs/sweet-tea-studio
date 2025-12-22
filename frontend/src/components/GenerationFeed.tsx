@@ -1,3 +1,4 @@
+import React from "react";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -26,7 +27,7 @@ interface GenerationFeedProps {
   onGenerate?: () => void;
 }
 
-export function GenerationFeed({ items, onSelectPreview, onGenerate }: GenerationFeedProps) {
+export const GenerationFeed = React.memo(function GenerationFeed({ items, onSelectPreview, onGenerate }: GenerationFeedProps) {
   const activeItem = items[0];
 
   // Format stats for display
@@ -152,4 +153,4 @@ export function GenerationFeed({ items, onSelectPreview, onGenerate }: Generatio
       )}
     </div>
   );
-}
+});

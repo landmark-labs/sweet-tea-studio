@@ -12,7 +12,7 @@ interface ProjectGalleryProps {
     onSelectImage?: (imagePath: string) => void;
 }
 
-export function ProjectGallery({ projects, className, onSelectImage }: ProjectGalleryProps) {
+export const ProjectGallery = React.memo(function ProjectGallery({ projects, className, onSelectImage }: ProjectGalleryProps) {
     // Panel state - persisted
     const [collapsed, setCollapsed] = useState(() => {
         const saved = localStorage.getItem("ds_project_gallery_collapsed");
@@ -394,4 +394,4 @@ export function ProjectGallery({ projects, className, onSelectImage }: ProjectGa
             )}
         </div>
     );
-}
+});

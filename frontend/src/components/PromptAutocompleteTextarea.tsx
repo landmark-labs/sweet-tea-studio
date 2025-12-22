@@ -267,8 +267,8 @@ export function PromptAutocompleteTextarea({
         };
 
         updateRect();
-        window.addEventListener("resize", updateRect);
-        window.addEventListener("scroll", updateRect, true);
+        window.addEventListener("resize", updateRect, { passive: true });
+        window.addEventListener("scroll", updateRect, { capture: true, passive: true });
         return () => {
             window.removeEventListener("resize", updateRect);
             window.removeEventListener("scroll", updateRect, true);

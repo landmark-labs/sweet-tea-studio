@@ -20,7 +20,7 @@ interface ImageViewerProps {
     selectedImagePath?: string;
 }
 
-export function ImageViewer({
+export const ImageViewer = React.memo(function ImageViewer({
     images,
     galleryItems,
     metadata,
@@ -711,4 +711,4 @@ export function ImageViewer({
             </div>
         </>
     );
-}
+});
