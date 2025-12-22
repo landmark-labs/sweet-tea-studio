@@ -224,7 +224,12 @@ def read_gallery(
     scored_items: List[tuple[float, GalleryItem]] = []
     missing_ids: List[int] = []
     for img, job, prompt, workflow in results:
-        if img.path and isinstance(img.path, str) and not os.path.exists(img.path):
+        file_exists = img.file_exists
+        if file_exists is None and img.path and isinstance(img.path, str):
+            file_exists = os.path.exists(img.path)
+            img.file_exists = file_exists
+            session.add(img)
+        if file_exists is False:
             img.is_deleted = True
             img.deleted_at = datetime.utcnow()
             session.add(img)
@@ -313,20 +318,20 @@ def read_gallery(
             "created_at": img.created_at,
         }
 
-        # Get image dimensions
-        img_width = None
-        img_height = None
-        # Try from job params first (EmptyLatentImage or similar)
+        # Get image dimensions (prefer stored values, fallback to job params)
+        img_width = img.width
+        img_height = img.height
         if isinstance(params, dict):
-            img_width = params.get("width") or params.get("empty_latent_width")
-            img_height = params.get("height") or params.get("empty_latent_height")
-        # Fallback to reading from actual image file
-        if (not img_width or not img_height) and img.path and os.path.exists(img.path):
-            try:
-                with PILImage.open(img.path) as pil_img:
-                    img_width, img_height = pil_img.size
-            except Exception:
-                pass
+            if not img_width:
+                img_width = params.get("width") or params.get("empty_latent_width")
+            if not img_height:
+                img_height = params.get("height") or params.get("empty_latent_height")
+        if img.width is None and img_width:
+            img.width = img_width
+            session.add(img)
+        if img.height is None and img_height:
+            img.height = img_height
+            session.add(img)
 
         item = GalleryItem(
             image=image_payload,

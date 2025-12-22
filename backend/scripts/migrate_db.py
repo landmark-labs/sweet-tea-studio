@@ -90,6 +90,24 @@ def migrate():
             cursor.execute("ALTER TABLE image ADD COLUMN extra_metadata JSON DEFAULT NULL")
             conn.commit()
             print("Migration successful: Added extra_metadata column.")
+
+        if "width" not in columns:
+            print("Adding width column to image table...")
+            cursor.execute("ALTER TABLE image ADD COLUMN width INTEGER DEFAULT NULL")
+            conn.commit()
+            print("Migration successful: Added width column.")
+
+        if "height" not in columns:
+            print("Adding height column to image table...")
+            cursor.execute("ALTER TABLE image ADD COLUMN height INTEGER DEFAULT NULL")
+            conn.commit()
+            print("Migration successful: Added height column.")
+
+        if "file_exists" not in columns:
+            print("Adding file_exists column to image table...")
+            cursor.execute("ALTER TABLE image ADD COLUMN file_exists BOOLEAN DEFAULT NULL")
+            conn.commit()
+            print("Migration successful: Added file_exists column.")
             
             
     except Exception as e:

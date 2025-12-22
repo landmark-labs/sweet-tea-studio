@@ -8,6 +8,9 @@ class ImageBase(SQLModel):
     path: str
     filename: str
     format: str = "png"
+    width: Optional[int] = Field(default=None, index=True)
+    height: Optional[int] = Field(default=None, index=True)
+    file_exists: Optional[bool] = Field(default=None, index=True)
     thumbnail_path: Optional[str] = None
     thumbnail_data: Optional[bytes] = Field(default=None, sa_column=Column(LargeBinary))  # Inline JPEG thumbnail for DB portability
     is_kept: bool = Field(default=False)

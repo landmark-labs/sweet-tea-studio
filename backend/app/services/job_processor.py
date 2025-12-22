@@ -171,25 +171,26 @@ def apply_params_to_graph(graph: dict, mapping: dict, params: dict):
                 current[field_path[-1]] = value
 
 
-def _create_thumbnail(image_path: str, max_px: int = 256, quality: int = 45) -> bytes | None:
+def _create_thumbnail(image_path: str, max_px: int = 256, quality: int = 45) -> tuple[bytes | None, int | None, int | None]:
     """
     Generate a compact JPEG thumbnail suitable for inline DB storage.
-    Returns the thumbnail as bytes, or None if generation fails.
+    Returns (thumbnail_bytes, width, height).
     Typically produces thumbnails of 5-15KB for 256px max dimension.
     """
     import io
     try:
         from PIL import Image as PILImage
         with PILImage.open(image_path) as img:
+            width, height = img.size
             img.thumbnail((max_px, max_px))
             if img.mode in ("RGBA", "P"):
                 img = img.convert("RGB")
             buf = io.BytesIO()
             img.save(buf, format="JPEG", quality=quality)
-            return buf.getvalue()
+            return buf.getvalue(), width, height
     except Exception as e:
         print(f"[Thumbnail] Failed to create thumbnail for {image_path}: {e}")
-        return None
+        return None, None, None
 
 
 def _process_single_image(
@@ -753,19 +754,30 @@ def process_job(job_id: int):
                 k: v for k, v in working_params.items() 
                 if k != "metadata" and not k.startswith("__")
             }
+
+            param_width = None
+            param_height = None
+            if isinstance(working_params, dict):
+                param_width = working_params.get("width") or working_params.get("empty_latent_width")
+                param_height = working_params.get("height") or working_params.get("empty_latent_height")
             
             # Create database records for each VERIFIED image (file confirmed on disk)
             for full_path, final_filename, idx in verified_results:
                 image_format = os.path.splitext(final_filename)[1].lstrip(".").lower() or "png"
                 
                 # Generate inline thumbnail for DB portability (allows viewing prompts without image files)
-                thumb_data = _create_thumbnail(full_path)
+                thumb_data, thumb_width, thumb_height = _create_thumbnail(full_path)
+                img_width = thumb_width or param_width
+                img_height = thumb_height or param_height
                 
                 new_image = Image(
                     job_id=job_id,
                     path=full_path,
                     filename=final_filename,
                     format=image_format,
+                    width=img_width,
+                    height=img_height,
+                    file_exists=True,
                     thumbnail_data=thumb_data,
                     extra_metadata=image_metadata,
                     is_kept=False

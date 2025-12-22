@@ -34,7 +34,7 @@ Targets: P95 input-to-paint < 50ms for ~2000-char prompts, 60fps during snippet 
 [x] Reduce large prop churn in PromptStudio (memoized subcomponents).
 
 ## Phase 4 - Backend perf
-[ ] Persist width/height and file-exists at ingest time (avoid per-request IO).
+[x] Persist width/height and file-exists at ingest time (avoid per-request IO).
 [ ] Add gallery indexes / FTS for search.
 [ ] Cache monitoring metrics server-side (avoid per-request nvidia-smi).
 
