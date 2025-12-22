@@ -16,7 +16,7 @@ from app.services.job_processor import get_sequence_cache_stats
 
 router = APIRouter()
 _client_log_lock = threading.Lock()
-_client_log_dir = Path(__file__).parent.parent.parent / "logs"
+_client_log_dir = Path(__file__).resolve().parents[3] / "logs"
 _client_log_path = _client_log_dir / "client_diagnostics.jsonl"
 _client_log_max_mb = float(os.getenv("SWEET_TEA_CLIENT_LOG_MAX_MB", "20"))
 _client_log_enabled = os.getenv("SWEET_TEA_CLIENT_LOG_ENABLED", "true").lower() not in ("0", "false", "no")

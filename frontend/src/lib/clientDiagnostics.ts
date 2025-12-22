@@ -1,3 +1,5 @@
+import { getApiBase } from "@/lib/api";
+
 type ClientLogEntry = {
   ts: number;
   type: string;
@@ -14,7 +16,6 @@ type ClientLogEntry = {
 
 const STORAGE_ENABLED_KEY = "sts_client_diag_enabled";
 const STORAGE_SESSION_KEY = "sts_client_session_id";
-const ENDPOINT = "/api/v1/monitoring/client-logs";
 const MAX_QUEUE = 200;
 const FLUSH_INTERVAL_MS = 30000;
 const MAX_BATCH = 50;
@@ -62,16 +63,17 @@ function enqueue(entry: ClientLogEntry) {
 
 async function send(entries: ClientLogEntry[]) {
   if (!entries.length) return;
+  const endpoint = `${getApiBase()}/monitoring/client-logs`;
   const payload = JSON.stringify({ session_id: getSessionId(), entries });
 
   if (typeof navigator !== "undefined" && typeof navigator.sendBeacon === "function") {
     const blob = new Blob([payload], { type: "application/json" });
-    navigator.sendBeacon(ENDPOINT, blob);
+    navigator.sendBeacon(endpoint, blob);
     return;
   }
 
   if (typeof fetch === "function") {
-    await fetch(ENDPOINT, {
+    await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: payload,
