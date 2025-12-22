@@ -467,49 +467,52 @@ export function ImageViewer({
                                     <span className="flex items-center gap-2">use in pipe</span>
                                     <span className="text-xs">▶</span>
                                 </div>
-                                <div className="absolute left-full top-0 ml-1 hidden group-hover:block bg-white border border-slate-200 rounded-md shadow-lg py-1 w-48 max-h-64 overflow-y-auto">
-                                    {imgWorkflows.map(w => (
-                                        <div
-                                            key={w.id}
-                                            className="px-3 py-2 hover:bg-slate-100 cursor-pointer truncate"
-                                            onClick={() => {
-                                                const rawPath = resolveRawPath(imagePath);
-                                                const item = galleryItems?.find(g => g.image.path === rawPath) || galleryItems?.find(g => g.image.path === imagePath);
-                                                if (metadataLoading && !item) {
-                                                    return;
-                                                }
-                                                onUseInPipe?.({
-                                                    workflowId: String(w.id),
-                                                    imagePath: rawPath || imagePath || "",
-                                                    galleryItem: item || {
-                                                        image: currentImage as any,
-                                                        job_params: {
-                                                            ...(currentMetadata?.job_params || {}),
-                                                            prompt: currentMetadata?.prompt,
-                                                            positive: currentMetadata?.prompt,
-                                                            negative_prompt: currentMetadata?.negative_prompt,
-                                                            negative: currentMetadata?.negative_prompt,
-                                                        },
-                                                        prompt: currentMetadata?.prompt as string | undefined,
-                                                        negative_prompt: currentMetadata?.negative_prompt as string | undefined,
-                                                        prompt_history: [],
-                                                        workflow_template_id: w.id,
-                                                        created_at: currentImage?.created_at || "",
-                                                        caption: (currentMetadata as any)?.caption,
-                                                        prompt_tags: [],
-                                                        prompt_name: undefined,
-                                                        engine_id: undefined,
-                                                        collection_id: undefined,
-                                                        project_id: undefined,
+                                {/* pl-2 + -ml-1 creates an invisible hover bridge to the right for horizontal submenus */}
+                                <div className="absolute left-full top-0 pl-2 -ml-1 hidden group-hover:block">
+                                    <div className="bg-white border border-slate-200 rounded-md shadow-lg py-1 w-48 max-h-64 overflow-y-auto">
+                                        {imgWorkflows.map(w => (
+                                            <div
+                                                key={w.id}
+                                                className="px-3 py-2 hover:bg-slate-100 cursor-pointer truncate"
+                                                onClick={() => {
+                                                    const rawPath = resolveRawPath(imagePath);
+                                                    const item = galleryItems?.find(g => g.image.path === rawPath) || galleryItems?.find(g => g.image.path === imagePath);
+                                                    if (metadataLoading && !item) {
+                                                        return;
                                                     }
-                                                });
-                                                setLightboxOpen(false); // Close lightbox if selecting
-                                                setContextMenu(null);
-                                            }}
-                                        >
-                                            {w.name}
-                                        </div>
-                                    ))}
+                                                    onUseInPipe?.({
+                                                        workflowId: String(w.id),
+                                                        imagePath: rawPath || imagePath || "",
+                                                        galleryItem: item || {
+                                                            image: currentImage as any,
+                                                            job_params: {
+                                                                ...(currentMetadata?.job_params || {}),
+                                                                prompt: currentMetadata?.prompt,
+                                                                positive: currentMetadata?.prompt,
+                                                                negative_prompt: currentMetadata?.negative_prompt,
+                                                                negative: currentMetadata?.negative_prompt,
+                                                            },
+                                                            prompt: currentMetadata?.prompt as string | undefined,
+                                                            negative_prompt: currentMetadata?.negative_prompt as string | undefined,
+                                                            prompt_history: [],
+                                                            workflow_template_id: w.id,
+                                                            created_at: currentImage?.created_at || "",
+                                                            caption: (currentMetadata as any)?.caption,
+                                                            prompt_tags: [],
+                                                            prompt_name: undefined,
+                                                            engine_id: undefined,
+                                                            collection_id: undefined,
+                                                            project_id: undefined,
+                                                        }
+                                                    });
+                                                    setLightboxOpen(false); // Close lightbox if selecting
+                                                    setContextMenu(null);
+                                                }}
+                                            >
+                                                {w.name}
+                                            </div>
+                                        ))}
+                                    </div>
                                 </div>
                             </div>
                         )}
@@ -527,45 +530,48 @@ export function ImageViewer({
                                     <Button variant="outline" size="sm" className="h-7 text-xs gap-1 border-blue-200 hover:bg-blue-50 text-blue-700">
                                         use in pipe ▶
                                     </Button>
-                                    <div className="absolute left-0 top-full mt-1 hidden group-hover/wf:block bg-white border border-slate-200 rounded-md shadow-lg py-1 w-48 max-h-64 overflow-y-auto z-50">
-                                        {imgWorkflows.map(w => (
-                                            <div key={w.id} className="px-3 py-2 hover:bg-slate-100 cursor-pointer truncate text-xs" onClick={() => {
-                                                const rawPath = resolveRawPath(imagePath);
-                                                const item = galleryItems?.find(g => g.image.path === rawPath) || galleryItems?.find(g => g.image.path === imagePath);
-                                                if (metadataLoading && !item) {
-                                                    return;
-                                                }
-                                                onUseInPipe?.({
-                                                    workflowId: String(w.id),
-                                                    imagePath: rawPath || imagePath || "",
-                                                    galleryItem: item || {
-                                                        image: currentImage as any,
-                                                        job_params: {
-                                                            ...(currentMetadata?.job_params || {}),
-                                                            prompt: currentMetadata?.prompt,
-                                                            positive: currentMetadata?.prompt,
-                                                            negative_prompt: currentMetadata?.negative_prompt,
-                                                            negative: currentMetadata?.negative_prompt,
-                                                        },
-                                                        prompt: currentMetadata?.prompt as string | undefined,
-                                                        negative_prompt: currentMetadata?.negative_prompt as string | undefined,
-                                                        prompt_history: [],
-                                                        workflow_template_id: w.id,
-                                                        created_at: currentImage?.created_at || "",
-                                                        caption: (currentMetadata as any)?.caption,
-                                                        prompt_tags: [],
-                                                        prompt_name: undefined,
-                                                        engine_id: undefined,
-                                                        collection_id: undefined,
-                                                        project_id: undefined,
+                                    {/* pt-2 + -mt-2 creates an invisible hover bridge between button and menu */}
+                                    <div className="absolute left-0 top-full pt-2 -mt-1 hidden group-hover/wf:block z-50">
+                                        <div className="bg-white border border-slate-200 rounded-md shadow-lg py-1 w-48 max-h-64 overflow-y-auto">
+                                            {imgWorkflows.map(w => (
+                                                <div key={w.id} className="px-3 py-2 hover:bg-slate-100 cursor-pointer truncate text-xs" onClick={() => {
+                                                    const rawPath = resolveRawPath(imagePath);
+                                                    const item = galleryItems?.find(g => g.image.path === rawPath) || galleryItems?.find(g => g.image.path === imagePath);
+                                                    if (metadataLoading && !item) {
+                                                        return;
                                                     }
-                                                });
-                                                setLightboxOpen?.(false);
-                                                setContextMenu(null);
-                                            }}>
-                                                {w.name}
-                                            </div>
-                                        ))}
+                                                    onUseInPipe?.({
+                                                        workflowId: String(w.id),
+                                                        imagePath: rawPath || imagePath || "",
+                                                        galleryItem: item || {
+                                                            image: currentImage as any,
+                                                            job_params: {
+                                                                ...(currentMetadata?.job_params || {}),
+                                                                prompt: currentMetadata?.prompt,
+                                                                positive: currentMetadata?.prompt,
+                                                                negative_prompt: currentMetadata?.negative_prompt,
+                                                                negative: currentMetadata?.negative_prompt,
+                                                            },
+                                                            prompt: currentMetadata?.prompt as string | undefined,
+                                                            negative_prompt: currentMetadata?.negative_prompt as string | undefined,
+                                                            prompt_history: [],
+                                                            workflow_template_id: w.id,
+                                                            created_at: currentImage?.created_at || "",
+                                                            caption: (currentMetadata as any)?.caption,
+                                                            prompt_tags: [],
+                                                            prompt_name: undefined,
+                                                            engine_id: undefined,
+                                                            collection_id: undefined,
+                                                            project_id: undefined,
+                                                        }
+                                                    });
+                                                    setLightboxOpen?.(false);
+                                                    setContextMenu(null);
+                                                }}>
+                                                    {w.name}
+                                                </div>
+                                            ))}
+                                        </div>
                                     </div>
                                 </div>
                             )}
