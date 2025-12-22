@@ -497,25 +497,6 @@ export default function PromptStudio() {
     };
   }, [store]);
 
-  const handleResetDefaults = useCallback(() => {
-    if (!selectedWorkflow) return;
-    const schema = visibleSchema;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const defaults: any = {};
-    Object.keys(schema).forEach((k) => {
-      if (schema[k].default !== undefined) defaults[k] = schema[k].default;
-    });
-
-    // Clear persistence
-    localStorage.removeItem(`ds_pipe_params_${selectedWorkflow.id}`);
-
-    // Update state 
-    persistForm(defaults);
-    // Register a single history entry for reset
-    handleFormChange(defaults, { immediateHistory: true });
-    setFocusedField("");
-  }, [handleFormChange, persistForm, selectedWorkflow, visibleSchema]);
-
   const pendingHistoryRef = useRef<{ prev: any; next: any; category: "text" | "structure"; skip: boolean } | null>(null);
   const historyTimerRef = useRef<NodeJS.Timeout | null>(null);
   const MAX_TEXT_UNDO_LEN = 8000;
@@ -580,6 +561,25 @@ export default function PromptStudio() {
       historyTimerRef.current = null;
     }, 350);
   }, [focusedField, isTextField, persistForm, registerStateChange, store]);
+
+  const handleResetDefaults = useCallback(() => {
+    if (!selectedWorkflow) return;
+    const schema = visibleSchema;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const defaults: any = {};
+    Object.keys(schema).forEach((k) => {
+      if (schema[k].default !== undefined) defaults[k] = schema[k].default;
+    });
+
+    // Clear persistence
+    localStorage.removeItem(`ds_pipe_params_${selectedWorkflow.id}`);
+
+    // Update state 
+    persistForm(defaults);
+    // Register a single history entry for reset
+    handleFormChange(defaults, { immediateHistory: true });
+    setFocusedField("");
+  }, [handleFormChange, persistForm, selectedWorkflow, visibleSchema]);
 
   const handlePromptUpdate = useCallback((field: string, value: string) => {
     const currentData = store.get(formDataAtom) || {};
