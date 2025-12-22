@@ -37,33 +37,43 @@ export const ImageViewer = React.memo(function ImageViewer({
     const [contextMenu, setContextMenu] = React.useState<{ x: number, y: number } | null>(null);
     const containerRef = React.useRef<HTMLDivElement>(null);
 
+    // Helper to extract raw file path from API URL or return path as-is
+    const extractRawPath = React.useCallback((pathStr?: string | null): string => {
+        if (!pathStr) return "";
+        if (pathStr.includes('/api/') && pathStr.includes('?path=')) {
+            try {
+                const url = new URL(pathStr, window.location.origin);
+                const pathParam = url.searchParams.get('path');
+                if (pathParam) return pathParam;
+            } catch {
+                // If URL parsing fails, use as-is
+            }
+        }
+        return pathStr;
+    }, []);
 
     const displayImages = React.useMemo(() => {
-        if (selectedImagePath && !images.some((img) => img.path === selectedImagePath)) {
-            // Extract raw file path if selectedImagePath is an API URL
-            let rawFilePath = selectedImagePath;
-            let isApiUrl = false;
+        if (!selectedImagePath) return images;
 
-            if (selectedImagePath.includes('/api/') && selectedImagePath.includes('?path=')) {
-                isApiUrl = true;
-                try {
-                    const url = new URL(selectedImagePath, window.location.origin);
-                    const pathParam = url.searchParams.get('path');
-                    if (pathParam) {
-                        rawFilePath = pathParam;
-                    }
-                } catch {
-                    // If URL parsing fails, use as-is
-                }
-            }
+        // Extract raw path for comparison (works for both API URLs and raw paths)
+        const selectedRawPath = extractRawPath(selectedImagePath);
+
+        // Check if the selected image already exists in the images array
+        const existsInImages = images.some((img) => {
+            const imgRawPath = extractRawPath(img.path);
+            return imgRawPath === selectedRawPath || img.path === selectedImagePath;
+        });
+
+        if (!existsInImages) {
+            // Create synthetic image for paths not in the gallery
+            const isApiUrl = selectedImagePath.includes('/api/') && selectedImagePath.includes('?path=');
 
             const synthetic: ApiImage = {
                 id: -1,
                 job_id: -1,
                 // Store the original selectedImagePath for display purposes
-                // but use _isApiPath to signal that it's already an API URL
                 path: selectedImagePath,
-                filename: rawFilePath.split(/[\\/]/).pop() || "preview.png",
+                filename: selectedRawPath.split(/[\\/]/).pop() || "preview.png",
                 created_at: new Date().toISOString(),
                 // @ts-expect-error - custom property to flag API URLs
                 _isApiUrl: isApiUrl
@@ -71,7 +81,7 @@ export const ImageViewer = React.memo(function ImageViewer({
             return [synthetic, ...images];
         }
         return images;
-    }, [images, selectedImagePath]);
+    }, [images, selectedImagePath, extractRawPath]);
 
     // Sync selected index with images length if it changes
     React.useEffect(() => {
@@ -88,12 +98,16 @@ export const ImageViewer = React.memo(function ImageViewer({
     // the user manually navigates with arrows
     React.useEffect(() => {
         if (!selectedImagePath) return;
-        const idx = displayImages.findIndex((img) => img.path === selectedImagePath);
+        const selectedRawPath = extractRawPath(selectedImagePath);
+        const idx = displayImages.findIndex((img) => {
+            const imgRawPath = extractRawPath(img.path);
+            return imgRawPath === selectedRawPath || img.path === selectedImagePath;
+        });
         if (idx >= 0) {
             setSelectedIndex(idx);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [displayImages, selectedImagePath]);
+    }, [displayImages, selectedImagePath, extractRawPath]);
 
     const currentImage = displayImages[selectedIndex];
     const imagePath = currentImage?.path;
