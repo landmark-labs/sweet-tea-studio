@@ -8,9 +8,14 @@ Targets: P95 input-to-paint < 50ms for ~2000-char prompts, 60fps during snippet 
 [x] Log prompt input latency (input to next frame) in `frontend/src/components/PromptAutocompleteTextarea.tsx`.
 [x] Log snippet action latency (drag/add/remove) in `frontend/src/components/PromptConstructor.tsx`.
 [x] Log prompt reconciliation duration in `frontend/src/components/PromptConstructor.tsx`.
-[ ] Capture baseline P50/P95 for prompt input and snippet actions.
+[x] Capture baseline P50/P95 for prompt input and snippet actions.
 [ ] Capture React Profiler traces for PromptStudio during typing and snippet drag.
 [ ] Identify top 3 slow commits and document them here.
+
+### Baseline snapshot (client_diagnostics.jsonl)
+- perf_prompt_input_latency: n=66 min=22ms p50=130ms p90=446ms p95=702ms p99=1323ms max=1473ms
+- perf_snippet_action_latency: n=7 min=106ms p50=185ms p90=223ms p95=240ms p99=254ms max=257ms (low sample count)
+- perf_prompt_reconcile: no samples yet (needs more usage)
 
 ## Phase 1 - Jotai state isolation
 [ ] Introduce form state atoms (atomFamily) keyed by field.
