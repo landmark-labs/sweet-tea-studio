@@ -658,7 +658,7 @@ export default function PromptStudio() {
       setSelectedProjectId(loadParams.project_id ? String(loadParams.project_id) : null);
     }
 
-    setPendingLoadParams(loadParams);
+    setPendingLoadParams({ ...loadParams, __isRegenerate: false });
   };
 
 
@@ -815,15 +815,16 @@ export default function PromptStudio() {
       }
 
       // STEP 5: Handle image injection - do it directly here instead of delegating to Effect 3
-      // Prefer the original input image from job params to avoid temp uploads when possible.
+      // Regenerate prefers original input image; use-in-pipe prefers the selected output image.
       const imageFields = findImageFieldsInSchema(schema);
       console.log("[LoadParams] Found image fields:", imageFields);
 
       if (imageFields.length > 0) {
         const imageField = imageFields[0];
+        const preferJobImage = Boolean(loadParams.__isRegenerate);
 
-        // PRIORITY 1: Use original input image from job params if available
-        const jobImage = typeof jobParams[imageField] === "string" ? jobParams[imageField] as string : null;
+        // PRIORITY 1: Use original input image from job params if this is a regenerate flow.
+        const jobImage = preferJobImage && typeof jobParams[imageField] === "string" ? jobParams[imageField] as string : null;
         if (jobImage && jobImage.trim()) {
           console.log("[LoadParams] Using image from job params:", jobImage);
           baseParams[imageField] = jobImage;

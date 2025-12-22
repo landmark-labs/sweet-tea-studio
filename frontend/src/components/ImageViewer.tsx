@@ -552,9 +552,6 @@ export const ImageViewer = React.memo(function ImageViewer({
                                                 onClick={() => {
                                                     const rawPath = resolveRawPath(imagePath);
                                                     const item = galleryItems?.find(g => g.image.path === rawPath) || galleryItems?.find(g => g.image.path === imagePath);
-                                                    if (metadataLoading && !item) {
-                                                        return;
-                                                    }
                                                     onUseInPipe?.({
                                                         workflowId: String(w.id),
                                                         imagePath: rawPath || imagePath || "",
@@ -612,9 +609,6 @@ export const ImageViewer = React.memo(function ImageViewer({
                                                 <div key={w.id} className="px-3 py-2 hover:bg-slate-100 cursor-pointer truncate text-xs" onClick={() => {
                                                     const rawPath = resolveRawPath(imagePath);
                                                     const item = galleryItems?.find(g => g.image.path === rawPath) || galleryItems?.find(g => g.image.path === imagePath);
-                                                    if (metadataLoading && !item) {
-                                                        return;
-                                                    }
                                                     onUseInPipe?.({
                                                         workflowId: String(w.id),
                                                         imagePath: rawPath || imagePath || "",
