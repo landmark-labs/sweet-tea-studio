@@ -481,17 +481,32 @@ export default function PromptStudio() {
     setFocusedField("");
   };
 
-  const pendingHistoryRef = useRef<{ prev: any; next: any } | null>(null);
+  const pendingHistoryRef = useRef<{ prev: any; next: any; category: "text" | "structure"; skip: boolean } | null>(null);
   const historyTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const MAX_TEXT_UNDO_LEN = 8000;
+
+  const isTextField = (fieldKey: string) => {
+    const def = visibleSchema?.[fieldKey];
+    if (!def) return false;
+    if (def.widget === "textarea") return true;
+    return def.type === "STRING" || def.type === "string";
+  };
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleFormChange = (newData: any, { immediateHistory }: { immediateHistory?: boolean } = {}) => {
     const previous = formData;
     persistForm(newData);
+    const focusedKey = focusedField || "";
+    const textFocused = focusedKey ? isTextField(focusedKey) : false;
+    const focusedValue = textFocused ? newData[focusedKey] : null;
+    const skipUndo = textFocused && typeof focusedValue === "string" && focusedValue.length > MAX_TEXT_UNDO_LEN;
+    const category = textFocused ? "text" : "structure";
 
     // Only register undo after edits settle to avoid per-keystroke snapshots
     if (immediateHistory) {
-      registerStateChange("Form updated", previous, newData, persistForm);
+      if (!skipUndo) {
+        registerStateChange("Form updated", previous, newData, persistForm, false, category);
+      }
       if (historyTimerRef.current) {
         clearTimeout(historyTimerRef.current);
         historyTimerRef.current = null;
@@ -500,11 +515,20 @@ export default function PromptStudio() {
       return;
     }
 
-    pendingHistoryRef.current = { prev: previous, next: newData };
+    pendingHistoryRef.current = { prev: previous, next: newData, category, skip: skipUndo };
     if (historyTimerRef.current) clearTimeout(historyTimerRef.current);
     historyTimerRef.current = setTimeout(() => {
       if (pendingHistoryRef.current) {
-        registerStateChange("Form updated", pendingHistoryRef.current.prev, pendingHistoryRef.current.next, persistForm);
+        if (!pendingHistoryRef.current.skip) {
+          registerStateChange(
+            "Form updated",
+            pendingHistoryRef.current.prev,
+            pendingHistoryRef.current.next,
+            persistForm,
+            false,
+            pendingHistoryRef.current.category
+          );
+        }
         pendingHistoryRef.current = null;
       }
       historyTimerRef.current = null;

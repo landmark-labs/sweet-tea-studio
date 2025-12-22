@@ -36,6 +36,7 @@ export function UndoRedoProvider({ children }: { children: ReactNode }) {
 
   const recordChange = useCallback((action: UndoRedoAction) => {
     if (restoringRef.current) return;
+    if (textInputFocusedRef.current && action.category === "text") return;
     setUndoStack((prev) => {
       const next = [...prev, action];
       // Prevent unbounded growth when users edit large prompt payloads

@@ -10,6 +10,8 @@ const AUTOCOMPLETE_STORAGE_KEY = "sts_autocomplete_enabled";
 const AUTOCOMPLETE_EVENT_NAME = "sts-autocomplete-enabled-changed";
 const AUTOCOMPLETE_CACHE_MAX = 200;
 const AUTOCOMPLETE_CACHE_TTL_MS = 10 * 60 * 1000;
+const MAX_HIGHLIGHT_LENGTH = 5000;
+const MAX_HIGHLIGHT_MATCHES = 500;
 
 interface PromptAutocompleteTextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
     value: string;
@@ -358,6 +360,7 @@ export function PromptAutocompleteTextarea({
 
     const highlightedContent = useMemo(() => {
         if (!highlightSnippets || !snippets || snippets.length === 0 || !debouncedValue) return null;
+        if (debouncedValue.length > MAX_HIGHLIGHT_LENGTH) return null;
 
         interface Match { start: number; end: number; color: string; }
         const matches: Match[] = [];
@@ -370,6 +373,9 @@ export function PromptAutocompleteTextarea({
             let pos = debouncedValue.indexOf(term);
             while (pos !== -1) {
                 matches.push({ start: pos, end: pos + term.length, color: snippet.color || "bg-slate-200" });
+                if (matches.length > MAX_HIGHLIGHT_MATCHES) {
+                    return null;
+                }
                 pos = debouncedValue.indexOf(term, pos + 1);
             }
         }
