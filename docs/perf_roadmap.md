@@ -29,9 +29,9 @@ Targets: P95 input-to-paint < 50ms for ~2000-char prompts, 60fps during snippet 
 [x] Move highlight computation to idle or worker; cap work for long prompts.
 
 ## Phase 3 - UI interaction perf
-[ ] Virtualize snippet library and gallery lists.
-[ ] Stabilize handlers/props to minimize re-render cascades.
-[ ] Reduce large prop churn in PromptStudio (memoized subcomponents).
+[x] Virtualize snippet library and gallery lists.
+[x] Stabilize handlers/props to minimize re-render cascades.
+[x] Reduce large prop churn in PromptStudio (memoized subcomponents).
 
 ## Phase 4 - Backend perf
 [ ] Persist width/height and file-exists at ingest time (avoid per-request IO).

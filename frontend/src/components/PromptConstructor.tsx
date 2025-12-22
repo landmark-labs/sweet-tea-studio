@@ -13,6 +13,7 @@ import { Plus, X, Type, Trash2, CornerDownLeft, Eraser, Check, Pencil } from "lu
 import { cn } from "@/lib/utils";
 import { useUndoRedo } from "@/lib/undoRedo";
 import { PromptAutocompleteTextarea } from "./PromptAutocompleteTextarea";
+import { VirtualGrid } from "@/components/VirtualGrid";
 import { PromptItem } from "@/lib/types";
 import { logClientFrameLatency, logClientPerfSample } from "@/lib/clientDiagnostics";
 import { cancelIdle, scheduleIdle, type IdleHandle } from "@/lib/idleScheduler";
@@ -209,6 +210,14 @@ interface SortableLibrarySnippetProps {
     onAddToCanvas: () => void;
 }
 
+const normalizePrompt = (value: string) => {
+    return value
+        .split(/\s*,\s*/g)
+        .map((entry) => entry.trim())
+        .filter(Boolean)
+        .join("|");
+};
+
 function SortableLibrarySnippet({ snippet, isEditing, onStartLongPress, onCancelLongPress, onDoubleClick, onEdit, onDelete, onAddToCanvas }: SortableLibrarySnippetProps) {
     const {
         attributes,
@@ -235,7 +244,7 @@ function SortableLibrarySnippet({ snippet, isEditing, onStartLongPress, onCancel
                             ref={setNodeRef}
                             style={style}
                             className={cn(
-                                "flex items-center gap-1 px-2 py-1.5 rounded-md border shadow-sm cursor-grab active:cursor-grabbing select-none group relative text-[11px] font-medium w-full min-w-0 min-h-[32px] transition-all hover:-translate-y-0.5 hover:shadow-md",
+                                "flex items-center gap-1 px-2 py-1.5 rounded-md border shadow-sm cursor-grab active:cursor-grabbing select-none group relative text-[11px] font-medium w-full h-full min-w-0 min-h-[32px] transition-all hover:-translate-y-0.5 hover:shadow-md",
                                 snippet.color,
                                 isEditing ? "ring-2 ring-amber-400 ring-offset-1" : "",
                                 isDragging && "ring-2 ring-blue-200 shadow-lg"
@@ -320,6 +329,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
     const [fieldItems, setFieldItems] = useState<Record<string, PromptItem[]>>({});
     const items = fieldItems[targetField] || [];
     const initializedFieldsRef = useRef<Set<string>>(new Set());
+    const lastReconciledRef = useRef<Record<string, string>>({});
 
     const applyItems = (target: string, value: PromptItem[]) => {
         if (target) initializedFieldsRef.current.add(target);
@@ -357,6 +367,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
     const [editingSnippetId, setEditingSnippetId] = useState<string | null>(null);
     const [editingTextId, setEditingTextId] = useState<string | null>(null);
     const [editingTextField, setEditingTextField] = useState<string | null>(null);
+    const [isDraggingLibrary, setIsDraggingLibrary] = useState(false);
     const longPressRef = useRef<NodeJS.Timeout | null>(null);
 
     const isEditing = editingSnippetId !== null || editingTextId !== null;
@@ -527,6 +538,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
         // it is an "Echo" from the parent. We trust our local state (items) is legally correct
         // and preserving it prevents ID thrashing / re-renders.
         if (lastCompiledRef.current?.field === targetField && lastCompiledRef.current?.value === currentVal) {
+            lastReconciledRef.current[targetField] = normalizePrompt(currentVal);
             return;
         }
 
@@ -535,6 +547,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
             if (!isTargetValid) return;
             if (syncingLibraryRef.current) return;
             if (lastCompiledRef.current?.field === targetField && lastCompiledRef.current?.value === currentVal) {
+                lastReconciledRef.current[targetField] = normalizePrompt(currentVal);
                 return;
             }
 
@@ -548,6 +561,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
             let cursor = 0;
 
             const safeVal = currentVal;
+            const normalizedCurrent = normalizePrompt(safeVal);
 
             selectedMatches.forEach((m) => {
                 if (m.start > cursor) {
@@ -628,6 +642,8 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
                 }
             }
 
+            lastReconciledRef.current[targetField] = normalizedCurrent;
+
             if (perfStart !== null) {
                 logClientPerfSample(
                     "perf_prompt_reconcile",
@@ -674,13 +690,14 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
         // NEW: Compare semantic content, not exact strings
         // This prevents cursor jump when the only difference is delimiter formatting
         // e.g., "a,b" vs "a, b" should be considered equivalent
-        const normalizeForComparison = (str: string) => {
-            // Split by comma (with or without surrounding spaces), filter empty, trim each
-            return str.split(/\s*,\s*/).filter(s => s.trim()).map(s => s.trim()).join("|");
-        };
+        const normalizeForComparison = (str: string) => normalizePrompt(str);
 
         const compiledNormalized = normalizeForComparison(compiled);
         const currentNormalized = normalizeForComparison(currentVal);
+
+        if (currentNormalized && lastReconciledRef.current[targetField] !== currentNormalized) {
+            return;
+        }
 
         // Only update if semantic content differs
         if (compiledNormalized !== currentNormalized) {
@@ -731,6 +748,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
     // Handle library snippet reordering
     const handleLibraryDragEnd = (event: any) => {
         const { active, over } = event;
+        setIsDraggingLibrary(false);
         if (!over || active.id === over.id) return;
         const oldIndex = library.findIndex((s) => s.id === active.id);
         const newIndex = library.findIndex((s) => s.id === over.id);
@@ -738,6 +756,14 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
             trackSnippetAction("drag_library", { from: oldIndex, to: newIndex });
             setLibrary(arrayMove(library, oldIndex, newIndex));
         }
+    };
+
+    const handleLibraryDragStart = () => {
+        setIsDraggingLibrary(true);
+    };
+
+    const handleLibraryDragCancel = () => {
+        setIsDraggingLibrary(false);
     };
 
     const cancelEdit = () => {
@@ -926,31 +952,40 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
                 <div className="mb-2">
                     <span className="text-[10px] font-bold text-slate-400 uppercase block">Snippets (Double-click to Add, Drag to Reorder, Long-press to Edit)</span>
                 </div>
-                <ScrollArea className="h-72 w-full">
-                    <DndContext
-                        sensors={sensors}
-                        collisionDetection={closestCenter}
-                        onDragEnd={handleLibraryDragEnd}
-                    >
-                        <SortableContext items={library.map(s => s.id)} strategy={rectSortingStrategy}>
-                            <div className="grid grid-cols-2 gap-2 items-start min-h-[40px] p-1">
-                                {library.map(snippet => (
-                                    <SortableLibrarySnippet
-                                        key={snippet.id}
-                                        snippet={snippet}
-                                        isEditing={editingSnippetId === snippet.id}
-                                        onStartLongPress={(e) => startLongPress(snippet, e)}
-                                        onCancelLongPress={cancelLongPress}
-                                        onDoubleClick={() => addSnippetToCanvas(snippet)}
-                                        onEdit={(e) => editSnippet(snippet, e)}
-                                        onDelete={(e) => deleteFromLibrary(snippet.id, e)}
-                                        onAddToCanvas={() => addSnippetToCanvas(snippet)}
-                                    />
-                                ))}
-                            </div>
-                        </SortableContext>
-                    </DndContext>
-                </ScrollArea>
+                <DndContext
+                    sensors={sensors}
+                    collisionDetection={closestCenter}
+                    onDragStart={handleLibraryDragStart}
+                    onDragCancel={handleLibraryDragCancel}
+                    onDragEnd={handleLibraryDragEnd}
+                >
+                    <SortableContext items={library.map(s => s.id)} strategy={rectSortingStrategy}>
+                        <VirtualGrid
+                            items={library}
+                            columnCount={2}
+                            rowHeight={40}
+                            gap={8}
+                            padding={4}
+                            overscan={4}
+                            virtualize={!isDraggingLibrary}
+                            className="h-72 w-full"
+                            getKey={(snippet) => snippet.id}
+                            emptyState={<div className="min-h-[40px]" />}
+                            renderItem={(snippet) => (
+                                <SortableLibrarySnippet
+                                    snippet={snippet}
+                                    isEditing={editingSnippetId === snippet.id}
+                                    onStartLongPress={(e) => startLongPress(snippet, e)}
+                                    onCancelLongPress={cancelLongPress}
+                                    onDoubleClick={() => addSnippetToCanvas(snippet)}
+                                    onEdit={(e) => editSnippet(snippet, e)}
+                                    onDelete={(e) => deleteFromLibrary(snippet.id, e)}
+                                    onAddToCanvas={() => addSnippetToCanvas(snippet)}
+                                />
+                            )}
+                        />
+                    </SortableContext>
+                </DndContext>
             </div>
 
             {/* 4. Canvas (Vertical / Flex Wrap) */}

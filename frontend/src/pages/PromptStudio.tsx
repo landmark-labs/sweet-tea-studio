@@ -72,10 +72,10 @@ export default function PromptStudio() {
   const [previewMetadata, setPreviewMetadata] = useState<any>(null);
   // Pending loadParams - holds the gallery item to inject until workflows are loaded
   const [pendingLoadParams, setPendingLoadParams] = useState<(GalleryItem & { __isRegenerate?: boolean }) | null>(null);
-  const handlePreviewSelect = (path: string, metadata?: any) => {
+  const handlePreviewSelect = useCallback((path: string, metadata?: any) => {
     setPreviewPath(path);
     setPreviewMetadata(metadata ?? null);
-  };
+  }, []);
 
   // Form Data State (Jotai)
   const store = useStore();
@@ -183,7 +183,7 @@ export default function PromptStudio() {
     };
   }, [library, snippetsLoaded]);
 
-  const loadGallery = async () => {
+  const loadGallery = useCallback(async () => {
     try {
       const projectFilter = galleryScopeAll || !selectedProjectId ? null : parseInt(selectedProjectId);
       const unassignedOnly = galleryScopeAll ? false : !selectedProjectId;
@@ -197,15 +197,15 @@ export default function PromptStudio() {
     } catch (e) {
       console.error("Failed to load gallery", e);
     }
-  };
+  }, [galleryScopeAll, selectedProjectId]);
 
   // Initial load and refresh
   useEffect(() => {
     loadGallery();
-  }, [galleryRefresh, selectedProjectId, galleryScopeAll]);
+  }, [galleryRefresh, loadGallery]);
 
   // Handle Deletion from Gallery or Auto-Discard
-  const handleGalleryDelete = async (ids: Set<number> | number) => {
+  const handleGalleryDelete = useCallback(async (ids: Set<number> | number) => {
     const idsToDelete = typeof ids === 'number' ? new Set([ids]) : ids;
     if (idsToDelete.size === 0) return;
 
@@ -236,7 +236,7 @@ export default function PromptStudio() {
       console.error("Failed to delete images", e);
       loadGallery(); // Revert on error
     }
-  };
+  }, [loadGallery]);
 
 
   // useOutletContext to get panel states from Layout
@@ -414,7 +414,7 @@ export default function PromptStudio() {
     }
   };
 
-  const persistForm = (data: any) => {
+  const persistForm = useCallback((data: any) => {
     const currentData = store.get(formDataAtom) || {};
     // Safety: Don't persist if checkpoint got wiped (common init race condition)
     Object.keys(data)
@@ -459,7 +459,7 @@ export default function PromptStudio() {
         persistHandleRef.current = { id, type: "timeout" };
       }
     }
-  };
+  }, [selectedWorkflowId, setFormData, store]);
 
   useEffect(() => {
     return () => {
@@ -497,7 +497,7 @@ export default function PromptStudio() {
     };
   }, [store]);
 
-  const handleResetDefaults = () => {
+  const handleResetDefaults = useCallback(() => {
     if (!selectedWorkflow) return;
     const schema = visibleSchema;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -514,21 +514,21 @@ export default function PromptStudio() {
     // Register a single history entry for reset
     handleFormChange(defaults, { immediateHistory: true });
     setFocusedField("");
-  };
+  }, [handleFormChange, persistForm, selectedWorkflow, visibleSchema]);
 
   const pendingHistoryRef = useRef<{ prev: any; next: any; category: "text" | "structure"; skip: boolean } | null>(null);
   const historyTimerRef = useRef<NodeJS.Timeout | null>(null);
   const MAX_TEXT_UNDO_LEN = 8000;
 
-  const isTextField = (fieldKey: string) => {
+  const isTextField = useCallback((fieldKey: string) => {
     const def = visibleSchema?.[fieldKey];
     if (!def) return false;
     if (def.widget === "textarea") return true;
     return def.type === "STRING" || def.type === "string";
-  };
+  }, [visibleSchema]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const handleFormChange = (newData: any, { immediateHistory }: { immediateHistory?: boolean } = {}) => {
+  const handleFormChange = useCallback((newData: any, { immediateHistory }: { immediateHistory?: boolean } = {}) => {
     const previous = store.get(formDataAtom);
     persistForm(newData);
     const focusedKey = focusedField || "";
@@ -579,20 +579,20 @@ export default function PromptStudio() {
       }
       historyTimerRef.current = null;
     }, 350);
-  };
+  }, [focusedField, isTextField, persistForm, registerStateChange, store]);
 
-  const handlePromptUpdate = (field: string, value: string) => {
+  const handlePromptUpdate = useCallback((field: string, value: string) => {
     const currentData = store.get(formDataAtom) || {};
     handleFormChange({ ...currentData, [field]: value });
-  };
+  }, [handleFormChange, store]);
 
-  const handlePromptUpdateMany = (updates: Record<string, string>) => {
+  const handlePromptUpdateMany = useCallback((updates: Record<string, string>) => {
     if (!updates || Object.keys(updates).length === 0) return;
     const currentData = store.get(formDataAtom) || {};
     handleFormChange({ ...currentData, ...updates });
-  };
+  }, [handleFormChange, store]);
 
-  const handleUseInPipe = ({ workflowId, imagePath, galleryItem }: { workflowId: string; imagePath: string; galleryItem: GalleryItem }) => {
+  const handleUseInPipe = useCallback(({ workflowId, imagePath, galleryItem }: { workflowId: string; imagePath: string; galleryItem: GalleryItem }) => {
     // Choose the workflow
     setSelectedWorkflowId(workflowId);
 
@@ -659,7 +659,7 @@ export default function PromptStudio() {
     }
 
     setPendingLoadParams({ ...loadParams, __isRegenerate: false });
-  };
+  }, [setPendingLoadParams, setPreviewMetadata, setPreviewPath, setSelectedProjectId, setSelectedWorkflowId]);
 
 
 
@@ -1463,15 +1463,15 @@ export default function PromptStudio() {
     }
   };
 
-  const handleGallerySelect = (item: GalleryItem) => {
+  const handleGallerySelect = useCallback((item: GalleryItem) => {
     handlePreviewSelect(item.image.path, {
       prompt: item.prompt,
       created_at: item.created_at,
       job_params: item.job_params
     });
-  };
+  }, [handlePreviewSelect]);
 
-  const handleWorkflowSelect = async (workflowId: string, fromImagePath?: string) => {
+  const handleWorkflowSelect = useCallback(async (workflowId: string, fromImagePath?: string) => {
     if (fromImagePath) {
       setIsLoading(true);
       try {
@@ -1507,7 +1507,7 @@ export default function PromptStudio() {
     }
 
     setSelectedWorkflowId(workflowId);
-  };
+  }, [selectedEngineId, setSelectedWorkflowId, workflows]);
 
   if (isLoading) {
     return (

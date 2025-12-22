@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from "react";
 import { api, Project, FolderImage } from "@/lib/api";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, FolderOpen, ImageIcon, Loader2, Download, Trash2, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { VirtualGrid } from "@/components/VirtualGrid";
 
 interface ProjectGalleryProps {
     projects: Project[];
@@ -108,6 +108,34 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
             setSelectedFolder("");
         }
     }, [selectedProjectId, folders]);
+
+    const galleryItems = !isLoading && selectedProjectId && images.length > 0 ? images : [];
+    const galleryEmptyState = React.useMemo(() => {
+        if (isLoading) {
+            return (
+                <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+                </div>
+            );
+        }
+        if (!selectedProjectId) {
+            return (
+                <div className="text-center py-8 text-xs text-slate-400">
+                    <ImageIcon className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                    <div>Select a project to browse images</div>
+                </div>
+            );
+        }
+        if (images.length === 0) {
+            return (
+                <div className="text-center py-8 text-xs text-slate-400">
+                    <ImageIcon className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                    <div>No images in this folder</div>
+                </div>
+            );
+        }
+        return null;
+    }, [images.length, isLoading, selectedProjectId]);
 
     // Handle drag start - set the image URL as draggable data
     const handleDragStart = (e: React.DragEvent, image: FolderImage) => {
@@ -286,63 +314,51 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
             </div>
 
             {/* Image Grid */}
-            <ScrollArea className="flex-1">
-                <div className="p-2">
-                    {isLoading ? (
-                        <div className="flex items-center justify-center py-8">
-                            <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+            <VirtualGrid
+                items={galleryItems}
+                columnCount={2}
+                rowHeight={(columnWidth) => columnWidth}
+                gap={4}
+                padding={8}
+                overscan={3}
+                className="flex-1"
+                emptyState={galleryEmptyState}
+                getKey={(image) => image.path}
+                renderItem={(image) => (
+                    <div
+                        className={cn(
+                            "h-full w-full relative group cursor-pointer rounded overflow-hidden border transition-all",
+                            selectedPaths.has(image.path)
+                                ? "border-blue-500 ring-2 ring-blue-500 scale-[0.97]"
+                                : "border-slate-200 hover:border-blue-400 hover:shadow-md"
+                        )}
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, image)}
+                        onClick={(e) => handleImageClick(image, e)}
+                        onContextMenu={(e) => handleContextMenu(e, image)}
+                        title={`${image.filename}\nClick to view, Ctrl+click to select, Shift+click for range`}
+                    >
+                        {/* Selection indicator */}
+                        {selectedPaths.has(image.path) && (
+                            <div className="absolute top-1 left-1 z-20 bg-blue-500 text-white rounded-full p-0.5">
+                                <Check className="w-3 h-3" />
+                            </div>
+                        )}
+                        <img
+                            src={`/api/v1/gallery/image/path?path=${encodeURIComponent(image.path)}`}
+                            alt={image.filename}
+                            className="w-full h-full object-cover"
+                            loading="lazy"
+                        />
+                        <div className="absolute inset-x-0 bottom-0 bg-black/70 text-white text-[8px] p-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <div className="truncate">{image.filename}</div>
+                            {image.width && image.height && (
+                                <div className="text-[7px] text-slate-300">{image.width}A-{image.height}</div>
+                            )}
                         </div>
-                    ) : !selectedProjectId ? (
-                        <div className="text-center py-8 text-xs text-slate-400">
-                            <ImageIcon className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                            <div>Select a project to browse images</div>
-                        </div>
-                    ) : images.length === 0 ? (
-                        <div className="text-center py-8 text-xs text-slate-400">
-                            <ImageIcon className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                            <div>No images in this folder</div>
-                        </div>
-                    ) : (
-                        <div className="grid grid-cols-2 gap-1">
-                            {images.map((image) => (
-                                <div
-                                    key={image.path}
-                                    className={cn(
-                                        "aspect-square relative group cursor-pointer rounded overflow-hidden border transition-all",
-                                        selectedPaths.has(image.path)
-                                            ? "border-blue-500 ring-2 ring-blue-500 scale-[0.97]"
-                                            : "border-slate-200 hover:border-blue-400 hover:shadow-md"
-                                    )}
-                                    draggable
-                                    onDragStart={(e) => handleDragStart(e, image)}
-                                    onClick={(e) => handleImageClick(image, e)}
-                                    onContextMenu={(e) => handleContextMenu(e, image)}
-                                    title={`${image.filename}\nClick to view, Ctrl+click to select, Shift+click for range`}
-                                >
-                                    {/* Selection indicator */}
-                                    {selectedPaths.has(image.path) && (
-                                        <div className="absolute top-1 left-1 z-20 bg-blue-500 text-white rounded-full p-0.5">
-                                            <Check className="w-3 h-3" />
-                                        </div>
-                                    )}
-                                    <img
-                                        src={`/api/v1/gallery/image/path?path=${encodeURIComponent(image.path)}`}
-                                        alt={image.filename}
-                                        className="w-full h-full object-cover"
-                                        loading="lazy"
-                                    />
-                                    <div className="absolute inset-x-0 bottom-0 bg-black/70 text-white text-[8px] p-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <div className="truncate">{image.filename}</div>
-                                        {image.width && image.height && (
-                                            <div className="text-[7px] text-slate-300">{image.width}×{image.height}</div>
-                                        )}
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
-            </ScrollArea>
+                    </div>
+                )}
+            />
 
             {/* Footer with selection or hint */}
             {images.length > 0 && (
