@@ -66,8 +66,11 @@ export const ImageViewer = React.memo(function ImageViewer({
             return imgRawPath === selectedRawPath || img.path === selectedImagePath;
         });
 
+        console.log('[ImageViewer] DISPLAY: existsInImages=', existsInImages, 'images.length=', images.length, 'selectedRawPath=', selectedRawPath?.slice(-40));
+
         if (!existsInImages) {
             // Create synthetic image for paths not in the gallery
+            console.log('[ImageViewer] DISPLAY: Creating SYNTHETIC image at index 0!');
             const isApiUrl = selectedImagePath.includes('/api/') && selectedImagePath.includes('?path=');
 
             const synthetic: ApiImage = {
