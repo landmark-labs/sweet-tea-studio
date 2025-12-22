@@ -19,6 +19,7 @@ interface ImageViewerProps {
     onDelete?: (imageId: number) => void;
     selectedImagePath?: string;
     onLoadMore?: () => void;  // Callback to load more images when near end
+    resetKey?: number;  // When changed, reset selectedIndex to 0 (for new generations)
 }
 
 export const ImageViewer = React.memo(function ImageViewer({
@@ -32,7 +33,8 @@ export const ImageViewer = React.memo(function ImageViewer({
     onRegenerate,
     onDelete,
     selectedImagePath,
-    onLoadMore
+    onLoadMore,
+    resetKey
 }: ImageViewerProps) {
     const [copyState, setCopyState] = React.useState<{ positive: boolean; negative: boolean }>({ positive: false, negative: false });
     const [selectedIndex, setSelectedIndex] = React.useState<number>(0);
@@ -106,6 +108,15 @@ export const ImageViewer = React.memo(function ImageViewer({
             }
         }
     }, [displayImages, selectedIndex]);
+
+    // Reset to first image when resetKey changes (e.g., new generation)
+    const lastResetKeyRef = React.useRef(resetKey);
+    React.useEffect(() => {
+        if (resetKey !== undefined && resetKey !== lastResetKeyRef.current) {
+            lastResetKeyRef.current = resetKey;
+            setSelectedIndex(0);
+        }
+    }, [resetKey]);
 
     // Track the last selectedImagePath to avoid resetting on unrelated re-renders
     const lastSelectedImagePathRef = React.useRef<string | undefined>(undefined);

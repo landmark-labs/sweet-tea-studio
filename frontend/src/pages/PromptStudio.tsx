@@ -1775,6 +1775,7 @@ export default function PromptStudio() {
               ));
             }}
             onDelete={(id) => handleGalleryDelete(id)}
+            resetKey={galleryRefresh}
           />
         </ErrorBoundary>
       </div>
