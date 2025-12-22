@@ -60,7 +60,7 @@ const resolveMediaKind = (fieldKey: string, field: Record<string, unknown>) => {
     const key = fieldKey.toLowerCase();
     const title = String(field.title || "").toLowerCase();
     const classType = String(field.x_class_type || "").toLowerCase();
-    if (classType.includes("video") || title.includes("loadvideo") || key.includes(".video")) {
+    if (key.endsWith(".video") && classType.includes("loadvideo")) {
         return "video";
     }
     return "image";
@@ -71,14 +71,14 @@ const isMediaUploadField = (fieldKey: string, field: Record<string, unknown>) =>
     const title = String(field.title || "").toLowerCase();
     const classType = String(field.x_class_type || "").toLowerCase();
     const isExplicit =
-        field.widget === "upload" ||
+        field.widget === "media_upload" ||
         field.widget === "image_upload" ||
-        field.widget === "media_upload";
+        (field.widget === "upload" && resolveMediaKind(fieldKey, field) === "image");
     const isLoadImage = title.includes("loadimage");
-    const isVideoNode = classType.includes("video") || title.includes("loadvideo") || key.includes(".video");
+    const isVideoInput = key.endsWith(".video") && classType.includes("loadvideo");
     const isStringLike = field.type === "string" || Array.isArray(field.enum);
 
-    return (isExplicit || isLoadImage || isVideoNode) && isStringLike;
+    return (isExplicit || isLoadImage || isVideoInput) && isStringLike;
 };
 
 const FieldRenderer = React.memo(function FieldRenderer({

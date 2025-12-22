@@ -100,7 +100,7 @@ def _infer_media_kind(
         kind = MEDIA_KIND_BY_TYPE.get(val_type.upper())
         if kind:
             return kind
-        if "VIDEO" in upper_type:
+        if "VIDEO" in upper_type and input_name and input_name.lower() == "video":
             return "video"
 
     if isinstance(config, dict):
@@ -120,16 +120,11 @@ def _infer_media_kind(
             if ext in VIDEO_EXTENSIONS:
                 return "video"
 
-    if input_name or class_type:
-        lower_input = (input_name or "").lower()
-        lower_class = (class_type or "").lower()
-        if "video" in lower_input:
-            if (
-                "video" in lower_class
-                or "load" in lower_class
-                or "vhs" in lower_class
-            ):
-                return "video"
+    if input_name and class_type:
+        lower_input = input_name.lower()
+        lower_class = class_type.lower()
+        if lower_input == "video" and "loadvideo" in lower_class:
+            return "video"
 
     return None
 

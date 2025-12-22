@@ -258,11 +258,8 @@ export function findMediaFieldsInSchema(
         const lowerTitle = String(field.title || "").toLowerCase();
         const lowerClass = String(field.x_class_type || "").toLowerCase();
 
-        if (!resolvedKind && kind === "video") {
-            const looksVideo = lowerClass.includes("video") || lowerTitle.includes("loadvideo") || lowerKey.includes(".video");
-            if (!looksVideo) {
-                continue;
-            }
+        if (!resolvedKind && kind === "video" && !(lowerKey.endsWith(".video") && lowerClass.includes("loadvideo"))) {
+            continue;
         }
 
         const isMediaUpload =
@@ -272,9 +269,7 @@ export function findMediaFieldsInSchema(
             lowerKey.includes("loadimage") ||
             lowerTitle.includes("loadimage") ||
             lowerClass.includes("loadimage") ||
-            lowerClass.includes("loadvideo") ||
-            lowerClass.includes("video") ||
-            lowerKey.includes(".video");
+            (lowerKey.endsWith(".video") && lowerClass.includes("loadvideo"));
 
         if (isMediaUpload) {
             mediaFields.push(key);
