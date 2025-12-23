@@ -43,6 +43,7 @@ export default function Gallery() {
 
     const PAGE_SIZE = 120;
     const [hasMore, setHasMore] = useState(true);
+    const [nextSkip, setNextSkip] = useState(0);
 
     const clickTimeout = useRef<NodeJS.Timeout | null>(null);
 
@@ -111,7 +112,7 @@ export default function Gallery() {
             }
             const target = projectId !== undefined ? projectId : selectedProjectId;
             const unassignedOnly = target === -1;
-            const skip = append ? items.length : 0;
+            const skip = append ? nextSkip : 0;
             const data = await api.getGallery({
                 search: queryValue,
                 skip,
@@ -123,8 +124,10 @@ export default function Gallery() {
             setItems((prev) => (append ? [...prev, ...data] : data));
             if (loadAll) {
                 setHasMore(false);
+                setNextSkip(0);
             } else {
-                setHasMore(data.length === PAGE_SIZE);
+                setHasMore(data.length > 0);
+                setNextSkip(prev => (append ? prev + PAGE_SIZE : PAGE_SIZE));
             }
             if (!append) {
                 setSelectedIds(new Set());

@@ -95,4 +95,8 @@
   .muted-label {
     @apply text-sm text-muted-foreground;
   }
+
+  .virtual-grid {
+    scrollbar-gutter: stable;
+  }
 }

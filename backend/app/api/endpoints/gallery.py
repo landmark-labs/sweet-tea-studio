@@ -435,6 +435,8 @@ def read_gallery(
             return [item for _, item in scored_items[:limit]]
         return [item for _, item in scored_items]
 
+    if limit is not None:
+        return [item for _, item in scored_items[:limit]]
     return [item for _, item in scored_items]
 
 

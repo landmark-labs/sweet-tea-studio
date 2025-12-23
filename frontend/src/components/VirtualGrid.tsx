@@ -109,7 +109,7 @@ export function VirtualGrid<T>({
 
     if (items.length === 0) {
         return (
-            <div ref={containerRef} className={cn("relative overflow-auto", className)}>
+            <div ref={containerRef} className={cn("virtual-grid relative overflow-auto", className)}>
                 {emptyState}
             </div>
         );
@@ -120,7 +120,7 @@ export function VirtualGrid<T>({
     const offsetLeft = padding;
 
     return (
-        <div ref={containerRef} className={cn("relative overflow-auto", className)} onScroll={handleScroll}>
+        <div ref={containerRef} className={cn("virtual-grid relative overflow-auto", className)} onScroll={handleScroll}>
             <div style={{ height: layout.totalHeight, position: "relative" }}>
                 <div
                     style={{

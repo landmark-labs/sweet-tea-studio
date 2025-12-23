@@ -797,22 +797,22 @@ export default function PromptStudio() {
       const positiveTarget = resolveTarget(extracted.positiveFieldKey, positiveField);
       const negativeTarget = resolveTarget(extracted.negativeFieldKey, negativeField);
 
-      if (positiveTarget) {
-        const directPositive = typeof jobParams[positiveTarget] === "string" ? jobParams[positiveTarget] as string : null;
-        if (directPositive && directPositive.trim()) {
-          baseParams[positiveTarget] = directPositive;
-        } else if (positivePrompt) {
-          baseParams[positiveTarget] = positivePrompt;
+        const choosePromptValue = (primary: unknown, secondary: unknown) => {
+          if (typeof primary === "string" && primary.trim()) return primary;
+          if (typeof secondary === "string" && secondary.trim()) return secondary;
+          return null;
+        };
+
+        if (positiveTarget) {
+          const directPositive = jobParams[positiveTarget];
+          const nextPositive = choosePromptValue(positivePrompt, directPositive);
+          if (nextPositive) baseParams[positiveTarget] = nextPositive;
         }
-      }
-      if (negativeTarget) {
-        const directNegative = typeof jobParams[negativeTarget] === "string" ? jobParams[negativeTarget] as string : null;
-        if (directNegative && directNegative.trim()) {
-          baseParams[negativeTarget] = directNegative;
-        } else if (negativePrompt) {
-          baseParams[negativeTarget] = negativePrompt;
+        if (negativeTarget) {
+          const directNegative = jobParams[negativeTarget];
+          const nextNegative = choosePromptValue(negativePrompt, directNegative);
+          if (nextNegative) baseParams[negativeTarget] = nextNegative;
         }
-      }
 
       // STEP 5: Handle image injection - do it directly here instead of delegating to Effect 3
       // Regenerate prefers original input image; use-in-pipe prefers the selected output image.
