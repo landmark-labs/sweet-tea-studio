@@ -50,11 +50,6 @@ export default function Gallery() {
 
     const navigate = useNavigate();
 
-    useEffect(() => {
-        loadGallery();
-        fetchProjects();
-    }, [loadGallery, fetchProjects]);
-
     // Keep fullscreen index valid when items update
     useEffect(() => {
         if (fullscreenIndex !== null && fullscreenIndex >= items.length) {
@@ -157,6 +152,11 @@ export default function Gallery() {
             console.error(err);
         }
     }, []);
+
+    useEffect(() => {
+        loadGallery();
+        fetchProjects();
+    }, [loadGallery, fetchProjects]);
 
     const handleSearch = (e: React.FormEvent) => {
         e.preventDefault();
