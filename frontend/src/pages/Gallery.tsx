@@ -40,6 +40,7 @@ export default function Gallery() {
     const [panPosition, setPanPosition] = useState({ x: 0, y: 0 });
     const [isDragging, setIsDragging] = useState(false);
     const dragStart = useRef({ x: 0, y: 0 });
+    const scrollContainerRef = useRef<HTMLDivElement | null>(null);
 
     const PAGE_SIZE = 80;
     const [hasMore, setHasMore] = useState(true);
@@ -171,17 +172,18 @@ export default function Gallery() {
     // Infinite scroll: load next page when sentinel enters view
     useEffect(() => {
         const target = loadMoreRef.current;
-        if (!target) return;
+        const root = scrollContainerRef.current;
+        if (!target || !root || !hasMore) return;
         const observer = new IntersectionObserver((entries) => {
             entries.forEach((entry) => {
                 if (entry.isIntersecting) {
                     handleLoadMore();
                 }
             });
-        }, { rootMargin: "600px 0px 0px 0px" });
+        }, { root, rootMargin: "400px 0px 400px 0px" });
         observer.observe(target);
         return () => observer.disconnect();
-    }, [handleLoadMore]);
+    }, [handleLoadMore, hasMore]);
 
     // Selection & fullscreen logic
     const handleSelectionToggle = (id: number, e?: React.MouseEvent) => {
@@ -514,7 +516,7 @@ export default function Gallery() {
                 onSelectFolder={handleSelectFolder}
                 projectFolders={projectFolders}
             />
-            <div className="flex-1 overflow-auto relative">
+            <div className="flex-1 overflow-auto relative" ref={scrollContainerRef}>
                 <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6 sticky top-0 z-20 bg-slate-50 px-8 py-4">
                     <div className="flex items-center gap-4 flex-wrap">
                         <h1 className="text-3xl font-bold tracking-tight text-slate-900">gallery</h1>
@@ -774,7 +776,7 @@ export default function Gallery() {
                                 ))}
                             </div>
                             {/* Infinite scroll sentinel */}
-                            <div ref={loadMoreRef} className="h-10" />
+                            <div ref={loadMoreRef} className="h-10 w-full" />
                             {!cleanupMode && hasMore && (
                                 <div className="flex justify-center pt-6">
                                     <Button variant="outline" onClick={handleLoadMore} disabled={isLoadingMore}>
