@@ -406,7 +406,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
         if (schema) {
             const fields = Object.keys(schema).filter(key => {
                 const f = schema[key];
-                return f.widget === "textarea" || f.type === "STRING";
+                return f.widget === "textarea" || f.type === "STRING" || f.type === "string";
             });
             setAvailableFields(fields);
         }
@@ -434,6 +434,61 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
     const reconcileHandleRef = useRef<IdleHandle | null>(null);
     const reconcileTokenRef = useRef(0);
 
+    const buildItemsFromValue = (
+        value: string,
+        index: ReturnType<typeof buildSnippetIndex>
+    ): PromptItem[] | null => {
+        if (!value) return null;
+        const matches = findSnippetMatches(value, index);
+        if (!matches || matches.length === 0) return null;
+        const selectedMatches = selectNonOverlappingMatches(matches, { preferLongest: true });
+        if (selectedMatches.length === 0) return null;
+
+        const nextItems: PromptItem[] = [];
+        let cursor = 0;
+
+        selectedMatches.forEach((m) => {
+            if (m.start > cursor) {
+                let gap = value.substring(cursor, m.start);
+                if (nextItems.length > 0 && gap.startsWith(", ")) {
+                    gap = gap.substring(2);
+                }
+                if (gap.endsWith(", ")) {
+                    gap = gap.substring(0, gap.length - 2);
+                }
+                if (gap.length > 0) {
+                    nextItems.push({
+                        id: `text-${cursor}`,
+                        type: "text",
+                        content: gap,
+                    });
+                }
+            }
+            nextItems.push({
+                ...m.snippet,
+                id: `instance-${m.start}`,
+                sourceId: m.snippet.id,
+            });
+            cursor = m.end;
+        });
+
+        if (cursor < value.length) {
+            let tail = value.substring(cursor);
+            if (nextItems.length > 0 && tail.startsWith(", ")) {
+                tail = tail.substring(2);
+            }
+            if (tail.length > 0) {
+                nextItems.push({
+                    id: `text-${cursor}`,
+                    type: "text",
+                    content: tail,
+                });
+            }
+        }
+
+        return nextItems;
+    };
+
     // Sync Library: keep linked blocks + prompt text aligned when snippets change.
     // Important: reconciliation depends on `library`, so we must guard against it
     // running on a library edit before the parent prompt text is updated.
@@ -443,19 +498,34 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
         // Use refs to access current state without dependencies
         const currentFieldItems = fieldItemsRef.current;
         const fieldKeys = Object.keys(currentFieldItems);
-        if (fieldKeys.length === 0) return;
+        const candidateFields = new Set<string>([...fieldKeys, ...availableFields]);
+        if (candidateFields.size === 0) return;
 
         const libraryById = new Map(library.map(s => [s.id, s]));
-        const nextFieldItems: Record<string, PromptItem[]> = {};
+        const nextFieldItems: Record<string, PromptItem[]> = { ...currentFieldItems };
         let didChangeItems = false;
 
         const valueUpdates: Record<string, string> = {};
 
-        for (const fieldKey of fieldKeys) {
+        for (const fieldKey of candidateFields) {
             const existing = currentFieldItems[fieldKey] || [];
+            const currentRaw = (valuesRef.current as any)?.[fieldKey];
+            const currentVal = typeof currentRaw === "string"
+                ? currentRaw
+                : (currentRaw === null || currentRaw === undefined ? "" : String(currentRaw));
+
+            let updated = existing;
             let didChangeField = false;
 
-            const updated = existing.map(item => {
+            if (updated.length === 0 && currentVal) {
+                const rebuilt = buildItemsFromValue(currentVal, snippetIndex);
+                if (rebuilt && rebuilt.length > 0) {
+                    updated = rebuilt;
+                    didChangeField = true;
+                }
+            }
+
+            const synced = updated.map(item => {
                 if (item.type !== "block" || !item.sourceId) return item;
 
                 const librarySnippet = libraryById.get(item.sourceId);
@@ -476,15 +546,15 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
                 return item;
             });
 
-            if (didChangeField) didChangeItems = true;
-            nextFieldItems[fieldKey] = didChangeField ? updated : existing;
+            if (didChangeField) {
+                didChangeItems = true;
+                nextFieldItems[fieldKey] = synced;
+            }
 
-            const hasLinkedBlocks = updated.some(i => i.type === "block" && !!i.sourceId);
+            const hasLinkedBlocks = synced.some(i => i.type === "block" && !!i.sourceId);
             if (!hasLinkedBlocks) continue;
 
-            const compiled = updated.map(i => i.content).join(", ");
-            const currentRaw = (valuesRef.current as any)?.[fieldKey];
-            const currentVal = typeof currentRaw === "string" ? currentRaw : (currentRaw === null || currentRaw === undefined ? "" : String(currentRaw));
+            const compiled = synced.map(i => i.content).join(", ");
 
             if (compiled !== currentVal) {
                 valueUpdates[fieldKey] = compiled;
@@ -516,7 +586,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
             syncingLibraryRef.current = false;
         }, 0);
         // Only depend on library - use refs for other values to avoid effect on every keystroke
-    }, [library]);
+    }, [availableFields, library, snippetIndex]);
 
     // Reconciliation Logic (INPUT Channel: External Text -> Items)
     useEffect(() => {
