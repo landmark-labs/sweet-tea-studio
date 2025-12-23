@@ -286,12 +286,16 @@ def read_gallery(
     scored_items: List[tuple[float, GalleryItem]] = []
     missing_ids: List[int] = []
     for img, job, prompt, workflow in results:
-        file_exists = img.file_exists
-        if file_exists is None and img.path and isinstance(img.path, str):
+        # Always verify file existence on disk - cached file_exists may be stale
+        # (e.g., file deleted via filesystem or by delete_folder_images before soft-delete fix)
+        file_exists = False
+        if img.path and isinstance(img.path, str):
             file_exists = os.path.exists(img.path)
-            img.file_exists = file_exists
-            session.add(img)
-        if file_exists is False:
+            # Update cache if changed
+            if img.file_exists != file_exists:
+                img.file_exists = file_exists
+                session.add(img)
+        if not file_exists:
             img.is_deleted = True
             img.deleted_at = datetime.utcnow()
             session.add(img)
