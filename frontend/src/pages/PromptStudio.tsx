@@ -1556,6 +1556,7 @@ export default function PromptStudio() {
             onFinish={() => setFocusedField("")}
             snippets={library}
             onUpdateSnippets={setLibrary}
+            externalValueSyncKey={externalValueSyncKey}
           />
         ) : (
           <div className="p-4 text-xs text-slate-400">select a prompt pipe to use the constructor</div>

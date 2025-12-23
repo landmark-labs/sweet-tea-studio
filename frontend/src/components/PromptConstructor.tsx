@@ -31,6 +31,7 @@ interface PromptConstructorProps {
     onFinish?: () => void;
     snippets: PromptItem[];
     onUpdateSnippets: React.Dispatch<React.SetStateAction<PromptItem[]>>;
+    externalValueSyncKey?: number;
 }
 
 // --- Constants ---
@@ -315,7 +316,7 @@ function SortableLibrarySnippet({ snippet, isEditing, onStartLongPress, onCancel
 
 // --- Main Component ---
 
-export const PromptConstructor = React.memo(function PromptConstructor({ schema, onUpdate, onUpdateMany, currentValues, targetField: controlledTarget, onTargetChange, onFinish, snippets: library, onUpdateSnippets: setLibrary }: PromptConstructorProps) {
+export const PromptConstructor = React.memo(function PromptConstructor({ schema, onUpdate, onUpdateMany, currentValues, targetField: controlledTarget, onTargetChange, onFinish, snippets: library, onUpdateSnippets: setLibrary, externalValueSyncKey }: PromptConstructorProps) {
     // 1. Identify Target Fields
     const [internalTarget, setInternalTarget] = useState<string>("");
     const targetField = controlledTarget !== undefined ? controlledTarget : internalTarget;
@@ -499,11 +500,112 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
         return nextItems;
     };
 
+    const rebuildItemsForValue = (
+        value: string,
+        index: ReturnType<typeof buildSnippetIndex>
+    ): PromptItem[] => {
+        if (!value) return [];
+        const matches = findSnippetMatches(value, index);
+        const selectedMatches = selectNonOverlappingMatches(matches || [], { preferLongest: true });
+
+        const newItems: PromptItem[] = [];
+        let cursor = 0;
+
+        selectedMatches.forEach((m) => {
+            if (m.start > cursor) {
+                let gap = value.substring(cursor, m.start);
+                if (newItems.length > 0 && gap.startsWith(", ")) {
+                    gap = gap.substring(2);
+                }
+                if (gap.endsWith(", ")) {
+                    gap = gap.substring(0, gap.length - 2);
+                }
+                if (gap.length > 0) {
+                    newItems.push({
+                        id: `text-${cursor}`,
+                        type: "text",
+                        content: gap,
+                    });
+                }
+            }
+            newItems.push({
+                ...m.snippet,
+                id: `instance-${m.start}`,
+                sourceId: m.snippet.id,
+            });
+            cursor = m.end;
+        });
+
+        if (cursor < value.length) {
+            let tail = value.substring(cursor);
+            if (newItems.length > 0 && tail.startsWith(", ")) {
+                tail = tail.substring(2);
+            }
+            if (tail.length > 0) {
+                newItems.push({
+                    id: `text-${cursor}`,
+                    type: "text",
+                    content: tail,
+                });
+            }
+        }
+
+        const mergedItems: PromptItem[] = [];
+        newItems.forEach(item => {
+            if (mergedItems.length > 0) {
+                const last = mergedItems[mergedItems.length - 1];
+                if (last.type === "text" && item.type === "text") {
+                    last.content += item.content;
+                    return;
+                }
+            }
+            mergedItems.push(item);
+        });
+
+        let textLabelCounter = 0;
+        return mergedItems.map(item => {
+            if (item.type === "text") {
+                textLabelCounter += 1;
+                return { ...item, label: item.label || `Text ${textLabelCounter}` };
+            }
+            return item;
+        });
+    };
+
+    useEffect(() => {
+        if (externalValueSyncKey === undefined) return;
+        if (!schema || availableFields.length === 0) return;
+
+        syncingLibraryRef.current = true;
+
+        const nextFieldItems: Record<string, PromptItem[]> = {};
+        const nextReconciled: Record<string, string> = {};
+
+        availableFields.forEach((fieldKey) => {
+            const rawVal = (currentValues as any)?.[fieldKey];
+            const currentVal = typeof rawVal === "string" ? rawVal : (rawVal === null || rawVal === undefined ? "" : String(rawVal));
+            nextFieldItems[fieldKey] = rebuildItemsForValue(currentVal, snippetIndex);
+            nextReconciled[fieldKey] = normalizePrompt(currentVal);
+        });
+
+        setFieldItems(nextFieldItems);
+        initializedFieldsRef.current = new Set(availableFields);
+        lastReconciledRef.current = { ...lastReconciledRef.current, ...nextReconciled };
+        if (targetField) {
+            itemsSourceRef.current = { field: targetField, source: "reconcile" };
+        }
+
+        setTimeout(() => {
+            syncingLibraryRef.current = false;
+        }, 0);
+    }, [availableFields, currentValues, externalValueSyncKey, schema, snippetIndex, targetField]);
+
     // Sync Library: keep linked blocks + prompt text aligned when snippets change.
     // Important: reconciliation depends on `library`, so we must guard against it
     // running on a library edit before the parent prompt text is updated.
     useEffect(() => {
         if (!library || library.length === 0) return;
+        if (syncingLibraryRef.current) return;
 
         // Use refs to access current state without dependencies
         const currentFieldItems = fieldItemsRef.current;
