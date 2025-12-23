@@ -330,15 +330,25 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
     const items = fieldItems[targetField] || [];
     const initializedFieldsRef = useRef<Set<string>>(new Set());
     const lastReconciledRef = useRef<Record<string, string>>({});
+    const itemsSourceRef = useRef<{ field: string; source: "constructor" | "reconcile" } | null>(null);
 
     const applyItems = (target: string, value: PromptItem[]) => {
-        if (target) initializedFieldsRef.current.add(target);
+        if (target) {
+            initializedFieldsRef.current.add(target);
+            itemsSourceRef.current = { field: target, source: "constructor" };
+        }
         setFieldItems(prev => ({ ...prev, [target]: value }));
     };
 
-    const setItems = (newItems: PromptItem[] | ((prev: PromptItem[]) => PromptItem[]), label = "Prompt items updated", record = true) => {
+    const setItems = (
+        newItems: PromptItem[] | ((prev: PromptItem[]) => PromptItem[]),
+        label = "Prompt items updated",
+        record = true,
+        source: "constructor" | "reconcile" = "constructor"
+    ) => {
         if (!targetField) return;
         initializedFieldsRef.current.add(targetField);
+        itemsSourceRef.current = { field: targetField, source };
         // Collect values for undo/redo registration AFTER the state update
         let previousItems: PromptItem[] = [];
         let resolvedItems: PromptItem[] = [];
@@ -706,9 +716,9 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
 
             if (isDifferent) {
                 if (mergedItems.length === 0 && currentVal === "") {
-                    if (currentItems.length > 0) setItems([], "Prompt cleared", false);
+                    if (currentItems.length > 0) setItems([], "Prompt cleared", false, "reconcile");
                 } else {
-                    setItems(labeledItems, "Prompt reconstructed", false);
+                    setItems(labeledItems, "Prompt reconstructed", false, "reconcile");
                 }
             }
 
@@ -742,6 +752,10 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
         if (!isTargetValid) return;
         if (suppressCompileRef.current) {
             suppressCompileRef.current = false;
+            return;
+        }
+        const itemsSource = itemsSourceRef.current;
+        if (itemsSource?.field === targetField && itemsSource.source === "reconcile") {
             return;
         }
 
