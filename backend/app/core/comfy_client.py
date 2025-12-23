@@ -420,12 +420,15 @@ class ComfyClient:
         # Prefer history outputs whenever possible so we preserve the true ComfyUI
         # filenames (including `type=temp` previews stored under ComfyUI/temp).
         # History can lag slightly behind the websocket completion signal, so retry briefly.
+        _t_history_start = time.time()
         for _attempt in range(5):
             output_items = _history_output_images()
             if output_items:
+                print(f"[TIMING] History fetch took {time.time()-_t_history_start:.3f}s (attempt {_attempt+1})")
                 _close_ws()
                 return output_items
             time.sleep(0.2)
+        print(f"[TIMING] History fetch FAILED after 5 attempts ({time.time()-_t_history_start:.3f}s)")
 
         # Fallback: Use the last preview image(s) as output when no history images exist.
         # This handles workflows using only PreviewImage nodes even if ComfyUI doesn't persist temp files.
