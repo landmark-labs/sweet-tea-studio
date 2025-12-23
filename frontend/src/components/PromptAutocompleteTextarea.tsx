@@ -92,6 +92,10 @@ export function PromptAutocompleteTextarea({
     const abortControllerRef = useRef<AbortController | null>(null);
     // Track intended cursor position to restore after external value changes add delimiters
     const intendedCursorRef = useRef<number | null>(null);
+    const [localValue, setLocalValue] = useState(value);
+    const lastInputAtRef = useRef(0);
+    const lastPropValueRef = useRef(value);
+    const pendingExternalValueRef = useRef<string | null>(null);
 
     const [cursor, setCursor] = useState(0);
     const [suggestions, setSuggestions] = useState<TagSuggestion[]>([]);
@@ -100,6 +104,25 @@ export function PromptAutocompleteTextarea({
     const [isFocused, setIsFocused] = useState(false);
     const [isTyping, setIsTyping] = useState(false);
     const [dropdownRect, setDropdownRect] = useState<{ top: number; left: number; width: number } | null>(null);
+
+    useEffect(() => {
+        if (value === lastPropValueRef.current) return;
+        lastPropValueRef.current = value;
+
+        const now = Date.now();
+        const timeSinceInput = now - lastInputAtRef.current;
+        const shouldSync = !isFocused || timeSinceInput > 350;
+
+        if (shouldSync) {
+            pendingExternalValueRef.current = null;
+            if (value !== localValue) {
+                intendedCursorRef.current = null;
+                setLocalValue(value);
+            }
+        } else {
+            pendingExternalValueRef.current = value;
+        }
+    }, [value, isFocused, localValue]);
 
     const pruneCache = (now: number) => {
         for (const [key, entry] of cacheRef.current) {
@@ -164,13 +187,13 @@ export function PromptAutocompleteTextarea({
     // Use useLayoutEffect to run synchronously before paint, preventing visible cursor flash
     useLayoutEffect(() => {
         if (intendedCursorRef.current !== null && textareaRef.current && document.activeElement === textareaRef.current) {
-            const pos = Math.min(intendedCursorRef.current, value.length);
+            const pos = Math.min(intendedCursorRef.current, localValue.length);
             textareaRef.current.setSelectionRange(pos, pos);
         }
-    }, [value]);
+    }, [localValue]);
 
     const currentToken = useMemo(() => {
-        const before = value.slice(0, cursor);
+        const before = localValue.slice(0, cursor);
         // Treat commas and parentheses as delimiters
         const lastDelimiter = Math.max(
             before.lastIndexOf(","),
@@ -180,7 +203,7 @@ export function PromptAutocompleteTextarea({
         const segment = lastDelimiter === -1 ? before : before.slice(lastDelimiter + 1);
         // Strip any remaining parentheses from the segment
         return segment.replace(/[()]/g, "").trim();
-    }, [value, cursor]);
+    }, [localValue, cursor]);
 
     // Defer token resolution to keep typing smooth under heavy render load
     const deferredToken = useDeferredValue(currentToken);
@@ -306,12 +329,12 @@ export function PromptAutocompleteTextarea({
             };
             return prev && prev.top === next.top && prev.left === next.left && prev.width === next.width ? prev : next;
         });
-    }, [showDropdown, value, cursor]);
+    }, [showDropdown, localValue, cursor]);
 
     const insertSuggestion = (name: string) => {
         if (!textareaRef.current) return;
-        const before = value.slice(0, cursor);
-        const after = value.slice(cursor);
+        const before = localValue.slice(0, cursor);
+        const after = localValue.slice(cursor);
 
         const lastComma = before.lastIndexOf(",");
         const segmentStart = lastComma === -1 ? 0 : lastComma + 1;
@@ -320,6 +343,9 @@ export function PromptAutocompleteTextarea({
         const displayName = name.replace(/_/g, " ");
 
         const newValue = `${before.slice(0, segmentStart)}${leadingSpaces}${displayName}${after}`;
+        lastInputAtRef.current = Date.now();
+        pendingExternalValueRef.current = null;
+        setLocalValue(newValue);
         onValueChange(newValue);
 
         const newPos = segmentStart + leadingSpaces.length + displayName.length;
@@ -353,7 +379,7 @@ export function PromptAutocompleteTextarea({
     };
 
     // --- Highlighting Logic (debounced for performance) ---
-    const [debouncedValue, setDebouncedValue] = useState(value);
+    const [debouncedValue, setDebouncedValue] = useState(localValue);
     const snippetIndex = useMemo(() => buildSnippetIndex(snippets), [snippets]);
     const [highlightedContent, setHighlightedContent] = useState<React.ReactNode[] | null>(null);
     const highlightHandleRef = useRef<IdleHandle | null>(null);
@@ -361,9 +387,9 @@ export function PromptAutocompleteTextarea({
 
     // Debounce value updates for highlighting (doesn't affect typing)
     useEffect(() => {
-        const timer = setTimeout(() => setDebouncedValue(value), 150);
+        const timer = setTimeout(() => setDebouncedValue(localValue), 150);
         return () => clearTimeout(timer);
-    }, [value]);
+    }, [localValue]);
 
     useEffect(() => {
         highlightTokenRef.current += 1;
@@ -472,12 +498,15 @@ export function PromptAutocompleteTextarea({
                 <Textarea
                     {...props}
                     ref={textareaRef}
-                    value={value}
+                    value={localValue}
                     onChange={(e) => {
                         const inputStart = typeof performance !== "undefined" ? performance.now() : null;
                         const nextValue = e.target.value;
                         const newCursor = e.target.selectionStart || 0;
                         intendedCursorRef.current = newCursor;
+                        lastInputAtRef.current = Date.now();
+                        pendingExternalValueRef.current = null;
+                        setLocalValue(nextValue);
                         setIsTyping(true); // Mark that user is actively typing
                         onValueChange(nextValue);
                         setCursor((prev) => (prev === newCursor ? prev : newCursor));
@@ -507,6 +536,12 @@ export function PromptAutocompleteTextarea({
                         setTextInputFocused(false);
                         setIsFocused(false);
                         setIsTyping(false); // Reset typing flag on blur
+                        const pendingExternal = pendingExternalValueRef.current;
+                        if (pendingExternal !== null) {
+                            pendingExternalValueRef.current = null;
+                            intendedCursorRef.current = null;
+                            setLocalValue(pendingExternal);
+                        }
                         // Close dropdown after delay to allow clicking on dropdown items
                         setTimeout(() => {
                             // Only close if focus is truly outside (not on dropdown buttons either)
