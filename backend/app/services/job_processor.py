@@ -247,9 +247,11 @@ def _process_single_image(
         pil_available = False
     
     # Get image bytes
+    _t_start = time.time()
     image_bytes = None
     if 'image_bytes' in img_data:
         image_bytes = img_data['image_bytes']
+        print(f"[IMG_PERF] Got image from WebSocket stream ({len(image_bytes)} bytes)")
     else:
         # Prefer local filesystem reads (ComfyUI usually runs on the same machine/container).
         orig_filename = img_data.get('filename', filename)
@@ -264,22 +266,30 @@ def _process_single_image(
         if not base_dir and engine_output_dir:
             base_dir = engine_output_dir
 
+        print(f"[IMG_PERF] engine_root_dir={engine_root_dir}, img_type={img_type}, base_dir={base_dir}")
+
         if base_dir:
             src_path = os.path.join(base_dir, subfolder, orig_filename) if subfolder else os.path.join(base_dir, orig_filename)
+            print(f"[IMG_PERF] Trying local read: {src_path} (exists={os.path.exists(src_path)})")
             if os.path.exists(src_path):
                 try:
                     with open(src_path, 'rb') as f:
                         image_bytes = f.read()
-                except Exception:
+                    print(f"[IMG_PERF] Local read SUCCESS: {len(image_bytes)} bytes in {time.time()-_t_start:.3f}s")
+                except Exception as e:
+                    print(f"[IMG_PERF] Local read FAILED: {e}")
                     image_bytes = None
 
         # Fall back to HTTP fetch (remote ComfyUI or unknown paths).
         if not image_bytes:
             img_url = img_data.get('url')
             if img_url:
+                print(f"[IMG_PERF] Falling back to HTTP: {img_url}")
+                _t_http = time.time()
                 try:
                     with urllib.request.urlopen(img_url, timeout=30) as response:
                         image_bytes = response.read()
+                    print(f"[IMG_PERF] HTTP download: {len(image_bytes)} bytes in {time.time()-_t_http:.3f}s")
                 except Exception as e:
                     print(f"Failed to download image from {img_url}: {e}")
     
@@ -290,6 +300,7 @@ def _process_single_image(
     full_path = os.path.join(save_dir, final_filename)
 
     # Process and save (single write path)
+    _t_process = time.time()
     if pil_available:
         try:
             image = PILImage.open(io.BytesIO(image_bytes))
@@ -388,6 +399,7 @@ def _process_single_image(
         with open(full_path, 'wb') as f:
             f.write(image_bytes)
     
+    print(f"[IMG_PERF] Processing+save took {time.time()-_t_process:.3f}s, total {time.time()-_t_start:.3f}s")
     return (full_path, final_filename, idx)
 
 
