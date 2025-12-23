@@ -14,6 +14,7 @@ interface VirtualGridProps<T> {
     padding?: number;
     className?: string;
     virtualize?: boolean;
+    scrollToTopKey?: number;
     renderItem: (item: T, index: number) => React.ReactNode;
     getKey?: (item: T, index: number) => React.Key;
     emptyState?: React.ReactNode;
@@ -37,6 +38,7 @@ export function VirtualGrid<T>({
     padding = 0,
     className,
     virtualize = true,
+    scrollToTopKey,
     renderItem,
     getKey,
     emptyState,
@@ -72,6 +74,14 @@ export function VirtualGrid<T>({
             }
         };
     }, []);
+
+    useLayoutEffect(() => {
+        if (scrollToTopKey === undefined) return;
+        const el = containerRef.current;
+        if (!el) return;
+        el.scrollTop = 0;
+        setScrollTop(0);
+    }, [scrollToTopKey]);
 
     const handleScroll = (event: React.UIEvent<HTMLDivElement>) => {
         const next = event.currentTarget.scrollTop;

@@ -21,6 +21,12 @@ import { VirtualGrid } from "@/components/VirtualGrid";
 
 const MISSING_IMAGE_SRC =
     "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MDAiIGhlaWdodD0iNDAwIiB2aWV3Qm94PSIwIDAgNDAwIDQwMCI+PHJlY3Qgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsbD0iI2UyZThmMCIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjOTRhM2I4IiBmb250LWZhbWlseT0iQXJpYWwsIHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMjQiPk1pc3NpbmcgRmlsZTwvdGV4dD48L3N2Zz4=";
+const PAGE_SIZE = 80;
+const CARD_META_HEIGHT = 260;
+const GRID_GAP = 16;
+const GRID_PADDING = 8;
+const MIN_COLUMN_WIDTH = 260;
+const MAX_COLUMN_COUNT = 4;
 
 export default function Gallery() {
     const [items, setItems] = useState<GalleryItem[]>([]);
@@ -41,15 +47,17 @@ export default function Gallery() {
     const [panPosition, setPanPosition] = useState({ x: 0, y: 0 });
     const [isDragging, setIsDragging] = useState(false);
     const dragStart = useRef({ x: 0, y: 0 });
-
-    const PAGE_SIZE = 80;
-    const CARD_META_HEIGHT = 220;
-    const GRID_GAP = 16;
-    const GRID_PADDING = 8;
-    const MIN_COLUMN_WIDTH = 260;
-    const MAX_COLUMN_COUNT = 4;
     const [hasMore, setHasMore] = useState(true);
     const [nextSkip, setNextSkip] = useState(0);
+    const [gridResetKey, setGridResetKey] = useState(0);
+
+    const searchRef = useRef(search);
+    const selectedProjectIdRef = useRef(selectedProjectId);
+    const activeQueryRef = useRef(activeQuery);
+    const nextSkipRef = useRef(nextSkip);
+    const queryTokenRef = useRef(0);
+    const isLoadingRef = useRef(false);
+    const isLoadingMoreRef = useRef(false);
 
     const clickTimeout = useRef<NodeJS.Timeout | null>(null);
 
@@ -95,6 +103,14 @@ export default function Gallery() {
         };
     }, []);
 
+    useEffect(() => {
+        searchRef.current = search;
+    }, [search]);
+
+    useEffect(() => {
+        selectedProjectIdRef.current = selectedProjectId;
+    }, [selectedProjectId]);
+
     const loadGallery = useCallback(async (
         query?: string,
         projectId?: number | null,
@@ -102,18 +118,23 @@ export default function Gallery() {
     ) => {
         const append = options?.append ?? false;
         const loadAll = options?.loadAll ?? false;
-        const queryValue = append ? activeQuery : (query ?? search);
+        const queryValue = append ? activeQueryRef.current : (query ?? searchRef.current);
+        const token = append ? queryTokenRef.current : queryTokenRef.current + 1;
         try {
             setError(null);
             if (append) {
+                isLoadingMoreRef.current = true;
                 setIsLoadingMore(true);
             } else {
+                isLoadingRef.current = true;
                 setIsLoading(true);
                 setActiveQuery(queryValue);
+                activeQueryRef.current = queryValue;
+                queryTokenRef.current = token;
             }
-            const target = projectId !== undefined ? projectId : selectedProjectId;
+            const target = projectId !== undefined ? projectId : selectedProjectIdRef.current;
             const unassignedOnly = target === -1;
-            const skip = append ? nextSkip : 0;
+            const skip = append ? nextSkipRef.current : 0;
             const limit = loadAll ? undefined : PAGE_SIZE;
             const data = await api.getGallery({
                 search: queryValue,
@@ -123,31 +144,39 @@ export default function Gallery() {
                 unassignedOnly,
                 includeThumbnails: false,
             });
+            if (token !== queryTokenRef.current) return;
             setItems((prev) => (append ? [...prev, ...data] : data));
             if (loadAll) {
                 setHasMore(false);
                 setNextSkip(0);
+                nextSkipRef.current = 0;
             } else {
                 const received = data.length;
                 const pageHasMore = limit !== undefined && received === limit;
                 setHasMore(pageHasMore);
-                setNextSkip(append ? skip + received : received);
+                const newSkip = append ? skip + received : received;
+                setNextSkip(newSkip);
+                nextSkipRef.current = newSkip;
             }
             if (!append) {
                 setSelectedIds(new Set());
                 setLastSelectedId(null);
+                setGridResetKey((prev) => prev + 1);
             }
         } catch (err) {
             console.error(err);
+            if (token !== queryTokenRef.current) return;
             setError(err instanceof Error ? err.message : "Failed to load gallery");
         } finally {
             if (append) {
+                isLoadingMoreRef.current = false;
                 setIsLoadingMore(false);
-            } else {
+            } else if (token === queryTokenRef.current) {
+                isLoadingRef.current = false;
                 setIsLoading(false);
             }
         }
-    }, [activeQuery, search, selectedProjectId, nextSkip, PAGE_SIZE, cleanupMode]);
+    }, []);
 
     const fetchProjects = useCallback(async () => {
         try {
@@ -169,9 +198,9 @@ export default function Gallery() {
     };
 
     const handleLoadMore = useCallback(() => {
-        if (isLoading || isLoadingMore || !hasMore) return;
-        loadGallery(search, selectedProjectId, { append: true });
-    }, [hasMore, isLoading, isLoadingMore, loadGallery, search, selectedProjectId]);
+        if (isLoadingRef.current || isLoadingMoreRef.current || !hasMore) return;
+        loadGallery(undefined, undefined, { append: true });
+    }, [hasMore, loadGallery]);
 
     const handleRangeChange = useCallback((range: { endIndex: number; total: number; columnCount: number; startIndex: number }) => {
         if (!hasMore || isLoading || isLoadingMore) return;
@@ -385,6 +414,7 @@ export default function Gallery() {
     };
 
     const handleSelectProject = (id: number | null) => {
+        selectedProjectIdRef.current = id;
         setSelectedProjectId(id);
         setSelectedFolder(null); // Reset folder when project changes
         loadGallery(search, id, { loadAll: cleanupMode });
@@ -600,6 +630,7 @@ export default function Gallery() {
                             padding={GRID_PADDING}
                             overscan={4}
                             className="h-full"
+                            scrollToTopKey={gridResetKey}
                             getKey={(item) => item.image.id}
                             onRangeChange={handleRangeChange}
                             emptyState={(
@@ -721,7 +752,7 @@ export default function Gallery() {
                                                                     </div>
                                                                     <HoverCard openDelay={200}>
                                                                         <HoverCardTrigger asChild>
-                                                                            <p className="line-clamp-3 text-slate-700 leading-relaxed cursor-help select-text">{positive}</p>
+                                                                            <p className="line-clamp-6 text-slate-700 leading-relaxed cursor-help select-text">{positive}</p>
                                                                         </HoverCardTrigger>
                                                                         <HoverCardContent className="w-[500px] max-h-[60vh] overflow-y-auto p-4 z-[100]" align="start">
                                                                             <div className="space-y-4">
