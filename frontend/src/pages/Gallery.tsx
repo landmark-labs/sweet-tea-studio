@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { api, GalleryItem, Project } from "@/lib/api";
 import { isVideoFile } from "@/lib/media";
 import { Card, CardContent } from "@/components/ui/card";
@@ -41,9 +41,10 @@ export default function Gallery() {
     const [isDragging, setIsDragging] = useState(false);
     const dragStart = useRef({ x: 0, y: 0 });
 
-    const PAGE_SIZE = 120;
+    const PAGE_SIZE = 80;
     const [hasMore, setHasMore] = useState(true);
     const [nextSkip, setNextSkip] = useState(0);
+    const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
     const clickTimeout = useRef<NodeJS.Timeout | null>(null);
 
@@ -52,7 +53,7 @@ export default function Gallery() {
     useEffect(() => {
         loadGallery();
         fetchProjects();
-    }, []);
+    }, [loadGallery, fetchProjects]);
 
     // Keep fullscreen index valid when items update
     useEffect(() => {
@@ -94,7 +95,7 @@ export default function Gallery() {
         };
     }, []);
 
-    const loadGallery = async (
+    const loadGallery = useCallback(async (
         query?: string,
         projectId?: number | null,
         options?: { append?: boolean; loadAll?: boolean }
@@ -113,10 +114,11 @@ export default function Gallery() {
             const target = projectId !== undefined ? projectId : selectedProjectId;
             const unassignedOnly = target === -1;
             const skip = append ? nextSkip : 0;
+            const limit = loadAll ? undefined : PAGE_SIZE;
             const data = await api.getGallery({
                 search: queryValue,
                 skip,
-                limit: loadAll ? undefined : PAGE_SIZE,
+                limit,
                 projectId: unassignedOnly ? null : target,
                 unassignedOnly,
                 includeThumbnails: false,
@@ -126,8 +128,10 @@ export default function Gallery() {
                 setHasMore(false);
                 setNextSkip(0);
             } else {
-                setHasMore(data.length > 0);
-                setNextSkip(prev => (append ? prev + PAGE_SIZE : PAGE_SIZE));
+                const received = data.length;
+                const pageHasMore = limit !== undefined && received === limit;
+                setHasMore(pageHasMore);
+                setNextSkip(append ? skip + received : received);
             }
             if (!append) {
                 setSelectedIds(new Set());
@@ -143,26 +147,41 @@ export default function Gallery() {
                 setIsLoading(false);
             }
         }
-    };
+    }, [activeQuery, search, selectedProjectId, nextSkip, PAGE_SIZE, cleanupMode]);
 
-    const fetchProjects = async () => {
+    const fetchProjects = useCallback(async () => {
         try {
             const data = await api.getProjects();
             setProjects(data);
         } catch (err) {
             console.error(err);
         }
-    };
+    }, []);
 
     const handleSearch = (e: React.FormEvent) => {
         e.preventDefault();
         loadGallery(search, selectedProjectId);
     };
 
-    const handleLoadMore = () => {
-        if (isLoadingMore || !hasMore) return;
+    const handleLoadMore = useCallback(() => {
+        if (isLoading || isLoadingMore || !hasMore) return;
         loadGallery(search, selectedProjectId, { append: true });
-    };
+    }, [hasMore, isLoading, isLoadingMore, loadGallery, search, selectedProjectId]);
+
+    // Infinite scroll: load next page when sentinel enters view
+    useEffect(() => {
+        const target = loadMoreRef.current;
+        if (!target) return;
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach((entry) => {
+                if (entry.isIntersecting) {
+                    handleLoadMore();
+                }
+            });
+        }, { rootMargin: "600px 0px 0px 0px" });
+        observer.observe(target);
+        return () => observer.disconnect();
+    }, [handleLoadMore]);
 
     // Selection & fullscreen logic
     const handleSelectionToggle = (id: number, e?: React.MouseEvent) => {
@@ -754,6 +773,8 @@ export default function Gallery() {
                                     </ContextMenu>
                                 ))}
                             </div>
+                            {/* Infinite scroll sentinel */}
+                            <div ref={loadMoreRef} className="h-10" />
                             {!cleanupMode && hasMore && (
                                 <div className="flex justify-center pt-6">
                                     <Button variant="outline" onClick={handleLoadMore} disabled={isLoadingMore}>
