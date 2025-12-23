@@ -6,6 +6,8 @@ type RowHeight = number | ((columnWidth: number) => number);
 interface VirtualGridProps<T> {
     items: T[];
     columnCount: number;
+    minColumnWidth?: number;
+    maxColumnCount?: number;
     rowHeight: RowHeight;
     gap?: number;
     overscan?: number;
@@ -15,11 +17,20 @@ interface VirtualGridProps<T> {
     renderItem: (item: T, index: number) => React.ReactNode;
     getKey?: (item: T, index: number) => React.Key;
     emptyState?: React.ReactNode;
+    onRangeChange?: (range: {
+        startIndex: number;
+        endIndex: number;
+        total: number;
+        totalRows: number;
+        columnCount: number;
+    }) => void;
 }
 
 export function VirtualGrid<T>({
     items,
     columnCount,
+    minColumnWidth,
+    maxColumnCount,
     rowHeight,
     gap = 0,
     overscan = 2,
@@ -29,6 +40,7 @@ export function VirtualGrid<T>({
     renderItem,
     getKey,
     emptyState,
+    onRangeChange,
 }: VirtualGridProps<T>) {
     const containerRef = useRef<HTMLDivElement | null>(null);
     const [viewport, setViewport] = useState({ width: 0, height: 0 });
@@ -72,8 +84,14 @@ export function VirtualGrid<T>({
     };
 
     const layout = useMemo(() => {
-        const safeColumns = Math.max(1, columnCount);
         const usableWidth = Math.max(0, viewport.width - padding * 2);
+        const computedColumns = minColumnWidth
+            ? Math.max(1, Math.floor((usableWidth + gap) / (minColumnWidth + gap)))
+            : columnCount;
+        const safeColumns = Math.max(
+            1,
+            maxColumnCount ? Math.min(computedColumns, maxColumnCount) : computedColumns
+        );
         const columnWidth = safeColumns > 0
             ? Math.max(0, (usableWidth - gap * (safeColumns - 1)) / safeColumns)
             : 0;
@@ -105,7 +123,18 @@ export function VirtualGrid<T>({
             startIndex,
             endIndex,
         };
-    }, [columnCount, gap, items.length, overscan, padding, rowHeight, scrollTop, viewport.height, viewport.width, virtualize]);
+    }, [columnCount, gap, items.length, maxColumnCount, minColumnWidth, overscan, padding, rowHeight, scrollTop, viewport.height, viewport.width, virtualize]);
+
+    useLayoutEffect(() => {
+        if (!onRangeChange) return;
+        onRangeChange({
+            startIndex: layout.startIndex,
+            endIndex: layout.endIndex,
+            total: items.length,
+            totalRows: layout.totalRows,
+            columnCount: layout.safeColumns,
+        });
+    }, [items.length, layout.endIndex, layout.safeColumns, layout.startIndex, layout.totalRows, onRangeChange]);
 
     if (items.length === 0) {
         return (
