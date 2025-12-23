@@ -994,29 +994,66 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
 
         } else if (editingSnippetId) {
             // UPDATE GLOBAL SNIPPET
+            // Use a direct imperative approach: compute updated values and push to parent
+            // instead of relying on the library sync effect (which had timing issues)
+
             const updatedLibrary = library.map(s =>
                 s.id === editingSnippetId
                     ? { ...s, label: snippetTitle, content: snippetContent }
                     : s
             );
+
+            // Compute updated fieldItems
+            const currentFieldItems = fieldItemsRef.current;
+            const nextFieldItems: Record<string, PromptItem[]> = {};
+            const valueUpdates: Record<string, string> = {};
+
+            Object.keys(currentFieldItems).forEach(fieldKey => {
+                const fieldItemsList = currentFieldItems[fieldKey] || [];
+                const updatedItems = fieldItemsList.map(item => {
+                    if (item.type === 'block' && item.sourceId === editingSnippetId) {
+                        return { ...item, label: snippetTitle, content: snippetContent };
+                    }
+                    return item;
+                });
+                nextFieldItems[fieldKey] = updatedItems;
+
+                // Check if this field has linked blocks that were updated
+                const hasLinkedBlocks = updatedItems.some(i => i.type === 'block' && i.sourceId === editingSnippetId);
+                if (hasLinkedBlocks) {
+                    // Compile the new value
+                    const compiled = updatedItems.map(i => i.content).join(", ");
+                    valueUpdates[fieldKey] = compiled;
+                }
+            });
+
+            // Prevent library sync effect from re-processing this change
+            syncingLibraryRef.current = true;
+
+            // Update library (parent state)
             setLibrary(updatedLibrary);
 
-            // Update fieldItems and sync the ref immediately so the library sync effect
-            // sees the correct items and doesn't try to rebuild them
-            setFieldItems(prev => {
-                const next = { ...prev };
-                Object.keys(next).forEach(fieldKey => {
-                    next[fieldKey] = next[fieldKey].map(item => {
-                        if (item.type === 'block' && item.sourceId === editingSnippetId) {
-                            return { ...item, label: snippetTitle, content: snippetContent };
-                        }
-                        return item;
+            // Update local fieldItems state and ref
+            fieldItemsRef.current = nextFieldItems;
+            setFieldItems(nextFieldItems);
+
+            // Directly update parent with new compiled values
+            if (Object.keys(valueUpdates).length > 0) {
+                suppressCompileRef.current = true;
+                if (onUpdateMany) {
+                    onUpdateMany(valueUpdates);
+                } else {
+                    // Fallback: update each field individually
+                    Object.entries(valueUpdates).forEach(([field, value]) => {
+                        onUpdate(field, value);
                     });
-                });
-                // Sync ref immediately so library sync effect sees correct items
-                fieldItemsRef.current = next;
-                return next;
-            });
+                }
+            }
+
+            // Clear sync flag after state settles
+            setTimeout(() => {
+                syncingLibraryRef.current = false;
+            }, 0);
 
             cancelEdit();
 
