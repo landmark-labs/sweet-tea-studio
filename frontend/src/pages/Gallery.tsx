@@ -593,7 +593,14 @@ export default function Gallery() {
                                                 onClick={(e) => handleCardClick(item, e)}
                                                 onDoubleClick={() => handleCardDoubleClick(item)}
                                             >
-                                                <div className="relative aspect-square bg-slate-100">
+                                                <div
+                                                    className="relative bg-slate-100"
+                                                    style={{
+                                                        aspectRatio: item.width && item.height && item.width > item.height
+                                                            ? `${item.width} / ${item.height}`
+                                                            : '1 / 1'
+                                                    }}
+                                                >
                                                     {/* Selection Overlay Checkbox */}
                                                     {selectedIds.has(item.image.id) && (
                                                         <div className="absolute top-2 left-2 z-20 bg-blue-500 text-white rounded-full p-0.5 shadow-sm">
