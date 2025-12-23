@@ -81,6 +81,7 @@ export default function PromptStudio() {
   const store = useStore();
   const setFormData = useSetAtom(setFormDataAtom);
   const [focusedField, setFocusedField] = useState<string>("");
+  const [externalValueSyncKey, setExternalValueSyncKey] = useState(0);
   const selectedWorkflowIdRef = useRef<string | null>(selectedWorkflowId);
   useEffect(() => {
     selectedWorkflowIdRef.current = selectedWorkflowId || null;
@@ -876,6 +877,7 @@ export default function PromptStudio() {
 
       // STEP 7: Update form state directly  
       setFormData(baseParams);
+      setExternalValueSyncKey((prev) => prev + 1);
 
       // Clear pending - we've processed it
       setPendingLoadParams(null);
@@ -1746,6 +1748,7 @@ export default function PromptStudio() {
               snippets={library}
               projectSlug={selectedProject?.slug}
               destinationFolder={generationTarget || undefined}
+              externalValueSyncKey={externalValueSyncKey}
             />
           )}
         </div>

@@ -22,6 +22,7 @@ interface PromptAutocompleteTextareaProps extends React.TextareaHTMLAttributes<H
     isActive?: boolean;
     snippets?: PromptItem[];
     highlightSnippets?: boolean;
+    externalValueSyncKey?: number;
 }
 
 function computeScore(query: string, candidate: string): number {
@@ -75,6 +76,7 @@ export function PromptAutocompleteTextarea({
     onKeyDown,
     snippets = [],
     highlightSnippets,
+    externalValueSyncKey,
     ...props
 }: PromptAutocompleteTextareaProps) {
     const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -123,6 +125,14 @@ export function PromptAutocompleteTextarea({
             pendingExternalValueRef.current = value;
         }
     }, [value, isFocused, localValue]);
+
+    useEffect(() => {
+        if (externalValueSyncKey === undefined) return;
+        lastPropValueRef.current = value;
+        pendingExternalValueRef.current = null;
+        intendedCursorRef.current = null;
+        setLocalValue(value);
+    }, [externalValueSyncKey, value]);
 
     const pruneCache = (now: number) => {
         for (const [key, entry] of cacheRef.current) {

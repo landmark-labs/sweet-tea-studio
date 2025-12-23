@@ -47,6 +47,7 @@ interface FieldRendererProps {
     engineId?: string;
     projectSlug?: string;
     destinationFolder?: string;
+    externalValueSyncKey?: number;
 }
 
 const BYPASS_PLACEHOLDER_KEY = "__sts_bypass_placeholder__";
@@ -95,6 +96,7 @@ const FieldRenderer = React.memo(function FieldRenderer({
     engineId,
     projectSlug,
     destinationFolder,
+    externalValueSyncKey,
 }: FieldRendererProps) {
     const value = useAtomValue(formFieldAtom(fieldKey));
     const isMediaUpload = isMediaUploadField(fieldKey, field);
@@ -133,6 +135,7 @@ const FieldRenderer = React.memo(function FieldRenderer({
                         isActive={isActive}
                         snippets={snippets}
                         highlightSnippets={true}
+                        externalValueSyncKey={externalValueSyncKey}
                     />
                 ) : (
                     <Textarea
@@ -408,6 +411,7 @@ interface DynamicFormProps {
     submitLabel?: string;
     isLoading?: boolean;
     submitDisabled?: boolean;
+    externalValueSyncKey?: number;
 }
 
 export const DynamicForm = React.memo(function DynamicForm({
@@ -423,7 +427,8 @@ export const DynamicForm = React.memo(function DynamicForm({
     onReset,
     snippets = [],
     projectSlug,
-    destinationFolder
+    destinationFolder,
+    externalValueSyncKey,
 }: DynamicFormProps) {
     const [dynamicOptions, setDynamicOptions] = useState<Record<string, string[]>>({});
     const store = useStore();
@@ -840,6 +845,7 @@ export const DynamicForm = React.memo(function DynamicForm({
                 engineId={engineId}
                 projectSlug={projectSlug}
                 destinationFolder={destinationFolder}
+                externalValueSyncKey={externalValueSyncKey}
             />
         );
     }, [
@@ -847,6 +853,7 @@ export const DynamicForm = React.memo(function DynamicForm({
         destinationFolder,
         dynamicOptions,
         engineId,
+        externalValueSyncKey,
         groups.prompts,
         handleChange,
         handleToggleChange,
