@@ -438,8 +438,6 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
     // to prevent stale parent values from overwriting linked blocks.
     const syncingLibraryRef = useRef(false);
     const suppressCompileRef = useRef(false);
-    // Guard to prevent library sync effect from running during direct snippet edits
-    const snippetEditInProgressRef = useRef(false);
 
     // Helper to validate target
     const isTargetValid = targetField && schema && schema[targetField] && schema[targetField].type === 'string';
@@ -608,7 +606,6 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
     useEffect(() => {
         if (!library || library.length === 0) return;
         if (syncingLibraryRef.current) return;
-        if (snippetEditInProgressRef.current) return;
 
         // Use refs to access current state without dependencies
         const currentFieldItems = fieldItemsRef.current;
@@ -996,10 +993,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
             cancelEdit();
 
         } else if (editingSnippetId) {
-            // UPDATE GLOBAL
-            // Prevent library sync effect from running during this update
-            snippetEditInProgressRef.current = true;
-
+            // UPDATE GLOBAL SNIPPET
             const updatedLibrary = library.map(s =>
                 s.id === editingSnippetId
                     ? { ...s, label: snippetTitle, content: snippetContent }
@@ -1007,7 +1001,8 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
             );
             setLibrary(updatedLibrary);
 
-            // Update fieldItems and sync the ref BEFORE React renders
+            // Update fieldItems and sync the ref immediately so the library sync effect
+            // sees the correct items and doesn't try to rebuild them
             setFieldItems(prev => {
                 const next = { ...prev };
                 Object.keys(next).forEach(fieldKey => {
@@ -1018,15 +1013,10 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
                         return item;
                     });
                 });
-                // Sync ref immediately to prevent race condition with library sync effect
+                // Sync ref immediately so library sync effect sees correct items
                 fieldItemsRef.current = next;
                 return next;
             });
-
-            // Clear flag after state settles
-            setTimeout(() => {
-                snippetEditInProgressRef.current = false;
-            }, 0);
 
             cancelEdit();
 
