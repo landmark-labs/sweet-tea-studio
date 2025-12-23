@@ -247,11 +247,9 @@ def _process_single_image(
         pil_available = False
     
     # Get image bytes
-    _t_start = time.time()
     image_bytes = None
     if 'image_bytes' in img_data:
         image_bytes = img_data['image_bytes']
-        print(f"[IMG_PERF] Got image from WebSocket stream ({len(image_bytes)} bytes)")
     else:
         # Prefer local filesystem reads (ComfyUI usually runs on the same machine/container).
         orig_filename = img_data.get('filename', filename)
@@ -266,30 +264,22 @@ def _process_single_image(
         if not base_dir and engine_output_dir:
             base_dir = engine_output_dir
 
-        print(f"[IMG_PERF] engine_root_dir={engine_root_dir}, img_type={img_type}, base_dir={base_dir}")
-
         if base_dir:
             src_path = os.path.join(base_dir, subfolder, orig_filename) if subfolder else os.path.join(base_dir, orig_filename)
-            print(f"[IMG_PERF] Trying local read: {src_path} (exists={os.path.exists(src_path)})")
             if os.path.exists(src_path):
                 try:
                     with open(src_path, 'rb') as f:
                         image_bytes = f.read()
-                    print(f"[IMG_PERF] Local read SUCCESS: {len(image_bytes)} bytes in {time.time()-_t_start:.3f}s")
-                except Exception as e:
-                    print(f"[IMG_PERF] Local read FAILED: {e}")
+                except Exception:
                     image_bytes = None
 
         # Fall back to HTTP fetch (remote ComfyUI or unknown paths).
         if not image_bytes:
             img_url = img_data.get('url')
             if img_url:
-                print(f"[IMG_PERF] Falling back to HTTP: {img_url}")
-                _t_http = time.time()
                 try:
                     with urllib.request.urlopen(img_url, timeout=30) as response:
                         image_bytes = response.read()
-                    print(f"[IMG_PERF] HTTP download: {len(image_bytes)} bytes in {time.time()-_t_http:.3f}s")
                 except Exception as e:
                     print(f"Failed to download image from {img_url}: {e}")
     
@@ -300,7 +290,6 @@ def _process_single_image(
     full_path = os.path.join(save_dir, final_filename)
 
     # Process and save (single write path)
-    _t_process = time.time()
     if pil_available:
         try:
             image = PILImage.open(io.BytesIO(image_bytes))
@@ -399,7 +388,6 @@ def _process_single_image(
         with open(full_path, 'wb') as f:
             f.write(image_bytes)
     
-    print(f"[IMG_PERF] Processing+save took {time.time()-_t_process:.3f}s, total {time.time()-_t_start:.3f}s")
     return (full_path, final_filename, idx)
 
 
@@ -616,9 +604,7 @@ def process_job(job_id: int):
             
             manager.broadcast_sync({"type": "started", "prompt_id": prompt_id}, str(job_id))
             
-            _t_postproc = time.time()
             outputs = client.get_images(prompt_id, progress_callback=on_progress)
-            print(f"[TIMING] get_images returned in {time.time()-_t_postproc:.3f}s with {len(outputs)} outputs")
             image_outputs = [item for item in outputs if item.get("kind") != "video"]
             video_outputs = [item for item in outputs if item.get("kind") == "video"]
             
@@ -833,7 +819,6 @@ def process_job(job_id: int):
             total_tasks = len(image_tasks) + len(video_tasks)
             max_workers = max(1, min(max_workers, total_tasks or 1))
 
-            _t_executor = time.time()
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 futures = {}
                 for task in image_tasks:
@@ -845,7 +830,6 @@ def process_job(job_id: int):
                     result = future.result()
                     if result:
                         processed_results.append(result)
-            print(f"[TIMING] ThreadPoolExecutor finished in {time.time()-_t_executor:.3f}s")
             
             # Sort by original index to maintain order
             processed_results.sort(key=lambda x: x[2])
@@ -944,14 +928,11 @@ def process_job(job_id: int):
                 session.add(new_image)
                 saved_media.append(new_image)
             
-            _t_db = time.time()
             session.commit()
-            print(f"[TIMING] DB commit (image records) took {time.time()-_t_db:.3f}s")
             
             for img in saved_media:
                 session.refresh(img)
 
-            _t_fts = time.time()
             fts_updated = False
             search_text = build_search_text(pos_embed, neg_embed, None, None, stacked_history)
             if search_text:
@@ -962,7 +943,6 @@ def process_job(job_id: int):
                         fts_updated = True
             if fts_updated:
                 session.commit()
-            print(f"[TIMING] FTS update took {time.time()-_t_fts:.3f}s")
                 
             images_payload = [
                 {
@@ -976,7 +956,6 @@ def process_job(job_id: int):
                 for img in saved_media
             ]
             
-            _t_broadcast = time.time()
             manager.broadcast_sync({
                 "type": "completed", 
                 "images": images_payload,
@@ -984,8 +963,6 @@ def process_job(job_id: int):
                 "prompt": pos_embed,
                 "negative_prompt": neg_embed
             }, str(job_id))
-            print(f"[TIMING] Final broadcast took {time.time()-_t_broadcast:.3f}s")
-            print(f"[TIMING] Total post-processing: {time.time()-_t_postproc:.3f}s")
             manager.close_job_sync(str(job_id))
             
             # Auto-Save Prompt
