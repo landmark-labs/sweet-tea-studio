@@ -585,6 +585,7 @@ def delete_folder_images(
     
     deleted = 0
     errors = []
+    soft_deleted_count = 0
     
     for path in req.paths:
         # Security: validate path is within the expected folder
@@ -601,6 +602,17 @@ def delete_folder_images(
                     json_path = os.path.splitext(abs_path)[0] + ".json"
                     if os.path.exists(json_path):
                         os.remove(json_path)
+                    
+                    # Soft-delete the corresponding Image record in the database
+                    # This prevents "Missing File" artifacts in the gallery
+                    db_image = session.exec(
+                        select(Image).where(Image.path == abs_path)
+                    ).first()
+                    if db_image:
+                        db_image.is_deleted = True
+                        db_image.deleted_at = datetime.utcnow()
+                        session.add(db_image)
+                        soft_deleted_count += 1
                 else:
                     errors.append(f"File not found: {path}")
             else:
@@ -608,7 +620,12 @@ def delete_folder_images(
         except Exception as e:
             errors.append(f"Failed to delete {path}: {str(e)}")
     
+    # Commit all soft-delete changes
+    if soft_deleted_count > 0:
+        session.commit()
+    
     return {
         "deleted": deleted,
-        "errors": errors
+        "errors": errors,
+        "soft_deleted": soft_deleted_count
     }
