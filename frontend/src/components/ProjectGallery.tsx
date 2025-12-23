@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { api, Project, FolderImage } from "@/lib/api";
 import { isVideoFile } from "@/lib/media";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -35,7 +35,10 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
 
     // Get selected project
     const selectedProject = projects.find(p => String(p.id) === selectedProjectId);
-    const folders = (selectedProject?.config_json as { folders?: string[] })?.folders || [];
+    // Memoize folders for referential stability - prevents effect re-runs on every render
+    const folders = useMemo(() => {
+        return (selectedProject?.config_json as { folders?: string[] })?.folders || [];
+    }, [selectedProject?.config_json]);
 
     // Persist collapsed state
     useEffect(() => {
@@ -108,7 +111,7 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
         } else if (folders.length === 0) {
             setSelectedFolder("");
         }
-    }, [selectedProjectId, folders]);
+    }, [selectedProjectId, folders, selectedFolder]);
 
     const galleryItems = !isLoading && selectedProjectId && images.length > 0 ? images : [];
     const galleryEmptyState = React.useMemo(() => {
@@ -373,25 +376,32 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
 
             {/* Footer with selection or hint */}
             {images.length > 0 && (
-                <div className="flex-none p-2 border-t bg-slate-50 text-[10px] text-slate-400">
+                <div className="flex-none p-3 border-t bg-slate-50">
                     {selectedPaths.size > 0 ? (
-                        <div className="flex items-center justify-between gap-2">
-                            <span className="text-blue-600 font-medium">{selectedPaths.size} selected</span>
-                            <div className="flex items-center gap-1">
-                                <button
-                                    className="text-slate-500 hover:underline"
+                        <div className="flex items-center justify-between gap-3">
+                            <span className="text-sm font-semibold text-blue-600">{selectedPaths.size} selected</span>
+                            <div className="flex items-center gap-2">
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-8 px-3 text-xs"
                                     onClick={() => setSelectedPaths(new Set())}
-                                >clear</button>
-                                <button
-                                    className="text-red-600 hover:underline flex items-center gap-1"
+                                >
+                                    Clear
+                                </Button>
+                                <Button
+                                    variant="destructive"
+                                    size="sm"
+                                    className="h-8 px-3 text-xs"
                                     onClick={handleBulkDelete}
                                 >
-                                    <Trash2 className="h-3 w-3" />delete
-                                </button>
+                                    <Trash2 className="h-4 w-4 mr-1" />
+                                    Delete
+                                </Button>
                             </div>
                         </div>
                     ) : (
-                        <div className="text-center">Ctrl+click to select, drag to use</div>
+                        <div className="text-center text-xs text-slate-400">Ctrl+click to select, drag to use</div>
                     )}
                 </div>
             )}
