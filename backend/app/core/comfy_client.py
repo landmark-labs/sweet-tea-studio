@@ -254,6 +254,10 @@ class ComfyClient:
                             # Clear earlier preview images - only keep post-completion ones
                             preview_images.clear()
                             preview_counter = 0
+                            # Use a very short timeout to catch any trailing images, then exit
+                            # This prevents waiting for the full 10s socket timeout
+                            if self.ws:
+                                self.ws.settimeout(1)
                     
                     continue  # Done processing text message
                 
