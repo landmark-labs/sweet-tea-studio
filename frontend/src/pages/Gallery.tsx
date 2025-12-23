@@ -653,7 +653,7 @@ export default function Gallery() {
                                             onClick={(e) => handleCardClick(item, e)}
                                             onDoubleClick={() => handleCardDoubleClick(item)}
                                         >
-                                            <div className="relative bg-slate-100 aspect-square">
+                                            <div className="relative bg-slate-100 aspect-square overflow-hidden">
                                                 {selectedIds.has(item.image.id) && (
                                                     <div className="absolute top-2 left-2 z-20 bg-blue-500 text-white rounded-full p-0.5 shadow-sm">
                                                         <Check className="w-3 h-3" />
@@ -663,7 +663,7 @@ export default function Gallery() {
                                                 {isVideoFile(item.image.path, item.image.filename) ? (
                                                     <video
                                                         src={`/api/v1/gallery/image/${item.image.id}`}
-                                                        className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                                                        className="w-full h-full object-cover object-top transition-transform group-hover:scale-105"
                                                         preload="metadata"
                                                         muted
                                                         playsInline
@@ -672,7 +672,7 @@ export default function Gallery() {
                                                     <img
                                                         src={`/api/v1/gallery/image/${item.image.id}`}
                                                         alt={item.image.filename}
-                                                        className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                                                        className="w-full h-full object-cover object-top transition-transform group-hover:scale-105"
                                                         loading="lazy"
                                                         decoding="async"
                                                         onError={handleImageError}
@@ -708,7 +708,11 @@ export default function Gallery() {
                                                 </div>
                                             </div>
 
-                                            <CardContent className="p-4 text-xs space-y-2 bg-white flex-1 relative z-10 overflow-hidden" onClick={() => { }}>
+                                            <CardContent
+                                                className="p-4 text-xs space-y-2 bg-white flex-1 relative z-10 overflow-hidden"
+                                                style={{ minHeight: CARD_META_HEIGHT - 40 }}
+                                                onClick={() => { }}
+                                            >
                                                 <div className="flex items-center gap-2 flex-wrap">
                                                     {item.workflow_name && (
                                                         <span className="px-1.5 py-0.5 bg-purple-50 text-purple-600 border border-purple-100 rounded text-[10px] font-medium">
