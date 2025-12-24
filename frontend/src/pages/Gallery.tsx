@@ -422,7 +422,8 @@ export default function Gallery() {
 
     const handleSelectFolder = (folder: string | null) => {
         setSelectedFolder(folder);
-        // Folder filtering now happens client-side via displayItems
+        // Reset scroll position when switching folders so items become visible
+        setGridResetKey((prev) => prev + 1);
     };
 
     // Get folders for the selected project
