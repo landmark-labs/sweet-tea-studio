@@ -36,6 +36,7 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; image: FolderImage } | null>(null);
     const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set());
     const lastSelectedPath = useRef<string | null>(null);
+    const [gridResetKey, setGridResetKey] = useState(0);
 
     // Get selected project
     const selectedProject = projects.find(p => String(p.id) === selectedProjectId);
@@ -68,6 +69,9 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
     useEffect(() => {
         let mounted = true;
         let timeoutId: NodeJS.Timeout;
+
+        // Reset VirtualGrid scroll position when switching folders
+        setGridResetKey(prev => prev + 1);
 
         const loadImages = async (showLoading = true) => {
             if (!selectedProjectId || !selectedFolder) {
@@ -330,6 +334,7 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
                 padding={8}
                 overscan={3}
                 className="flex-1"
+                scrollToTopKey={gridResetKey}
                 emptyState={galleryEmptyState}
                 getKey={(image) => image.path}
                 renderItem={(image) => (
