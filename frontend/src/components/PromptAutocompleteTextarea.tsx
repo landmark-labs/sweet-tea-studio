@@ -411,65 +411,11 @@ export function PromptAutocompleteTextarea({
         return () => clearTimeout(timer);
     }, [localValue]);
 
-    useEffect(() => {
-        highlightTokenRef.current += 1;
-        const token = highlightTokenRef.current;
-
-        if (!highlightSnippets || !debouncedValue || debouncedValue.length > MAX_HIGHLIGHT_LENGTH || snippetIndex.entries.length === 0) {
-            cancelIdle(highlightHandleRef.current);
-            highlightHandleRef.current = null;
-            // Only update state if it's not already null to prevent infinite loops
-            setHighlightedContent((prev) => prev === null ? prev : null);
-            return;
-        }
-
-        cancelIdle(highlightHandleRef.current);
-        highlightHandleRef.current = scheduleIdle(() => {
-            if (token !== highlightTokenRef.current) return;
-
-            const matches = findSnippetMatches(debouncedValue, snippetIndex, { maxMatches: MAX_HIGHLIGHT_MATCHES });
-            if (!matches || matches.length === 0) {
-                setHighlightedContent((prev) => prev === null ? prev : null);
-                return;
-            }
-
-            const selectedMatches = selectNonOverlappingMatches(matches);
-            if (selectedMatches.length === 0) {
-                setHighlightedContent((prev) => prev === null ? prev : null);
-                return;
-            }
-
-            const nodes: React.ReactNode[] = [];
-            let cursor = 0;
-
-            selectedMatches.forEach((m, idx) => {
-                if (m.start > cursor) {
-                    nodes.push(debouncedValue.slice(cursor, m.start));
-                }
-                nodes.push(
-                    <span
-                        key={`${m.start}-${idx}`}
-                        className={cn(m.snippet.color || "bg-slate-200", "rounded-sm opacity-70 text-transparent select-none")}
-                    >
-                        {debouncedValue.slice(m.start, m.end)}
-                    </span>
-                );
-                cursor = m.end;
-            });
-
-            if (cursor < debouncedValue.length) {
-                nodes.push(debouncedValue.slice(cursor));
-            }
-
-            setHighlightedContent(nodes);
-            highlightHandleRef.current = null;
-        }, { timeout: 300 });
-
-        return () => {
-            cancelIdle(highlightHandleRef.current);
-            highlightHandleRef.current = null;
-        };
-    }, [debouncedValue, highlightSnippets, snippetIndex]);
+    // TEMPORARILY DISABLED: Highlighting effect causes infinite loops
+    // TODO: Fix root cause and re-enable
+    // useEffect(() => {
+    //     ... highlighting logic disabled ...
+    // }, [debouncedValue, highlightSnippets, snippetIndex]);
 
 
     return (
