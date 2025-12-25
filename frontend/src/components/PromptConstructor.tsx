@@ -582,7 +582,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
         const nextReconciled: Record<string, string> = {};
 
         availableFields.forEach((fieldKey) => {
-            const rawVal = (currentValues as any)?.[fieldKey];
+            const rawVal = (valuesRef.current as any)?.[fieldKey];
             const currentVal = typeof rawVal === "string" ? rawVal : (rawVal === null || rawVal === undefined ? "" : String(rawVal));
             nextFieldItems[fieldKey] = rebuildItemsForValue(currentVal, snippetIndex);
             nextReconciled[fieldKey] = normalizePrompt(currentVal);
@@ -598,7 +598,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
         setTimeout(() => {
             syncingLibraryRef.current = false;
         }, 0);
-    }, [availableFields, currentValues, externalValueSyncKey, schema, snippetIndex, targetField]);
+    }, [availableFields, externalValueSyncKey, schema, snippetIndex, targetField]);
 
     // Sync Library: keep linked blocks + prompt text aligned when snippets change.
     // Important: reconciliation depends on `library`, so we must guard against it
