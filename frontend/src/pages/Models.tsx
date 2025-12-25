@@ -278,6 +278,19 @@ export default function Models() {
     }
   };
 
+  const clearQueue = async () => {
+    try {
+      const res = await fetch("/api/v1/models/downloads/clear", {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        fetchDownloads(); // Refresh the queue
+      }
+    } catch (e) {
+      console.error("Failed to clear queue:", e);
+    }
+  };
+
   return (
     <div className="h-full flex flex-col p-4 gap-4 overflow-hidden">
       <div className="flex-none flex flex-col gap-1">
@@ -446,16 +459,29 @@ export default function Models() {
 
             <div className="bg-slate-50 p-2 rounded text-[10px] text-slate-500 space-y-1">
               <div className="flex gap-2 items-center"><Info size={12} /> <span>Auto-sorted by link type</span></div>
-              <p>Civitai links use civitaidownloader (API key supported). HF links use aria2c.</p>
+              <p>Civitai: API downloader. HF file links: aria2c. HF repo IDs: huggingface_hub (sharded models).</p>
             </div>
           </CardContent>
         </Card>
 
         {/* Column 3: Download Queue */}
         <Card className="h-full flex flex-col overflow-hidden">
-          <CardHeader className="pb-1 p-3 flex-none">
-            <CardTitle className="text-sm">download queue</CardTitle>
-            <CardDescription className="text-[10px]">active and past jobs.</CardDescription>
+          <CardHeader className="pb-1 p-3 flex-none flex flex-row items-center justify-between">
+            <div>
+              <CardTitle className="text-sm">download queue</CardTitle>
+              <CardDescription className="text-[10px]">active and past jobs.</CardDescription>
+            </div>
+            {downloadQueue.some(j => j.status === "completed" || j.status === "failed" || j.status === "cancelled") && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 text-[10px] text-slate-500 hover:text-red-500"
+                onClick={clearQueue}
+              >
+                <Trash2 size={12} className="mr-1" />
+                clear
+              </Button>
+            )}
           </CardHeader>
           <CardContent className="space-y-2 flex-1 overflow-y-auto p-2 scrollbar-thin">
             {downloadQueue.map((job) => (

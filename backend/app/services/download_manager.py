@@ -16,6 +16,14 @@ from urllib.parse import urlparse, unquote
 
 import httpx
 
+# huggingface_hub for repo/directory downloads
+try:
+    from huggingface_hub import snapshot_download, hf_hub_download
+    HF_HUB_AVAILABLE = True
+except ImportError:
+    HF_HUB_AVAILABLE = False
+    print("[DownloadManager] huggingface_hub not installed, repo downloads will be limited")
+
 
 # Will be set by models.py to avoid circular import
 _get_models_root_fn: Callable[[], Path] | None = None
@@ -176,6 +184,13 @@ def _detect_source(url: str) -> Literal["huggingface", "civitai", "unknown"]:
         return "huggingface"
     if "civitai.com" in host:
         return "civitai"
+    
+    # Check if it's a repo ID format (org/model)
+    if "/" in url and "://" not in url:
+        parts = url.strip().split("/")
+        if len(parts) == 2 and all(p for p in parts):
+            return "huggingface"  # Treat repo IDs as HuggingFace
+    
     return "unknown"
 
 
@@ -234,6 +249,87 @@ def _convert_hf_url_to_download(url: str) -> str:
     # e.g., https://huggingface.co/org/repo/blob/main/file.safetensors
     # to    https://huggingface.co/org/repo/resolve/main/file.safetensors
     return url.replace("/blob/", "/resolve/")
+
+
+# Common model file extensions for detection
+MODEL_FILE_EXTENSIONS = {
+    ".safetensors", ".gguf", ".bin", ".pt", ".pth", ".ckpt", 
+    ".onnx", ".pb", ".h5", ".tflite", ".mlmodel"
+}
+
+
+def _is_direct_file_url(url: str) -> bool:
+    """Check if URL points to a specific file (has a file extension).
+    
+    Direct file URLs should use aria2c for fast multi-connection downloads.
+    Examples that return True:
+    - https://huggingface.co/org/repo/resolve/main/model.safetensors
+    - https://huggingface.co/org/repo/blob/main/file.gguf
+    
+    Examples that return False:
+    - https://huggingface.co/org/repo-name
+    - org/model-name (repo ID)
+    """
+    parsed = urlparse(url)
+    path = unquote(parsed.path).lower()
+    
+    # Check if path ends with a known model file extension
+    for ext in MODEL_FILE_EXTENSIONS:
+        if path.endswith(ext):
+            return True
+    
+    # Also check for /resolve/ or /blob/ patterns with a file at the end
+    if "/resolve/" in path or "/blob/" in path:
+        filename = path.split("/")[-1]
+        if "." in filename:
+            return True
+    
+    return False
+
+
+def _is_hf_repo_id(input_str: str) -> bool:
+    """Check if input is a HuggingFace repo ID (org/model format).
+    
+    Examples that return True:
+    - unsloth/Qwen3-14B-GGUF
+    - stabilityai/stable-diffusion-3.5-large
+    
+    Examples that return False:
+    - https://huggingface.co/org/repo
+    - just-a-name (no slash)
+    """
+    # If it contains ://, it's a URL not a repo ID
+    if "://" in input_str:
+        return False
+    
+    # Repo IDs are in format org/model or user/model
+    parts = input_str.strip().split("/")
+    if len(parts) == 2 and all(p for p in parts):
+        # Both parts should be non-empty and alphanumeric with dashes/underscores
+        return all(re.match(r'^[\w\-\.]+$', p) for p in parts)
+    
+    return False
+
+
+def _extract_repo_id_from_hf_url(url: str) -> str | None:
+    """Extract repo ID from a HuggingFace URL.
+    
+    Examples:
+    - https://huggingface.co/org/model -> org/model
+    - https://huggingface.co/org/model/tree/main -> org/model
+    """
+    parsed = urlparse(url)
+    if "huggingface.co" not in parsed.netloc and "hf.co" not in parsed.netloc:
+        return None
+    
+    path = parsed.path.strip("/")
+    parts = path.split("/")
+    
+    # Need at least org/model (2 parts)
+    if len(parts) >= 2:
+        return f"{parts[0]}/{parts[1]}"
+    
+    return None
 
 
 class DownloadManager:
@@ -309,6 +405,15 @@ class DownloadManager:
                     del self._jobs[job_id]
                     return True
             return False
+    
+    def clear_finished_jobs(self) -> int:
+        """Remove all completed, failed, and cancelled jobs. Returns count of removed jobs."""
+        with self._lock:
+            finished_statuses = (DownloadStatus.COMPLETED, DownloadStatus.FAILED, DownloadStatus.CANCELLED)
+            to_remove = [jid for jid, job in self._jobs.items() if job.status in finished_statuses]
+            for jid in to_remove:
+                del self._jobs[jid]
+            return len(to_remove)
     
     def _run_download(self, job: DownloadJob):
         """Execute the download in a background thread."""
@@ -402,26 +507,100 @@ class DownloadManager:
                             last_bytes = downloaded
     
     def _download_huggingface(self, job: DownloadJob):
-        """Download from HuggingFace using aria2c for speed, falling back to httpx."""
-        url = _convert_hf_url_to_download(job.url)
+        """Download from HuggingFace - route to aria2c for files, hf_hub for repos."""
+        url = job.url
         
-        # Build headers
-        headers = {}
+        # Get HF token for authentication
         hf_token = os.environ.get("HF_TOKEN") or os.environ.get("HUGGING_FACE_HUB_TOKEN")
-        if hf_token:
-            headers["Authorization"] = f"Bearer {hf_token}"
         
-        # Try aria2c first for faster downloads
-        aria2c = _get_aria2c_path()
-        if aria2c is None:
-            # Try to download aria2c
-            aria2c = _download_aria2c()
+        # Determine download strategy based on URL type
+        if _is_hf_repo_id(url):
+            # Direct repo ID like "org/model" -> use hf_hub
+            print(f"[DownloadManager] Detected repo ID: {url}, using huggingface_hub")
+            self._download_with_hf_hub(job, url, hf_token)
+        elif _is_direct_file_url(url):
+            # Direct file URL with extension -> use aria2c for speed
+            print(f"[DownloadManager] Detected direct file URL, using aria2c")
+            download_url = _convert_hf_url_to_download(url)
+            headers = {}
+            if hf_token:
+                headers["Authorization"] = f"Bearer {hf_token}"
+            
+            # Try aria2c first for faster downloads
+            aria2c = _get_aria2c_path()
+            if aria2c is None:
+                aria2c = _download_aria2c()
+            
+            if aria2c and self._download_with_aria2c(job, download_url, headers):
+                return  # Success with aria2c
+            
+            # Fall back to httpx
+            self._download_with_progress(job, download_url, headers)
+        else:
+            # HF URL without file extension -> extract repo ID and use hf_hub
+            repo_id = _extract_repo_id_from_hf_url(url)
+            if repo_id:
+                print(f"[DownloadManager] Detected repo URL: {url} -> {repo_id}, using huggingface_hub")
+                self._download_with_hf_hub(job, repo_id, hf_token)
+            else:
+                # Fallback: treat as direct download
+                print(f"[DownloadManager] Could not parse HF URL, trying direct download: {url}")
+                download_url = _convert_hf_url_to_download(url)
+                headers = {}
+                if hf_token:
+                    headers["Authorization"] = f"Bearer {hf_token}"
+                self._download_with_progress(job, download_url, headers)
+    
+    def _download_with_hf_hub(self, job: DownloadJob, repo_id: str, token: str | None = None):
+        """Download entire repo or sharded model using huggingface_hub.
         
-        if aria2c and self._download_with_aria2c(job, url, headers):
-            return  # Success with aria2c
+        This is used for:
+        - Sharded models (multiple files)
+        - Full repo downloads
+        - When user provides repo ID instead of file URL
+        """
+        if not HF_HUB_AVAILABLE:
+            raise ValueError(
+                "huggingface_hub is not installed. "
+                "Run: pip install huggingface_hub"
+            )
         
-        # Fall back to httpx
-        self._download_with_progress(job, url, headers)
+        try:
+            job.status = DownloadStatus.DOWNLOADING
+            job.speed = "Downloading repo..."
+            
+            # Get target directory
+            models_root = _get_models_root()
+            target_dir = models_root / job.target_folder
+            target_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Extract just the model name for the subfolder
+            model_name = repo_id.split("/")[-1] if "/" in repo_id else repo_id
+            local_dir = target_dir / model_name
+            
+            print(f"[DownloadManager] Downloading repo {repo_id} to {local_dir}")
+            
+            # Use snapshot_download for full repo
+            # This handles sharded models automatically
+            downloaded_path = snapshot_download(
+                repo_id=repo_id,
+                local_dir=str(local_dir),
+                token=token,
+                resume_download=True,
+                # Progress callback would be nice but snapshot_download doesn't support it well
+            )
+            
+            job.target_path = Path(downloaded_path)
+            job.filename = model_name
+            job.progress = 100.0
+            job.speed = "Complete"
+            job.status = DownloadStatus.COMPLETED
+            
+            print(f"[DownloadManager] Successfully downloaded repo to {downloaded_path}")
+            
+        except Exception as e:
+            print(f"[DownloadManager] hf_hub download failed: {e}")
+            raise
     
     def _download_with_aria2c(self, job: DownloadJob, url: str, headers: dict | None = None) -> bool:
         """Download using aria2c for multi-connection speed. Returns True on success."""
@@ -514,9 +693,34 @@ class DownloadManager:
                 "Get your API key from https://civitai.com/user/account"
             )
         
+        # Convert model page URLs to API download URLs
+        # Model page URLs look like: https://civitai.com/models/12345/model-name?modelVersionId=67890
+        # API download URLs should be: https://civitai.com/api/download/models/67890
+        parsed = urlparse(url)
+        query_params = dict(p.split("=") for p in parsed.query.split("&") if "=" in p)
+        
+        # Check if URL contains modelVersionId parameter
+        if "modelVersionId" in query_params:
+            version_id = query_params["modelVersionId"]
+            url = f"https://civitai.com/api/download/models/{version_id}"
+        # Check if it's already an API download URL pattern 
+        elif "/api/download/models/" in url:
+            # Already in correct format, just strip any existing query params
+            base_match = re.search(r'/api/download/models/(\d+)', url)
+            if base_match:
+                version_id = base_match.group(1)
+                url = f"https://civitai.com/api/download/models/{version_id}"
+        # Check for direct model version page URLs like /models/123/name/456
+        elif re.search(r'/models/\d+/[^/]+/(\d+)', parsed.path):
+            match = re.search(r'/models/\d+/[^/]+/(\d+)', parsed.path)
+            version_id = match.group(1)
+            url = f"https://civitai.com/api/download/models/{version_id}"
+        else:
+            # Log that we're using the URL as-is since we couldn't parse it
+            print(f"[DownloadManager] Could not extract modelVersionId from URL, using as-is: {url}")
+        
         # Add API key as query parameter
-        separator = "&" if "?" in url else "?"
-        url = f"{url}{separator}token={api_key}"
+        url = f"{url}?token={api_key}"
         
         self._download_with_progress(job, url)
     
