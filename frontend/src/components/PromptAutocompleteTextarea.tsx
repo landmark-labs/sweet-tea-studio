@@ -390,7 +390,17 @@ export function PromptAutocompleteTextarea({
 
     // --- Highlighting Logic (debounced for performance) ---
     const [debouncedValue, setDebouncedValue] = useState(localValue);
-    const snippetIndex = useMemo(() => buildSnippetIndex(snippets), [snippets]);
+    // Use ref to avoid stale closures while controlling when memo recomputes
+    const snippetsRef = useRef(snippets);
+    snippetsRef.current = snippets;
+    // Stabilize snippetIndex by memoizing on content, not reference
+    // This prevents infinite loops when parent passes new array with same content
+    const snippetContentKey = useMemo(() => {
+        if (!snippets || snippets.length === 0) return "";
+        return snippets.map(s => `${s.id}:${s.content}`).join("|");
+    }, [snippets]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const snippetIndex = useMemo(() => buildSnippetIndex(snippetsRef.current), [snippetContentKey]);
     const [highlightedContent, setHighlightedContent] = useState<React.ReactNode[] | null>(null);
     const highlightHandleRef = useRef<IdleHandle | null>(null);
     const highlightTokenRef = useRef(0);
