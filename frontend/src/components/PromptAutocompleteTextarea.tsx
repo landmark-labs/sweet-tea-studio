@@ -391,6 +391,9 @@ export function PromptAutocompleteTextarea({
     // --- Highlighting Logic (debounced for performance) ---
     const [debouncedValue, setDebouncedValue] = useState(localValue);
     const snippetIndex = useMemo(() => buildSnippetIndex(snippets), [snippets]);
+    // Ref to access snippetIndex in effects without adding it as a dependency (prevents infinite loops)
+    const snippetIndexRef = useRef(snippetIndex);
+    snippetIndexRef.current = snippetIndex;
     const [highlightedContent, setHighlightedContent] = useState<React.ReactNode[] | null>(null);
     const highlightHandleRef = useRef<IdleHandle | null>(null);
     const highlightTokenRef = useRef(0);
@@ -405,7 +408,8 @@ export function PromptAutocompleteTextarea({
         highlightTokenRef.current += 1;
         const token = highlightTokenRef.current;
 
-        if (!highlightSnippets || !debouncedValue || debouncedValue.length > MAX_HIGHLIGHT_LENGTH || snippetIndex.entries.length === 0) {
+        const currentIndex = snippetIndexRef.current;
+        if (!highlightSnippets || !debouncedValue || debouncedValue.length > MAX_HIGHLIGHT_LENGTH || currentIndex.entries.length === 0) {
             cancelIdle(highlightHandleRef.current);
             highlightHandleRef.current = null;
             // Only update state if it's not already null to prevent infinite loops
@@ -417,7 +421,7 @@ export function PromptAutocompleteTextarea({
         highlightHandleRef.current = scheduleIdle(() => {
             if (token !== highlightTokenRef.current) return;
 
-            const matches = findSnippetMatches(debouncedValue, snippetIndex, { maxMatches: MAX_HIGHLIGHT_MATCHES });
+            const matches = findSnippetMatches(debouncedValue, snippetIndexRef.current, { maxMatches: MAX_HIGHLIGHT_MATCHES });
             if (!matches || matches.length === 0) {
                 setHighlightedContent((prev) => prev === null ? prev : null);
                 return;
@@ -459,7 +463,8 @@ export function PromptAutocompleteTextarea({
             cancelIdle(highlightHandleRef.current);
             highlightHandleRef.current = null;
         };
-    }, [debouncedValue, highlightSnippets, snippetIndex]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [debouncedValue, highlightSnippets]);
 
 
     return (
