@@ -4,7 +4,7 @@ import { isVideoFile } from "@/lib/media";
 import { Card, CardContent } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Save, Trash2, Calendar, Search, RotateCcw, Copy, Check, X, ChevronLeft, ChevronRight } from "lucide-react";
+import { Save, Trash2, Calendar, Search, RotateCcw, Copy, Check, X, ChevronLeft, ChevronRight, FolderInput } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
@@ -18,6 +18,7 @@ import {
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { ProjectSidebar } from "@/components/ProjectSidebar";
 import { VirtualGrid } from "@/components/VirtualGrid";
+import { MoveImagesDialog } from "@/components/MoveImagesDialog";
 
 const MISSING_IMAGE_SRC =
     "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MDAiIGhlaWdodD0iNDAwIiB2aWV3Qm94PSIwIDAgNDAwIDQwMCI+PHJlY3Qgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsbD0iI2UyZThmMCIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjOTRhM2I4IiBmb250LWZhbWlseT0iQXJpYWwsIHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMjQiPk1pc3NpbmcgRmlsZTwvdGV4dD48L3N2Zz4=";
@@ -50,6 +51,7 @@ export default function Gallery() {
     const [hasMore, setHasMore] = useState(true);
     const [nextSkip, setNextSkip] = useState(0);
     const [gridResetKey, setGridResetKey] = useState(0);
+    const [moveDialogOpen, setMoveDialogOpen] = useState(false);
 
     const searchRef = useRef(search);
     const selectedProjectIdRef = useRef(selectedProjectId);
@@ -561,7 +563,14 @@ export default function Gallery() {
                                 {cleanupMode ? `${selectedIds.size} to keep` : `${selectedIds.size} selected`}
                                 <div className="h-4 w-px bg-blue-200 mx-1 flex-shrink-0" />
                                 {!cleanupMode && (
-                                    <button onClick={handleBulkDelete} className="hover:underline text-red-600">delete</button>
+                                    <>
+                                        <button onClick={() => setMoveDialogOpen(true)} className="hover:underline text-blue-600 flex items-center gap-1">
+                                            <FolderInput className="w-3 h-3" />
+                                            move
+                                        </button>
+                                        <div className="h-4 w-px bg-blue-200 flex-shrink-0" />
+                                        <button onClick={handleBulkDelete} className="hover:underline text-red-600">delete</button>
+                                    </>
                                 )}
                                 <button onClick={() => setSelectedIds(new Set())} className="hover:underline text-slate-500">clear</button>
                             </div>
@@ -901,6 +910,20 @@ export default function Gallery() {
                     </div>
                 )
             }
+
+            {/* Move Images Dialog */}
+            <MoveImagesDialog
+                open={moveDialogOpen}
+                onOpenChange={setMoveDialogOpen}
+                selectedImageIds={Array.from(selectedIds)}
+                projects={projects}
+                currentProjectId={selectedProjectId}
+                onMoveComplete={() => {
+                    setSelectedIds(new Set());
+                    setSelectionMode(false);
+                    loadGallery(search, selectedProjectId);
+                }}
+            />
         </div >
     );
 }

@@ -87,16 +87,6 @@ export function ProjectSidebar({
             {!collapsed && <span>all projects</span>}
           </Button>
 
-          <Button
-            variant={selectedProjectId === -1 ? "secondary" : "ghost"}
-            className={cn("w-full justify-start", collapsed ? "px-2" : "px-4")}
-            onClick={() => onSelectProject(-1)}
-            title="draft generations"
-          >
-            <FolderOpen className="h-4 w-4 mr-2" />
-            {!collapsed && <span>draft mode</span>}
-          </Button>
-
           {draftsProject && (
             <Button
               variant={selectedProjectId === draftsProject.id ? "secondary" : "ghost"}

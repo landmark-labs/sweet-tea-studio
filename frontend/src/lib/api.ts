@@ -632,6 +632,27 @@ export const api = {
         return res.json();
     },
 
+    moveImages: async (
+        imageIds: number[],
+        projectId: number,
+        subfolder?: string
+    ): Promise<{ moved: number; failed: number[]; new_paths: Record<number, string> }> => {
+        const res = await fetch(`${API_BASE}/gallery/move`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                image_ids: imageIds,
+                project_id: projectId,
+                subfolder: subfolder || null,
+            }),
+        });
+        if (!res.ok) {
+            const errorData = await res.json().catch(() => ({}));
+            throw new Error(errorData.detail || "Failed to move images");
+        }
+        return res.json();
+    },
+
     updateImage: async (imageId: number, data: { caption?: string; tags?: string[] }): Promise<void> => {
         const res = await fetch(`${API_BASE}/gallery/${imageId}`, {
             method: "PATCH",

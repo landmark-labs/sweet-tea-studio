@@ -585,14 +585,17 @@ export const DynamicForm = React.memo(function DynamicForm({
                 };
             }
 
+            // Media uploads are grouped with their parent node - same title resolution as other fields
             const isMediaUpload = isMediaUploadField(key, field);
             if (isMediaUpload) {
-                const mediaKind = resolveMediaKind(key, field);
+                const nodeGroupId = field.x_node_id ? String(field.x_node_id) : "media";
+                // Use same title chain as other nodes: alias > x_title > field.title > fallback
+                const groupTitle = field.x_node_alias || field.x_title || field.title || "Media Input";
                 return {
                     key,
-                    section: "inputs",
-                    groupId: "inputs",
-                    groupTitle: field.title || (mediaKind === "video" ? "Input Videos" : "Input Images"),
+                    section: "nodes",
+                    groupId: nodeGroupId,
+                    groupTitle,
                     order: nodeOrderPosition ?? parseOrder(field.x_node_id, 0),
                     source: "heuristic",
                     reason: "media_upload"
@@ -630,9 +633,11 @@ export const DynamicForm = React.memo(function DynamicForm({
             }
 
             const fallbackNodeId = field.x_node_id || "default";
-            const fallbackGroupTitle = field.x_title || field.title || "Configuration";
+            // Prefer alias > x_title > field.title for group title
+            const fallbackGroupTitle = field.x_node_alias || field.x_title || field.title || "Configuration";
             const match = field.title?.match(/\((.+)\)$/);
-            const heuristicTitle = match ? match[1] : fallbackGroupTitle;
+            // If we have an alias, use it directly; otherwise fall back to heuristics
+            const heuristicTitle = field.x_node_alias || (match ? match[1] : fallbackGroupTitle);
             // Always prefer the clean x_node_id for grouping stability if available
             const nodeGroupId = field.x_node_id ? String(field.x_node_id) : (match ? heuristicTitle : fallbackNodeId);
 
@@ -651,7 +656,9 @@ export const DynamicForm = React.memo(function DynamicForm({
             const placement = resolvePlacement(key);
             placements[key] = placement;
 
-            if (placement.section === "inputs") {
+            // Note: "inputs" section is deprecated - media uploads now go into their node groups
+            // This block is kept for backwards compatibility with explicit x_form annotations
+            if (placement.section === "inputs" && placement.source === "annotation") {
                 inputs.push(key);
                 return;
             }

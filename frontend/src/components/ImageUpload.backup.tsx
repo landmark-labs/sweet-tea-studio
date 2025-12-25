@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useRef } from "react";
+﻿import React, { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { Upload, X, Loader2, Grid, PenTool, FolderOpen, ChevronRight } from "lucide-react";
-import { api, Project, FolderImage } from "@/lib/api";
+import { Upload, X, Loader2, Grid, PenTool } from "lucide-react";
+import { api } from "@/lib/api";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { InpaintEditor } from "@/components/InpaintEditor";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 
 interface ImageUploadProps {
     value?: string;
@@ -55,14 +56,6 @@ export function ImageUpload({
     const [recent, setRecent] = useState<string[]>([]);
     const [galleryImages, setGalleryImages] = useState<string[]>([]);
 
-    // Browse dialog project/folder selection state
-    const [projects, setProjects] = useState<Project[]>([]);
-    const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
-    const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
-    const [projectFolderImages, setProjectFolderImages] = useState<FolderImage[]>([]);
-    const [projectGalleryImages, setProjectGalleryImages] = useState<string[]>([]);
-    const [isLoadingProjectImages, setIsLoadingProjectImages] = useState(false);
-
     // Mask Editor State
     const [isMaskEditorOpen, setIsMaskEditorOpen] = useState(false);
     const objectUrlRef = useRef<string | null>(null);
@@ -104,72 +97,14 @@ export function ImageUpload({
 
     useEffect(() => {
         if (isBrowseOpen) {
-            // Load gallery images for the "Recent" tab (default view)
+            // Load gallery images for the "Output" tab
             api.getGallery({ limit: 25, includeThumbnails: false }).then(items => {
                 // Sort by created_at desc (newest first)
                 const sorted = items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
                 setGalleryImages(sorted.slice(0, 25).map(i => i.image.path));
             }).catch(console.error);
-
-            // Load projects for the project picker
-            api.getProjects().then(setProjects).catch(console.error);
-        } else {
-            // Reset selection when dialog closes
-            setSelectedProjectId(null);
-            setSelectedFolder(null);
-            setProjectFolderImages([]);
         }
     }, [isBrowseOpen]);
-
-    // Load folder images when project and folder are selected
-    useEffect(() => {
-        if (selectedProjectId && selectedFolder) {
-            setIsLoadingProjectImages(true);
-            api.getProjectFolderImages(selectedProjectId, selectedFolder)
-                .then(images => {
-                    // Sort by mtime desc (newest first)
-                    const sorted = images.sort((a, b) =>
-                        new Date(b.mtime).getTime() - new Date(a.mtime).getTime()
-                    );
-                    setProjectFolderImages(sorted);
-                })
-                .catch(console.error)
-                .finally(() => setIsLoadingProjectImages(false));
-            setProjectGalleryImages([]); // Clear project gallery when folder selected
-        } else if (selectedProjectId && !selectedFolder) {
-            // Load ALL images from all project folders combined
-            setIsLoadingProjectImages(true);
-            const selectedProject = projects.find(p => p.id === selectedProjectId);
-            const folders = selectedProject?.config_json?.folders || [];
-
-            // Fetch images from each folder and merge
-            Promise.all(
-                folders.map(folder =>
-                    api.getProjectFolderImages(selectedProjectId, folder).catch(() => [])
-                )
-            ).then(results => {
-                // Flatten and dedupe by path
-                const allImages = results.flat();
-                const uniqueByPath = new Map<string, FolderImage>();
-                allImages.forEach(img => uniqueByPath.set(img.path, img));
-
-                // Sort all by mtime desc (newest first)
-                const sorted = Array.from(uniqueByPath.values()).sort((a, b) =>
-                    new Date(b.mtime).getTime() - new Date(a.mtime).getTime()
-                );
-
-                // Limit to 25 for performance
-                setProjectGalleryImages(sorted.slice(0, 25).map(img => img.path));
-            }).catch(console.error)
-                .finally(() => setIsLoadingProjectImages(false));
-
-            setProjectFolderImages([]);
-        } else {
-            setProjectFolderImages([]);
-            setProjectGalleryImages([]);
-            setIsLoadingProjectImages(false);
-        }
-    }, [selectedProjectId, selectedFolder, projects]);
 
     const addToRecent = (filename: string) => {
         // Ensure unique and limit to 5
@@ -359,9 +294,14 @@ export function ImageUpload({
         }
     };
 
+    // Filter "valid" recents (that actually exist in current options if options provided)
+    // If options are empty (no connection), we show all recent.
+    const displayRecent = (options.length > 0
+        ? recent.filter(r => options.includes(r))
+        : recent).slice(0, 5);
 
     const accept = mediaKind === "video" ? "video/*" : mediaKind === "any" ? "image/*,video/*" : "image/*";
-    const browseTitle = mediaKind === "video" ? "browse videos" : mediaKind === "any" ? "browse media" : "browse images";
+    const browseTitle = mediaKind === "video" ? "Browse Videos" : mediaKind === "any" ? "Browse Media" : "Browse Images";
     const resolvedKind = previewKind || (value ? guessKindFromFilename(value) : null) || (mediaKind === "video" ? "video" : "image");
     const isVideoPreview = resolvedKind === "video";
 
@@ -374,7 +314,7 @@ export function ImageUpload({
             {!preview && !value ? (
                 <div
                     className={cn(
-                        "flex flex-col items-center justify-center border-2 border-dashed rounded-lg p-4 transition-colors gap-3",
+                        "flex flex-col items-center justify-center border-2 border-dashed rounded-lg p-6 transition-colors gap-4",
                         isDragging ? "border-blue-500 bg-blue-50" : "border-slate-200 hover:bg-slate-50"
                     )}
                     onDragEnter={handleDragEnter}
@@ -382,35 +322,22 @@ export function ImageUpload({
                     onDragLeave={handleDragLeave}
                     onDrop={handleDrop}
                 >
-                    <div className="flex flex-col items-center gap-1 text-center">
-                        {isUploading ? <Loader2 className="h-5 w-5 animate-spin text-blue-500" /> : <Upload className="h-5 w-5 text-slate-300" />}
-                        <div className="text-xs text-slate-500">
-                            {isUploading ? "Uploading..." : "Drag & drop here"}
+                    <div className="flex flex-col items-center gap-2 text-center">
+                        {isUploading ? <Loader2 className="h-8 w-8 animate-spin text-blue-500" /> : <Upload className="h-8 w-8 text-slate-300" />}
+                        <div className="text-sm text-slate-600">
+                            {isUploading ? "Uploading..." : "Click to upload or drag & drop"}
                         </div>
                     </div>
 
-                    {/* Side-by-side buttons */}
-                    <div className="flex gap-2 w-full">
-                        <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="flex-1"
-                            onClick={() => document.getElementById("file-upload")?.click()}
-                            disabled={isUploading}
-                        >
-                            Select File
-                        </Button>
-                        <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="flex-1"
-                            onClick={() => setIsBrowseOpen(true)}
-                        >
-                            <Grid className="w-3 h-3 mr-1" /> Browse
-                        </Button>
-                    </div>
+                    <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => document.getElementById("file-upload")?.click()}
+                        disabled={isUploading}
+                    >
+                        Select File
+                    </Button>
                     <input
                         id="file-upload"
                         type="file"
@@ -419,7 +346,59 @@ export function ImageUpload({
                         onChange={handleFileChange}
                     />
 
+                    {/* Recent & Browse */}
+                    {displayRecent.length > 0 && (
+                        <div className="w-full pt-4 border-t flex flex-col gap-2">
+                            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Recent</span>
+                            <div className="flex flex-wrap gap-2">
+                                {displayRecent.map(r => (
+                                    <HoverCard key={r}>
+                                        <HoverCardTrigger asChild>
+                                            <button
+                                                type="button"
+                                                onClick={() => selectOption(r)}
+                                                className="text-xs bg-white border px-2 py-1 rounded shadow-sm hover:border-blue-400 truncate max-w-[120px]"
+                                            >
+                                                {r}
+                                            </button>
+                                        </HoverCardTrigger>
+                                        <HoverCardContent className="w-48 p-0 overflow-hidden rounded-md border shadow-lg">
+                                            {guessKindFromFilename(r) === "video" ? (
+                                                <video
+                                                    src={`/api/v1/gallery/image/path?path=${encodeURIComponent(r)}`}
+                                                    className="w-full h-auto object-contain bg-slate-950"
+                                                    preload="metadata"
+                                                    muted
+                                                    playsInline
+                                                />
+                                            ) : (
+                                                <img
+                                                    src={`/api/v1/gallery/image/path?path=${encodeURIComponent(r)}`}
+                                                    alt={r}
+                                                    className="w-full h-auto object-contain bg-slate-950"
+                                                />
+                                            )}
+                                            <div className="p-2 bg-white text-[10px] text-center truncate">
+                                                {r}
+                                            </div>
+                                        </HoverCardContent>
+                                    </HoverCard>
+                                ))}
+                            </div>
+                        </div>
+                    )}
 
+                    <div className="w-full pt-2">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="w-full"
+                            onClick={() => setIsBrowseOpen(true)}
+                        >
+                            <Grid className="w-3 h-3 mr-2" /> Browse Library
+                        </Button>
+                    </div>
                 </div>
             ) : (
                 <div
@@ -502,89 +481,53 @@ export function ImageUpload({
                         <DialogTitle>{browseTitle}</DialogTitle>
                     </DialogHeader>
 
-                    {/* Project/Folder Selector */}
-                    <div className="flex gap-2 items-center border-b pb-3">
-                        <div className="flex items-center gap-1 text-sm text-slate-500">
-                            <FolderOpen className="w-4 h-4" />
-                            <span>browse:</span>
-                        </div>
-                        <select
-                            value={selectedProjectId ?? ""}
-                            onChange={(e) => {
-                                const val = e.target.value;
-                                setSelectedProjectId(val ? parseInt(val) : null);
-                                setSelectedFolder(null);
-                            }}
-                            className="text-sm border rounded px-2 py-1 bg-white flex-1 max-w-[180px]"
-                        >
-                            <option value="">recent</option>
-                            {projects.map(p => (
-                                <option key={p.id} value={p.id}>{p.name}</option>
-                            ))}
-                        </select>
-
-                        {selectedProjectId && (
-                            <>
-                                <ChevronRight className="w-4 h-4 text-slate-400" />
-                                <select
-                                    value={selectedFolder ?? ""}
-                                    onChange={(e) => setSelectedFolder(e.target.value || null)}
-                                    className="text-sm border rounded px-2 py-1 bg-white flex-1 max-w-[180px]"
-                                >
-                                    <option value="">all images</option>
-                                    {projects.find(p => p.id === selectedProjectId)?.config_json?.folders?.map(f => (
-                                        <option key={f} value={f}>{f}</option>
-                                    ))}
-                                </select>
-                            </>
-                        )}
-                    </div>
-
-                    <div className="flex-1 min-h-[350px] flex flex-col">
+                    <div className="flex-1 min-h-[400px] flex flex-col gap-4">
                         <ScrollArea className="flex-1 bg-slate-50 p-4 rounded-md border text-sm">
-                            {/* Show project folder images when project & folder selected */}
-                            {selectedProjectId && selectedFolder && projectFolderImages.length > 0 && (
-                                <div className="grid grid-cols-5 gap-3">
-                                    {projectFolderImages.map((img, i) => (
-                                        <button
-                                            key={i}
-                                            type="button"
-                                            onClick={() => selectGalleryImage(img.path)}
-                                            className="aspect-square relative group bg-white border rounded-md overflow-hidden hover:ring-2 hover:ring-blue-500 focus:outline-none"
-                                        >
-                                            {guessKindFromFilename(img.path) === "video" ? (
-                                                <video
-                                                    src={`/api/v1/gallery/image/path?path=${encodeURIComponent(img.path)}`}
-                                                    className="w-full h-full object-cover"
-                                                    preload="metadata"
-                                                    muted
-                                                    playsInline
-                                                />
-                                            ) : (
-                                                <img
-                                                    loading="lazy"
-                                                    src={`/api/v1/gallery/image/path?path=${encodeURIComponent(img.path)}`}
-                                                    alt={img.filename}
-                                                    className="w-full h-full object-cover"
-                                                />
-                                            )}
-                                            <div className="absolute inset-x-0 bottom-0 bg-black/70 text-white text-[10px] p-1 truncate opacity-0 group-hover:opacity-100 transition-opacity">
-                                                {img.filename}
-                                            </div>
-                                        </button>
-                                    ))}
+                            {(options.length > 0) && (
+                                <div className="mb-6">
+                                    <h4 className="font-semibold mb-2 text-slate-500 uppercase text-xs">Input Directory (Last 25)</h4>
+                                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-4">
+                                        {options.slice(0, 25).map(opt => (
+                                            <button
+                                                key={opt}
+                                                type="button"
+                                                onClick={() => selectOption(opt)}
+                                                className="aspect-square relative group bg-white border rounded-md overflow-hidden hover:ring-2 hover:ring-blue-500 focus:outline-none"
+                                            >
+                                                {guessKindFromFilename(opt) === "video" ? (
+                                                    <video
+                                                        src={`/api/v1/gallery/image/path?path=${encodeURIComponent(opt)}`}
+                                                        className="w-full h-full object-cover"
+                                                        preload="metadata"
+                                                        muted
+                                                        playsInline
+                                                    />
+                                                ) : (
+                                                    <img
+                                                        loading="lazy"
+                                                        src={`/api/v1/gallery/image/path?path=${encodeURIComponent(opt)}`}
+                                                        alt={opt}
+                                                        className="w-full h-full object-cover"
+                                                    />
+                                                )}
+                                                <div className="absolute inset-x-0 bottom-0 bg-black/70 text-white text-[10px] p-1 truncate opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    {opt}
+                                                </div>
+                                            </button>
+                                        ))}
+                                    </div>
                                 </div>
                             )}
 
-                            {/* Show project gallery images when project selected but no specific folder */}
-                            {selectedProjectId && !selectedFolder && projectGalleryImages.length > 0 && (
-                                <div className="grid grid-cols-5 gap-3">
-                                    {projectGalleryImages.map((path, i) => (
+                            <div>
+                                <h4 className="font-semibold mb-2 text-slate-500 uppercase text-xs">Gallery (Output)</h4>
+                                <div className="grid grid-cols-3 sm:grid-cols-4 gap-4">
+                                    {galleryImages.map((path, i) => (
                                         <button
                                             key={i}
                                             type="button"
                                             onClick={() => selectGalleryImage(path)}
-                                            className="aspect-square relative group bg-white border rounded-md overflow-hidden hover:ring-2 hover:ring-blue-500 focus:outline-none"
+                                            className="aspect-square relative group bg-white border rounded-md overflow-hidden hover:ring-2 hover:ring-green-500 focus:outline-none"
                                         >
                                             {guessKindFromFilename(path) === "video" ? (
                                                 <video
@@ -598,7 +541,7 @@ export function ImageUpload({
                                                 <img
                                                     loading="lazy"
                                                     src={`/api/v1/gallery/image/path?path=${encodeURIComponent(path)}`}
-                                                    alt="Project Gallery"
+                                                    alt="Gallery"
                                                     className="w-full h-full object-cover"
                                                 />
                                             )}
@@ -608,103 +551,7 @@ export function ImageUpload({
                                         </button>
                                     ))}
                                 </div>
-                            )}
-
-                            {/* Loading indicator for project images */}
-                            {selectedProjectId && isLoadingProjectImages && (
-                                <div className="text-center text-slate-400 py-8 flex flex-col items-center gap-2">
-                                    <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
-                                    <span>Loading images...</span>
-                                </div>
-                            )}
-
-                            {/* Message when project selected but no images */}
-                            {selectedProjectId && !selectedFolder && !isLoadingProjectImages && projectGalleryImages.length === 0 && (
-                                <div className="text-center text-slate-400 py-8">
-                                    No images in this project
-                                </div>
-                            )}
-
-                            {/* Message when folder selected but empty */}
-                            {selectedProjectId && selectedFolder && !isLoadingProjectImages && projectFolderImages.length === 0 && (
-                                <div className="text-center text-slate-400 py-8">
-                                    No images in this folder
-                                </div>
-                            )}
-
-                            {/* Default: Recent Gallery view (when no project selected) */}
-                            {!selectedProjectId && (
-                                <>
-                                    {(options.length > 0) && (
-                                        <div className="mb-6">
-                                            <h4 className="font-semibold mb-2 text-slate-500 uppercase text-xs">inputs</h4>
-                                            <div className="grid grid-cols-5 gap-3">
-                                                {options.slice(0, 25).map(opt => (
-                                                    <button
-                                                        key={opt}
-                                                        type="button"
-                                                        onClick={() => selectOption(opt)}
-                                                        className="aspect-square relative group bg-white border rounded-md overflow-hidden hover:ring-2 hover:ring-blue-500 focus:outline-none"
-                                                    >
-                                                        {guessKindFromFilename(opt) === "video" ? (
-                                                            <video
-                                                                src={`/api/v1/gallery/image/path?path=${encodeURIComponent(opt)}`}
-                                                                className="w-full h-full object-cover"
-                                                                preload="metadata"
-                                                                muted
-                                                                playsInline
-                                                            />
-                                                        ) : (
-                                                            <img
-                                                                loading="lazy"
-                                                                src={`/api/v1/gallery/image/path?path=${encodeURIComponent(opt)}`}
-                                                                alt={opt}
-                                                                className="w-full h-full object-cover"
-                                                            />
-                                                        )}
-                                                        <div className="absolute inset-x-0 bottom-0 bg-black/70 text-white text-[10px] p-1 truncate opacity-0 group-hover:opacity-100 transition-opacity">
-                                                            {opt}
-                                                        </div>
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    <div>
-                                        <div className="grid grid-cols-5 gap-3">
-                                            {galleryImages.map((path, i) => (
-                                                <button
-                                                    key={i}
-                                                    type="button"
-                                                    onClick={() => selectGalleryImage(path)}
-                                                    className="aspect-square relative group bg-white border rounded-md overflow-hidden hover:ring-2 hover:ring-green-500 focus:outline-none"
-                                                >
-                                                    {guessKindFromFilename(path) === "video" ? (
-                                                        <video
-                                                            src={`/api/v1/gallery/image/path?path=${encodeURIComponent(path)}`}
-                                                            className="w-full h-full object-cover"
-                                                            preload="metadata"
-                                                            muted
-                                                            playsInline
-                                                        />
-                                                    ) : (
-                                                        <img
-                                                            loading="lazy"
-                                                            src={`/api/v1/gallery/image/path?path=${encodeURIComponent(path)}`}
-                                                            alt="Gallery"
-                                                            className="w-full h-full object-cover"
-                                                        />
-                                                    )}
-                                                    <div className="absolute inset-x-0 bottom-0 bg-black/70 text-white text-[10px] p-1 truncate opacity-0 group-hover:opacity-100 transition-opacity">
-                                                        {path.split(/[\\/]/).pop()}
-                                                    </div>
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-                                </>
-                            )}
+                            </div>
                         </ScrollArea>
                     </div>
                 </DialogContent>
@@ -720,3 +567,4 @@ export function ImageUpload({
         </div>
     );
 }
+

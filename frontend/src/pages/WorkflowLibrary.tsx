@@ -61,6 +61,22 @@ const NodeCard = ({ node, schemaEdits, setSchemaEdits }: NodeCardProps) => {
     const isCore = node.active.some(([_, f]: [string, any]) => f.x_core === true) ||
         node.hidden.some(([_, f]: [string, any]) => f.x_core === true);
 
+    // Get current alias from any field in this node (they should all have the same alias)
+    const currentAlias = [...node.active, ...node.hidden]
+        .find(([_, f]: [string, any]) => f.x_node_alias)?.[1]?.x_node_alias || "";
+
+    const setNodeAlias = (alias: string) => {
+        const s = { ...schemaEdits };
+        [...node.active, ...node.hidden].forEach(([key]: [string, any]) => {
+            if (alias.trim()) {
+                s[key].x_node_alias = alias;
+            } else {
+                delete s[key].x_node_alias;
+            }
+        });
+        setSchemaEdits(s);
+    };
+
     const toggleCore = () => {
         const s = { ...schemaEdits };
         [...node.active, ...node.hidden].forEach(([key]: [string, any]) => {
@@ -96,7 +112,15 @@ const NodeCard = ({ node, schemaEdits, setSchemaEdits }: NodeCardProps) => {
                         <GripVertical className="w-4 h-4" />
                     </button>
                     <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-xs font-mono text-slate-500">{node.id}</div>
-                    <span className="font-medium text-sm">{node.title}</span>
+                    {/* Alias or Title display */}
+                    {currentAlias ? (
+                        <div className="flex items-center gap-1.5">
+                            <span className="font-medium text-sm text-blue-700">{currentAlias}</span>
+                            <span className="text-[10px] text-slate-400">({node.title})</span>
+                        </div>
+                    ) : (
+                        <span className="font-medium text-sm">{node.title}</span>
+                    )}
                     {!isExpanded && (
                         <span className="text-[10px] text-slate-400 ml-1">({paramCount} params)</span>
                     )}
@@ -123,6 +147,31 @@ const NodeCard = ({ node, schemaEdits, setSchemaEdits }: NodeCardProps) => {
                     )}
                 </div>
             </div>
+
+            {/* Alias Editor - shown when expanded */}
+            {isExpanded && (
+                <div className="px-4 py-2 bg-slate-50 border-b flex items-center gap-2">
+                    <Label htmlFor={`alias-${node.id}`} className="text-xs text-slate-500 flex-shrink-0">Display Name:</Label>
+                    <Input
+                        id={`alias-${node.id}`}
+                        className="h-7 text-xs flex-1 max-w-[200px]"
+                        value={currentAlias}
+                        placeholder={node.title}
+                        onChange={(e) => setNodeAlias(e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                    />
+                    {currentAlias && (
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 text-xs text-slate-400 hover:text-slate-600 px-1"
+                            onClick={(e) => { e.stopPropagation(); setNodeAlias(""); }}
+                        >
+                            Clear
+                        </Button>
+                    )}
+                </div>
+            )}
 
             {isExpanded && (
                 <>

@@ -2,8 +2,11 @@ import json
 import logging
 import mimetypes
 import os
+import re
+import shutil
 from datetime import datetime
 from difflib import SequenceMatcher
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -19,8 +22,10 @@ from app.db.database import get_session
 from app.models.engine import Engine
 from app.models.image import Image, ImageRead
 from app.models.job import Job
+from app.models.project import Project
 from app.models.prompt import Prompt
 from app.models.workflow import WorkflowTemplate
+from app.core.config import settings
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -541,6 +546,178 @@ def bulk_delete_images(req: BulkDeleteRequest, session: Session = Depends(get_se
     except SQLAlchemyError:
         logger.exception("Bulk delete failed at DB layer")
         raise HTTPException(status_code=500, detail="Failed to delete images")
+
+
+class MoveImagesRequest(BaseModel):
+    image_ids: List[int]
+    project_id: int
+    subfolder: Optional[str] = None  # e.g., "transform", "output"; defaults to "output"
+
+
+class MoveImagesResult(BaseModel):
+    moved: int
+    failed: List[int]
+    new_paths: Dict[int, str]  # image_id -> new path
+
+
+def _get_next_image_number(directory: Path, prefix: str = "") -> int:
+    """
+    Find the highest numeric suffix in existing images and return next number.
+    
+    Looks for files matching the pattern: {prefix}{number}.ext
+    For example, with prefix='project-output-', finds 'project-output-0050.png' -> returns 51
+    """
+    if not directory.exists():
+        return 1
+    
+    max_num = 0
+    
+    # Pattern to extract the numeric suffix from filenames
+    # Matches: prefix + digits at the end of the stem
+    if prefix:
+        # Escape special regex characters in prefix
+        escaped_prefix = re.escape(prefix)
+        pattern = re.compile(rf"^{escaped_prefix}(\d+)$")
+    else:
+        # Fallback: just find trailing digits
+        pattern = re.compile(r"(\d+)$")
+    
+    for ext in [".png", ".jpg", ".jpeg", ".webp"]:
+        for f in directory.glob(f"*{ext}"):
+            match = pattern.match(f.stem) if prefix else pattern.search(f.stem)
+            if match:
+                num = int(match.group(1))
+                max_num = max(max_num, num)
+    
+    return max_num + 1
+
+
+@router.post("/move", response_model=MoveImagesResult)
+def move_images(req: MoveImagesRequest, session: Session = Depends(get_session)):
+    """
+    Move images from one project (typically drafts) to another project.
+    
+    Files are renamed to match the standard naming convention with incrementing
+    sequence numbers (e.g., 0051.png, 0052.png) based on existing images in the
+    destination folder.
+    
+    Both the physical files and database records are updated.
+    """
+    if not req.image_ids:
+        return MoveImagesResult(moved=0, failed=[], new_paths={})
+    
+    # Load target project
+    project = session.get(Project, req.project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Target project not found")
+    
+    # Get engine for determining output directory
+    engine = session.exec(select(Engine).where(Engine.is_active == True)).first()
+    if not engine:
+        engine = session.exec(select(Engine)).first()
+    
+    if not engine or not engine.output_dir:
+        raise HTTPException(status_code=500, detail="No engine configured with output directory")
+    
+    # Determine destination directory
+    subfolder = req.subfolder or "output"
+    dest_dir = settings.get_project_output_dir_in_comfy(engine.output_dir, project.slug)
+    
+    # If subfolder is not "output", create it within the project's sweet_tea folder
+    if subfolder != "output":
+        dest_dir = settings.get_project_dir_in_comfy(engine.output_dir, project.slug) / subfolder
+    
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Build filename prefix: project-subfolder- (e.g., 'myproject-output-')
+    filename_prefix = f"{project.slug}-{subfolder}-"
+    
+    # Get starting sequence number based on existing files
+    next_num = _get_next_image_number(dest_dir, filename_prefix)
+    
+    # Load images
+    images = session.exec(
+        select(Image).where(Image.id.in_(req.image_ids)).where(Image.is_deleted == False)
+    ).all()
+    images_by_id = {img.id: img for img in images}
+    
+    moved = 0
+    failed: List[int] = []
+    new_paths: Dict[int, str] = {}
+    
+    for img_id in req.image_ids:
+        image = images_by_id.get(img_id)
+        if not image:
+            failed.append(img_id)
+            continue
+        
+        try:
+            old_path = Path(image.path) if image.path else None
+            if not old_path or not old_path.exists():
+                logger.warning("Image file not found during move", extra={"image_id": img_id, "path": image.path})
+                failed.append(img_id)
+                continue
+            
+            # Determine file extension
+            ext = old_path.suffix.lower() or ".png"
+            
+            # Generate new filename: project-subfolder-0051.ext
+            new_filename = f"{filename_prefix}{next_num:04d}{ext}"
+            new_path = dest_dir / new_filename
+            
+            # Move the file
+            shutil.move(str(old_path), str(new_path))
+            
+            # Also move associated .json metadata file if it exists
+            old_json = old_path.with_suffix(".json")
+            if old_json.exists():
+                new_json = new_path.with_suffix(".json")
+                shutil.move(str(old_json), str(new_json))
+            
+            # Update database record
+            image.path = str(new_path)
+            image.filename = new_filename
+            session.add(image)
+            
+            # Update associated job's project_id if currently unassigned or from drafts
+            job = session.get(Job, image.job_id) if image.job_id else None
+            if job:
+                # Get drafts project to check if moving from it
+                drafts_project = session.exec(
+                    select(Project).where(Project.slug == "drafts")
+                ).first()
+                drafts_id = drafts_project.id if drafts_project else None
+                
+                if job.project_id is None or job.project_id == drafts_id:
+                    job.project_id = req.project_id
+                    session.add(job)
+            
+            new_paths[img_id] = str(new_path)
+            moved += 1
+            next_num += 1
+            
+        except Exception as e:
+            logger.exception("Failed to move image", extra={"image_id": img_id, "error": str(e)})
+            failed.append(img_id)
+    
+    try:
+        session.commit()
+    except SQLAlchemyError:
+        session.rollback()
+        logger.exception("Failed to commit image move transaction")
+        raise HTTPException(status_code=500, detail="Failed to save moved images")
+    
+    logger.info(
+        "Moved images to project",
+        extra={
+            "project_id": req.project_id,
+            "project_slug": project.slug,
+            "moved": moved,
+            "failed": len(failed),
+        }
+    )
+    
+    return MoveImagesResult(moved=moved, failed=failed, new_paths=new_paths)
 
 
 @router.post("/cleanup")

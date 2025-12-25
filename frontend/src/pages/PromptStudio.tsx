@@ -1693,14 +1693,13 @@ export default function PromptStudio() {
               >
                 <SelectTrigger className="h-7 text-xs">
                   <SelectValue placeholder="select project">
-                    {selectedProject?.name || "Draft Mode"}
+                    {selectedProject?.name || draftsProject?.name || "drafts"}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">draft mode (unsaved)</SelectItem>
                   {draftsProject && (
                     <SelectItem value={String(draftsProject.id)}>
-                      {draftsProject.name || "Drafts"}
+                      {draftsProject.name.toLowerCase()}
                     </SelectItem>
                   )}
                   {projects
@@ -1714,8 +1713,8 @@ export default function PromptStudio() {
               </Select>
             </div>
 
-            {/* Destination Selector (Compact) */}
-            {selectedProjectId && (
+            {/* Destination Selector (Compact) - hidden for drafts project which has no subfolders */}
+            {selectedProjectId && selectedProject?.slug !== "drafts" && (
               <div className="flex-1">
                 <label className="text-[9px] font-bold text-slate-400 lowercase tracking-wider">destination</label>
                 <Select
