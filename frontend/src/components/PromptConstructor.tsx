@@ -442,6 +442,9 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
     // Helper to validate target
     const isTargetValid = targetField && schema && schema[targetField] && schema[targetField].type === 'string';
     const snippetIndex = useMemo(() => buildSnippetIndex(library), [library]);
+    // Ref to access snippetIndex in effects without adding it as a dependency (prevents infinite loops)
+    const snippetIndexRef = useRef(snippetIndex);
+    snippetIndexRef.current = snippetIndex;
     const reconcileHandleRef = useRef<IdleHandle | null>(null);
     const reconcileTokenRef = useRef(0);
 
@@ -584,7 +587,8 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
         availableFields.forEach((fieldKey) => {
             const rawVal = (valuesRef.current as any)?.[fieldKey];
             const currentVal = typeof rawVal === "string" ? rawVal : (rawVal === null || rawVal === undefined ? "" : String(rawVal));
-            nextFieldItems[fieldKey] = rebuildItemsForValue(currentVal, snippetIndex);
+            // Use ref to avoid adding snippetIndex to dependency array (prevents infinite loops)
+            nextFieldItems[fieldKey] = rebuildItemsForValue(currentVal, snippetIndexRef.current);
             nextReconciled[fieldKey] = normalizePrompt(currentVal);
         });
 
@@ -598,7 +602,8 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
         setTimeout(() => {
             syncingLibraryRef.current = false;
         }, 0);
-    }, [availableFields, externalValueSyncKey, schema, snippetIndex, targetField]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [availableFields, externalValueSyncKey, schema, targetField]);
 
     // Sync Library: keep linked blocks + prompt text aligned when snippets change.
     // Important: reconciliation depends on `library`, so we must guard against it
@@ -630,7 +635,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
             let didChangeField = false;
 
             if (updated.length === 0 && currentVal) {
-                const rebuilt = buildItemsFromValue(currentVal, snippetIndex);
+                const rebuilt = buildItemsFromValue(currentVal, snippetIndexRef.current);
                 if (rebuilt && rebuilt.length > 0) {
                     updated = rebuilt;
                     didChangeField = true;
@@ -698,7 +703,8 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
             syncingLibraryRef.current = false;
         }, 0);
         // Only depend on library - use refs for other values to avoid effect on every keystroke
-    }, [availableFields, library, snippetIndex]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [availableFields, library]);
 
     // Reconciliation Logic (INPUT Channel: External Text -> Items)
     useEffect(() => {
@@ -735,7 +741,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
 
             const perfStart = typeof performance !== "undefined" ? performance.now() : null;
 
-            const matches = findSnippetMatches(currentVal, snippetIndex);
+            const matches = findSnippetMatches(currentVal, snippetIndexRef.current);
             if (matches === null) return;
             const selectedMatches = selectNonOverlappingMatches(matches, { preferLongest: true });
 
@@ -834,7 +840,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
                     {
                         len: safeVal.length,
                         items: currentItems.length,
-                        library: snippetIndex.entries.length,
+                        library: snippetIndexRef.current.entries.length,
                     },
                     { sampleRate: 0.05, throttleMs: 3000, minMs: 4 }
                 );
@@ -846,7 +852,8 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
             cancelIdle(reconcileHandleRef.current);
             reconcileHandleRef.current = null;
         };
-    }, [currentValues[targetField], targetField, snippetIndex, isTargetValid]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [currentValues[targetField], targetField, isTargetValid]);
 
 
     // Compile (OUTPUT Channel: Items -> Parent)
