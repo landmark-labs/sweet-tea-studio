@@ -667,6 +667,11 @@ export default function PromptStudio() {
     // Extract image path from the item
     const imagePath = item?.image?.path || item?.job_params?.image || '';
 
+    // Extract workflow_template_id from job_params
+    const workflowId = item?.workflow_template_id
+      || item?.job_params?.workflow_template_id
+      || item?.job_params?.workflow_id;
+
     // Prefer raw filesystem path, not API URL
     const rawPath = (() => {
       if (imagePath.includes("/api/") && imagePath.includes("path=")) {
@@ -679,28 +684,51 @@ export default function PromptStudio() {
       return imagePath;
     })();
 
+    // Extract prompts from job_params - check multiple possible field names
+    const jobParams = item?.job_params || {};
+
+    // For positive prompt, check various field naming conventions
+    const positivePrompt = item?.prompt
+      || jobParams.prompt
+      || jobParams.positive
+      || jobParams.text_positive
+      || jobParams.positive_prompt
+      || null;
+
+    // For negative prompt, check various field naming conventions  
+    const negativePrompt = item?.negative_prompt
+      || jobParams.negative_prompt
+      || jobParams.negative
+      || jobParams.text_negative
+      || null;
+
     const loadParams: GalleryItem = {
       ...(item || {} as GalleryItem),
       image: item?.image || { id: -1, job_id: -1, path: rawPath, filename: rawPath.split(/[\\/]/).pop() || 'image.png', created_at: '' },
-      prompt: item?.prompt
-        || item?.job_params?.prompt
-        || item?.job_params?.positive
-        || item?.job_params?.text_positive,
-      negative_prompt: item?.negative_prompt
-        || item?.job_params?.negative_prompt
-        || item?.job_params?.negative
-        || item?.job_params?.text_negative,
+      prompt: positivePrompt,
+      negative_prompt: negativePrompt,
+      workflow_template_id: workflowId,
       job_params: {
-        ...(item?.job_params || {}),
+        ...jobParams,
+        // Ensure prompt fields are correctly set in job_params too
+        prompt: positivePrompt,
+        positive: positivePrompt,
+        negative_prompt: negativePrompt,
+        negative: negativePrompt,
       }
     };
+
+    // Set the workflow to match the original
+    if (workflowId) {
+      setSelectedWorkflowId(String(workflowId));
+    }
 
     // Set preview if we have an image path
     if (rawPath) {
       setPreviewPath(`/api/v1/gallery/image/path?path=${encodeURIComponent(rawPath)}`);
       setPreviewMetadata({
-        prompt: loadParams.prompt || loadParams.job_params?.prompt,
-        negative_prompt: loadParams.negative_prompt || loadParams.job_params?.negative_prompt,
+        prompt: positivePrompt,
+        negative_prompt: negativePrompt,
         caption: loadParams.caption,
         created_at: loadParams.created_at,
       });
@@ -712,7 +740,7 @@ export default function PromptStudio() {
       __isRegenerate: true,
       __randomizeSeed: seedOption === 'random'
     });
-  }, [setPendingLoadParams, setPreviewMetadata, setPreviewPath]);
+  }, [setPendingLoadParams, setPreviewMetadata, setPreviewPath, setSelectedWorkflowId]);
 
 
   // Effect 1: CAPTURE loadParams immediately when navigation happens
