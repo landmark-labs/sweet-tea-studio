@@ -457,14 +457,38 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
                                 <div className="bg-white border border-slate-200 rounded-md shadow-lg py-1 w-36">
                                     <button
                                         className="w-full px-3 py-1.5 text-left text-xs hover:bg-slate-100"
-                                        onClick={() => {
-                                            const galleryItem: GalleryItem = {
-                                                image: { id: -1, job_id: -1, path: contextMenu.image.path, filename: contextMenu.image.filename, created_at: '' },
-                                                job_params: {},
-                                                prompt_history: [],
-                                                created_at: '',
-                                            };
-                                            onRegenerate(galleryItem, 'same');
+                                        onClick={async () => {
+                                            // Fetch metadata from image to get workflow_template_id and job_params
+                                            try {
+                                                const metadata = await api.getImageMetadata(contextMenu.image.path);
+                                                const galleryItem: GalleryItem = {
+                                                    image: { id: -1, job_id: -1, path: contextMenu.image.path, filename: contextMenu.image.filename, created_at: '' },
+                                                    job_params: {
+                                                        ...metadata.parameters,
+                                                        prompt: metadata.prompt,
+                                                        positive: metadata.prompt,
+                                                        negative_prompt: metadata.negative_prompt,
+                                                        negative: metadata.negative_prompt,
+                                                    },
+                                                    prompt: metadata.prompt || undefined,
+                                                    negative_prompt: metadata.negative_prompt || undefined,
+                                                    prompt_history: [],
+                                                    created_at: '',
+                                                    // Try to get workflow_template_id from metadata parameters
+                                                    workflow_template_id: (metadata.parameters as any)?.workflow_template_id,
+                                                };
+                                                onRegenerate(galleryItem, 'same');
+                                            } catch (e) {
+                                                console.error("Failed to fetch metadata:", e);
+                                                // Fallback without full metadata
+                                                const galleryItem: GalleryItem = {
+                                                    image: { id: -1, job_id: -1, path: contextMenu.image.path, filename: contextMenu.image.filename, created_at: '' },
+                                                    job_params: {},
+                                                    prompt_history: [],
+                                                    created_at: '',
+                                                };
+                                                onRegenerate(galleryItem, 'same');
+                                            }
                                             setContextMenu(null);
                                         }}
                                     >
@@ -472,14 +496,38 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
                                     </button>
                                     <button
                                         className="w-full px-3 py-1.5 text-left text-xs hover:bg-slate-100"
-                                        onClick={() => {
-                                            const galleryItem: GalleryItem = {
-                                                image: { id: -1, job_id: -1, path: contextMenu.image.path, filename: contextMenu.image.filename, created_at: '' },
-                                                job_params: {},
-                                                prompt_history: [],
-                                                created_at: '',
-                                            };
-                                            onRegenerate(galleryItem, 'random');
+                                        onClick={async () => {
+                                            // Fetch metadata from image to get workflow_template_id and job_params
+                                            try {
+                                                const metadata = await api.getImageMetadata(contextMenu.image.path);
+                                                const galleryItem: GalleryItem = {
+                                                    image: { id: -1, job_id: -1, path: contextMenu.image.path, filename: contextMenu.image.filename, created_at: '' },
+                                                    job_params: {
+                                                        ...metadata.parameters,
+                                                        prompt: metadata.prompt,
+                                                        positive: metadata.prompt,
+                                                        negative_prompt: metadata.negative_prompt,
+                                                        negative: metadata.negative_prompt,
+                                                    },
+                                                    prompt: metadata.prompt || undefined,
+                                                    negative_prompt: metadata.negative_prompt || undefined,
+                                                    prompt_history: [],
+                                                    created_at: '',
+                                                    // Try to get workflow_template_id from metadata parameters
+                                                    workflow_template_id: (metadata.parameters as any)?.workflow_template_id,
+                                                };
+                                                onRegenerate(galleryItem, 'random');
+                                            } catch (e) {
+                                                console.error("Failed to fetch metadata:", e);
+                                                // Fallback without full metadata
+                                                const galleryItem: GalleryItem = {
+                                                    image: { id: -1, job_id: -1, path: contextMenu.image.path, filename: contextMenu.image.filename, created_at: '' },
+                                                    job_params: {},
+                                                    prompt_history: [],
+                                                    created_at: '',
+                                                };
+                                                onRegenerate(galleryItem, 'random');
+                                            }
                                             setContextMenu(null);
                                         }}
                                     >

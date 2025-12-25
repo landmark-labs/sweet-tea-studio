@@ -182,13 +182,60 @@ export const ImageViewer = React.memo(function ImageViewer({
             .finally(() => setMetadataLoading(false));
     }, [imagePath]);
 
-    // Use PNG metadata as the authoritative source
+    // Use PNG metadata as the authoritative source for prompts display
     const currentMetadata = pngMetadata ? {
         prompt: pngMetadata.prompt,
         negative_prompt: pngMetadata.negative_prompt,
         job_params: pngMetadata.parameters,
         source: pngMetadata.source
     } : metadata;
+
+    // Find matching gallery item for full metadata (including workflow_template_id)
+    // This is critical for regenerate to work correctly - we need the pipe ID
+    const matchingGalleryItem = React.useMemo(() => {
+        if (!imagePath || !galleryItems?.length) return null;
+        const rawPath = extractRawPath(imagePath);
+        // Try exact path match first, then raw path match
+        return galleryItems.find(g => g.image.path === imagePath)
+            || galleryItems.find(g => g.image.path === rawPath)
+            || galleryItems.find(g => extractRawPath(g.image.path) === rawPath)
+            || null;
+    }, [imagePath, galleryItems, extractRawPath]);
+
+    // For regenerate, we need the full gallery item with workflow_template_id
+    // Merge PNG metadata (latest prompts from file) with gallery item metadata (for pipe ID)
+    const currentItemForRegenerate = React.useMemo((): GalleryItem | null => {
+        if (!currentImage) return null;
+
+        // Start with the matching gallery item if available
+        const base: GalleryItem = matchingGalleryItem || {
+            image: currentImage as any,
+            job_params: {},
+            prompt_history: [],
+            created_at: currentImage?.created_at || '',
+        };
+
+        // Merge PNG metadata if available (for fresh prompt data)
+        const mergedJobParams = {
+            ...base.job_params,
+            ...(pngMetadata?.parameters || {}),
+            // Ensure prompt fields are set from best available source
+            prompt: pngMetadata?.prompt || base.prompt || base.job_params?.prompt,
+            positive: pngMetadata?.prompt || base.prompt || base.job_params?.positive,
+            negative_prompt: pngMetadata?.negative_prompt || base.negative_prompt || base.job_params?.negative_prompt,
+            negative: pngMetadata?.negative_prompt || base.negative_prompt || base.job_params?.negative,
+        };
+
+        return {
+            ...base,
+            image: { ...base.image, path: currentImage.path },
+            prompt: pngMetadata?.prompt as string || base.prompt,
+            negative_prompt: pngMetadata?.negative_prompt as string || base.negative_prompt,
+            job_params: mergedJobParams,
+            // Preserve workflow_template_id from gallery item (critical for pipe switching)
+            workflow_template_id: base.workflow_template_id,
+        };
+    }, [currentImage, matchingGalleryItem, pngMetadata]);
 
 
     // Track displayImages length in a ref for keyboard navigation
@@ -545,7 +592,7 @@ export const ImageViewer = React.memo(function ImageViewer({
                                         <div
                                             className="px-3 py-2 hover:bg-slate-100 cursor-pointer text-xs"
                                             onClick={() => {
-                                                onRegenerate(currentMetadata || {}, 'same');
+                                                onRegenerate(currentItemForRegenerate || currentMetadata || {}, 'same');
                                                 setContextMenu(null);
                                             }}
                                         >
@@ -554,7 +601,7 @@ export const ImageViewer = React.memo(function ImageViewer({
                                         <div
                                             className="px-3 py-2 hover:bg-slate-100 cursor-pointer text-xs"
                                             onClick={() => {
-                                                onRegenerate(currentMetadata || {}, 'random');
+                                                onRegenerate(currentItemForRegenerate || currentMetadata || {}, 'random');
                                                 setContextMenu(null);
                                             }}
                                         >
@@ -724,7 +771,7 @@ export const ImageViewer = React.memo(function ImageViewer({
                                             <div
                                                 className="px-3 py-2 hover:bg-slate-100 cursor-pointer text-xs"
                                                 onClick={() => {
-                                                    onRegenerate(currentMetadata || {}, 'same');
+                                                    onRegenerate(currentItemForRegenerate || currentMetadata || {}, 'same');
                                                     setRegenerateMenuOpen(false);
                                                 }}
                                             >
@@ -733,7 +780,7 @@ export const ImageViewer = React.memo(function ImageViewer({
                                             <div
                                                 className="px-3 py-2 hover:bg-slate-100 cursor-pointer text-xs"
                                                 onClick={() => {
-                                                    onRegenerate(currentMetadata || {}, 'random');
+                                                    onRegenerate(currentItemForRegenerate || currentMetadata || {}, 'random');
                                                     setRegenerateMenuOpen(false);
                                                 }}
                                             >

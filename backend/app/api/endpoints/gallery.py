@@ -811,5 +811,11 @@ def get_image_metadata_by_path(path: str, session: Session = Depends(get_session
                     result["negative_prompt"] = params.get("negative_prompt") or params.get("negative") or params.get("text_negative")
                 if result["prompt"] or result["negative_prompt"]:
                     result["source"] = "database"
+        
+        # Include workflow_template_id from the job (critical for regenerate to switch to correct pipe)
+        if image.job_id:
+            job = session.get(Job, image.job_id)
+            if job and job.workflow_template_id:
+                result["parameters"]["workflow_template_id"] = job.workflow_template_id
     
     return result
