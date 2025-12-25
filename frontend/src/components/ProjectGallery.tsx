@@ -453,7 +453,7 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
                                 <span className="flex items-center gap-2"><RotateCcw className="h-3 w-3" /> regenerate</span>
                                 <span className="text-[10px]">▶</span>
                             </div>
-                            <div className="absolute left-full top-0 pl-1 hidden group-hover:block">
+                            <div className="absolute right-full top-0 pr-1 hidden group-hover:block">
                                 <div className="bg-white border border-slate-200 rounded-md shadow-lg py-1 w-36">
                                     <button
                                         className="w-full px-3 py-1.5 text-left text-xs hover:bg-slate-100"
@@ -500,7 +500,7 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
                                     <span className="flex items-center gap-2">use in pipe</span>
                                     <span className="text-[10px]">▶</span>
                                 </div>
-                                <div className="absolute left-full top-0 pl-1 hidden group-hover:block">
+                                <div className="absolute right-full top-0 pr-1 hidden group-hover:block">
                                     <div className="bg-white border border-slate-200 rounded-md shadow-lg py-1 w-40 max-h-48 overflow-y-auto">
                                         {workflows.filter(w => {
                                             const jsonStr = JSON.stringify(w.graph_json || {});
