@@ -13,7 +13,6 @@ from typing import Any, Dict, List, Literal, Optional
 import json
 import time
 from threading import Thread, RLock
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager, nullcontext
 
 import httpx
@@ -368,47 +367,6 @@ def bulk_upsert_tag_suggestions(session: Session, tags: List[TagSuggestion], sou
 
 # --- External Fetchers ---
 
-def fetch_danbooru_tags(query: str, limit: int = 10) -> List[TagSuggestion]:
-    hostname = "danbooru.donmai.us"
-    last_error: Optional[Exception] = None
-
-    for use_doh in (True, False):
-        dns_ctx = doh_override_dns(hostname) if use_doh else nullcontext(False)
-        with dns_ctx:
-            try:
-                with httpx.Client(
-                    timeout=5.0,
-                    headers={"User-Agent": "sweet-tea-studio/0.1 (autocomplete)"},
-                    base_url=f"https://{hostname}",
-                    follow_redirects=True,
-                    trust_env=False,
-                ) as client:
-                    res = client.get(
-                        "/tags.json",
-                        params={
-                            "search[name_matches]": f"{query}*",
-                            "search[order]": "count",
-                            "limit": limit,
-                        },
-                    )
-                    res.raise_for_status()
-                    data = res.json()
-                    return [
-                        TagSuggestion(
-                            name=tag.get("name", ""),
-                            source="danbooru",
-                            frequency=int(tag.get("post_count", 0) or 0),
-                            description=tag.get("category_name"),
-                        )
-                        for tag in data
-                        if tag.get("name")
-                    ]
-            except Exception as e:
-                last_error = e
-                continue
-
-    logger.warning(f"[TagFetch] Danbooru query failed for '{query}': {last_error}")
-    return []
 
 def fetch_all_danbooru_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int = TAG_CACHE_PAGE_SIZE) -> List[TagSuggestion]:
     hostname = "danbooru.donmai.us"
@@ -470,47 +428,6 @@ def fetch_all_danbooru_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int =
         data = _attempt(use_doh=False)
     return data[:max_tags]
 
-def fetch_e621_tags(query: str, limit: int = 10) -> List[TagSuggestion]:
-    hostname = "e621.net"
-    last_error: Optional[Exception] = None
-
-    for use_doh in (True, False):
-        dns_ctx = doh_override_dns(hostname) if use_doh else nullcontext(False)
-        with dns_ctx:
-            try:
-                with httpx.Client(
-                    timeout=5.0,
-                    headers={"User-Agent": "sweet-tea-studio/0.1 (autocomplete)"},
-                    base_url=f"https://{hostname}",
-                    follow_redirects=True,
-                    trust_env=False,
-                ) as client:
-                    res = client.get(
-                        "/tags.json",
-                        params={
-                            "search[name_matches]": f"{query}*",
-                            "search[order]": "count",
-                            "limit": limit,
-                        },
-                    )
-                    res.raise_for_status()
-                    data = res.json()
-                    return [
-                        TagSuggestion(
-                            name=tag.get("name", ""),
-                            source="e621",
-                            frequency=int(tag.get("post_count", 0) or 0),
-                            description=str(tag.get("category") or ""),
-                        )
-                        for tag in data
-                        if tag.get("name")
-                    ]
-            except Exception as e:
-                last_error = e
-                continue
-
-    logger.warning(f"[TagFetch] e621 query failed: {last_error}")
-    return []
 
 def fetch_all_e621_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int = TAG_CACHE_PAGE_SIZE) -> List[TagSuggestion]:
     hostname = "e621.net"
@@ -571,58 +488,6 @@ def fetch_all_e621_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int = TAG
         data = _attempt(use_doh=False)
     return data[:max_tags]
 
-def fetch_rule34_tags(query: str, limit: int = 10) -> List[TagSuggestion]:
-    """Fetch tags from Rule34 autocomplete API."""
-    try:
-        dns_ctx = doh_override_dns("api.rule34.xxx", additional_hosts=["rule34.xxx"])
-        with dns_ctx:
-            with httpx.Client(
-                timeout=5.0,
-                headers={
-                    "User-Agent": (
-                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                        "AppleWebKit/537.36 (KHTML, like Gecko) "
-                        "Chrome/120.0.0.0 Safari/537.36"
-                    ),
-                    "Accept": "application/json,text/html;q=0.8,*/*;q=0.1",
-                    "Accept-Language": "en-US,en;q=0.9",
-                    "Referer": "https://rule34.xxx/",
-                },
-                follow_redirects=True,
-                trust_env=False,
-            ) as client:
-                res = client.get(
-                    "https://api.rule34.xxx/autocomplete.php",
-                    params={"q": query},
-                )
-            res.raise_for_status()
-            
-            data = res.json()
-            tags = []
-            for item in data[:limit]:
-                name = item.get("value", "").strip().lower()
-                label = item.get("label", "")
-                count = 0
-                if "(" in label and ")" in label:
-                    try:
-                        count_str = label.split("(")[-1].rstrip(")")
-                        count = int(count_str)
-                    except ValueError:
-                        pass
-                
-                if name:
-                    tags.append(
-                        TagSuggestion(
-                            name=name,
-                            source="rule34",
-                            frequency=count,
-                            description=None,
-                        )
-                    )
-            return tags
-    except Exception as e:
-        logger.warning(f"[TagFetch] Rule34 query failed for '{query}': {e}")
-        return []
 
 def fetch_all_rule34_tags(max_tags: int = TAG_CACHE_MAX_TAGS, page_size: int = 100) -> List[TagSuggestion]:
     """Fetch popular tags from Rule34 using the official DAPI, with fallbacks."""
@@ -1005,7 +870,7 @@ def save_discovered_tags(tags: List[TagSuggestion]):
 # --- Endpoints ---
 
 @router.get("/suggest", response_model=List[TagSuggestion])
-def suggest_tags(query: str, background_tasks: BackgroundTasks, limit: int = 20):
+def suggest_tags(query: str, limit: int = 20):
     raw_query = " ".join((query or "").strip().lower().split())
     if not raw_query or len(raw_query) < 2:
         return []
@@ -1103,45 +968,9 @@ def suggest_tags(query: str, background_tasks: BackgroundTasks, limit: int = 20)
                 description=snippet[:180] if snippet else None,
             )
 
-    # 2. If local cache doesn't have enough suggestions, query remote APIs once.
-    # This enables "harvest as you type" behavior when tags.db is missing a tag.
-    if len(normalized_query) >= 3:
-        existing_tag_count = sum(1 for s in merged.values() if s.source != "prompt")
-        if existing_tag_count < limit:
-            remote_limit = min(10, max(1, limit))
-            remote_results: List[TagSuggestion] = []
-
-            fetchers = [
-                ("danbooru", lambda: fetch_danbooru_tags(normalized_query, limit=remote_limit)),
-                ("e621", lambda: fetch_e621_tags(normalized_query, limit=remote_limit)),
-                ("rule34", lambda: fetch_rule34_tags(normalized_query, limit=remote_limit)),
-            ]
-
-            with ThreadPoolExecutor(max_workers=len(fetchers)) as executor:
-                futures = {executor.submit(fn): label for label, fn in fetchers}
-                for future in as_completed(futures):
-                    label = futures[future]
-                    try:
-                        data = future.result()
-                        if data:
-                            remote_results.extend(data)
-                    except Exception as e:
-                        logger.warning(f"[TagFetch] {label} remote suggest failed: {e}")
-
-            # Merge remote results + save them for future local suggestions.
-            seen_to_save: set[str] = set()
-            for suggestion in remote_results:
-                key = (suggestion.name or "").strip().lower()
-                if not key:
-                    continue
-                if key not in merged:
-                    merged[key] = suggestion
-                if key not in seen_to_save and suggestion.source != "prompt":
-                    tags_to_save.append(suggestion)
-                    seen_to_save.add(key)
-
-            if tags_to_save:
-                background_tasks.add_task(save_discovered_tags, tags_to_save)
+    # 2. Remote API fallback removed per user request. 
+    # Autocomplete should only query the local database to avoid hitting external APIs on every keystroke.
+    # To populate the DB, the background cache refresh scheduler is used instead.
 
     priority = {"library": 0, "prompt": 0, "custom": 0, "danbooru": 1, "e621": 2, "rule34": 3}
 
