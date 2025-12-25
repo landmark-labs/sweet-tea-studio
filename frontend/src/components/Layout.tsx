@@ -77,8 +77,8 @@ export default function Layout() {
           collapsed ? "w-16" : "w-56"
         )}
       >
-        <div className={cn("p-4 border-b border-border/70 flex items-center", collapsed ? "justify-center" : "justify-between")}>
-          {!collapsed && (
+        <div className={cn("p-4 border-b border-border/70 flex items-center relative", collapsed ? "justify-center" : "justify-between")}>
+          {!collapsed ? (
             <div>
               <h1 className="flex items-baseline gap-1 text-xl font-semibold leading-none whitespace-nowrap">
                 <span className="bg-gradient-to-r from-primary via-secondary to-accent bg-clip-text text-transparent">
@@ -91,9 +91,23 @@ export default function Layout() {
               </h1>
               <p className="text-[10px] text-muted-foreground whitespace-nowrap">a creative workspace</p>
             </div>
+          ) : (
+            <div className="absolute left-[calc(50%-5px)] top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center">
+              <LemonBadge className="h-[36px] w-[58px]" />
+            </div>
           )}
-          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full" onClick={() => setCollapsed(!collapsed)}>
-            {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn(
+              "rounded-full transition-all",
+              collapsed
+                ? "absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-8 w-8 hover:bg-transparent text-slate-700 font-bold"
+                : "h-8 w-8"
+            )}
+            onClick={() => setCollapsed(!collapsed)}
+          >
+            {collapsed ? <ChevronRight size={18} strokeWidth={3} /> : <ChevronLeft size={16} />}
           </Button>
         </div>
         <nav className="flex-1 p-3 space-y-1 overflow-x-hidden">
