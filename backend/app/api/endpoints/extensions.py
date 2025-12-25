@@ -34,7 +34,7 @@ install_jobs: Dict[str, InstallJob] = {}
 
 class InstallMissingRequest(BaseModel):
     missing_nodes: List[str]
-    allow_manual_clone: bool = False
+    allow_manual_clone: bool = True
 
 @router.post("/install")
 def install_missing_nodes(request: InstallMissingRequest, background_tasks: BackgroundTasks):

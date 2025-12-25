@@ -329,7 +329,7 @@ export default function WorkflowLibrary() {
     // Install State
     const [installOpen, setInstallOpen] = useState(false);
     const [installStatus, setInstallStatus] = useState<any>(null);
-    const [allowManualClone, setAllowManualClone] = useState(false);
+    const [allowManualClone, setAllowManualClone] = useState(true);
     // eslint-disable-line @typescript-eslint/no-unused-vars
     const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
