@@ -53,13 +53,42 @@ export function calculateProgressStats(
     }
 
     const latest = history[history.length - 1];
-    const oldest = history[0];
 
-    // Calculate rate from history window
-    const stepsDelta = latest.step - oldest.step;
-    const timeDeltaMs = latest.timestamp - oldest.timestamp;
+    // Calculate instantaneous rates for each interval
+    const rates: number[] = [];
+    for (let i = 0; i < history.length - 1; i++) {
+        const current = history[i];
+        const next = history[i + 1];
+        const stepDelta = next.step - current.step;
+        const timeDelta = next.timestamp - current.timestamp;
 
-    if (timeDeltaMs <= 0 || stepsDelta <= 0) {
+        if (timeDelta > 0 && stepDelta > 0) {
+            rates.push(stepDelta / timeDelta);
+        }
+    }
+
+    // If we don't have enough valid intervals, fallback to overall average
+    let stepsPerMs = 0;
+
+    if (rates.length === 0) {
+        // Fallback: Calculate rate from total history window
+        const oldest = history[0];
+        const totalStepDelta = latest.step - oldest.step;
+        const totalTimeDelta = latest.timestamp - oldest.timestamp;
+        if (totalTimeDelta > 0 && totalStepDelta > 0) {
+            stepsPerMs = totalStepDelta / totalTimeDelta;
+        }
+    } else {
+        // Calculate Median Rate
+        rates.sort((a, b) => a - b);
+        const mid = Math.floor(rates.length / 2);
+        stepsPerMs = rates.length % 2 !== 0
+            ? rates[mid]
+            : (rates[mid - 1] + rates[mid]) / 2;
+    }
+
+    // Safety check for zero rate
+    if (stepsPerMs <= 0) {
         const now = Date.now();
         return {
             currentStep: latest.step,
@@ -73,7 +102,6 @@ export function calculateProgressStats(
         };
     }
 
-    const stepsPerMs = stepsDelta / timeDeltaMs;
     const stepsPerSecond = stepsPerMs * 1000;
     const secondsPerStep = 1 / stepsPerSecond;
 
