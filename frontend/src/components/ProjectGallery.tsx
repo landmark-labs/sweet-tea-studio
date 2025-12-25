@@ -38,8 +38,37 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
     const lastSelectedPath = useRef<string | null>(null);
     const [gridResetKey, setGridResetKey] = useState(0);
 
-    // Get selected project
-    const selectedProject = projects.find(p => String(p.id) === selectedProjectId);
+    // Pre-process projects: Sort "drafts" to top, rename to "drafts", ensure it has "output" folder
+    const sortedProjects = useMemo(() => {
+        const result = [...projects];
+        const draftsIndex = result.findIndex(p => p.slug === "drafts");
+
+        if (draftsIndex !== -1) {
+            const drafts = { ...result[draftsIndex] };
+            // Rename to lowercase "drafts"
+            drafts.name = "drafts";
+
+            // Ensure it has at least "output" folder
+            const config = drafts.config_json || {};
+            const folders = config.folders || [];
+            if (!folders.includes("output")) {
+                drafts.config_json = {
+                    ...config,
+                    folders: ["output", ...folders]
+                };
+            }
+
+            // Move to start
+            result.splice(draftsIndex, 1);
+            result.unshift(drafts);
+        }
+
+        return result;
+    }, [projects]);
+
+    // Get selected project from sorted list
+    const selectedProject = sortedProjects.find(p => String(p.id) === selectedProjectId);
+
     // Memoize folders for referential stability - prevents effect re-runs on every render
     const folders = useMemo(() => {
         return (selectedProject?.config_json as { folders?: string[] })?.folders || [];
@@ -310,10 +339,10 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
                             </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
-                            {projects.length === 0 ? (
+                            {sortedProjects.length === 0 ? (
                                 <SelectItem value="__empty" disabled>No projects</SelectItem>
                             ) : (
-                                projects.map((p) => (
+                                sortedProjects.map((p) => (
                                     <SelectItem key={p.id} value={String(p.id)}>
                                         {p.name}
                                     </SelectItem>

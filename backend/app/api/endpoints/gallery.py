@@ -592,6 +592,35 @@ def _get_next_image_number(directory: Path, prefix: str = "") -> int:
     return max_num + 1
 
 
+def _clone_job(session: Session, job: Job, target_project_id: int) -> Job:
+    """
+    Clone a job record to support splitting a batch.
+    
+    Used when multiple images belong to one job but only a subset are being moved
+    to a different project. The moved images will point to this new job.
+    """
+    new_job = Job(
+        engine_id=job.engine_id,
+        workflow_template_id=job.workflow_template_id,
+        status=job.status,
+        input_params=job.input_params,
+        prompt_id=job.prompt_id,
+        comfy_prompt_id=job.comfy_prompt_id,
+        title=job.title,
+        project_id=target_project_id,
+        output_dir=job.output_dir,
+        input_dir=job.input_dir,
+        mask_dir=job.mask_dir,
+        created_at=job.created_at,
+        started_at=job.started_at,
+        completed_at=job.completed_at,
+        error=job.error,
+    )
+    session.add(new_job)
+    session.flush()  # Ensure we get an ID
+    return new_job
+
+
 @router.post("/move", response_model=MoveImagesResult)
 def move_images(req: MoveImagesRequest, session: Session = Depends(get_session)):
     """
@@ -645,6 +674,41 @@ def move_images(req: MoveImagesRequest, session: Session = Depends(get_session))
     failed: List[int] = []
     new_paths: Dict[int, str] = {}
     
+    # --- Job Splitting Logic ---
+    # Determine which jobs need to be moved or split
+    # 1. Identify all jobs involved
+    job_ids = set(img.job_id for img in images if img.job_id)
+    
+    # Map original job_id -> target job_id (either moved original or new clone)
+    job_mapping: Dict[int, int] = {}
+    
+    for jid in job_ids:
+        job = session.get(Job, jid)
+        if not job:
+            continue
+            
+        # Only process if the job isn't already in the target project
+        if job.project_id != req.project_id:
+            # Count total active images in this job
+            total_images_count = session.exec(
+                select(func.count(Image.id))
+                .where(Image.job_id == jid)
+                .where(Image.is_deleted == False)
+            ).one()
+            
+            # Count how many of these are being moved
+            moving_count = sum(1 for img in images if img.job_id == jid)
+            
+            if total_images_count == moving_count:
+                # Case 1: All images are moving. Move the job itself.
+                job.project_id = req.project_id
+                session.add(job)
+                job_mapping[jid] = job.id
+            else:
+                # Case 2: Only some images are moving. Split the job.
+                new_job = _clone_job(session, job, req.project_id)
+                job_mapping[jid] = new_job.id
+    
     for img_id in req.image_ids:
         image = images_by_id.get(img_id)
         if not image:
@@ -679,18 +743,9 @@ def move_images(req: MoveImagesRequest, session: Session = Depends(get_session))
             image.filename = new_filename
             session.add(image)
             
-            # Update associated job's project_id if currently unassigned or from drafts
-            job = session.get(Job, image.job_id) if image.job_id else None
-            if job:
-                # Get drafts project to check if moving from it
-                drafts_project = session.exec(
-                    select(Project).where(Project.slug == "drafts")
-                ).first()
-                drafts_id = drafts_project.id if drafts_project else None
-                
-                if job.project_id is None or job.project_id == drafts_id:
-                    job.project_id = req.project_id
-                    session.add(job)
+            # Update associated job to the mapped job (either moved or split)
+            if image.job_id and image.job_id in job_mapping:
+                image.job_id = job_mapping[image.job_id]
             
             new_paths[img_id] = str(new_path)
             moved += 1
