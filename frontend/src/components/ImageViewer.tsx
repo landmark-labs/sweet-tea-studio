@@ -612,20 +612,6 @@ export const ImageViewer = React.memo(function ImageViewer({
                             </div>
                         )}
 
-                        {onDelete && currentImage && (
-                            <div
-                                className="px-3 py-2 hover:bg-red-50 cursor-pointer flex items-center gap-2 text-red-600"
-                                onClick={() => {
-                                    if (confirm("Delete this image permanently?")) {
-                                        onDelete(currentImage.id);
-                                    }
-                                    setContextMenu(null);
-                                }}
-                            >
-                                <Trash2 size={14} /> delete
-                            </div>
-                        )}
-
                         {imgWorkflows.length > 0 && (
                             <div className="relative group">
                                 <div className="px-3 py-2 hover:bg-slate-100 cursor-pointer flex items-center justify-between">
@@ -662,7 +648,7 @@ export const ImageViewer = React.memo(function ImageViewer({
                                                             caption: (currentMetadata as any)?.caption,
                                                             prompt_tags: [],
                                                             prompt_name: undefined,
-                                                            engine_id: undefined,
+
                                                             collection_id: undefined,
                                                             project_id: undefined,
                                                         }
@@ -677,6 +663,23 @@ export const ImageViewer = React.memo(function ImageViewer({
                                     </div>
                                 </div>
                             </div>
+                        )}
+
+                        {onDelete && currentImage && (
+                            <>
+                                <div className="h-px bg-slate-100 my-1" />
+                                <div
+                                    className="px-3 py-2 hover:bg-red-50 cursor-pointer flex items-center gap-2 text-red-600"
+                                    onClick={() => {
+                                        if (confirm("Delete this image permanently?")) {
+                                            onDelete(currentImage.id);
+                                        }
+                                        setContextMenu(null);
+                                    }}
+                                >
+                                    <Trash2 size={14} /> delete
+                                </div>
+                            </>
                         )}
                     </div>
                 )}
@@ -731,7 +734,7 @@ export const ImageViewer = React.memo(function ImageViewer({
                                                             caption: (currentMetadata as any)?.caption,
                                                             prompt_tags: [],
                                                             prompt_name: undefined,
-                                                            engine_id: undefined,
+
                                                             collection_id: undefined,
                                                             project_id: undefined,
                                                         }
