@@ -408,7 +408,8 @@ export function PromptAutocompleteTextarea({
         if (!highlightSnippets || !debouncedValue || debouncedValue.length > MAX_HIGHLIGHT_LENGTH || snippetIndex.entries.length === 0) {
             cancelIdle(highlightHandleRef.current);
             highlightHandleRef.current = null;
-            setHighlightedContent(null);
+            // Only update state if it's not already null to prevent infinite loops
+            setHighlightedContent((prev) => prev === null ? prev : null);
             return;
         }
 
@@ -418,13 +419,13 @@ export function PromptAutocompleteTextarea({
 
             const matches = findSnippetMatches(debouncedValue, snippetIndex, { maxMatches: MAX_HIGHLIGHT_MATCHES });
             if (!matches || matches.length === 0) {
-                setHighlightedContent(null);
+                setHighlightedContent((prev) => prev === null ? prev : null);
                 return;
             }
 
             const selectedMatches = selectNonOverlappingMatches(matches);
             if (selectedMatches.length === 0) {
-                setHighlightedContent(null);
+                setHighlightedContent((prev) => prev === null ? prev : null);
                 return;
             }
 

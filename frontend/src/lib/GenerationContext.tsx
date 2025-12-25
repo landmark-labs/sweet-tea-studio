@@ -275,6 +275,8 @@ export function GenerationProvider({ children }: GenerationProviderProps) {
             const ws = new WebSocket(`${wsProtocol}//${window.location.host}${wsApiPath}/jobs/${job.id}/ws`);
             wsRef.current = ws;
             let lastPreviewUpdate = 0;
+            let lastProgressUpdate = 0;
+            const PROGRESS_THROTTLE_MS = 100;
             ws.onmessage = (event) => {
                 const data = JSON.parse(event.data);
                 if (data.type === "status") {
@@ -286,6 +288,12 @@ export function GenerationProvider({ children }: GenerationProviderProps) {
                     updateFeed(job.id, statusUpdates);
                 } else if (data.type === "progress") {
                     const pct = (data.data.value / data.data.max) * 100;
+                    // Time-based throttle: skip expensive updateFeed calls if called too frequently
+                    const now = Date.now();
+                    if (now - lastProgressUpdate < PROGRESS_THROTTLE_MS) {
+                        return; // Skip this update, another will come shortly
+                    }
+                    lastProgressUpdate = now;
                     // Use RAF to defer update and avoid blocking the main thread
                     requestAnimationFrame(() => {
                         updateFeed(job.id, { progress: pct, status: "processing" });

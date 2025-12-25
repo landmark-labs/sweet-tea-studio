@@ -1119,6 +1119,8 @@ export default function PromptStudio() {
 
   const wsRef = useRef<WebSocket | null>(null);
   const lastPreviewUpdateRef = useRef<number>(0);
+  const lastProgressUpdateRef = useRef<number>(0);
+  const PROGRESS_THROTTLE_MS = 100; // Minimum ms between progress updates
   const wsDebug = useMemo(
     () => import.meta.env.DEV && localStorage.getItem("ds_debug_ws") === "1",
     []
@@ -1199,6 +1201,13 @@ export default function PromptStudio() {
           max,
           jobStartTime || Date.now()
         );
+
+        // Time-based throttle: skip expensive updateFeed calls if called too frequently
+        const now = Date.now();
+        if (now - lastProgressUpdateRef.current < PROGRESS_THROTTLE_MS) {
+          return; // Skip this update, another will come shortly
+        }
+        lastProgressUpdateRef.current = now;
 
         // Use RAF to defer expensive state updates and avoid blocking the main thread
         // This prevents Chrome "message handler took Xms" violations
