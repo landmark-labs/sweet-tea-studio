@@ -202,7 +202,23 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
     // Context menu handlers
     const handleContextMenu = (e: React.MouseEvent, image: FolderImage) => {
         e.preventDefault();
-        setContextMenu({ x: e.clientX, y: e.clientY, image });
+        const menuWidth = 160; // Approximate menu width
+        const menuHeight = 200; // Approximate menu height with submenus
+
+        let x = e.clientX;
+        let y = e.clientY;
+
+        // Flip to left if would overflow right edge
+        if (x + menuWidth > window.innerWidth) {
+            x = window.innerWidth - menuWidth - 8;
+        }
+
+        // Flip up if would overflow bottom edge
+        if (y + menuHeight > window.innerHeight) {
+            y = window.innerHeight - menuHeight - 8;
+        }
+
+        setContextMenu({ x, y, image });
     };
 
     const handleDownload = async () => {
