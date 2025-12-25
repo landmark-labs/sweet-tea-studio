@@ -1200,14 +1200,18 @@ export default function PromptStudio() {
           jobStartTime || Date.now()
         );
 
-        updateFeed(lastJobId, {
-          progress: pct,
-          status: "processing",
-          currentStep: value,
-          totalSteps: max,
-          elapsedMs: stats?.elapsedMs,
-          estimatedRemainingMs: stats?.estimatedRemainingMs,
-          iterationsPerSecond: stats?.iterationsPerSecond,
+        // Use RAF to defer expensive state updates and avoid blocking the main thread
+        // This prevents Chrome "message handler took Xms" violations
+        requestAnimationFrame(() => {
+          updateFeed(lastJobId, {
+            progress: pct,
+            status: "processing",
+            currentStep: value,
+            totalSteps: max,
+            elapsedMs: stats?.elapsedMs,
+            estimatedRemainingMs: stats?.estimatedRemainingMs,
+            iterationsPerSecond: stats?.iterationsPerSecond,
+          });
         });
       } else if (data.type === "execution_complete" || data.type === "generation_done") {
         // ComfyUI finished rendering - reset button immediately

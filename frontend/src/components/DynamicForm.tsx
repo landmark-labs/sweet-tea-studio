@@ -349,33 +349,36 @@ const SettingsGroupSection = React.memo(function SettingsGroupSection({
             <AccordionTrigger
                 className="text-xs font-semibold uppercase text-slate-500 hover:no-underline py-2 [&>svg]:ml-auto"
                 aria-label={`${group.title} controls (${isBypassed ? "bypassed" : "active"})`}
+                asChild
             >
-                <div className="flex items-center gap-3">
-                    <span className="flex items-center gap-2">
-                        <span>{group.title}</span>
-                        {isBypassed && (
-                            <span className="text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5">
-                                Bypassed
-                            </span>
+                <div className="flex flex-1 items-center justify-between cursor-pointer" role="button" tabIndex={0}>
+                    <div className="flex items-center gap-3">
+                        <span className="flex items-center gap-2">
+                            <span>{group.title}</span>
+                            {isBypassed && (
+                                <span className="text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5">
+                                    Bypassed
+                                </span>
+                            )}
+                        </span>
+                        {group.hasBypass && group.bypassKey && (
+                            <div
+                                className="flex items-center gap-2"
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                <span className="text-[9px] text-slate-300 uppercase tracking-wider">
+                                    {isBypassed ? "bypassed" : "active"}
+                                </span>
+                                <Switch
+                                    checked={Boolean(bypassValue)}
+                                    onCheckedChange={(c) => onToggleChange(group.bypassKey!, Boolean(c))}
+                                    className={cn(
+                                        "h-3.5 w-6 data-[state=checked]:bg-amber-500 data-[state=unchecked]:bg-slate-200"
+                                    )}
+                                />
+                            </div>
                         )}
-                    </span>
-                    {group.hasBypass && group.bypassKey && (
-                        <div
-                            className="flex items-center gap-2"
-                            onClick={(e) => e.stopPropagation()}
-                        >
-                            <span className="text-[9px] text-slate-300 uppercase tracking-wider">
-                                {isBypassed ? "bypassed" : "active"}
-                            </span>
-                            <Switch
-                                checked={Boolean(bypassValue)}
-                                onCheckedChange={(c) => onToggleChange(group.bypassKey!, Boolean(c))}
-                                className={cn(
-                                    "h-3.5 w-6 data-[state=checked]:bg-amber-500 data-[state=unchecked]:bg-slate-200"
-                                )}
-                            />
-                        </div>
-                    )}
+                    </div>
                 </div>
             </AccordionTrigger>
             <AccordionContent className="space-y-4 pt-0 pb-4">

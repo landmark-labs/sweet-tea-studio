@@ -192,6 +192,13 @@ def list_downloads():
     return download_manager.get_downloads()
 
 
+@router.delete("/downloads/clear")
+def clear_finished_downloads():
+    """Clear all completed, failed, and cancelled downloads from the queue."""
+    count = download_manager.clear_finished_jobs()
+    return {"cleared": count}
+
+
 @router.delete("/downloads/{job_id}")
 def cancel_or_remove_download(job_id: str):
     """Cancel a running download or remove a completed/failed one."""

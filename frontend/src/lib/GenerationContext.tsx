@@ -286,7 +286,10 @@ export function GenerationProvider({ children }: GenerationProviderProps) {
                     updateFeed(job.id, statusUpdates);
                 } else if (data.type === "progress") {
                     const pct = (data.data.value / data.data.max) * 100;
-                    updateFeed(job.id, { progress: pct, status: "processing" });
+                    // Use RAF to defer update and avoid blocking the main thread
+                    requestAnimationFrame(() => {
+                        updateFeed(job.id, { progress: pct, status: "processing" });
+                    });
                 } else if (data.type === "completed") {
                     const paths = data.images?.map((img: any) => img.path) || [];
                     updateFeed(job.id, {
