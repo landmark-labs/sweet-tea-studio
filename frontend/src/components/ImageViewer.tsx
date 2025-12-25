@@ -16,7 +16,7 @@ interface ImageViewerProps {
     onUseInPipe?: (payload: { workflowId: string; imagePath: string; galleryItem: GalleryItem }) => void;
     onImageUpdate?: (image: ApiImage) => void;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    onRegenerate?: (item: any) => void;
+    onRegenerate?: (item: any, seedOption: 'same' | 'random') => void;
     onDelete?: (imageId: number) => void;
     selectedImagePath?: string;
     onLoadMore?: () => void;  // Callback to load more images when near end
@@ -141,6 +141,7 @@ export const ImageViewer = React.memo(function ImageViewer({
     } | null>(null);
     const [metadataLoading, setMetadataLoading] = React.useState(false);
     const [useInPipeMenuOpen, setUseInPipeMenuOpen] = React.useState(false);
+    const [regenerateMenuOpen, setRegenerateMenuOpen] = React.useState(false);
 
     // Fetch metadata from PNG when image path changes
     React.useEffect(() => {
@@ -534,14 +535,33 @@ export const ImageViewer = React.memo(function ImageViewer({
                         <div className="h-px bg-slate-100 my-1" />
 
                         {onRegenerate && (
-                            <div
-                                className="px-3 py-2 hover:bg-slate-100 cursor-pointer flex items-center gap-2 text-slate-700"
-                                onClick={() => {
-                                    onRegenerate(currentMetadata || {});
-                                    setContextMenu(null);
-                                }}
-                            >
-                                <RotateCcw size={14} /> Regenerate
+                            <div className="relative group">
+                                <div className="px-3 py-2 hover:bg-slate-100 cursor-pointer flex items-center justify-between">
+                                    <span className="flex items-center gap-2"><RotateCcw size={14} /> regenerate</span>
+                                    <span className="text-xs">▶</span>
+                                </div>
+                                <div className="absolute left-full top-0 pl-2 -ml-1 hidden group-hover:block">
+                                    <div className="bg-white border border-slate-200 rounded-md shadow-lg py-1 w-40">
+                                        <div
+                                            className="px-3 py-2 hover:bg-slate-100 cursor-pointer text-xs"
+                                            onClick={() => {
+                                                onRegenerate(currentMetadata || {}, 'same');
+                                                setContextMenu(null);
+                                            }}
+                                        >
+                                            same seed
+                                        </div>
+                                        <div
+                                            className="px-3 py-2 hover:bg-slate-100 cursor-pointer text-xs"
+                                            onClick={() => {
+                                                onRegenerate(currentMetadata || {}, 'random');
+                                                setContextMenu(null);
+                                            }}
+                                        >
+                                            random seed (-1)
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         )}
 
@@ -676,6 +696,49 @@ export const ImageViewer = React.memo(function ImageViewer({
                                                     {w.name}
                                                 </div>
                                             ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Regenerate button with dropdown */}
+                            {onRegenerate && (
+                                <div
+                                    className="relative"
+                                    onMouseEnter={() => setRegenerateMenuOpen(true)}
+                                    onMouseLeave={() => setRegenerateMenuOpen(false)}
+                                >
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-7 text-xs gap-1 border-green-200 hover:bg-green-50 text-green-700"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setRegenerateMenuOpen((open) => !open);
+                                        }}
+                                    >
+                                        <RotateCcw className="w-3 h-3" /> regenerate ▶
+                                    </Button>
+                                    <div className={`absolute left-0 top-full pt-2 -mt-1 z-50 ${regenerateMenuOpen ? "block" : "hidden"}`}>
+                                        <div className="bg-white border border-slate-200 rounded-md shadow-lg py-1 w-40">
+                                            <div
+                                                className="px-3 py-2 hover:bg-slate-100 cursor-pointer text-xs"
+                                                onClick={() => {
+                                                    onRegenerate(currentMetadata || {}, 'same');
+                                                    setRegenerateMenuOpen(false);
+                                                }}
+                                            >
+                                                same seed
+                                            </div>
+                                            <div
+                                                className="px-3 py-2 hover:bg-slate-100 cursor-pointer text-xs"
+                                                onClick={() => {
+                                                    onRegenerate(currentMetadata || {}, 'random');
+                                                    setRegenerateMenuOpen(false);
+                                                }}
+                                            >
+                                                random seed (-1)
+                                            </div>
                                         </div>
                                     </div>
                                 </div>

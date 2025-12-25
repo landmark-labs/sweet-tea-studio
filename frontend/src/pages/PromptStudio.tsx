@@ -71,7 +71,7 @@ export default function PromptStudio() {
   const [previewPath, setPreviewPath] = useState<string | null>(null);
   const [previewMetadata, setPreviewMetadata] = useState<any>(null);
   // Pending loadParams - holds the gallery item to inject until workflows are loaded
-  const [pendingLoadParams, setPendingLoadParams] = useState<(GalleryItem & { __isRegenerate?: boolean }) | null>(null);
+  const [pendingLoadParams, setPendingLoadParams] = useState<(GalleryItem & { __isRegenerate?: boolean; __randomizeSeed?: boolean }) | null>(null);
   const handlePreviewSelect = useCallback((path: string, metadata?: any) => {
     setPreviewPath(path);
     setPreviewMetadata(metadata ?? null);
@@ -662,6 +662,57 @@ export default function PromptStudio() {
     setPendingLoadParams({ ...loadParams, __isRegenerate: false });
   }, [setPendingLoadParams, setPreviewMetadata, setPreviewPath, setSelectedProjectId, setSelectedWorkflowId]);
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handleRegenerate = useCallback((item: any, seedOption: 'same' | 'random') => {
+    // Extract image path from the item
+    const imagePath = item?.image?.path || item?.job_params?.image || '';
+
+    // Prefer raw filesystem path, not API URL
+    const rawPath = (() => {
+      if (imagePath.includes("/api/") && imagePath.includes("path=")) {
+        try {
+          const url = new URL(imagePath, window.location.origin);
+          const p = url.searchParams.get("path");
+          if (p) return p;
+        } catch { /* ignore */ }
+      }
+      return imagePath;
+    })();
+
+    const loadParams: GalleryItem = {
+      ...(item || {} as GalleryItem),
+      image: item?.image || { id: -1, job_id: -1, path: rawPath, filename: rawPath.split(/[\\/]/).pop() || 'image.png', created_at: '' },
+      prompt: item?.prompt
+        || item?.job_params?.prompt
+        || item?.job_params?.positive
+        || item?.job_params?.text_positive,
+      negative_prompt: item?.negative_prompt
+        || item?.job_params?.negative_prompt
+        || item?.job_params?.negative
+        || item?.job_params?.text_negative,
+      job_params: {
+        ...(item?.job_params || {}),
+      }
+    };
+
+    // Set preview if we have an image path
+    if (rawPath) {
+      setPreviewPath(`/api/v1/gallery/image/path?path=${encodeURIComponent(rawPath)}`);
+      setPreviewMetadata({
+        prompt: loadParams.prompt || loadParams.job_params?.prompt,
+        negative_prompt: loadParams.negative_prompt || loadParams.job_params?.negative_prompt,
+        caption: loadParams.caption,
+        created_at: loadParams.created_at,
+      });
+    }
+
+    // Set pending load params with regenerate and seed flags
+    setPendingLoadParams({
+      ...loadParams,
+      __isRegenerate: true,
+      __randomizeSeed: seedOption === 'random'
+    });
+  }, [setPendingLoadParams, setPreviewMetadata, setPreviewPath]);
 
 
   // Effect 1: CAPTURE loadParams immediately when navigation happens
@@ -743,6 +794,33 @@ export default function PromptStudio() {
       }
       const baseParams: Record<string, unknown> = { ...targetDefaults, ...storedParams };
 
+      // STEP 2.5: Handle seed for regeneration
+      // If regenerating with same seed, copy seed from job_params
+      // If regenerating with random seed, set seed to -1
+      if (loadParams.__isRegenerate) {
+        const jobParams = (loadParams.job_params || {}) as Record<string, unknown>;
+        // Find seed field in schema
+        const seedField = Object.keys(schema).find(k =>
+          k.toLowerCase().includes('seed') &&
+          !k.toLowerCase().includes('control_after')
+        );
+
+        if (seedField) {
+          if (loadParams.__randomizeSeed) {
+            // Random seed mode - set to -1
+            baseParams[seedField] = -1;
+            console.log("[LoadParams] Regenerate with random seed: -1");
+          } else {
+            // Same seed mode - copy from job_params
+            const sourceSeed = jobParams[seedField] ?? jobParams['seed'] ?? jobParams['noise_seed'];
+            if (sourceSeed !== undefined) {
+              baseParams[seedField] = sourceSeed;
+              console.log("[LoadParams] Regenerate with same seed:", sourceSeed);
+            }
+          }
+        }
+      }
+
       // STEP 3: Extract prompts from source image with multiple fallbacks
       const jobParams = (loadParams.job_params || {}) as Record<string, unknown>;
       let positivePrompt =
@@ -798,22 +876,22 @@ export default function PromptStudio() {
       const positiveTarget = resolveTarget(extracted.positiveFieldKey, positiveField);
       const negativeTarget = resolveTarget(extracted.negativeFieldKey, negativeField);
 
-        const choosePromptValue = (primary: unknown, secondary: unknown) => {
-          if (typeof primary === "string" && primary.trim()) return primary;
-          if (typeof secondary === "string" && secondary.trim()) return secondary;
-          return null;
-        };
+      const choosePromptValue = (primary: unknown, secondary: unknown) => {
+        if (typeof primary === "string" && primary.trim()) return primary;
+        if (typeof secondary === "string" && secondary.trim()) return secondary;
+        return null;
+      };
 
-        if (positiveTarget) {
-          const directPositive = jobParams[positiveTarget];
-          const nextPositive = choosePromptValue(positivePrompt, directPositive);
-          if (nextPositive) baseParams[positiveTarget] = nextPositive;
-        }
-        if (negativeTarget) {
-          const directNegative = jobParams[negativeTarget];
-          const nextNegative = choosePromptValue(negativePrompt, directNegative);
-          if (nextNegative) baseParams[negativeTarget] = nextNegative;
-        }
+      if (positiveTarget) {
+        const directPositive = jobParams[positiveTarget];
+        const nextPositive = choosePromptValue(positivePrompt, directPositive);
+        if (nextPositive) baseParams[positiveTarget] = nextPositive;
+      }
+      if (negativeTarget) {
+        const directNegative = jobParams[negativeTarget];
+        const nextNegative = choosePromptValue(negativePrompt, directNegative);
+        if (nextNegative) baseParams[negativeTarget] = nextNegative;
+      }
 
       // STEP 5: Handle image injection - do it directly here instead of delegating to Effect 3
       // Regenerate prefers original input image; use-in-pipe prefers the selected output image.
@@ -1790,6 +1868,7 @@ export default function PromptStudio() {
               ));
             }}
             onDelete={(id) => handleGalleryDelete(id)}
+            onRegenerate={handleRegenerate}
             resetKey={galleryRefresh}
           />
         </ErrorBoundary>
@@ -1798,6 +1877,9 @@ export default function PromptStudio() {
       {/* 4. Project Gallery (Right Side) */}
       <ProjectGallery
         projects={projects}
+        workflows={workflows}
+        onRegenerate={handleRegenerate}
+        onUseInPipe={handleUseInPipe}
         onSelectImage={(imagePath, pgImages) => {
           // Show clicked image in the viewer and use ProjectGallery's images for navigation
           setPreviewPath(`/api/v1/gallery/image/path?path=${encodeURIComponent(imagePath)}`);

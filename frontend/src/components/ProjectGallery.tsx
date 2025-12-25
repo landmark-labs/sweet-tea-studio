@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
-import { api, Project, FolderImage } from "@/lib/api";
+import { api, Project, FolderImage, GalleryItem } from "@/lib/api";
 import { isVideoFile } from "@/lib/media";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight, FolderOpen, ImageIcon, Loader2, Download, Trash2, Check } from "lucide-react";
+import { ChevronLeft, ChevronRight, FolderOpen, ImageIcon, Loader2, Download, Trash2, Check, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { VirtualGrid } from "@/components/VirtualGrid";
 
@@ -11,9 +11,13 @@ interface ProjectGalleryProps {
     projects: Project[];
     className?: string;
     onSelectImage?: (imagePath: string, images: FolderImage[]) => void;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    workflows?: any[];
+    onRegenerate?: (item: any, seedOption: 'same' | 'random') => void;
+    onUseInPipe?: (payload: { workflowId: string; imagePath: string; galleryItem: GalleryItem }) => void;
 }
 
-export const ProjectGallery = React.memo(function ProjectGallery({ projects, className, onSelectImage }: ProjectGalleryProps) {
+export const ProjectGallery = React.memo(function ProjectGallery({ projects, className, onSelectImage, workflows = [], onRegenerate, onUseInPipe }: ProjectGalleryProps) {
     // Panel state - persisted
     const [collapsed, setCollapsed] = useState(() => {
         const saved = localStorage.getItem("ds_project_gallery_collapsed");
@@ -420,6 +424,95 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
                         <Download className="h-3 w-3" />
                         download
                     </button>
+
+                    {/* Regenerate with submenu */}
+                    {onRegenerate && (
+                        <div className="relative group">
+                            <div className="w-full px-3 py-1.5 text-left text-xs hover:bg-slate-100 flex items-center justify-between cursor-pointer">
+                                <span className="flex items-center gap-2"><RotateCcw className="h-3 w-3" /> regenerate</span>
+                                <span className="text-[10px]">▶</span>
+                            </div>
+                            <div className="absolute left-full top-0 pl-1 hidden group-hover:block">
+                                <div className="bg-white border border-slate-200 rounded-md shadow-lg py-1 w-36">
+                                    <button
+                                        className="w-full px-3 py-1.5 text-left text-xs hover:bg-slate-100"
+                                        onClick={() => {
+                                            const galleryItem: GalleryItem = {
+                                                image: { id: -1, job_id: -1, path: contextMenu.image.path, filename: contextMenu.image.filename, created_at: '' },
+                                                job_params: {},
+                                                prompt_history: [],
+                                                created_at: '',
+                                            };
+                                            onRegenerate(galleryItem, 'same');
+                                            setContextMenu(null);
+                                        }}
+                                    >
+                                        same seed
+                                    </button>
+                                    <button
+                                        className="w-full px-3 py-1.5 text-left text-xs hover:bg-slate-100"
+                                        onClick={() => {
+                                            const galleryItem: GalleryItem = {
+                                                image: { id: -1, job_id: -1, path: contextMenu.image.path, filename: contextMenu.image.filename, created_at: '' },
+                                                job_params: {},
+                                                prompt_history: [],
+                                                created_at: '',
+                                            };
+                                            onRegenerate(galleryItem, 'random');
+                                            setContextMenu(null);
+                                        }}
+                                    >
+                                        random seed (-1)
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Use in pipe with workflow submenu */}
+                    {onUseInPipe && workflows.filter(w => {
+                        const jsonStr = JSON.stringify(w.graph_json || {});
+                        return jsonStr.includes("LoadImage") || jsonStr.includes("VAEEncode");
+                    }).length > 0 && (
+                            <div className="relative group">
+                                <div className="w-full px-3 py-1.5 text-left text-xs hover:bg-slate-100 flex items-center justify-between cursor-pointer">
+                                    <span className="flex items-center gap-2">use in pipe</span>
+                                    <span className="text-[10px]">▶</span>
+                                </div>
+                                <div className="absolute left-full top-0 pl-1 hidden group-hover:block">
+                                    <div className="bg-white border border-slate-200 rounded-md shadow-lg py-1 w-40 max-h-48 overflow-y-auto">
+                                        {workflows.filter(w => {
+                                            const jsonStr = JSON.stringify(w.graph_json || {});
+                                            return jsonStr.includes("LoadImage") || jsonStr.includes("VAEEncode");
+                                        }).map((w: any) => (
+                                            <button
+                                                key={w.id}
+                                                className="w-full px-3 py-1.5 text-left text-xs hover:bg-slate-100 truncate"
+                                                onClick={() => {
+                                                    const galleryItem: GalleryItem = {
+                                                        image: { id: -1, job_id: -1, path: contextMenu.image.path, filename: contextMenu.image.filename, created_at: '' },
+                                                        job_params: {},
+                                                        prompt_history: [],
+                                                        workflow_template_id: w.id,
+                                                        created_at: '',
+                                                    };
+                                                    onUseInPipe({
+                                                        workflowId: String(w.id),
+                                                        imagePath: contextMenu.image.path,
+                                                        galleryItem,
+                                                    });
+                                                    setContextMenu(null);
+                                                }}
+                                            >
+                                                {w.name}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                    <div className="h-px bg-slate-100 my-1" />
                     <button
                         className="w-full px-3 py-1.5 text-left text-xs text-red-600 hover:bg-red-50 flex items-center gap-2"
                         onClick={handleDelete}
