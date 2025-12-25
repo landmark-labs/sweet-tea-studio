@@ -36,7 +36,7 @@ class InstallMissingRequest(BaseModel):
     missing_nodes: List[str]
     allow_manual_clone: bool = False
 
-@router.post("/install_missing")
+@router.post("/install")
 def install_missing_nodes(request: InstallMissingRequest, background_tasks: BackgroundTasks):
     """
     Start an async background job to install missing nodes.
@@ -55,7 +55,7 @@ def install_missing_nodes(request: InstallMissingRequest, background_tasks: Back
     
     return {"job_id": job_id}
 
-@router.get("/install_status/{job_id}")
+@router.get("/install/{job_id}")
 def get_install_status(job_id: str):
     if job_id not in install_jobs:
         raise HTTPException(status_code=404, detail="Job not found")
