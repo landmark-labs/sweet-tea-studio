@@ -390,17 +390,7 @@ export function PromptAutocompleteTextarea({
 
     // --- Highlighting Logic (debounced for performance) ---
     const [debouncedValue, setDebouncedValue] = useState(localValue);
-    // Use ref to avoid stale closures while controlling when memo recomputes
-    const snippetsRef = useRef(snippets);
-    snippetsRef.current = snippets;
-    // Stabilize snippetIndex by memoizing on content, not reference
-    // This prevents infinite loops when parent passes new array with same content
-    const snippetContentKey = useMemo(() => {
-        if (!snippets || snippets.length === 0) return "";
-        return snippets.map(s => `${s.id}:${s.content}`).join("|");
-    }, [snippets]);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    const snippetIndex = useMemo(() => buildSnippetIndex(snippetsRef.current), [snippetContentKey]);
+    const snippetIndex = useMemo(() => buildSnippetIndex(snippets), [snippets]);
     const [highlightedContent, setHighlightedContent] = useState<React.ReactNode[] | null>(null);
     const highlightHandleRef = useRef<IdleHandle | null>(null);
     const highlightTokenRef = useRef(0);
@@ -411,11 +401,65 @@ export function PromptAutocompleteTextarea({
         return () => clearTimeout(timer);
     }, [localValue]);
 
-    // TEMPORARILY DISABLED: Highlighting effect causes infinite loops
-    // TODO: Fix root cause and re-enable
-    // useEffect(() => {
-    //     ... highlighting logic disabled ...
-    // }, [debouncedValue, highlightSnippets, snippetIndex]);
+    useEffect(() => {
+        highlightTokenRef.current += 1;
+        const token = highlightTokenRef.current;
+
+        if (!highlightSnippets || !debouncedValue || debouncedValue.length > MAX_HIGHLIGHT_LENGTH || snippetIndex.entries.length === 0) {
+            cancelIdle(highlightHandleRef.current);
+            highlightHandleRef.current = null;
+            // Only update state if it's not already null to prevent infinite loops
+            setHighlightedContent((prev) => prev === null ? prev : null);
+            return;
+        }
+
+        cancelIdle(highlightHandleRef.current);
+        highlightHandleRef.current = scheduleIdle(() => {
+            if (token !== highlightTokenRef.current) return;
+
+            const matches = findSnippetMatches(debouncedValue, snippetIndex, { maxMatches: MAX_HIGHLIGHT_MATCHES });
+            if (!matches || matches.length === 0) {
+                setHighlightedContent((prev) => prev === null ? prev : null);
+                return;
+            }
+
+            const selectedMatches = selectNonOverlappingMatches(matches);
+            if (selectedMatches.length === 0) {
+                setHighlightedContent((prev) => prev === null ? prev : null);
+                return;
+            }
+
+            const nodes: React.ReactNode[] = [];
+            let cursor = 0;
+
+            selectedMatches.forEach((m, idx) => {
+                if (m.start > cursor) {
+                    nodes.push(debouncedValue.slice(cursor, m.start));
+                }
+                nodes.push(
+                    <span
+                        key={`${m.start}-${idx}`}
+                        className={cn(m.snippet.color || "bg-slate-200", "rounded-sm opacity-70 text-transparent select-none")}
+                    >
+                        {debouncedValue.slice(m.start, m.end)}
+                    </span>
+                );
+                cursor = m.end;
+            });
+
+            if (cursor < debouncedValue.length) {
+                nodes.push(debouncedValue.slice(cursor));
+            }
+
+            setHighlightedContent(nodes);
+            highlightHandleRef.current = null;
+        }, { timeout: 300 });
+
+        return () => {
+            cancelIdle(highlightHandleRef.current);
+            highlightHandleRef.current = null;
+        };
+    }, [debouncedValue, highlightSnippets, snippetIndex]);
 
 
     return (
