@@ -427,9 +427,13 @@ def list_project_folder_images(
         raise HTTPException(status_code=404, detail="Project not found")
     
     # Validate folder exists in project config
-    config = project.config_json or {"folders": ["inputs", "output", "masks"]}
-    folders = config.get("folders", [])
-    if folder_name not in folders:
+    # Validate folder exists in project config
+    config = project.config_json or {}
+    folders = config.get("folders")
+    if folders is None:
+        folders = ["input", "output", "masks"]  # Default if missing
+        
+    if folder_name not in folders and not (project.slug == "drafts" and folder_name == "output"):
         raise HTTPException(status_code=404, detail=f"Folder '{folder_name}' not found in project")
     
     # Resolve path based on folder type and engine configuration
@@ -550,9 +554,13 @@ def delete_folder_images(
         raise HTTPException(status_code=404, detail="Project not found")
     
     # Validate folder exists in project config
-    config = project.config_json or {"folders": ["inputs", "output", "masks"]}
-    folders = config.get("folders", [])
-    if folder_name not in folders:
+    # Validate folder exists in project config
+    config = project.config_json or {}
+    folders = config.get("folders")
+    if folders is None:
+        folders = ["input", "output", "masks"]
+        
+    if folder_name not in folders and not (project.slug == "drafts" and folder_name == "output"):
         raise HTTPException(status_code=404, detail=f"Folder '{folder_name}' not found in project")
     
     # Resolve folder path for validation
