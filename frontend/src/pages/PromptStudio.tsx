@@ -508,6 +508,10 @@ export default function PromptStudio() {
   const historyTimerRef = useRef<NodeJS.Timeout | null>(null);
   const MAX_TEXT_UNDO_LEN = 8000;
 
+  // Ref pattern: access focusedField without adding it as a dependency
+  const focusedFieldRef = useRef(focusedField);
+  focusedFieldRef.current = focusedField;
+
   const isTextField = useCallback((fieldKey: string) => {
     const def = visibleSchema?.[fieldKey];
     if (!def) return false;
@@ -519,7 +523,8 @@ export default function PromptStudio() {
   const handleFormChange = useCallback((newData: any, { immediateHistory }: { immediateHistory?: boolean } = {}) => {
     const previous = store.get(formDataAtom);
     persistForm(newData);
-    const focusedKey = focusedField || "";
+    // Use ref to get current focusedField without dependency (keeps callback stable)
+    const focusedKey = focusedFieldRef.current || "";
     const textFocused = focusedKey ? isTextField(focusedKey) : false;
     const focusedValue = textFocused ? newData[focusedKey] : null;
     const skipUndo = textFocused && typeof focusedValue === "string" && focusedValue.length > MAX_TEXT_UNDO_LEN;
@@ -567,7 +572,7 @@ export default function PromptStudio() {
       }
       historyTimerRef.current = null;
     }, 350);
-  }, [focusedField, isTextField, persistForm, registerStateChange, store]);
+  }, [isTextField, persistForm, registerStateChange, store]);
 
   const handleResetDefaults = useCallback(() => {
     if (!selectedWorkflow) return;
