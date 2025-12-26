@@ -19,6 +19,7 @@ import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/h
 import { ProjectSidebar } from "@/components/ProjectSidebar";
 import { VirtualGrid } from "@/components/VirtualGrid";
 import { MoveImagesDialog } from "@/components/MoveImagesDialog";
+import React from "react";
 
 const MISSING_IMAGE_SRC =
     "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MDAiIGhlaWdodD0iNDAwIiB2aWV3Qm94PSIwIDAgNDAwIDQwMCI+PHJlY3Qgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsbD0iI2UyZThmMCIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjOTRhM2I4IiBmb250LWZhbWlseT0iQXJpYWwsIHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMjQiPk1pc3NpbmcgRmlsZTwvdGV4dD48L3N2Zz4=";
@@ -28,6 +29,38 @@ const GRID_GAP = 16;
 const GRID_PADDING = 8;
 const MIN_COLUMN_WIDTH = 260;
 const MAX_COLUMN_COUNT = 4;
+
+// Hover-to-play video thumbnail component
+function VideoThumbnail({ src, className }: { src: string; className?: string }) {
+    const videoRef = React.useRef<HTMLVideoElement>(null);
+
+    const handleMouseEnter = React.useCallback(() => {
+        if (videoRef.current) {
+            videoRef.current.play().catch(() => { });
+        }
+    }, []);
+
+    const handleMouseLeave = React.useCallback(() => {
+        if (videoRef.current) {
+            videoRef.current.pause();
+            videoRef.current.currentTime = 0;
+        }
+    }, []);
+
+    return (
+        <video
+            ref={videoRef}
+            src={src}
+            className={className}
+            preload="metadata"
+            muted
+            playsInline
+            loop
+            onMouseEnter={handleMouseEnter}
+            onMouseLeave={handleMouseLeave}
+        />
+    );
+}
 
 export default function Gallery() {
     const [items, setItems] = useState<GalleryItem[]>([]);
@@ -664,12 +697,9 @@ export default function Gallery() {
                                                 )}
 
                                                 {isVideoFile(item.image.path, item.image.filename) ? (
-                                                    <video
+                                                    <VideoThumbnail
                                                         src={`/api/v1/gallery/image/${item.image.id}`}
                                                         className="w-full h-full object-cover object-top transition-transform group-hover:scale-105"
-                                                        preload="metadata"
-                                                        muted
-                                                        playsInline
                                                     />
                                                 ) : (
                                                     <img

@@ -5,6 +5,38 @@ import { Card } from "@/components/ui/card";
 import { RefreshCw, Trash2, Check, CheckCircle2, RotateCcw } from "lucide-react";
 import { Button } from "./ui/button";
 
+// Hover-to-play video thumbnail component
+function VideoThumbnail({ src, className }: { src: string; className?: string }) {
+    const videoRef = React.useRef<HTMLVideoElement>(null);
+
+    const handleMouseEnter = React.useCallback(() => {
+        if (videoRef.current) {
+            videoRef.current.play().catch(() => { });
+        }
+    }, []);
+
+    const handleMouseLeave = React.useCallback(() => {
+        if (videoRef.current) {
+            videoRef.current.pause();
+            videoRef.current.currentTime = 0;
+        }
+    }, []);
+
+    return (
+        <video
+            ref={videoRef}
+            src={src}
+            className={className}
+            preload="metadata"
+            muted
+            playsInline
+            loop
+            onMouseEnter={handleMouseEnter}
+            onMouseLeave={handleMouseLeave}
+        />
+    );
+}
+
 interface RunningGalleryProps {
     images: GalleryItem[];
     selectedIds: Set<number>;
@@ -116,12 +148,9 @@ export function RunningGallery({
                         >
                             <div className="aspect-square bg-slate-200 relative">
                                 {isVideo ? (
-                                    <video
+                                    <VideoThumbnail
                                         src={mediaUrl}
                                         className="w-full h-full object-cover"
-                                        preload="metadata"
-                                        muted
-                                        playsInline
                                     />
                                 ) : (
                                     <img

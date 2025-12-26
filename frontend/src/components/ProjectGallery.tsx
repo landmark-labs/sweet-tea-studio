@@ -33,6 +33,22 @@ const GalleryItemCell = React.memo(function GalleryItemCell({
     onClick,
     onContextMenu,
 }: GalleryItemCellProps) {
+    const videoRef = React.useRef<HTMLVideoElement>(null);
+    const isVideo = isVideoFile(image.path, image.filename);
+
+    const handleMouseEnter = React.useCallback(() => {
+        if (videoRef.current) {
+            videoRef.current.play().catch(() => { });
+        }
+    }, []);
+
+    const handleMouseLeave = React.useCallback(() => {
+        if (videoRef.current) {
+            videoRef.current.pause();
+            videoRef.current.currentTime = 0;
+        }
+    }, []);
+
     return (
         <div
             className={cn(
@@ -45,6 +61,8 @@ const GalleryItemCell = React.memo(function GalleryItemCell({
             onDragStart={(e) => onDragStart(e, image)}
             onClick={(e) => onClick(image, e)}
             onContextMenu={(e) => onContextMenu(e, image)}
+            onMouseEnter={isVideo ? handleMouseEnter : undefined}
+            onMouseLeave={isVideo ? handleMouseLeave : undefined}
             title={`${image.filename}\nClick to view, Ctrl+click to select, Shift+click for range`}
         >
             {/* Selection indicator */}
@@ -53,13 +71,15 @@ const GalleryItemCell = React.memo(function GalleryItemCell({
                     <Check className="w-3 h-3" />
                 </div>
             )}
-            {isVideoFile(image.path, image.filename) ? (
+            {isVideo ? (
                 <video
+                    ref={videoRef}
                     src={`/api/v1/gallery/image/path?path=${encodeURIComponent(image.path)}`}
                     className="w-full h-full object-cover"
                     preload="metadata"
                     muted
                     playsInline
+                    loop
                 />
             ) : (
                 <img
