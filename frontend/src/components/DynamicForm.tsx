@@ -349,9 +349,8 @@ const SettingsGroupSection = React.memo(function SettingsGroupSection({
             <AccordionTrigger
                 className="text-xs font-semibold uppercase text-slate-500 hover:no-underline py-2 [&>svg]:ml-auto"
                 aria-label={`${group.title} controls (${isBypassed ? "bypassed" : "active"})`}
-                asChild
             >
-                <div className="flex flex-1 items-center justify-between cursor-pointer" role="button" tabIndex={0}>
+                <div className="flex flex-1 items-center justify-between" role="button" tabIndex={0}>
                     <div className="flex items-center gap-3">
                         <span className="flex items-center gap-2">
                             <span>{group.title}</span>
