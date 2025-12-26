@@ -734,8 +734,8 @@ export default function Gallery() {
                                                 isSelected={selectedIds.has(item.image.id)}
                                                 handleImageError={handleImageError}
                                             />
-                                            <div className="absolute inset-x-0 top-0 aspect-square flex items-center justify-center">
-                                                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                                            <div className="absolute inset-x-0 top-0 aspect-square flex items-center justify-center pointer-events-none">
+                                                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 pointer-events-auto">
                                                     <Button
                                                         variant="secondary"
                                                         size="icon"
