@@ -48,7 +48,7 @@ export const COLORS = [
 
 // --- Sub-Components ---
 
-function SortableItem({ item, index, textIndex, onRemove, onUpdateContent, onEditTextSnippet }: { item: PromptItem, index: number, textIndex?: number, onRemove: (id: string, e: React.MouseEvent) => void, onUpdateContent: (id: string, val: string) => void, onEditTextSnippet?: (item: PromptItem, textIndex?: number) => void }) {
+const SortableItem = React.memo(function SortableItem({ item, index, textIndex, onRemove, onUpdateContent, onEditTextSnippet }: { item: PromptItem, index: number, textIndex?: number, onRemove: (id: string, e: React.MouseEvent) => void, onUpdateContent: (id: string, val: string) => void, onEditTextSnippet?: (item: PromptItem, textIndex?: number) => void }) {
     const {
         attributes,
         listeners,
@@ -197,7 +197,13 @@ function SortableItem({ item, index, textIndex, onRemove, onUpdateContent, onEdi
             </HoverCardContent>
         </HoverCard>
     );
-}
+}, (prevProps, nextProps) => {
+    // Custom comparison - only re-render if item content/id changes
+    return prevProps.item.id === nextProps.item.id &&
+        prevProps.item.content === nextProps.item.content &&
+        prevProps.item.label === nextProps.item.label &&
+        prevProps.textIndex === nextProps.textIndex;
+});
 
 // Sortable library snippet for drag-to-reorder
 interface SortableLibrarySnippetProps {
@@ -219,7 +225,7 @@ const normalizePrompt = (value: string) => {
         .join("|");
 };
 
-function SortableLibrarySnippet({ snippet, isEditing, onStartLongPress, onCancelLongPress, onDoubleClick, onEdit, onDelete, onAddToCanvas }: SortableLibrarySnippetProps) {
+const SortableLibrarySnippet = React.memo(function SortableLibrarySnippet({ snippet, isEditing, onStartLongPress, onCancelLongPress, onDoubleClick, onEdit, onDelete, onAddToCanvas }: SortableLibrarySnippetProps) {
     const {
         attributes,
         listeners,
@@ -312,7 +318,14 @@ function SortableLibrarySnippet({ snippet, isEditing, onStartLongPress, onCancel
             </ContextMenuContent>
         </ContextMenu>
     );
-}
+}, (prevProps, nextProps) => {
+    // Custom comparison for library snippets
+    return prevProps.snippet.id === nextProps.snippet.id &&
+        prevProps.snippet.content === nextProps.snippet.content &&
+        prevProps.snippet.label === nextProps.snippet.label &&
+        prevProps.snippet.color === nextProps.snippet.color &&
+        prevProps.isEditing === nextProps.isEditing;
+});
 
 // --- Main Component ---
 
