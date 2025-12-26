@@ -735,8 +735,9 @@ export default function Gallery() {
                                                 handleImageError={handleImageError}
                                             />
                                             <div className="absolute inset-x-0 top-0 aspect-square flex items-center justify-center pointer-events-none">
-                                                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 pointer-events-auto">
+                                                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                                                     <Button
+                                                        className="pointer-events-auto"
                                                         variant="secondary"
                                                         size="icon"
                                                         onClick={(e) => { e.stopPropagation(); handleSavePrompt(item); }}
@@ -746,6 +747,7 @@ export default function Gallery() {
                                                     </Button>
 
                                                     <Button
+                                                        className="pointer-events-auto"
                                                         variant="secondary"
                                                         size="icon"
                                                         onClick={(e) => { e.stopPropagation(); handleRegenerate(item); }}
@@ -754,6 +756,7 @@ export default function Gallery() {
                                                         <RotateCcw className="w-4 h-4" />
                                                     </Button>
                                                     <Button
+                                                        className="pointer-events-auto"
                                                         variant="destructive"
                                                         size="icon"
                                                         onClick={(e) => { e.stopPropagation(); handleDelete(item.image.id); }}
