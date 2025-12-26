@@ -1188,11 +1188,20 @@ export default function PromptStudio() {
         }
         updateFeed(lastJobId, statusUpdates);
       } else if (data.type === "progress") {
+        // Time-based throttle: MUST be first to skip ALL work when messages arrive too frequently
+        const now = Date.now();
+        if (now - lastProgressUpdateRef.current < PROGRESS_THROTTLE_MS) {
+          return; // Skip this update entirely, another will come shortly
+        }
+        lastProgressUpdateRef.current = now;
+
         const { value, max } = data.data;
         const pct = (value / max) * 100;
-        setProgress(pct);
-        setGenerationState("running");
-        setStatusLabel("processing");
+
+        // Use functional updates to avoid re-renders when values haven't changed
+        setProgress(prev => prev === pct ? prev : pct);
+        setGenerationState(prev => prev === "running" ? prev : "running");
+        setStatusLabel(prev => prev === "processing" ? prev : "processing");
 
         // Track progress history for time estimation
         progressHistoryRef.current = addProgressEntry(progressHistoryRef.current, value);
@@ -1202,15 +1211,7 @@ export default function PromptStudio() {
           jobStartTime || Date.now()
         );
 
-        // Time-based throttle: skip expensive updateFeed calls if called too frequently
-        const now = Date.now();
-        if (now - lastProgressUpdateRef.current < PROGRESS_THROTTLE_MS) {
-          return; // Skip this update, another will come shortly
-        }
-        lastProgressUpdateRef.current = now;
-
         // Use RAF to defer expensive state updates and avoid blocking the main thread
-        // This prevents Chrome "message handler took Xms" violations
         requestAnimationFrame(() => {
           updateFeed(lastJobId, {
             progress: pct,
