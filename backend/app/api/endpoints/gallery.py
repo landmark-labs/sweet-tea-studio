@@ -234,6 +234,18 @@ def read_gallery(
     elif unassigned_only:
         stmt = stmt.where(Job.project_id == None)
 
+    # Filter by folder at SQL level (before LIMIT) - match parent directory in path
+    # Pattern: %/foldername/filename or %\foldername\filename
+    if folder:
+        folder_pattern_forward = f"%/{folder}/%"
+        folder_pattern_back = f"%\\{folder}\\%"
+        stmt = stmt.where(
+            or_(
+                Image.path.like(folder_pattern_forward),
+                Image.path.like(folder_pattern_back),
+            )
+        )
+
     if search:
         fts_used = False
         if _fts_available(session):
@@ -307,18 +319,6 @@ def read_gallery(
             session.add(img)
             missing_ids.append(img.id)
             continue
-        
-        # Filter by folder if specified - match parent directory of image
-        if folder and img.path:
-            path_normalized = img.path.replace("\\", "/")
-            path_segments = path_normalized.split("/")
-            if len(path_segments) >= 2:
-                parent_folder = path_segments[-2]
-                if parent_folder.lower() != folder.lower():
-                    continue
-            else:
-                # No parent folder to match
-                continue
         
         params = job.input_params if job and job.input_params else {}
         if isinstance(params, str):
