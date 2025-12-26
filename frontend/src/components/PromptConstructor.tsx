@@ -954,12 +954,15 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
 
     const addSnippetToCanvas = (snippet: PromptItem) => {
         if (!isTargetValid) return;
-        // Prevent duplicate: Check if this snippet (by sourceId) is already in items
-        const alreadyExists = items.some(item => item.sourceId === snippet.id);
-        if (alreadyExists) return;
         const id = `instance-${nextInstanceId()}`;
         trackSnippetAction("add_snippet", { snippet_id: snippet.id });
-        setItems([...items, { ...snippet, id, sourceId: snippet.id }]);
+        // Use callback form to avoid stale closure - ensures we always work with latest items
+        setItems((prev) => {
+            // Prevent duplicate: Check if this snippet (by sourceId) is already in items
+            const alreadyExists = prev.some(item => item.sourceId === snippet.id);
+            if (alreadyExists) return prev;
+            return [...prev, { ...snippet, id, sourceId: snippet.id }];
+        }, "Added snippet to canvas");
     };
 
     // Handle library snippet reordering
