@@ -55,6 +55,7 @@ export default function Gallery() {
 
     const searchRef = useRef(search);
     const selectedProjectIdRef = useRef(selectedProjectId);
+    const selectedFolderRef = useRef(selectedFolder);
     const activeQueryRef = useRef(activeQuery);
     const nextSkipRef = useRef(nextSkip);
     const queryTokenRef = useRef(0);
@@ -116,10 +117,11 @@ export default function Gallery() {
     const loadGallery = useCallback(async (
         query?: string,
         projectId?: number | null,
-        options?: { append?: boolean; loadAll?: boolean }
+        options?: { append?: boolean; loadAll?: boolean; folder?: string | null }
     ) => {
         const append = options?.append ?? false;
         const loadAll = options?.loadAll ?? false;
+        const folderValue = options?.folder !== undefined ? options.folder : selectedFolderRef.current;
         const queryValue = append ? activeQueryRef.current : (query ?? searchRef.current);
         const token = append ? queryTokenRef.current : queryTokenRef.current + 1;
         try {
@@ -143,6 +145,7 @@ export default function Gallery() {
                 skip,
                 limit,
                 projectId: unassignedOnly ? null : target,
+                folder: folderValue,
                 unassignedOnly,
                 includeThumbnails: false,
             });
@@ -423,9 +426,10 @@ export default function Gallery() {
     };
 
     const handleSelectFolder = (folder: string | null) => {
+        selectedFolderRef.current = folder;
         setSelectedFolder(folder);
-        // Reset scroll position when switching folders so items become visible
-        setGridResetKey((prev) => prev + 1);
+        // Reload with new folder filter (server-side filtering)
+        loadGallery(search, selectedProjectId, { loadAll: cleanupMode, folder });
     };
 
     // Get folders for the selected project
@@ -519,19 +523,8 @@ export default function Gallery() {
 
     const cleanupDeleteCount = Math.max(items.length - selectedIds.size, 0);
 
-    // Filter items by selected folder - match folder name in image path
-    const displayItems = selectedFolder
-        ? items.filter(item => {
-            const path = item.image.path || '';
-            // Check if the path contains the folder name as a directory segment
-            const pathSegments = path.replace(/\\/g, '/').split('/');
-
-            // Fix: Check parent directory specifically to avoid partial matches
-            if (pathSegments.length < 2) return false;
-            const parentFolder = pathSegments[pathSegments.length - 2];
-            return parentFolder.toLowerCase() === selectedFolder.toLowerCase();
-        })
-        : items;
+    // Items are now filtered server-side via folder parameter
+    const displayItems = items;
 
     const fullscreenItem = fullscreenIndex !== null ? displayItems[fullscreenIndex] : null;
 

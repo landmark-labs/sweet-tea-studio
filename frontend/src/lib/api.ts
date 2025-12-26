@@ -137,6 +137,7 @@ export interface GalleryQuery {
     skip?: number;
     limit?: number;
     projectId?: number | null;
+    folder?: string | null;
     unassignedOnly?: boolean;
     includeThumbnails?: boolean;
 }
@@ -583,6 +584,7 @@ export const api = {
             if (query.projectId !== undefined && query.projectId !== null) {
                 params.append("project_id", String(query.projectId));
             }
+            if (query.folder) params.append("folder", query.folder);
             if (query.unassignedOnly) params.append("unassigned_only", "true");
             if (query.includeThumbnails !== undefined) {
                 params.append("include_thumbnails", query.includeThumbnails ? "true" : "false");

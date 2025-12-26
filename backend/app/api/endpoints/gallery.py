@@ -200,6 +200,7 @@ def read_gallery(
     kept_only: bool = Query(False),
     collection_id: Optional[int] = Query(None),
     project_id: Optional[int] = Query(None),
+    folder: Optional[str] = Query(None, description="Filter by folder name in image path"),
     unassigned_only: bool = Query(False, description="Return only images with no project assignment"),
     session: Session = Depends(get_session),
 ):
@@ -306,6 +307,19 @@ def read_gallery(
             session.add(img)
             missing_ids.append(img.id)
             continue
+        
+        # Filter by folder if specified - match parent directory of image
+        if folder and img.path:
+            path_normalized = img.path.replace("\\", "/")
+            path_segments = path_normalized.split("/")
+            if len(path_segments) >= 2:
+                parent_folder = path_segments[-2]
+                if parent_folder.lower() != folder.lower():
+                    continue
+            else:
+                # No parent folder to match
+                continue
+        
         params = job.input_params if job and job.input_params else {}
         if isinstance(params, str):
             try:
