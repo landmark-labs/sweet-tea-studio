@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useMemo, useCallback, memo, type ComponentProps } from "react";
+import { useEffect, useState, useRef, useMemo, useCallback, memo, startTransition, type ComponentProps } from "react";
 import { useAtomValue, useSetAtom, useStore } from "jotai";
 import { addProgressEntry, calculateProgressStats, mapStatusToGenerationState, type GenerationState, type ProgressHistoryEntry } from "@/lib/generationState";
 import { useLocation, useNavigate, useOutletContext } from "react-router-dom";
@@ -1199,9 +1199,12 @@ export default function PromptStudio() {
         const pct = (value / max) * 100;
 
         // Use functional updates to avoid re-renders when values haven't changed
-        setProgress(prev => prev === pct ? prev : pct);
-        setGenerationState(prev => prev === "running" ? prev : "running");
-        setStatusLabel(prev => prev === "processing" ? prev : "processing");
+        // Wrap in startTransition to mark as low-priority (keeps UI responsive)
+        startTransition(() => {
+          setProgress(prev => prev === pct ? prev : pct);
+          setGenerationState(prev => prev === "running" ? prev : "running");
+          setStatusLabel(prev => prev === "processing" ? prev : "processing");
+        });
 
         // Track progress history for time estimation
         progressHistoryRef.current = addProgressEntry(progressHistoryRef.current, value);

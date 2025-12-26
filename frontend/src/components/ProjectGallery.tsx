@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { api, Project, FolderImage, GalleryItem } from "@/lib/api";
 import { isVideoFile } from "@/lib/media";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -16,6 +16,72 @@ interface ProjectGalleryProps {
     onRegenerate?: (item: any, seedOption: 'same' | 'random') => void;
     onUseInPipe?: (payload: { workflowId: string; imagePath: string; galleryItem: GalleryItem }) => void;
 }
+
+// Memoized gallery item - only re-renders when its specific props change
+interface GalleryItemCellProps {
+    image: FolderImage;
+    isSelected: boolean;
+    onDragStart: (e: React.DragEvent, image: FolderImage) => void;
+    onClick: (image: FolderImage, e: React.MouseEvent) => void;
+    onContextMenu: (e: React.MouseEvent, image: FolderImage) => void;
+}
+
+const GalleryItemCell = React.memo(function GalleryItemCell({
+    image,
+    isSelected,
+    onDragStart,
+    onClick,
+    onContextMenu,
+}: GalleryItemCellProps) {
+    return (
+        <div
+            className={cn(
+                "h-full w-full relative group cursor-pointer rounded overflow-hidden border transition-all",
+                isSelected
+                    ? "border-blue-500 ring-2 ring-blue-500 scale-[0.97]"
+                    : "border-slate-200 hover:border-blue-400 hover:shadow-md"
+            )}
+            draggable
+            onDragStart={(e) => onDragStart(e, image)}
+            onClick={(e) => onClick(image, e)}
+            onContextMenu={(e) => onContextMenu(e, image)}
+            title={`${image.filename}\nClick to view, Ctrl+click to select, Shift+click for range`}
+        >
+            {/* Selection indicator */}
+            {isSelected && (
+                <div className="absolute top-1 left-1 z-20 bg-blue-500 text-white rounded-full p-0.5">
+                    <Check className="w-3 h-3" />
+                </div>
+            )}
+            {isVideoFile(image.path, image.filename) ? (
+                <video
+                    src={`/api/v1/gallery/image/path?path=${encodeURIComponent(image.path)}`}
+                    className="w-full h-full object-cover"
+                    preload="metadata"
+                    muted
+                    playsInline
+                />
+            ) : (
+                <img
+                    src={`/api/v1/gallery/image/path?path=${encodeURIComponent(image.path)}`}
+                    alt={image.filename}
+                    className="w-full h-full object-cover"
+                    loading="lazy"
+                />
+            )}
+            <div className="absolute inset-x-0 bottom-0 bg-black/70 text-white text-[8px] p-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="truncate">{image.filename}</div>
+                {image.width && image.height && (
+                    <div className="text-[7px] text-slate-300">{image.width}×{image.height}</div>
+                )}
+            </div>
+        </div>
+    );
+}, (prevProps, nextProps) => {
+    // Custom comparison - only re-render if these specific props change
+    return prevProps.image.path === nextProps.image.path &&
+        prevProps.isSelected === nextProps.isSelected;
+});
 
 export const ProjectGallery = React.memo(function ProjectGallery({ projects, className, onSelectImage, workflows = [], onRegenerate, onUseInPipe }: ProjectGalleryProps) {
     // Panel state - persisted
@@ -179,14 +245,14 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
     }, [images.length, isLoading, selectedProjectId]);
 
     // Handle drag start - set the image URL as draggable data
-    const handleDragStart = (e: React.DragEvent, image: FolderImage) => {
+    const handleDragStart = useCallback((e: React.DragEvent, image: FolderImage) => {
         const imageUrl = `/api/v1/gallery/image/path?path=${encodeURIComponent(image.path)}`;
         e.dataTransfer.setData("text/plain", imageUrl);
         e.dataTransfer.effectAllowed = "copy";
-    };
+    }, []);
 
     // Multi-select handler
-    const handleImageClick = (image: FolderImage, e: React.MouseEvent) => {
+    const handleImageClick = useCallback((image: FolderImage, e: React.MouseEvent) => {
         if (e.ctrlKey || e.metaKey) {
             // Toggle selection
             setSelectedPaths(prev => {
@@ -203,15 +269,17 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
             if (startIdx !== -1 && endIdx !== -1) {
                 const low = Math.min(startIdx, endIdx);
                 const high = Math.max(startIdx, endIdx);
-                const newSet = new Set(selectedPaths);
-                images.slice(low, high + 1).forEach(img => newSet.add(img.path));
-                setSelectedPaths(newSet);
+                setSelectedPaths(prev => {
+                    const newSet = new Set(prev);
+                    images.slice(low, high + 1).forEach(img => newSet.add(img.path));
+                    return newSet;
+                });
             }
         } else {
             // Normal click - view image and pass images array for navigation
             onSelectImage?.(image.path, images);
         }
-    };
+    }, [images, onSelectImage]);
 
     // Bulk delete handler
     const handleBulkDelete = async () => {
@@ -229,7 +297,7 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
     };
 
     // Context menu handlers
-    const handleContextMenu = (e: React.MouseEvent, image: FolderImage) => {
+    const handleContextMenu = useCallback((e: React.MouseEvent, image: FolderImage) => {
         e.preventDefault();
         const menuWidth = 160; // Approximate menu width
         const menuHeight = 200; // Approximate menu height with submenus
@@ -248,7 +316,7 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
         }
 
         setContextMenu({ x, y, image });
-    };
+    }, []);
 
     const handleDownload = async () => {
         if (!contextMenu) return;
@@ -383,48 +451,13 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
                 emptyState={galleryEmptyState}
                 getKey={(image) => image.path}
                 renderItem={(image) => (
-                    <div
-                        className={cn(
-                            "h-full w-full relative group cursor-pointer rounded overflow-hidden border transition-all",
-                            selectedPaths.has(image.path)
-                                ? "border-blue-500 ring-2 ring-blue-500 scale-[0.97]"
-                                : "border-slate-200 hover:border-blue-400 hover:shadow-md"
-                        )}
-                        draggable
-                        onDragStart={(e) => handleDragStart(e, image)}
-                        onClick={(e) => handleImageClick(image, e)}
-                        onContextMenu={(e) => handleContextMenu(e, image)}
-                        title={`${image.filename}\nClick to view, Ctrl+click to select, Shift+click for range`}
-                    >
-                        {/* Selection indicator */}
-                        {selectedPaths.has(image.path) && (
-                            <div className="absolute top-1 left-1 z-20 bg-blue-500 text-white rounded-full p-0.5">
-                                <Check className="w-3 h-3" />
-                            </div>
-                        )}
-                        {isVideoFile(image.path, image.filename) ? (
-                            <video
-                                src={`/api/v1/gallery/image/path?path=${encodeURIComponent(image.path)}`}
-                                className="w-full h-full object-cover"
-                                preload="metadata"
-                                muted
-                                playsInline
-                            />
-                        ) : (
-                            <img
-                                src={`/api/v1/gallery/image/path?path=${encodeURIComponent(image.path)}`}
-                                alt={image.filename}
-                                className="w-full h-full object-cover"
-                                loading="lazy"
-                            />
-                        )}
-                        <div className="absolute inset-x-0 bottom-0 bg-black/70 text-white text-[8px] p-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <div className="truncate">{image.filename}</div>
-                            {image.width && image.height && (
-                                <div className="text-[7px] text-slate-300">{image.width}A-{image.height}</div>
-                            )}
-                        </div>
-                    </div>
+                    <GalleryItemCell
+                        image={image}
+                        isSelected={selectedPaths.has(image.path)}
+                        onDragStart={handleDragStart}
+                        onClick={handleImageClick}
+                        onContextMenu={handleContextMenu}
+                    />
                 )}
             />
 
