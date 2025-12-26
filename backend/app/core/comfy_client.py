@@ -408,26 +408,31 @@ class ComfyClient:
                         img["kind"] = "image"
                         output_items.append(img)
 
-                videos = node_output.get("videos") or []
-                if isinstance(videos, list):
-                    print(f"[ComfyClient] Found {len(videos)} video(s) in node output")
-                    for video in videos:
-                        if not isinstance(video, dict):
-                            continue
-                        filename = video.get("filename")
-                        if not filename:
-                            continue
-                        subfolder = video.get("subfolder") or ""
-                        video_type = video.get("type") or "output"
-                        vid = dict(video)
-                        vid["url"] = self._get_url(
-                            f"/view?filename={urllib.parse.quote(str(filename))}"
-                            f"&subfolder={urllib.parse.quote(str(subfolder))}"
-                            f"&type={urllib.parse.quote(str(video_type))}"
-                        )
-                        vid["kind"] = "video"
-                        print(f"[ComfyClient] Video output: filename={filename}, type={video_type}, subfolder={subfolder}")
-                        output_items.append(vid)
+                # Check for videos under "videos" key (standard) and "gifs" key (VHS_VideoCombine)
+                for video_key in ("videos", "gifs"):
+                    videos = node_output.get(video_key) or []
+                    if isinstance(videos, list) and len(videos) > 0:
+                        print(f"[ComfyClient] Found {len(videos)} video(s) in node output under '{video_key}' key")
+                        for video in videos:
+                            if not isinstance(video, dict):
+                                continue
+                            filename = video.get("filename")
+                            if not filename:
+                                continue
+                            # Skip non-video files (e.g., PNG workflow files)
+                            if not any(filename.lower().endswith(ext) for ext in ('.mp4', '.webm', '.mov', '.mkv', '.avi', '.gif')):
+                                continue
+                            subfolder = video.get("subfolder") or ""
+                            video_type = video.get("type") or "output"
+                            vid = dict(video)
+                            vid["url"] = self._get_url(
+                                f"/view?filename={urllib.parse.quote(str(filename))}"
+                                f"&subfolder={urllib.parse.quote(str(subfolder))}"
+                                f"&type={urllib.parse.quote(str(video_type))}"
+                            )
+                            vid["kind"] = "video"
+                            print(f"[ComfyClient] Video output: filename={filename}, type={video_type}, subfolder={subfolder}")
+                            output_items.append(vid)
 
             return output_items
 
