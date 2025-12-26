@@ -362,11 +362,20 @@ export default function PromptStudio() {
     previousProjectRef.current = selectedProjectId;
   }, [selectedProjectId]);
 
+  // Track the previous workflow ID to detect actual pipe switches
+  const previousWorkflowIdRef = useRef<string | null>(null);
+
   useEffect(() => {
     if (!selectedWorkflow) return;
 
     const schema = visibleSchema;
     const workflowKey = String(selectedWorkflow.id);
+    const previousWorkflowId = previousWorkflowIdRef.current;
+    const isWorkflowSwitch = previousWorkflowId !== null && previousWorkflowId !== workflowKey;
+
+    // Update the previous workflow ID ref for next run
+    previousWorkflowIdRef.current = workflowKey;
+
     const currentData = store.get(formDataAtom) || {};
     const hasExistingData = Object.keys(currentData).length > 0;
     const hasMissingDefaults = Object.entries(schema)
@@ -375,8 +384,15 @@ export default function PromptStudio() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .some(([key, field]: [string, any]) => field?.default !== undefined && currentData[key] === undefined);
 
-    // Avoid overwriting user edits unless we are switching workflows or have new defaults to apply
-    if (initializedWorkflowsRef.current.has(workflowKey) && hasExistingData && !hasMissingDefaults) {
+    // When switching workflows, ALWAYS reload the new workflow's persisted data
+    // Previously, `hasExistingData` would be true from the OLD pipe's data,
+    // blocking the new pipe's saved sampler/scheduler from being loaded.
+    const shouldLoadData = isWorkflowSwitch ||
+      !initializedWorkflowsRef.current.has(workflowKey) ||
+      hasMissingDefaults ||
+      !hasExistingData;
+
+    if (!shouldLoadData) {
       return;
     }
 
