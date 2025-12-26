@@ -402,6 +402,7 @@ class ComfyClient:
 
                 videos = node_output.get("videos") or []
                 if isinstance(videos, list):
+                    print(f"[ComfyClient] Found {len(videos)} video(s) in node output")
                     for video in videos:
                         if not isinstance(video, dict):
                             continue
@@ -417,6 +418,7 @@ class ComfyClient:
                             f"&type={urllib.parse.quote(str(video_type))}"
                         )
                         vid["kind"] = "video"
+                        print(f"[ComfyClient] Video output: filename={filename}, type={video_type}, subfolder={subfolder}")
                         output_items.append(vid)
 
             return output_items

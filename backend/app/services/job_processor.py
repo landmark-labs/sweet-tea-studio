@@ -406,41 +406,58 @@ def _process_single_video(
     """
     import urllib.request
 
+    print(f"[Video] Processing video idx={idx}, video_data={video_data}")
+    
     orig_filename = os.path.basename(video_data.get("filename") or filename)
     subfolder = video_data.get("subfolder", "")
     video_type = video_data.get("type")  # e.g. "output", "temp"
 
+    print(f"[Video] orig_filename={orig_filename}, subfolder={subfolder}, type={video_type}")
+    print(f"[Video] engine_root_dir={engine_root_dir}, engine_output_dir={engine_output_dir}")
+
     base_dir = None
     if engine_root_dir and video_type:
         candidate = os.path.join(engine_root_dir, str(video_type))
+        print(f"[Video] Checking candidate base_dir: {candidate}")
         if os.path.isdir(candidate):
             base_dir = candidate
+            print(f"[Video] Using base_dir: {base_dir}")
+        else:
+            print(f"[Video] Candidate dir does not exist: {candidate}")
     if not base_dir and engine_output_dir:
         base_dir = engine_output_dir
+        print(f"[Video] Falling back to engine_output_dir: {base_dir}")
 
     full_path = os.path.join(save_dir, filename)
+    print(f"[Video] Target full_path: {full_path}")
+    
+    copied_successfully = False
 
     if base_dir:
         src_path = os.path.join(base_dir, subfolder, orig_filename) if subfolder else os.path.join(base_dir, orig_filename)
+        print(f"[Video] Attempting to copy from: {src_path}")
         if os.path.exists(src_path):
             try:
                 shutil.copy2(src_path, full_path)
+                copied_successfully = True
+                print(f"[Video] Successfully copied {src_path} to {full_path}")
             except Exception as e:
                 print(f"[Video] Failed to copy {src_path} to {full_path}: {e}")
                 return None
         else:
-            src_path = None
-    else:
-        src_path = None
+            print(f"[Video] Source file does not exist: {src_path}")
 
-    if not src_path:
+    if not copied_successfully:
         video_url = video_data.get("url")
+        print(f"[Video] Attempting URL download: {video_url}")
         if not video_url:
+            print(f"[Video] No URL available, cannot retrieve video")
             return None
         try:
             with urllib.request.urlopen(video_url, timeout=60) as response:
                 with open(full_path, "wb") as f:
                     f.write(response.read())
+            print(f"[Video] Successfully downloaded video to {full_path}")
         except Exception as e:
             print(f"[Video] Failed to download video from {video_url}: {e}")
             return None
@@ -450,10 +467,12 @@ def _process_single_video(
             sidecar_path = full_path.rsplit(".", 1)[0] + ".json"
             with open(sidecar_path, "w", encoding="utf-8") as sf:
                 sf.write(provenance_json)
+            print(f"[Video] Wrote sidecar to {sidecar_path}")
         except Exception as e:
             print(f"[Video] Failed to write sidecar for {full_path}: {e}")
 
     return (full_path, filename, idx)
+
 def process_job(job_id: int):
     with Session(db_engine) as session:
         # Re-fetch objects within session
