@@ -86,9 +86,15 @@ export function GenerationProvider({ children }: GenerationProviderProps) {
         }
     }, [selectedWorkflowId]);
 
-    // Persisted stores
-    const { trackFeedStart, updateFeed, updatePreviewBlob } = useGenerationFeedStore();
-    const { prompts, searchQuery: promptSearch, setSearchQuery: setPromptSearch, setPrompts, shouldRefetch } = usePromptLibraryStore();
+    // Persisted stores - use selectors to minimize re-renders
+    const trackFeedStart = useGenerationFeedStore(useCallback(state => state.trackFeedStart, []));
+    const updateFeed = useGenerationFeedStore(useCallback(state => state.updateFeed, []));
+    const updatePreviewBlob = useGenerationFeedStore(useCallback(state => state.updatePreviewBlob, []));
+    const prompts = usePromptLibraryStore(useCallback(state => state.prompts, []));
+    const promptSearch = usePromptLibraryStore(useCallback(state => state.searchQuery, []));
+    const setPromptSearch = usePromptLibraryStore(useCallback(state => state.setSearchQuery, []));
+    const setPrompts = usePromptLibraryStore(useCallback(state => state.setPrompts, []));
+    const shouldRefetch = usePromptLibraryStore(useCallback(state => state.shouldRefetch, []));
     const wsRef = useRef<WebSocket | null>(null);
 
     // Persist selections

@@ -88,10 +88,16 @@ export default function PromptStudio() {
   }, [selectedWorkflowId]);
   const initializedWorkflowsRef = useRef<Set<string>>(new Set());
 
-  const { generationFeed, trackFeedStart, updateFeed, updatePreviewBlob } = useGenerationFeedStore();
+  // Use selectors to minimize re-renders on store updates
+  const generationFeed = useGenerationFeedStore(useCallback(state => state.generationFeed, []));
+  const trackFeedStart = useGenerationFeedStore(useCallback(state => state.trackFeedStart, []));
+  const updateFeed = useGenerationFeedStore(useCallback(state => state.updateFeed, []));
+  const updatePreviewBlob = useGenerationFeedStore(useCallback(state => state.updatePreviewBlob, []));
 
-  // Prompt Library State
-  const { setPrompts, clearPrompts, shouldRefetch: shouldRefetchPrompts } = usePromptLibraryStore();
+  // Prompt Library State - also using selectors
+  const setPrompts = usePromptLibraryStore(useCallback(state => state.setPrompts, []));
+  const clearPrompts = usePromptLibraryStore(useCallback(state => state.clearPrompts, []));
+  const shouldRefetchPrompts = usePromptLibraryStore(useCallback(state => state.shouldRefetch, []));
   const [, setPromptLoading] = useState(false);
   const [, setPromptError] = useState<string | null>(null);
   const [promptSearch, setPromptSearch] = useState("");

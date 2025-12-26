@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Outlet, NavLink } from "react-router-dom";
 import { PlusCircle, Settings, Library, Image as ImageIcon, GitBranch, ChevronLeft, ChevronRight, HardDrive, FolderOpen, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -38,7 +38,8 @@ export default function Layout() {
   const [perfHudOpen, setPerfHudOpen] = useState(() => localStorage.getItem("ds_perf_hud_open") === "true");
 
   // Persist effects
-  const { clearPreviewBlobs } = useGenerationFeedStore();
+  // Use selector to only re-render when clearPreviewBlobs changes (very rare)
+  const clearPreviewBlobs = useGenerationFeedStore(useCallback(state => state.clearPreviewBlobs, []));
 
   useEffect(() => localStorage.setItem("ds_feed_open", String(feedOpen)), [feedOpen]);
   useEffect(() => {
@@ -221,8 +222,11 @@ export default function Layout() {
 
 // Separate component for panels to use hooks
 function GlobalFloatingPanels({ feedOpen, libraryOpen, onFeedClose, onLibraryClose }: { feedOpen: boolean; libraryOpen: boolean; onFeedClose: () => void; onLibraryClose: () => void }) {
-  const { generationFeed } = useGenerationFeedStore();
-  const { prompts, searchQuery: promptSearch, setSearchQuery: setPromptSearch } = usePromptLibraryStore();
+  // Use selectors to minimize re-renders - only subscribe to what's actually used
+  const generationFeed = useGenerationFeedStore(useCallback(state => state.generationFeed, []));
+  const prompts = usePromptLibraryStore(useCallback(state => state.prompts, []));
+  const promptSearch = usePromptLibraryStore(useCallback(state => state.searchQuery, []));
+  const setPromptSearch = usePromptLibraryStore(useCallback(state => state.setSearchQuery, []));
   const generation = useGeneration();
 
   return (
