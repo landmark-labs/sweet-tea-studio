@@ -960,6 +960,10 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
         setItems((prev) => [...prev, { ...snippet, id, sourceId: snippet.id }], "Added snippet to canvas");
     };
 
+    // Ref pattern: allow memoized components to always access the latest callback
+    const addSnippetToCanvasRef = useRef(addSnippetToCanvas);
+    addSnippetToCanvasRef.current = addSnippetToCanvas;
+
     // Handle library snippet reordering
     const handleLibraryDragEnd = (event: any) => {
         const { active, over } = event;
@@ -1233,10 +1237,10 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
                                     isEditing={editingSnippetId === snippet.id}
                                     onStartLongPress={(e) => startLongPress(snippet, e)}
                                     onCancelLongPress={cancelLongPress}
-                                    onDoubleClick={() => addSnippetToCanvas(snippet)}
+                                    onDoubleClick={() => addSnippetToCanvasRef.current(snippet)}
                                     onEdit={(e) => editSnippet(snippet, e)}
                                     onDelete={(e) => deleteFromLibrary(snippet.id, e)}
-                                    onAddToCanvas={() => addSnippetToCanvas(snippet)}
+                                    onAddToCanvas={() => addSnippetToCanvasRef.current(snippet)}
                                 />
                             )}
                         />
