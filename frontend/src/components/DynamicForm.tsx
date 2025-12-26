@@ -106,7 +106,7 @@ const FieldRenderer = React.memo(function FieldRenderer({
 
         return (
             <div className="space-y-2">
-                <Label htmlFor={fieldKey}>{field.title || fieldKey}</Label>
+                <Label>{field.title || fieldKey}</Label>
                 <ImageUpload
                     value={value as string | undefined}
                     onChange={(val) => onValueChange(fieldKey, val)}

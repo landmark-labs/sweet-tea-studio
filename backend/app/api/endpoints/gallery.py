@@ -204,10 +204,16 @@ def read_gallery(
     unassigned_only: bool = Query(False, description="Return only images with no project assignment"),
     session: Session = Depends(get_session),
 ):
-    # When limit is None, fetch all; when searching, fetch more to allow scoring/filtering
+    # When limit is None, fetch all; when searching or folder filtering, fetch more to allow scoring/filtering
     fetch_limit = None
     if limit is not None:
-        fetch_limit = limit * 5 if search else limit
+        if search:
+            fetch_limit = limit * 5
+        elif folder:
+            # Folder filter needs more candidates since LIKE may match folder name elsewhere in path
+            fetch_limit = limit * 10
+        else:
+            fetch_limit = limit
     
     stmt = (
         select(Image, Job, Prompt, WorkflowTemplate)
@@ -319,6 +325,17 @@ def read_gallery(
             session.add(img)
             missing_ids.append(img.id)
             continue
+        
+        # Exact parent folder validation (LIKE pattern may match folder name elsewhere in path)
+        if folder and img.path:
+            path_normalized = img.path.replace("\\", "/")
+            path_segments = path_normalized.split("/")
+            if len(path_segments) >= 2:
+                parent_folder = path_segments[-2]
+                if parent_folder.lower() != folder.lower():
+                    continue
+            else:
+                continue
         
         params = job.input_params if job and job.input_params else {}
         if isinstance(params, str):
