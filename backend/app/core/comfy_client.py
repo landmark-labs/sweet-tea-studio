@@ -378,9 +378,17 @@ class ComfyClient:
                 return []
 
             output_items: List[Dict[str, Any]] = []
-            for node_output in outputs.values():
+            for node_id, node_output in outputs.items():
                 if not isinstance(node_output, dict):
                     continue
+                # Debug: print all available keys in this node output
+                output_keys = list(node_output.keys())
+                print(f"[ComfyClient] Node {node_id} output keys: {output_keys}")
+                if output_keys:
+                    for key in output_keys:
+                        val = node_output.get(key)
+                        if isinstance(val, list) and len(val) > 0:
+                            print(f"[ComfyClient]   {key} has {len(val)} items, first item: {val[0] if val else 'empty'}")
                 images = node_output.get("images") or []
                 if isinstance(images, list):
                     for image in images:
