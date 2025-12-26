@@ -592,7 +592,18 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
             nextReconciled[fieldKey] = normalizePrompt(currentVal);
         });
 
-        setFieldItems(nextFieldItems);
+        // Guard: Only update if items actually changed to prevent infinite loops
+        const currentItems = fieldItemsRef.current;
+        const hasChanges = Object.keys(nextFieldItems).some(key => {
+            const next = nextFieldItems[key];
+            const curr = currentItems[key];
+            if (!curr || curr.length !== next.length) return true;
+            return next.some((item, i) => item.id !== curr[i]?.id || item.content !== curr[i]?.content);
+        });
+
+        if (hasChanges) {
+            setFieldItems(nextFieldItems);
+        }
         initializedFieldsRef.current = new Set(availableFields);
         lastReconciledRef.current = { ...lastReconciledRef.current, ...nextReconciled };
         if (targetField) {
