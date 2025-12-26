@@ -31,21 +31,20 @@ const MIN_COLUMN_WIDTH = 260;
 const MAX_COLUMN_COUNT = 4;
 
 // Hover-to-play video thumbnail component
-function VideoThumbnail({ src, className }: { src: string; className?: string }) {
+// Uses isHovering prop from parent to control playback (overlay blocks direct mouse events)
+function VideoThumbnail({ src, className, isHovering }: { src: string; className?: string; isHovering?: boolean }) {
     const videoRef = React.useRef<HTMLVideoElement>(null);
 
-    const handleMouseEnter = React.useCallback(() => {
+    React.useEffect(() => {
         if (videoRef.current) {
-            videoRef.current.play().catch(() => { });
+            if (isHovering) {
+                videoRef.current.play().catch(() => { });
+            } else {
+                videoRef.current.pause();
+                videoRef.current.currentTime = 0;
+            }
         }
-    }, []);
-
-    const handleMouseLeave = React.useCallback(() => {
-        if (videoRef.current) {
-            videoRef.current.pause();
-            videoRef.current.currentTime = 0;
-        }
-    }, []);
+    }, [isHovering]);
 
     return (
         <video
@@ -56,9 +55,50 @@ function VideoThumbnail({ src, className }: { src: string; className?: string })
             muted
             playsInline
             loop
-            onMouseEnter={handleMouseEnter}
-            onMouseLeave={handleMouseLeave}
         />
+    );
+}
+
+// Wrapper for gallery card content to track hover state for video playback
+interface GalleryCardContentProps {
+    item: GalleryItem;
+    isSelected: boolean;
+    handleImageError: (e: React.SyntheticEvent<HTMLImageElement>) => void;
+}
+
+function GalleryCardContent({ item, isSelected, handleImageError }: GalleryCardContentProps) {
+    const [isHovering, setIsHovering] = useState(false);
+    const isVideo = isVideoFile(item.image.path, item.image.filename);
+
+    return (
+        <div
+            className="relative bg-slate-100 aspect-square overflow-hidden"
+            onMouseEnter={() => setIsHovering(true)}
+            onMouseLeave={() => setIsHovering(false)}
+        >
+            {isSelected && (
+                <div className="absolute top-2 left-2 z-20 bg-blue-500 text-white rounded-full p-0.5 shadow-sm">
+                    <Check className="w-3 h-3" />
+                </div>
+            )}
+
+            {isVideo ? (
+                <VideoThumbnail
+                    src={`/api/v1/gallery/image/${item.image.id}`}
+                    className="w-full h-full object-cover object-top transition-transform group-hover:scale-105"
+                    isHovering={isHovering}
+                />
+            ) : (
+                <img
+                    src={`/api/v1/gallery/image/${item.image.id}`}
+                    alt={item.image.filename}
+                    className="w-full h-full object-cover object-top transition-transform group-hover:scale-105"
+                    loading="lazy"
+                    decoding="async"
+                    onError={handleImageError}
+                />
+            )}
+        </div>
     );
 }
 
@@ -689,29 +729,12 @@ export default function Gallery() {
                                             onClick={(e) => handleCardClick(item, e)}
                                             onDoubleClick={() => handleCardDoubleClick(item)}
                                         >
-                                            <div className="relative bg-slate-100 aspect-square overflow-hidden">
-                                                {selectedIds.has(item.image.id) && (
-                                                    <div className="absolute top-2 left-2 z-20 bg-blue-500 text-white rounded-full p-0.5 shadow-sm">
-                                                        <Check className="w-3 h-3" />
-                                                    </div>
-                                                )}
-
-                                                {isVideoFile(item.image.path, item.image.filename) ? (
-                                                    <VideoThumbnail
-                                                        src={`/api/v1/gallery/image/${item.image.id}`}
-                                                        className="w-full h-full object-cover object-top transition-transform group-hover:scale-105"
-                                                    />
-                                                ) : (
-                                                    <img
-                                                        src={`/api/v1/gallery/image/${item.image.id}`}
-                                                        alt={item.image.filename}
-                                                        className="w-full h-full object-cover object-top transition-transform group-hover:scale-105"
-                                                        loading="lazy"
-                                                        decoding="async"
-                                                        onError={handleImageError}
-                                                    />
-                                                )}
-
+                                            <GalleryCardContent
+                                                item={item}
+                                                isSelected={selectedIds.has(item.image.id)}
+                                                handleImageError={handleImageError}
+                                            />
+                                            <div className="absolute inset-x-0 top-0 aspect-square flex items-center justify-center">
                                                 <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                                                     <Button
                                                         variant="secondary"
