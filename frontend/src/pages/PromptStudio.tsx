@@ -1074,12 +1074,6 @@ export default function PromptStudio() {
       const jobParams = (loadParams.job_params || {}) as Record<string, unknown>;
       const jobParamsFiltered = filterParamsForSchema(schema, jobParams);
 
-      // Debug: Log bypass keys in job_params
-      const bypassKeysInJobParams = Object.keys(jobParams).filter(k => k.startsWith("__bypass_"));
-      const bypassKeysInFiltered = Object.keys(jobParamsFiltered).filter(k => k.startsWith("__bypass_"));
-      console.log("[LoadParams] Bypass keys in job_params:", bypassKeysInJobParams, bypassKeysInJobParams.map(k => ({ [k]: jobParams[k] })));
-      console.log("[LoadParams] Bypass keys in filtered:", bypassKeysInFiltered, bypassKeysInFiltered.map(k => ({ [k]: jobParamsFiltered[k] })));
-
       const readStoredParams = () => {
         if (targetWorkflowId && targetWorkflowId === selectedWorkflowId) {
           return store.get(formDataAtom) || {};
@@ -1837,6 +1831,11 @@ export default function PromptStudio() {
       });
 
       const cleanParams = Object.keys(data).reduce((acc, key) => {
+        // Always preserve __bypass_ keys - they control which nodes are bypassed
+        if (key.startsWith("__bypass_")) {
+          acc[key] = data[key];
+          return acc;
+        }
         if (key in schema) {
           // Check if belonging to a bypassed node
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
