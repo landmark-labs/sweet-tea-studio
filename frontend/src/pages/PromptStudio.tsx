@@ -31,6 +31,34 @@ const PromptConstructorPanel = memo(function PromptConstructorPanel(props: Promp
   return <PromptConstructor {...props} currentValues={currentValues} />;
 });
 
+const isPersistableSchemaKey = (key: string) =>
+  !key.startsWith("__") || key.startsWith("__bypass_");
+
+const buildSchemaDefaults = (schema: Record<string, any>) => {
+  const defaults: Record<string, unknown> = {};
+  Object.entries(schema || {}).forEach(([key, field]) => {
+    if (isPersistableSchemaKey(key) && field?.default !== undefined) {
+      defaults[key] = field.default;
+    }
+  });
+  return defaults;
+};
+
+const filterParamsForSchema = (
+  schema: Record<string, any>,
+  params: Record<string, unknown> | null | undefined
+) => {
+  const filtered: Record<string, unknown> = {};
+  if (!params || typeof params !== "object") return filtered;
+  Object.entries(params).forEach(([key, value]) => {
+    if (value === undefined) return;
+    if (isPersistableSchemaKey(key) && key in schema) {
+      filtered[key] = value;
+    }
+  });
+  return filtered;
+};
+
 export default function PromptStudio() {
   const [engines, setEngines] = useState<Engine[]>([]);
   const [workflows, setWorkflows] = useState<WorkflowTemplate[]>([]);
@@ -124,6 +152,7 @@ export default function PromptStudio() {
   const pendingSaveRef = useRef<NodeJS.Timeout | null>(null);
   const persistHandleRef = useRef<{ id: number | NodeJS.Timeout; type: "idle" | "timeout" } | null>(null);
   const pendingPersistRef = useRef<{ workflowId: string; data: any } | null>(null);
+  const workflowParamsCacheRef = useRef<Record<string, Record<string, unknown>>>({});
 
   // Load snippets from backend on mount
   useEffect(() => {
@@ -380,7 +409,7 @@ export default function PromptStudio() {
     const hasExistingData = Object.keys(currentData).length > 0;
     const hasMissingDefaults = Object.entries(schema)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .filter(([key]: [string, any]) => !key.startsWith("__") || key.startsWith("__bypass_"))
+      .filter(([key]: [string, any]) => isPersistableSchemaKey(key))
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .some(([key, field]: [string, any]) => field?.default !== undefined && currentData[key] === undefined);
 
@@ -396,13 +425,7 @@ export default function PromptStudio() {
       return;
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let initialData: any = {};
-    Object.entries(schema).forEach(([k, field]: [string, any]) => {
-      if (!k.startsWith("__") && field?.default !== undefined) {
-        initialData[k] = field.default;
-      }
-    });
+    let initialData: Record<string, unknown> = buildSchemaDefaults(schema);
     try {
       const saved = localStorage.getItem(`ds_pipe_params_${workflowKey}`);
       if (saved) {
@@ -411,17 +434,19 @@ export default function PromptStudio() {
       }
     } catch (e) { /* ignore */ }
     setFormData(initialData);
+    workflowParamsCacheRef.current[workflowKey] = initialData;
     initializedWorkflowsRef.current.add(workflowKey);
   }, [selectedWorkflow, visibleSchema, setFormData, store]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { registerStateChange } = useUndoRedo();
 
-  const flushPendingPersist = () => {
+  const flushPendingPersist = useCallback(() => {
     const pending = pendingPersistRef.current;
     if (!pending) return;
     try {
       localStorage.setItem(`ds_pipe_params_${pending.workflowId}`, JSON.stringify(pending.data));
+      workflowParamsCacheRef.current[pending.workflowId] = pending.data;
     } catch (e) {
       console.warn("Failed to persist form data", e);
     }
@@ -435,7 +460,7 @@ export default function PromptStudio() {
       }
       persistHandleRef.current = null;
     }
-  };
+  }, []);
 
   const persistForm = useCallback((data: any) => {
     const currentData = store.get(formDataAtom) || {};
@@ -453,6 +478,7 @@ export default function PromptStudio() {
     setFormData(data);
     if (selectedWorkflowId) {
       const workflowId = selectedWorkflowId;
+      workflowParamsCacheRef.current[workflowId] = data;
       pendingPersistRef.current = { workflowId, data };
       if (persistHandleRef.current) {
         const handle = persistHandleRef.current;
@@ -493,7 +519,7 @@ export default function PromptStudio() {
       }
       pendingHistoryRef.current = null;
     };
-  }, [selectedWorkflowId]);
+  }, [selectedWorkflowId, flushPendingPersist]);
 
   // Ensure in-flight form persistence is flushed on tab close/refresh
   useEffect(() => {
@@ -502,7 +528,9 @@ export default function PromptStudio() {
       const workflowId = selectedWorkflowIdRef.current;
       if (workflowId) {
         try {
-          localStorage.setItem(`ds_pipe_params_${workflowId}`, JSON.stringify(store.get(formDataAtom)));
+          const latest = store.get(formDataAtom);
+          localStorage.setItem(`ds_pipe_params_${workflowId}`, JSON.stringify(latest));
+          workflowParamsCacheRef.current[workflowId] = latest;
         } catch (e) {
           console.warn("Failed to persist form data on unload", e);
         }
@@ -518,7 +546,7 @@ export default function PromptStudio() {
       window.removeEventListener("beforeunload", handleBeforeUnload);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [store]);
+  }, [store, flushPendingPersist]);
 
   const pendingHistoryRef = useRef<{ prev: any; next: any; category: "text" | "structure"; skip: boolean } | null>(null);
   const historyTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -621,6 +649,7 @@ export default function PromptStudio() {
   }, [handleFormChange, store]);
 
   const handleUseInPipe = useCallback(({ workflowId, imagePath, galleryItem }: { workflowId: string; imagePath: string; galleryItem: GalleryItem }) => {
+    flushPendingPersist();
     // Choose the workflow
     setSelectedWorkflowId(workflowId);
 
@@ -687,10 +716,11 @@ export default function PromptStudio() {
     }
 
     setPendingLoadParams({ ...loadParams, __isRegenerate: false });
-  }, [setPendingLoadParams, setPreviewMetadata, setPreviewPath, setSelectedProjectId, setSelectedWorkflowId]);
+  }, [flushPendingPersist, setPendingLoadParams, setPreviewMetadata, setPreviewPath, setSelectedProjectId, setSelectedWorkflowId]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleRegenerate = useCallback((item: any, seedOption: 'same' | 'random') => {
+    flushPendingPersist();
     // Extract image path from the item
     const imagePath = item?.image?.path || item?.job_params?.image || '';
 
@@ -767,7 +797,7 @@ export default function PromptStudio() {
       __isRegenerate: true,
       __randomizeSeed: seedOption === 'random'
     });
-  }, [setPendingLoadParams, setPreviewMetadata, setPreviewPath, setSelectedWorkflowId]);
+  }, [flushPendingPersist, setPendingLoadParams, setPreviewMetadata, setPreviewPath, setSelectedWorkflowId]);
 
 
   // Effect 1: CAPTURE loadParams immediately when navigation happens
@@ -832,28 +862,42 @@ export default function PromptStudio() {
       const schema = targetWorkflow.input_schema;
 
       // STEP 1: Build defaults from target workflow schema
-      const targetDefaults: Record<string, unknown> = {};
-      Object.entries(schema).forEach(([k, field]: [string, any]) => {
-        if ((!k.startsWith("__") || k.startsWith("__bypass_")) && field?.default !== undefined) {
-          targetDefaults[k] = field.default;
-        }
-      });
+      const targetDefaults = buildSchemaDefaults(schema);
 
-      // STEP 2: Merge persisted params (preserve user-tuned settings) then overlay defaults
-      let storedParams: Record<string, unknown> = {};
-      try {
-        const saved = localStorage.getItem(`ds_pipe_params_${targetWorkflowId}`);
-        if (saved) storedParams = JSON.parse(saved);
-      } catch (e) {
-        console.warn("Failed to parse stored params", e);
-      }
-      const baseParams: Record<string, unknown> = { ...targetDefaults, ...storedParams };
+      const jobParams = (loadParams.job_params || {}) as Record<string, unknown>;
+      const jobParamsFiltered = filterParamsForSchema(schema, jobParams);
+
+      const readStoredParams = () => {
+        if (targetWorkflowId && targetWorkflowId === selectedWorkflowId) {
+          return store.get(formDataAtom) || {};
+        }
+        const cached = workflowParamsCacheRef.current[targetWorkflowId];
+        if (cached) return cached;
+        try {
+          const saved = localStorage.getItem(`ds_pipe_params_${targetWorkflowId}`);
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            workflowParamsCacheRef.current[targetWorkflowId] = parsed;
+            return parsed;
+          }
+        } catch (e) {
+          console.warn("Failed to parse stored params", e);
+        }
+        return {};
+      };
+
+      // STEP 2: Merge defaults with stored params (use-in-pipe) or job params (regenerate)
+      const storedParams = loadParams.__isRegenerate
+        ? {}
+        : filterParamsForSchema(schema, readStoredParams());
+      const baseParams: Record<string, unknown> = loadParams.__isRegenerate
+        ? { ...targetDefaults, ...jobParamsFiltered }
+        : { ...targetDefaults, ...storedParams };
 
       // STEP 2.5: Handle seed for regeneration
       // If regenerating with same seed, copy seed from job_params
       // If regenerating with random seed, set seed to -1
       if (loadParams.__isRegenerate) {
-        const jobParams = (loadParams.job_params || {}) as Record<string, unknown>;
         // Find seed field in schema
         const seedField = Object.keys(schema).find(k =>
           k.toLowerCase().includes('seed') &&
@@ -877,7 +921,6 @@ export default function PromptStudio() {
       }
 
       // STEP 3: Extract prompts from source image with multiple fallbacks
-      const jobParams = (loadParams.job_params || {}) as Record<string, unknown>;
       let positivePrompt =
         loadParams.prompt ||
         (jobParams as any)?.prompt ||
@@ -1011,6 +1054,7 @@ export default function PromptStudio() {
       // STEP 6: Persist to localStorage so workflow init effect picks it up
       try {
         localStorage.setItem(`ds_pipe_params_${targetWorkflowId}`, JSON.stringify(baseParams));
+        workflowParamsCacheRef.current[targetWorkflowId] = baseParams;
       } catch (e) {
         console.warn("Failed to persist loadParams", e);
       }
@@ -1054,6 +1098,9 @@ export default function PromptStudio() {
           setFormData(newFormData);
           try {
             localStorage.setItem(`ds_pipe_params_${selectedWorkflowId}`, JSON.stringify(newFormData));
+            if (selectedWorkflowId) {
+              workflowParamsCacheRef.current[selectedWorkflowId] = newFormData;
+            }
           } catch (e) { /* ignore */ }
           return;
         }
@@ -1080,6 +1127,9 @@ export default function PromptStudio() {
         // Also persist to localStorage
         try {
           localStorage.setItem(`ds_pipe_params_${selectedWorkflowId}`, JSON.stringify(newFormData));
+          if (selectedWorkflowId) {
+            workflowParamsCacheRef.current[selectedWorkflowId] = newFormData;
+          }
         } catch (e) { /* ignore */ }
 
       } catch (err) {
@@ -1670,6 +1720,7 @@ export default function PromptStudio() {
             const currentStored = JSON.parse(localStorage.getItem(key) || "{}");
             const newData = { ...currentStored, [imageFieldKey]: uploaded.filename };
             localStorage.setItem(key, JSON.stringify(newData));
+            workflowParamsCacheRef.current[workflowId] = newData;
           }
         }
       } catch (e) {
