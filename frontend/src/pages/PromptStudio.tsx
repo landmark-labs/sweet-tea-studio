@@ -53,6 +53,12 @@ const filterParamsForSchema = (
   if (!params || typeof params !== "object") return filtered;
   Object.entries(params).forEach(([key, value]) => {
     if (value === undefined) return;
+    // Always preserve __bypass_ keys from job_params for regeneration
+    // These keys may not exist in the schema at runtime but are still valid
+    if (key.startsWith("__bypass_")) {
+      filtered[key] = value;
+      return;
+    }
     if (isPersistableSchemaKey(key) && key in schema) {
       filtered[key] = value;
     }
