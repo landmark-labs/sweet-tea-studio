@@ -75,10 +75,16 @@ export function extractPrompts(params: Record<string, unknown> | null | undefine
             const lowerKey = key.toLowerCase();
 
             // Match patterns like "CLIPTextEncode.text" or "6.text" or "CLIPTextEncode_2.text"
-            if (
-                lowerKey.includes("cliptextencode") && lowerKey.includes(".text") ||
-                /^\d+\.text$/i.test(key)
-            ) {
+            const isCLIPTextEncode =
+                (lowerKey.includes("cliptextencode") && lowerKey.includes(".text")) ||
+                /^\d+\.text$/i.test(key);
+
+            // Match STRING_LITERAL patterns (common in Wan2.2 and other video workflows)
+            const isStringLiteral =
+                lowerKey.includes("string_literal") ||
+                (lowerKey.includes(".string") && !lowerKey.includes("lora"));
+
+            if (isCLIPTextEncode || isStringLiteral) {
                 // Extract node ID from key
                 const nodeIdMatch = key.match(/^(\d+)\.|^([^.]+)\./);
                 const nodeId = nodeIdMatch ? (nodeIdMatch[1] || nodeIdMatch[2]) : key;
@@ -142,8 +148,13 @@ export function findPromptFieldsInSchema(
 
         const lowerKey = key.toLowerCase();
 
-        // Look for CLIPTextEncode text fields
-        if (lowerKey.includes("cliptextencode") && lowerKey.includes(".text")) {
+        // Look for CLIPTextEncode and STRING_LITERAL text fields
+        const isCLIPTextEncode = lowerKey.includes("cliptextencode") && lowerKey.includes(".text");
+        const isStringLiteral =
+            lowerKey.includes("string_literal") ||
+            (lowerKey.includes(".string") && !lowerKey.includes("lora"));
+
+        if (isCLIPTextEncode || isStringLiteral) {
             const nodeId = field.x_node_id !== undefined ? String(field.x_node_id) : key.split(".")[0];
             clipTextFields.push({
                 key,
