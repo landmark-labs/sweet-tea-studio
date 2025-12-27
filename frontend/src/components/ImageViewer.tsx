@@ -891,10 +891,21 @@ export const ImageViewer = React.memo(function ImageViewer({
                                                     return true;
                                                 })
                                                 .map(([k, v]) => (
-                                                    <div key={k} className="min-w-0">
-                                                        <span className="font-medium text-slate-500 capitalize text-[9px] uppercase tracking-wide block truncate">{k.replace(/_/g, ' ')}</span>
-                                                        <span className="text-slate-800 font-mono text-xs block truncate" title={String(v)}>{String(v)}</span>
-                                                    </div>
+                                                    <Tooltip key={k}>
+                                                        <TooltipTrigger asChild>
+                                                            <div className="min-w-0 cursor-default">
+                                                                <span className="font-medium text-slate-500 capitalize text-[9px] uppercase tracking-wide block truncate">{k.replace(/_/g, ' ')}</span>
+                                                                <span className="text-slate-800 font-mono text-xs block truncate">{String(v)}</span>
+                                                            </div>
+                                                        </TooltipTrigger>
+                                                        <TooltipContent side="top" className="max-w-xs">
+                                                            <div className="text-xs">
+                                                                <span className="font-semibold text-slate-600">{k.replace(/_/g, ' ')}</span>
+                                                                <span className="mx-1 text-slate-400">:</span>
+                                                                <span className="font-mono break-all">{String(v)}</span>
+                                                            </div>
+                                                        </TooltipContent>
+                                                    </Tooltip>
                                                 ))
                                             }
                                         </div>

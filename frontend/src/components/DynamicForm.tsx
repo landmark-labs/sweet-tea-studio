@@ -123,7 +123,10 @@ const FieldRenderer = React.memo(function FieldRenderer({
     if (field.widget === "textarea") {
         return (
             <div className="space-y-2">
-                <Label htmlFor={fieldKey} className={cn(isActive && "text-blue-600 font-semibold")}>{field.title || fieldKey}</Label>
+                {/* Only show label for non-prompt textareas; prompt fields get their title from the group header */}
+                {!isPromptField && (
+                    <Label htmlFor={fieldKey} className={cn(isActive && "text-blue-600 font-semibold")}>{field.title || fieldKey}</Label>
+                )}
                 {isPromptField ? (
                     <PromptAutocompleteTextarea
                         id={fieldKey}

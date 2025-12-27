@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
-import { Loader2 } from "lucide-react";
+import { Loader2, ChevronLeft, ChevronRight } from "lucide-react";
 
 import { ImageViewer } from "@/components/ImageViewer";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -117,6 +117,9 @@ export default function PromptStudio() {
   );
   const [galleryScopeAll] = useState(
     localStorage.getItem("ds_gallery_scope") === "all"
+  );
+  const [promptConstructorCollapsed, setPromptConstructorCollapsed] = useState(
+    localStorage.getItem("ds_prompt_constructor_collapsed") === "true"
   );
 
   const location = useLocation();
@@ -596,6 +599,11 @@ export default function PromptStudio() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [saveCanvas]);
+
+  // Persist prompt constructor collapsed state
+  useEffect(() => {
+    localStorage.setItem("ds_prompt_constructor_collapsed", String(promptConstructorCollapsed));
+  }, [promptConstructorCollapsed]);
 
   // Track the previous workflow ID to detect actual pipe switches
   const previousWorkflowIdRef = useRef<string | null>(null);
@@ -1959,29 +1967,59 @@ export default function PromptStudio() {
   return (
     <div className="h-full w-full bg-slate-100 flex overflow-hidden relative">
 
-      {/* 1. Left Column - Prompt Constructor */}
-      <div className="w-[380px] flex-none bg-white border-r hidden xl:block overflow-hidden">
-        {selectedWorkflow ? (
-          <PromptConstructorPanel
-            // Filter out hidden parameters if the new editor logic flagged them
-            schema={
-              Object.fromEntries(
-                Object.entries(visibleSchema ?? {}).filter(
-                  ([_, val]: [string, any]) => !val.__hidden
-                )
-              )
-            }
-            onUpdate={handlePromptUpdate}
-            onUpdateMany={handlePromptUpdateMany}
-            targetField={focusedField}
-            onTargetChange={setFocusedField}
-            onFinish={() => setFocusedField("")}
-            snippets={library}
-            onUpdateSnippets={setLibrary}
-            externalValueSyncKey={externalValueSyncKey}
-          />
+      {/* 1. Left Column - Prompt Constructor (Collapsible) */}
+      <div
+        className={`flex-none bg-white border-r hidden xl:flex flex-col overflow-hidden transition-all duration-200 ${promptConstructorCollapsed ? 'w-8 cursor-pointer hover:bg-slate-50' : 'w-[380px]'
+          }`}
+        onClick={promptConstructorCollapsed ? () => setPromptConstructorCollapsed(false) : undefined}
+      >
+        {promptConstructorCollapsed ? (
+          // Collapsed state - narrow bar with icon
+          <div className="flex flex-col items-center justify-center h-full gap-2 text-slate-400">
+            <ChevronRight className="w-4 h-4" />
+            <span className="text-[9px] font-medium tracking-wider uppercase [writing-mode:vertical-lr] rotate-180">
+              prompts
+            </span>
+          </div>
         ) : (
-          <div className="p-4 text-xs text-slate-400">select a prompt pipe to use the constructor</div>
+          // Expanded state - full prompt constructor
+          <>
+            {/* Collapse toggle header */}
+            <div className="flex-none flex items-center justify-between px-3 py-2 border-b bg-slate-50/50">
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">prompt constructor</span>
+              <button
+                onClick={() => setPromptConstructorCollapsed(true)}
+                className="p-1 rounded hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors"
+                title="Collapse prompt constructor"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-hidden">
+              {selectedWorkflow ? (
+                <PromptConstructorPanel
+                  // Filter out hidden parameters if the new editor logic flagged them
+                  schema={
+                    Object.fromEntries(
+                      Object.entries(visibleSchema ?? {}).filter(
+                        ([_, val]: [string, any]) => !val.__hidden
+                      )
+                    )
+                  }
+                  onUpdate={handlePromptUpdate}
+                  onUpdateMany={handlePromptUpdateMany}
+                  targetField={focusedField}
+                  onTargetChange={setFocusedField}
+                  onFinish={() => setFocusedField("")}
+                  snippets={library}
+                  onUpdateSnippets={setLibrary}
+                  externalValueSyncKey={externalValueSyncKey}
+                />
+              ) : (
+                <div className="p-4 text-xs text-slate-400">select a prompt pipe to use the constructor</div>
+              )}
+            </div>
+          </>
         )}
       </div>
 
