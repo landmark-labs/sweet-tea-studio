@@ -357,7 +357,7 @@ const SortableLibrarySnippet = React.memo(function SortableLibrarySnippet({ snip
                             ref={setNodeRef}
                             style={style}
                             className={cn(
-                                "flex items-center gap-1 px-2 py-1.5 rounded-md border shadow-sm cursor-grab active:cursor-grabbing select-none group relative text-[11px] font-medium w-full h-full min-w-0 min-h-[32px] transition-all hover:-translate-y-0.5 hover:shadow-md",
+                                "flex items-center gap-1 px-2 py-1 rounded-md border shadow-sm cursor-grab active:cursor-grabbing select-none group relative text-[11px] font-medium w-full h-full min-w-0 min-h-[28px] transition-all hover:-translate-y-0.5 hover:shadow-md",
                                 snippet.color,
                                 isEditing ? "ring-2 ring-amber-400 ring-offset-1" : "",
                                 isDragging && "ring-2 ring-blue-200 shadow-lg"
@@ -1332,8 +1332,8 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
                     <SortableContext items={library.map(s => s.id)} strategy={rectSortingStrategy}>
                         <VirtualGrid
                             items={library}
-                            columnCount={2}
-                            rowHeight={40}
+                            columnCount={3}
+                            rowHeight={32}
                             gap={8}
                             padding={4}
                             overscan={4}
