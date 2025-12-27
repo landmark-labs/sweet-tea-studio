@@ -690,15 +690,46 @@ def process_job(job_id: int):
             saved_media = []
             
             # Extract positive/negative prompts ONCE before the loop
-            # Check working_params for common prompt keys, then fall back to CLIPTextEncode nodes
+            # Check working_params for common prompt keys, then fall back to CLIPTextEncode/STRING_LITERAL nodes
             pos_embed = working_params.get("prompt") or working_params.get("positive") or working_params.get("positive_prompt") or ""
             neg_embed = working_params.get("negative_prompt") or working_params.get("negative") or ""
+            
+            # Also check for STRING_LITERAL patterns in working_params (common in Wan2.2 workflows)
+            if not pos_embed or not neg_embed:
+                string_literal_values = []
+                for key, value in working_params.items():
+                    if isinstance(value, str) and value.strip():
+                        key_lower = key.lower()
+                        if "string_literal" in key_lower or (".string" in key_lower and "lora" not in key_lower):
+                            string_literal_values.append({"key": key, "value": value})
+                
+                # Sort by key to get consistent ordering
+                string_literal_values.sort(key=lambda x: x["key"])
+                
+                if string_literal_values:
+                    if not pos_embed and len(string_literal_values) >= 1:
+                        pos_embed = string_literal_values[0]["value"]
+                    if not neg_embed and len(string_literal_values) >= 2:
+                        neg_embed = string_literal_values[1]["value"]
             
             if not pos_embed or not neg_embed:
                 clip_nodes = []
                 for node_id, node_data in final_graph.items():
-                    if node_data.get("class_type") == "CLIPTextEncode":
+                    class_type = node_data.get("class_type", "")
+                    
+                    # Check CLIPTextEncode nodes
+                    if class_type == "CLIPTextEncode":
                         text = node_data.get("inputs", {}).get("text", "")
+                        if isinstance(text, str) and text.strip():
+                            clip_nodes.append({
+                                "node_id": node_id,
+                                "text": text,
+                                "title": node_data.get("_meta", {}).get("title", "")
+                            })
+                    
+                    # Check STRING_LITERAL nodes (used in Wan2.2 and other video workflows)
+                    if "string" in class_type.lower() and "literal" in class_type.lower():
+                        text = node_data.get("inputs", {}).get("string", "")
                         if isinstance(text, str) and text.strip():
                             clip_nodes.append({
                                 "node_id": node_id,
@@ -714,7 +745,7 @@ def process_job(job_id: int):
                     elif not pos_embed:
                         pos_embed = text
                 
-                # Fallback: first two CLIPTextEncode nodes
+                # Fallback: first two nodes
                 if not pos_embed and len(clip_nodes) >= 1:
                     pos_embed = clip_nodes[0]["text"]
                 if not neg_embed and len(clip_nodes) >= 2:
