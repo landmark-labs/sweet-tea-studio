@@ -908,10 +908,6 @@ export default function PromptStudio() {
         negative: negativePrompt ? String(negativePrompt).substring(0, 50) + "..." : "undefined"
       });
 
-      if ((!positivePrompt || !negativePrompt) && !cancelled) {
-        setError("Could not extract prompts from the selected image. Please paste prompts manually.");
-      }
-
       // STEP 4: Find prompt fields in target schema and inject
       // Prefer mapping to the same node/field we extracted from (prevents swap)
       const { positiveField, negativeField } = findPromptFieldsInSchema(schema);
@@ -946,6 +942,13 @@ export default function PromptStudio() {
         const directNegative = jobParams[negativeTarget];
         const nextNegative = choosePromptValue(negativePrompt, directNegative);
         if (nextNegative) baseParams[negativeTarget] = nextNegative;
+      }
+
+      // STEP 4.5: Show error only if we couldn't find ANY prompt from any source
+      // Check both the positivePrompt variable AND the actual injected value
+      const hasPromptInForm = positiveTarget && baseParams[positiveTarget];
+      if (!positivePrompt && !hasPromptInForm && !cancelled) {
+        setError("Could not extract prompts from the selected image. Please paste prompts manually.");
       }
 
       // STEP 5: Handle image injection - do it directly here instead of delegating to Effect 3
@@ -990,10 +993,14 @@ export default function PromptStudio() {
                 console.log("[LoadParams] Image upload complete:", result.filename);
                 baseParams[imageField] = result.filename;
               } else {
-                console.warn("[LoadParams] Failed to fetch image for upload");
+                console.warn("[LoadParams] Failed to fetch image for upload, clearing field");
+                // Clear the image field so ComfyUI doesn't use a default/old value
+                baseParams[imageField] = "";
               }
             } catch (err) {
               console.warn("[LoadParams] Image upload failed:", err);
+              // Clear the image field so ComfyUI doesn't use a default/old value
+              baseParams[imageField] = "";
             }
           }
         }

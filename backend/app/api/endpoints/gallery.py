@@ -1031,10 +1031,40 @@ def get_image_metadata_by_path(path: str, session: Session = Depends(get_session
     except Exception as e:
         logger.warning("Failed to read image metadata", extra={"path": path, "error": str(e)})
     
+    # If PIL couldn't extract prompts (e.g., for videos), try reading sidecar JSON
+    # Videos and some image formats store metadata in a .json file alongside the media
+    if result["source"] == "none" or not result["prompt"]:
+        sidecar_path = os.path.splitext(actual_path)[0] + ".json"
+        if os.path.exists(sidecar_path):
+            try:
+                with open(sidecar_path, "r", encoding="utf-8") as sf:
+                    sidecar_data = json.load(sf)
+                    if isinstance(sidecar_data, dict):
+                        result["prompt"] = result["prompt"] or sidecar_data.get("positive_prompt")
+                        result["negative_prompt"] = result["negative_prompt"] or sidecar_data.get("negative_prompt")
+                        # Include flattened params
+                        if "params" in sidecar_data and isinstance(sidecar_data["params"], dict):
+                            result["parameters"].update(sidecar_data["params"])
+                        else:
+                            # Include non-prompt fields as parameters
+                            for k, v in sidecar_data.items():
+                                if k not in ["positive_prompt", "negative_prompt", "params"] and v is not None and not isinstance(v, (dict, list)):
+                                    result["parameters"][k] = v
+                        if result["prompt"] or result["negative_prompt"]:
+                            result["source"] = "sidecar_json"
+            except Exception as sidecar_err:
+                logger.debug("Failed to read sidecar JSON", extra={"path": sidecar_path, "error": str(sidecar_err)})
+    
     # Fallback: try to find in database by path (most recent first)
+    # Try both the original path and the resolved actual_path for better matching
     image = session.exec(
         select(Image).where(Image.path == path).order_by(Image.created_at.desc())
     ).first()
+    if not image and actual_path and actual_path != path:
+        # Try with the resolved actual_path (may differ in slash style or resolution)
+        image = session.exec(
+            select(Image).where(Image.path == actual_path).order_by(Image.created_at.desc())
+        ).first()
     if image and image.extra_metadata:
         metadata = image.extra_metadata if isinstance(image.extra_metadata, dict) else {}
         if isinstance(image.extra_metadata, str):
