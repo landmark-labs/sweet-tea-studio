@@ -690,6 +690,17 @@ export const api = {
         return res.json();
     },
 
+    downloadImages: async (imageIds: number[]): Promise<Blob> => {
+        const res = await fetch(`${API_BASE}/gallery/download`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ image_ids: imageIds }),
+        });
+        if (!res.ok) throw new Error("Failed to download images");
+        return res.blob();
+    },
+
+
     // --- Captioning ---
     captionImage: async (file: File, imageId?: number): Promise<CaptionResponse> => {
         const formData = new FormData();

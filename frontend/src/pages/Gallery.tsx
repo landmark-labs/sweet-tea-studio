@@ -4,7 +4,7 @@ import { isVideoFile } from "@/lib/media";
 import { Card, CardContent } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Save, Trash2, Calendar, Search, RotateCcw, Copy, Check, X, ChevronLeft, ChevronRight, FolderInput } from "lucide-react";
+import { Download, Trash2, Calendar, Search, RotateCcw, Copy, Check, X, ChevronLeft, ChevronRight, FolderInput } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
@@ -525,30 +525,37 @@ export default function Gallery() {
         }
     };
 
-    const handleSavePrompt = async (item: GalleryItem) => {
-        const name = prompt("Enter a name for this prompt preset:");
-        if (!name) return;
+    const handleDownload = async (item: GalleryItem) => {
+        try {
+            const url = `/api/v1/gallery/image/${item.image.id}`;
+            const res = await fetch(url);
+            const blob = await res.blob();
+            const a = document.createElement("a");
+            a.href = URL.createObjectURL(blob);
+            a.download = item.image.filename || `image_${item.image.id}`;
+            a.click();
+            URL.revokeObjectURL(a.href);
+        } catch (e) {
+            console.error("Download failed", e);
+            alert("Failed to download image");
+        }
+    };
 
-        const workflowId = item.workflow_template_id || 1;
-        const tags = (item.prompt || "")
-            .split(",")
-            .map((t) => t.trim())
-            .filter(Boolean);
+    const handleBulkDownload = async () => {
+        if (selectedIds.size === 0) return;
 
         try {
-            await api.savePrompt({
-                workflow_id: workflowId,
-                name: name,
-                description: `Saved from Gallery Image #${item.image.id}`,
-                parameters: item.job_params,
-                preview_image_path: item.image.path,
-                positive_text: item.job_params?.prompt,
-                negative_text: item.job_params?.negative_prompt,
-                tags,
-            });
-            alert("Prompt saved to library!");
-        } catch (err) {
-            alert("Failed to save prompt");
+            const blob = await api.downloadImages(Array.from(selectedIds));
+            const a = document.createElement("a");
+            a.href = URL.createObjectURL(blob);
+            // Check content type to determine filename
+            const isZip = blob.type === "application/zip";
+            a.download = isZip ? `gallery_export_${Date.now()}.zip` : `image_${Date.now()}`;
+            a.click();
+            URL.revokeObjectURL(a.href);
+        } catch (e) {
+            console.error("Bulk download failed", e);
+            alert("Failed to download images");
         }
     };
 
@@ -630,6 +637,11 @@ export default function Gallery() {
                                 <div className="h-4 w-px bg-blue-200 mx-1 flex-shrink-0" />
                                 {!cleanupMode && (
                                     <>
+                                        <button onClick={handleBulkDownload} className="hover:underline text-blue-600 flex items-center gap-1">
+                                            <Download className="w-3 h-3" />
+                                            download
+                                        </button>
+                                        <div className="h-4 w-px bg-blue-200 flex-shrink-0" />
                                         <button onClick={() => setMoveDialogOpen(true)} className="hover:underline text-blue-600 flex items-center gap-1">
                                             <FolderInput className="w-3 h-3" />
                                             move
@@ -740,10 +752,10 @@ export default function Gallery() {
                                                         className="pointer-events-auto"
                                                         variant="secondary"
                                                         size="icon"
-                                                        onClick={(e) => { e.stopPropagation(); handleSavePrompt(item); }}
-                                                        title="Save Prompt to Library"
+                                                        onClick={(e) => { e.stopPropagation(); handleDownload(item); }}
+                                                        title="Download"
                                                     >
-                                                        <Save className="w-4 h-4" />
+                                                        <Download className="w-4 h-4" />
                                                     </Button>
 
                                                     <Button
@@ -852,8 +864,8 @@ export default function Gallery() {
                                         </Card>
                                     </ContextMenuTrigger>
                                     <ContextMenuContent>
+                                        <ContextMenuItem onSelect={() => handleDownload(item)}>download</ContextMenuItem>
                                         <ContextMenuItem onSelect={() => handleRegenerate(item)}>regenerate</ContextMenuItem>
-                                        <ContextMenuItem onSelect={() => handleSavePrompt(item)}>save prompt</ContextMenuItem>
                                         <ContextMenuSeparator />
                                         <ContextMenuItem className="text-red-600" onSelect={() => handleDelete(item.image.id)}>delete</ContextMenuItem>
                                     </ContextMenuContent>

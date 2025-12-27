@@ -1,16 +1,19 @@
+import io
 import json
 import logging
 import mimetypes
 import os
 import re
 import shutil
+import zipfile
 from datetime import datetime
 from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
+
 from PIL import Image as PILImage, ExifTags
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import SQLAlchemyError
@@ -1112,3 +1115,72 @@ def get_image_metadata_by_path(path: str, session: Session = Depends(get_session
                 result["parameters"]["workflow_template_id"] = job.workflow_template_id
     
     return result
+
+
+class DownloadRequest(BaseModel):
+    image_ids: List[int]
+
+
+@router.post("/download")
+def download_images(req: DownloadRequest, session: Session = Depends(get_session)):
+    """
+    Create a zip file containing multiple images and return it as a streaming response.
+    For a single image, returns the image directly without zipping.
+    """
+    if not req.image_ids:
+        raise HTTPException(status_code=400, detail="No image IDs provided")
+    
+    # Look up images from database
+    images = session.exec(
+        select(Image).where(Image.id.in_(req.image_ids)).where(Image.is_deleted == False)
+    ).all()
+    
+    if not images:
+        raise HTTPException(status_code=404, detail="No images found")
+    
+    # Filter to only existing files
+    valid_images = []
+    for img in images:
+        if img.path and os.path.exists(img.path):
+            valid_images.append(img)
+    
+    if not valid_images:
+        raise HTTPException(status_code=404, detail="No image files found on disk")
+    
+    # Single image - return directly without zipping
+    if len(valid_images) == 1:
+        img = valid_images[0]
+        return FileResponse(
+            img.path,
+            media_type=_guess_media_type(img.path),
+            filename=img.filename or os.path.basename(img.path)
+        )
+    
+    # Multiple images - create zip
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        used_names = set()
+        for img in valid_images:
+            filename = img.filename or os.path.basename(img.path)
+            # Handle duplicate filenames
+            base_name = filename
+            counter = 1
+            while filename in used_names:
+                name_parts = os.path.splitext(base_name)
+                filename = f"{name_parts[0]}_{counter}{name_parts[1]}"
+                counter += 1
+            used_names.add(filename)
+            
+            zf.write(img.path, arcname=filename)
+    
+    zip_buffer.seek(0)
+    
+    # Generate zip filename based on timestamp
+    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    zip_filename = f"gallery_export_{timestamp}.zip"
+    
+    return StreamingResponse(
+        zip_buffer,
+        media_type="application/zip",
+        headers={"Content-Disposition": f"attachment; filename={zip_filename}"}
+    )
