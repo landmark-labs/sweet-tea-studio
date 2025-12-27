@@ -357,7 +357,7 @@ const SortableLibrarySnippet = React.memo(function SortableLibrarySnippet({ snip
                             ref={setNodeRef}
                             style={style}
                             className={cn(
-                                "flex items-center gap-1 px-2 py-1 rounded-md border shadow-sm cursor-grab active:cursor-grabbing select-none group relative text-[11px] font-medium w-full h-full min-w-0 min-h-[28px] transition-all hover:-translate-y-0.5 hover:shadow-md",
+                                "flex items-center gap-1 px-1.5 py-1 rounded-md border shadow-sm cursor-grab active:cursor-grabbing select-none group relative text-[10px] font-medium w-full h-full min-w-0 min-h-[28px] transition-all hover:-translate-y-0.5 hover:shadow-md overflow-hidden",
                                 snippet.color,
                                 isEditing ? "ring-2 ring-amber-400 ring-offset-1" : "",
                                 isDragging && "ring-2 ring-blue-200 shadow-lg"
@@ -373,31 +373,32 @@ const SortableLibrarySnippet = React.memo(function SortableLibrarySnippet({ snip
                             {...attributes}
                             {...listeners}
                         >
-                            <span className="truncate flex-1 min-w-0">{snippet.label}</span>
+                            <span className="truncate w-full pr-1">{snippet.label}</span>
+                            <div className="absolute right-0 top-0 bottom-0 flex items-center pr-1 opacity-0 group-hover:opacity-100 transition-opacity bg-gradient-to-l from-white/90 via-white/80 to-transparent pl-4">
+                                {/* Pencil edit button */}
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-4 w-4 rounded-full bg-white/50 hover:bg-amber-100/80"
+                                    onPointerDown={(e) => e.stopPropagation()}
+                                    onClick={onEdit}
+                                    title="Edit Snippet"
+                                >
+                                    <Pencil size={9} className="text-slate-700" />
+                                </Button>
 
-                            {/* Pencil edit button */}
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-4 w-4 -mr-0.5 ml-1 rounded-full opacity-0 hover:opacity-100 group-hover:opacity-100 bg-white/30 hover:bg-white/60"
-                                onPointerDown={(e) => e.stopPropagation()}
-                                onClick={onEdit}
-                                title="Edit Snippet"
-                            >
-                                <Pencil size={10} className="text-slate-700" />
-                            </Button>
-
-                            {/* Delete button */}
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-4 w-4 -mr-1 rounded-full opacity-0 hover:opacity-100 group-hover:opacity-100 bg-white/20 hover:bg-red-100/80"
-                                onPointerDown={(e) => e.stopPropagation()}
-                                onClick={onDelete}
-                                title="Delete Snippet"
-                            >
-                                <Trash2 size={10} className="text-slate-700 hover:text-red-600" />
-                            </Button>
+                                {/* Delete button */}
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-4 w-4 ml-0.5 rounded-full bg-white/50 hover:bg-red-100/80"
+                                    onPointerDown={(e) => e.stopPropagation()}
+                                    onClick={onDelete}
+                                    title="Delete Snippet"
+                                >
+                                    <Trash2 size={9} className="text-slate-700 hover:text-red-600" />
+                                </Button>
+                            </div>
                         </div>
                     </HoverCardTrigger>
                 </ContextMenuTrigger>
