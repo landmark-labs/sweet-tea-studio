@@ -235,6 +235,107 @@ const SortableLibrarySnippet = React.memo(function SortableLibrarySnippet({ snip
         isDragging
     } = useSortable({ id: snippet.id });
 
+    // Controlled hover state - only show when mouse is stationary and no interactions are happening
+    const [hoverOpen, setHoverOpen] = useState(false);
+    const hoverTimerRef = useRef<NodeJS.Timeout | null>(null);
+    const isInteractingRef = useRef(false);
+    const isInHoverContentRef = useRef(false);
+
+    const clearHoverTimer = () => {
+        if (hoverTimerRef.current) {
+            clearTimeout(hoverTimerRef.current);
+            hoverTimerRef.current = null;
+        }
+    };
+
+    const startHoverTimer = () => {
+        clearHoverTimer();
+        if (isInteractingRef.current || isDragging) return;
+        hoverTimerRef.current = setTimeout(() => {
+            if (!isInteractingRef.current && !isDragging) {
+                setHoverOpen(true);
+            }
+        }, 500);
+    };
+
+    const handleMouseMove = () => {
+        // Reset the timer on any mouse movement - require stillness
+        if (!hoverOpen) {
+            startHoverTimer();
+        }
+    };
+
+    const handleMouseEnter = () => {
+        if (!isInteractingRef.current && !isDragging) {
+            startHoverTimer();
+        }
+    };
+
+    const handleMouseLeave = () => {
+        clearHoverTimer();
+        // Only close if not hovering over the content
+        if (!isInHoverContentRef.current) {
+            setHoverOpen(false);
+        }
+    };
+
+    const handlePointerDown = (e: React.PointerEvent) => {
+        isInteractingRef.current = true;
+        clearHoverTimer();
+        setHoverOpen(false);
+        onStartLongPress(e);
+    };
+
+    const handlePointerUp = () => {
+        isInteractingRef.current = false;
+        onCancelLongPress();
+    };
+
+    const handlePointerLeave = () => {
+        isInteractingRef.current = false;
+        onCancelLongPress();
+        handleMouseLeave();
+    };
+
+    const handlePointerCancel = () => {
+        isInteractingRef.current = false;
+        onCancelLongPress();
+    };
+
+    const handleDoubleClick = () => {
+        isInteractingRef.current = true;
+        clearHoverTimer();
+        setHoverOpen(false);
+        onCancelLongPress();
+        onDoubleClick();
+        // Reset after a brief delay
+        setTimeout(() => {
+            isInteractingRef.current = false;
+        }, 100);
+    };
+
+    const handleHoverContentEnter = () => {
+        isInHoverContentRef.current = true;
+    };
+
+    const handleHoverContentLeave = () => {
+        isInHoverContentRef.current = false;
+        setHoverOpen(false);
+    };
+
+    // Cleanup timer on unmount
+    useEffect(() => {
+        return () => clearHoverTimer();
+    }, []);
+
+    // Close hover when dragging starts
+    useEffect(() => {
+        if (isDragging) {
+            clearHoverTimer();
+            setHoverOpen(false);
+        }
+    }, [isDragging]);
+
     const style = {
         transform: CSS.Transform.toString(transform),
         transition,
@@ -244,7 +345,12 @@ const SortableLibrarySnippet = React.memo(function SortableLibrarySnippet({ snip
 
     return (
         <ContextMenu>
-            <HoverCard openDelay={500} closeDelay={80}>
+            <HoverCard open={hoverOpen} onOpenChange={(open) => {
+                // Only allow external close, not external open (we control opening via timer)
+                if (!open) {
+                    setHoverOpen(false);
+                }
+            }}>
                 <ContextMenuTrigger asChild>
                     <HoverCardTrigger asChild>
                         <div
@@ -256,14 +362,14 @@ const SortableLibrarySnippet = React.memo(function SortableLibrarySnippet({ snip
                                 isEditing ? "ring-2 ring-amber-400 ring-offset-1" : "",
                                 isDragging && "ring-2 ring-blue-200 shadow-lg"
                             )}
-                            onPointerDown={onStartLongPress}
-                            onPointerUp={onCancelLongPress}
-                            onPointerLeave={onCancelLongPress}
-                            onPointerCancel={onCancelLongPress}
-                            onDoubleClick={(e) => {
-                                onCancelLongPress();
-                                onDoubleClick();
-                            }}
+                            onMouseEnter={handleMouseEnter}
+                            onMouseMove={handleMouseMove}
+                            onMouseLeave={handleMouseLeave}
+                            onPointerDown={handlePointerDown}
+                            onPointerUp={handlePointerUp}
+                            onPointerLeave={handlePointerLeave}
+                            onPointerCancel={handlePointerCancel}
+                            onDoubleClick={handleDoubleClick}
                             {...attributes}
                             {...listeners}
                         >
@@ -295,7 +401,11 @@ const SortableLibrarySnippet = React.memo(function SortableLibrarySnippet({ snip
                         </div>
                     </HoverCardTrigger>
                 </ContextMenuTrigger>
-                <HoverCardContent className="w-80 shadow-xl border-slate-200">
+                <HoverCardContent
+                    className="w-80 shadow-xl border-slate-200"
+                    onMouseEnter={handleHoverContentEnter}
+                    onMouseLeave={handleHoverContentLeave}
+                >
                     <div className="space-y-2">
                         <div className="flex items-center justify-between">
                             <p className="text-xs font-semibold text-slate-700">{snippet.label}</p>
