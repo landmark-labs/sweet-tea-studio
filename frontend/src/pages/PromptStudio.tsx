@@ -59,6 +59,39 @@ const filterParamsForSchema = (
   return filtered;
 };
 
+const normalizeParamsWithDefaults = (
+  schema: Record<string, any>,
+  params: Record<string, unknown>
+) => {
+  const normalized: Record<string, unknown> = { ...params };
+  Object.entries(schema || {}).forEach(([key, field]) => {
+    if (!isPersistableSchemaKey(key)) return;
+    if (field?.default === undefined) return;
+
+    const value = normalized[key];
+    if (value === undefined || value === null) {
+      normalized[key] = field.default;
+      return;
+    }
+
+    if (Array.isArray(field.enum)) {
+      const defaultValue = field.default;
+      const valueStr = typeof value === "string" ? value : String(value);
+      const trimmed = valueStr.trim();
+      const enumHasEmpty = field.enum.includes("");
+      const isEmpty = trimmed.length === 0;
+      const hasEnumValues = field.enum.length > 0;
+      const matchesEnum = hasEnumValues && (field.enum.includes(value) || field.enum.includes(valueStr));
+      const isInvalid = hasEnumValues && !matchesEnum;
+
+      if ((isEmpty && !enumHasEmpty) || isInvalid) {
+        normalized[key] = defaultValue;
+      }
+    }
+  });
+  return normalized;
+};
+
 export default function PromptStudio() {
   const [engines, setEngines] = useState<Engine[]>([]);
   const [workflows, setWorkflows] = useState<WorkflowTemplate[]>([]);
@@ -433,8 +466,9 @@ export default function PromptStudio() {
         initialData = { ...initialData, ...parsed };
       }
     } catch (e) { /* ignore */ }
-    setFormData(initialData);
-    workflowParamsCacheRef.current[workflowKey] = initialData;
+    const normalized = normalizeParamsWithDefaults(schema, initialData);
+    setFormData(normalized);
+    workflowParamsCacheRef.current[workflowKey] = normalized;
     initializedWorkflowsRef.current.add(workflowKey);
   }, [selectedWorkflow, visibleSchema, setFormData, store]);
 
@@ -1051,16 +1085,18 @@ export default function PromptStudio() {
 
       if (cancelled) return;
 
+      const normalizedParams = normalizeParamsWithDefaults(schema, baseParams);
+
       // STEP 6: Persist to localStorage so workflow init effect picks it up
       try {
-        localStorage.setItem(`ds_pipe_params_${targetWorkflowId}`, JSON.stringify(baseParams));
-        workflowParamsCacheRef.current[targetWorkflowId] = baseParams;
+        localStorage.setItem(`ds_pipe_params_${targetWorkflowId}`, JSON.stringify(normalizedParams));
+        workflowParamsCacheRef.current[targetWorkflowId] = normalizedParams;
       } catch (e) {
         console.warn("Failed to persist loadParams", e);
       }
 
       // STEP 7: Update form state directly  
-      setFormData(baseParams);
+      setFormData(normalizedParams);
       setExternalValueSyncKey((prev) => prev + 1);
 
       // Clear pending - we've processed it

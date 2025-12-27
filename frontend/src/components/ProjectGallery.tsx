@@ -122,7 +122,11 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; image: FolderImage } | null>(null);
     const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set());
     const lastSelectedPath = useRef<string | null>(null);
+    const imagesRef = useRef<FolderImage[]>([]);
     const [gridResetKey, setGridResetKey] = useState(0);
+
+    // Keep imagesRef in sync with images state for stable callbacks
+    imagesRef.current = images;
 
     // Pre-process projects: Sort "drafts" to top, rename to "drafts", ensure it has "output" folder
     const sortedProjects = useMemo(() => {
@@ -273,6 +277,10 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
 
     // Multi-select handler
     const handleImageClick = useCallback((image: FolderImage, e: React.MouseEvent) => {
+        // Use imagesRef.current to ensure we always have the latest images array
+        // (the memo comparison for GalleryItemCell doesn't track onClick changes)
+        const currentImages = imagesRef.current;
+
         if (e.ctrlKey || e.metaKey) {
             // Toggle selection
             setSelectedPaths(prev => {
@@ -284,22 +292,22 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
             lastSelectedPath.current = image.path;
         } else if (e.shiftKey && lastSelectedPath.current) {
             // Range selection
-            const startIdx = images.findIndex(img => img.path === lastSelectedPath.current);
-            const endIdx = images.findIndex(img => img.path === image.path);
+            const startIdx = currentImages.findIndex(img => img.path === lastSelectedPath.current);
+            const endIdx = currentImages.findIndex(img => img.path === image.path);
             if (startIdx !== -1 && endIdx !== -1) {
                 const low = Math.min(startIdx, endIdx);
                 const high = Math.max(startIdx, endIdx);
                 setSelectedPaths(prev => {
                     const newSet = new Set(prev);
-                    images.slice(low, high + 1).forEach(img => newSet.add(img.path));
+                    currentImages.slice(low, high + 1).forEach(img => newSet.add(img.path));
                     return newSet;
                 });
             }
         } else {
             // Normal click - view image and pass images array for navigation
-            onSelectImage?.(image.path, images);
+            onSelectImage?.(image.path, currentImages);
         }
-    }, [images, onSelectImage]);
+    }, [onSelectImage]);
 
     // Bulk delete handler
     const handleBulkDelete = async () => {
