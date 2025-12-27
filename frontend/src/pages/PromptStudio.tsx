@@ -1692,9 +1692,21 @@ export default function PromptStudio() {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
         // Skip if focus is inside the snippet editor (Ctrl+Enter saves the snippet there)
+        // UNLESS both the title and content inputs are empty - then trigger generation
         const activeEl = document.activeElement;
-        if (activeEl?.closest('[data-snippet-editor="true"]')) {
-          return;
+        const snippetEditor = activeEl?.closest('[data-snippet-editor="true"]');
+        if (snippetEditor) {
+          // Check if both inputs are empty - if so, allow generation
+          const titleInput = snippetEditor.querySelector('input') as HTMLInputElement | null;
+          const contentTextarea = snippetEditor.querySelector('textarea') as HTMLTextAreaElement | null;
+          const titleEmpty = !titleInput?.value?.trim();
+          const contentEmpty = !contentTextarea?.value?.trim();
+
+          if (!titleEmpty || !contentEmpty) {
+            // Editor has content, let the snippet editor handle it
+            return;
+          }
+          // Both empty - fall through to trigger generation
         }
 
         if (!selectedWorkflowId || isBusy || engineOffline) return;

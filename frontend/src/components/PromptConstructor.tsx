@@ -1219,6 +1219,13 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+            // If snippet editor is completely empty, don't handle the event here
+            // Let it bubble up to trigger generation instead
+            if (!snippetTitle.trim() && !snippetContent.trim()) {
+                return; // Don't prevent default, let it bubble
+            }
+            e.preventDefault();
+            e.stopPropagation();
             saveSnippet();
         }
     };
