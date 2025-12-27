@@ -1074,6 +1074,12 @@ export default function PromptStudio() {
       const jobParams = (loadParams.job_params || {}) as Record<string, unknown>;
       const jobParamsFiltered = filterParamsForSchema(schema, jobParams);
 
+      // Debug: Log bypass keys in job_params
+      const bypassKeysInJobParams = Object.keys(jobParams).filter(k => k.startsWith("__bypass_"));
+      const bypassKeysInFiltered = Object.keys(jobParamsFiltered).filter(k => k.startsWith("__bypass_"));
+      console.log("[LoadParams] Bypass keys in job_params:", bypassKeysInJobParams, bypassKeysInJobParams.map(k => ({ [k]: jobParams[k] })));
+      console.log("[LoadParams] Bypass keys in filtered:", bypassKeysInFiltered, bypassKeysInFiltered.map(k => ({ [k]: jobParamsFiltered[k] })));
+
       const readStoredParams = () => {
         if (targetWorkflowId && targetWorkflowId === selectedWorkflowId) {
           return store.get(formDataAtom) || {};
