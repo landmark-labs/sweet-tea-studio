@@ -3,7 +3,7 @@ import asyncio
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.endpoints import collections, engines, extensions, files, gallery, jobs, library, models, monitoring, projects, workflows, portfolio, snippets, status
+from app.api.endpoints import canvases, collections, engines, extensions, files, gallery, jobs, library, models, monitoring, projects, workflows, portfolio, snippets, status
 from app.api.endpoints.library_tags import start_tag_cache_refresh_background
 from app.core.config import settings
 from app.core.error_handlers import register_gallery_error_handlers
@@ -39,6 +39,7 @@ if settings.BACKEND_CORS_ORIGINS:
 
 app.include_router(engines.router, prefix="/api/v1/engines", tags=["engines"])
 app.include_router(workflows.router, prefix="/api/v1/workflows", tags=["workflows"])
+app.include_router(canvases.router, prefix="/api/v1/canvases", tags=["canvases"])
 app.include_router(projects.router, prefix="/api/v1/projects", tags=["projects"])
 app.include_router(jobs.router, prefix="/api/v1/jobs", tags=["jobs"])
 app.include_router(gallery.router, prefix="/api/v1/gallery", tags=["gallery"])

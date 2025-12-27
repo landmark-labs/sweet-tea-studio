@@ -15,7 +15,7 @@ import { ImageViewer } from "@/components/ImageViewer";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { InstallStatusDialog, InstallStatus } from "@/components/InstallStatusDialog";
 import { PromptConstructor, COLORS } from "@/components/PromptConstructor";
-import { PromptItem } from "@/lib/types";
+import { CanvasPayload, PromptItem } from "@/lib/types";
 
 import { useUndoRedo } from "@/lib/undoRedo";
 import { ProjectGallery } from "@/components/ProjectGallery";
@@ -23,6 +23,7 @@ import { useGenerationFeedStore, usePromptLibraryStore } from "@/lib/stores/prom
 import { useGeneration } from "@/lib/GenerationContext";
 import { logClientEventThrottled } from "@/lib/clientDiagnostics";
 import { formDataAtom, setFormDataAtom } from "@/lib/atoms/formAtoms";
+import { useCanvasStore } from "@/lib/stores/canvasStore";
 
 type PromptConstructorPanelProps = Omit<ComponentProps<typeof PromptConstructor>, "currentValues">;
 
@@ -80,11 +81,12 @@ const normalizeParamsWithDefaults = (
       const trimmed = valueStr.trim();
       const enumHasEmpty = field.enum.includes("");
       const isEmpty = trimmed.length === 0;
-      const hasEnumValues = field.enum.length > 0;
-      const matchesEnum = hasEnumValues && (field.enum.includes(value) || field.enum.includes(valueStr));
-      const isInvalid = hasEnumValues && !matchesEnum;
 
-      if ((isEmpty && !enumHasEmpty) || isInvalid) {
+      // Only reset if value is truly empty - preserve values that exist even if not
+      // in static enum list. This allows regeneration with samplers/schedulers/models
+      // that were valid at generation time but may not be in the hardcoded enum.
+      // DynamicForm handles showing "stale" values, ComfyUI validates at execution.
+      if (isEmpty && !enumHasEmpty) {
         normalized[key] = defaultValue;
       }
     }
@@ -155,6 +157,12 @@ export default function PromptStudio() {
   const updateFeed = useGenerationFeedStore(useCallback(state => state.updateFeed, []));
   const updatePreviewBlob = useGenerationFeedStore(useCallback(state => state.updatePreviewBlob, []));
 
+  const registerCanvasSnapshotProvider = useCanvasStore(useCallback(state => state.registerSnapshotProvider, []));
+  const registerCanvasSnapshotApplier = useCanvasStore(useCallback(state => state.registerSnapshotApplier, []));
+  const saveCanvas = useCanvasStore(useCallback(state => state.saveCanvas, []));
+  const pendingCanvas = useCanvasStore(useCallback(state => state.pendingCanvas, []));
+  const clearPendingCanvas = useCanvasStore(useCallback(state => state.clearPendingCanvas, []));
+
   // Prompt Library State - also using selectors
   const setPrompts = usePromptLibraryStore(useCallback(state => state.setPrompts, []));
   const clearPrompts = usePromptLibraryStore(useCallback(state => state.clearPrompts, []));
@@ -183,9 +191,17 @@ export default function PromptStudio() {
   const [library, setLibrary] = useState<PromptItem[]>([]);
   const [snippetsLoaded, setSnippetsLoaded] = useState(false);
   const pendingSaveRef = useRef<NodeJS.Timeout | null>(null);
+  const allowEmptySnippetSyncRef = useRef(false);
   const persistHandleRef = useRef<{ id: number | NodeJS.Timeout; type: "idle" | "timeout" } | null>(null);
   const pendingPersistRef = useRef<{ workflowId: string; data: any } | null>(null);
   const workflowParamsCacheRef = useRef<Record<string, Record<string, unknown>>>({});
+  const pendingCanvasPayloadRef = useRef<CanvasPayload | null>(null);
+  const [canvasGallerySelection, setCanvasGallerySelection] = useState<{
+    projectId?: string | null;
+    folder?: string | null;
+    collapsed?: boolean;
+  } | null>(null);
+  const [canvasGallerySyncKey, setCanvasGallerySyncKey] = useState(0);
 
   // Load snippets from backend on mount
   useEffect(() => {
@@ -226,8 +242,9 @@ export default function PromptStudio() {
     // Debounce saves to avoid hammering the API
     if (pendingSaveRef.current) clearTimeout(pendingSaveRef.current);
     pendingSaveRef.current = setTimeout(async () => {
+      const allowEmptySync = allowEmptySnippetSyncRef.current;
       // SAFETY: Don't sync empty library to avoid nuking backend data
-      if (library.length === 0) {
+      if (library.length === 0 && !allowEmptySync) {
         console.warn("[Snippets] Skipping sync - library is empty (would delete all backend snippets)");
         return;
       }
@@ -244,6 +261,10 @@ export default function PromptStudio() {
         console.error("Failed to save snippets to backend", e);
         // Fallback: save to localStorage
         localStorage.setItem("ds_prompt_snippets", JSON.stringify(library));
+      } finally {
+        if (allowEmptySnippetSyncRef.current) {
+          allowEmptySnippetSyncRef.current = false;
+        }
       }
     }, 1000);
 
@@ -423,6 +444,152 @@ export default function PromptStudio() {
     }
     previousProjectRef.current = selectedProjectId;
   }, [selectedProjectId]);
+
+  const buildCanvasPayload = useCallback((): CanvasPayload => {
+    const formData = store.get(formDataAtom) || {};
+    const project = selectedProjectId
+      ? projects.find((p) => String(p.id) === String(selectedProjectId)) || null
+      : null;
+    const galleryProjectId = localStorage.getItem("ds_project_gallery_project") || "";
+    const galleryFolder = localStorage.getItem("ds_project_gallery_folder") || "";
+    const galleryCollapsed = localStorage.getItem("ds_project_gallery_collapsed") === "true";
+
+    return {
+      selected_engine_id: selectedEngineId || null,
+      selected_workflow_id: selectedWorkflowId || null,
+      selected_project_id: selectedProjectId || null,
+      selected_project_slug: project?.slug || null,
+      selected_project_name: project?.name || null,
+      generation_target: generationTarget || null,
+      form_data: formData,
+      snippets: library,
+      project_gallery: {
+        project_id: galleryProjectId || null,
+        folder: galleryFolder || null,
+        collapsed: galleryCollapsed,
+      },
+    };
+  }, [store, selectedEngineId, selectedWorkflowId, selectedProjectId, projects, generationTarget, library]);
+
+  const normalizeCanvasFormData = useCallback((workflowId: string, rawData: Record<string, unknown>) => {
+    const workflow = workflows.find((w) => String(w.id) === String(workflowId));
+    if (!workflow) return rawData;
+    const schema = workflow.input_schema || {};
+    const defaults = buildSchemaDefaults(schema);
+    const filtered = filterParamsForSchema(schema, rawData);
+    return normalizeParamsWithDefaults(schema, { ...defaults, ...filtered });
+  }, [workflows]);
+
+  const applyCanvasFormData = useCallback((workflowId: string, rawData: Record<string, unknown>) => {
+    const normalized = normalizeCanvasFormData(workflowId, rawData);
+    try {
+      localStorage.setItem(`ds_pipe_params_${workflowId}`, JSON.stringify(normalized));
+    } catch (e) {
+      console.warn("Failed to persist canvas form data", e);
+    }
+    workflowParamsCacheRef.current[workflowId] = normalized;
+    initializedWorkflowsRef.current.add(workflowId);
+    setFormData(normalized);
+    setExternalValueSyncKey((prev) => prev + 1);
+  }, [normalizeCanvasFormData, setFormData, setExternalValueSyncKey]);
+
+  const applyCanvasPayload = useCallback((payload: CanvasPayload) => {
+    if (!payload) return;
+
+    if (payload.selected_engine_id !== undefined) {
+      setSelectedEngineId(payload.selected_engine_id || "");
+    }
+    if (payload.selected_project_id !== undefined) {
+      setSelectedProjectId(payload.selected_project_id || null);
+    }
+    if (payload.generation_target !== undefined) {
+      setGenerationTarget(payload.generation_target || "");
+    }
+    if (payload.snippets !== undefined) {
+      if (payload.snippets.length === 0) {
+        allowEmptySnippetSyncRef.current = true;
+      } else {
+        allowEmptySnippetSyncRef.current = false;
+      }
+      setLibrary(payload.snippets);
+    }
+
+    if (payload.project_gallery) {
+      const nextSelection = {
+        projectId: payload.project_gallery.project_id || "",
+        folder: payload.project_gallery.folder || "",
+        collapsed: payload.project_gallery.collapsed,
+      };
+      setCanvasGallerySelection(nextSelection);
+      setCanvasGallerySyncKey((prev) => prev + 1);
+
+      if (payload.project_gallery.project_id !== undefined) {
+        localStorage.setItem("ds_project_gallery_project", nextSelection.projectId || "");
+      }
+      if (payload.project_gallery.folder !== undefined) {
+        localStorage.setItem("ds_project_gallery_folder", nextSelection.folder || "");
+      }
+      if (payload.project_gallery.collapsed !== undefined) {
+        localStorage.setItem("ds_project_gallery_collapsed", String(Boolean(payload.project_gallery.collapsed)));
+      }
+    }
+
+    const workflowId = payload.selected_workflow_id || selectedWorkflowIdRef.current;
+    if (workflowId) {
+      const rawData = (payload.form_data || {}) as Record<string, unknown>;
+      const workflowExists = workflows.some((w) => String(w.id) === String(workflowId));
+      if (!workflowExists) {
+        pendingCanvasPayloadRef.current = payload;
+        try {
+          localStorage.setItem(`ds_pipe_params_${workflowId}`, JSON.stringify(rawData));
+        } catch (e) {
+          console.warn("Failed to store canvas params for pending workflow", e);
+        }
+        workflowParamsCacheRef.current[String(workflowId)] = rawData;
+      }
+      setSelectedWorkflowId(String(workflowId));
+      if (workflowExists) {
+        applyCanvasFormData(String(workflowId), rawData);
+      }
+    }
+  }, [applyCanvasFormData, setSelectedEngineId, setSelectedProjectId, setGenerationTarget, setLibrary, setSelectedWorkflowId, workflows]);
+
+  useEffect(() => {
+    registerCanvasSnapshotProvider(buildCanvasPayload);
+    registerCanvasSnapshotApplier(applyCanvasPayload);
+    return () => {
+      registerCanvasSnapshotProvider(null);
+      registerCanvasSnapshotApplier(null);
+    };
+  }, [registerCanvasSnapshotProvider, registerCanvasSnapshotApplier, buildCanvasPayload, applyCanvasPayload]);
+
+  useEffect(() => {
+    if (!pendingCanvas) return;
+    applyCanvasPayload(pendingCanvas.payload as CanvasPayload);
+    clearPendingCanvas();
+  }, [pendingCanvas, applyCanvasPayload, clearPendingCanvas]);
+
+  useEffect(() => {
+    const pending = pendingCanvasPayloadRef.current;
+    if (!pending) return;
+    const workflowId = pending.selected_workflow_id;
+    if (!workflowId) return;
+    const workflowExists = workflows.some((w) => String(w.id) === String(workflowId));
+    if (!workflowExists) return;
+    pendingCanvasPayloadRef.current = null;
+    applyCanvasFormData(String(workflowId), (pending.form_data || {}) as Record<string, unknown>);
+  }, [workflows, applyCanvasFormData]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        saveCanvas();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [saveCanvas]);
 
   // Track the previous workflow ID to detect actual pipe switches
   const previousWorkflowIdRef = useRef<string | null>(null);
@@ -2045,6 +2212,8 @@ export default function PromptStudio() {
         workflows={workflows}
         onRegenerate={handleRegenerate}
         onUseInPipe={handleUseInPipe}
+        externalSelection={canvasGallerySelection || undefined}
+        externalSelectionKey={canvasGallerySyncKey}
         onSelectImage={(imagePath, pgImages) => {
           // Show clicked image in the viewer and use ProjectGallery's images for navigation
           setPreviewPath(`/api/v1/gallery/image/path?path=${encodeURIComponent(imagePath)}`);

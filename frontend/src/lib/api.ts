@@ -245,6 +245,34 @@ export interface ProjectCreate {
     slug?: string;
 }
 
+// --- Canvases ---
+export interface Canvas {
+    id: number;
+    name: string;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    payload: Record<string, any>;
+    project_id?: number | null;
+    workflow_template_id?: number | null;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface CanvasCreate {
+    name: string;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    payload: Record<string, any>;
+    project_id?: number | null;
+    workflow_template_id?: number | null;
+}
+
+export interface CanvasUpdate {
+    name?: string;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    payload?: Record<string, any>;
+    project_id?: number | null;
+    workflow_template_id?: number | null;
+}
+
 export interface InstallStatus {
     job_id?: string;
     status: "pending" | "running" | "completed" | "failed";
@@ -808,6 +836,60 @@ export const api = {
         }
 
         return res.json();
+    },
+
+    // --- Canvases ---
+    getCanvases: async (filters?: { projectId?: number | null; workflowId?: number | null }): Promise<Canvas[]> => {
+        const params = new URLSearchParams();
+        if (filters?.projectId !== undefined && filters?.projectId !== null) {
+            params.append("project_id", String(filters.projectId));
+        }
+        if (filters?.workflowId !== undefined && filters?.workflowId !== null) {
+            params.append("workflow_template_id", String(filters.workflowId));
+        }
+        const qs = params.toString();
+        const res = await fetch(`${API_BASE}/canvases${qs ? `?${qs}` : ""}`);
+        if (!res.ok) throw new Error("Failed to fetch canvases");
+        return res.json();
+    },
+
+    getCanvas: async (canvasId: number): Promise<Canvas> => {
+        const res = await fetch(`${API_BASE}/canvases/${canvasId}`);
+        if (!res.ok) throw new Error("Failed to fetch canvas");
+        return res.json();
+    },
+
+    createCanvas: async (data: CanvasCreate): Promise<Canvas> => {
+        const res = await fetch(`${API_BASE}/canvases`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(data),
+        });
+        if (!res.ok) {
+            const errorData = await res.json().catch(() => ({}));
+            throw new Error(errorData.detail || "Failed to create canvas");
+        }
+        return res.json();
+    },
+
+    updateCanvas: async (canvasId: number, data: CanvasUpdate): Promise<Canvas> => {
+        const res = await fetch(`${API_BASE}/canvases/${canvasId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(data),
+        });
+        if (!res.ok) {
+            const errorData = await res.json().catch(() => ({}));
+            throw new Error(errorData.detail || "Failed to update canvas");
+        }
+        return res.json();
+    },
+
+    deleteCanvas: async (canvasId: number): Promise<void> => {
+        const res = await fetch(`${API_BASE}/canvases/${canvasId}`, {
+            method: "DELETE",
+        });
+        if (!res.ok) throw new Error("Failed to delete canvas");
     },
 
     // --- Status ---

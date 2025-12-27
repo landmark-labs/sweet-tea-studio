@@ -15,6 +15,12 @@ interface ProjectGalleryProps {
     workflows?: any[];
     onRegenerate?: (item: any, seedOption: 'same' | 'random') => void;
     onUseInPipe?: (payload: { workflowId: string; imagePath: string; galleryItem: GalleryItem }) => void;
+    externalSelection?: {
+        projectId?: string | null;
+        folder?: string | null;
+        collapsed?: boolean;
+    };
+    externalSelectionKey?: number;
 }
 
 // Memoized gallery item - only re-renders when its specific props change
@@ -103,7 +109,7 @@ const GalleryItemCell = React.memo(function GalleryItemCell({
         prevProps.isSelected === nextProps.isSelected;
 });
 
-export const ProjectGallery = React.memo(function ProjectGallery({ projects, className, onSelectImage, workflows = [], onRegenerate, onUseInPipe }: ProjectGalleryProps) {
+export const ProjectGallery = React.memo(function ProjectGallery({ projects, className, onSelectImage, workflows = [], onRegenerate, onUseInPipe, externalSelection, externalSelectionKey }: ProjectGalleryProps) {
     // Panel state - persisted
     const [collapsed, setCollapsed] = useState(() => {
         const saved = localStorage.getItem("ds_project_gallery_collapsed");
@@ -168,6 +174,21 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
     useEffect(() => {
         localStorage.setItem("ds_project_gallery_collapsed", String(collapsed));
     }, [collapsed]);
+
+    useEffect(() => {
+        if (!externalSelection) return;
+        if (externalSelection.projectId !== undefined) {
+            setSelectedProjectId(externalSelection.projectId || "");
+        }
+        if (externalSelection.folder !== undefined) {
+            setSelectedFolder(externalSelection.folder || "");
+        }
+        if (externalSelection.collapsed !== undefined) {
+            setCollapsed(Boolean(externalSelection.collapsed));
+        }
+        setSelectedPaths(new Set());
+        lastSelectedPath.current = null;
+    }, [externalSelection, externalSelectionKey]);
 
     // Persist project selection
     useEffect(() => {

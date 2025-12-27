@@ -303,6 +303,50 @@ export interface ProjectCreate {
 }
 
 // ====================
+// CANVASES
+// ====================
+
+export interface CanvasPayload {
+    selected_engine_id?: string | null;
+    selected_workflow_id?: string | null;
+    selected_project_id?: string | null;
+    selected_project_slug?: string | null;
+    selected_project_name?: string | null;
+    generation_target?: string | null;
+    form_data?: Record<string, unknown>;
+    snippets?: PromptItem[];
+    project_gallery?: {
+        project_id?: string | null;
+        folder?: string | null;
+        collapsed?: boolean;
+    };
+}
+
+export interface Canvas {
+    id: number;
+    name: string;
+    payload: CanvasPayload;
+    project_id?: number | null;
+    workflow_template_id?: number | null;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface CanvasCreate {
+    name: string;
+    payload: CanvasPayload;
+    project_id?: number | null;
+    workflow_template_id?: number | null;
+}
+
+export interface CanvasUpdate {
+    name?: string;
+    payload?: CanvasPayload;
+    project_id?: number | null;
+    workflow_template_id?: number | null;
+}
+
+// ====================
 // COLLECTIONS (Legacy)
 // ====================
 

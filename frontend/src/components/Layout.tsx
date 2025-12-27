@@ -27,6 +27,7 @@ import { PromptLibraryQuickPanel } from "@/components/PromptLibraryQuickPanel";
 import { useGenerationFeedStore, usePromptLibraryStore } from "@/lib/stores/promptDataStore";
 import { useGeneration } from "@/lib/GenerationContext";
 import { initClientDiagnostics } from "@/lib/clientDiagnostics";
+import { CanvasSidebar } from "@/components/CanvasSidebar";
 
 export default function Layout() {
   const [collapsed, setCollapsed] = useState(false);
@@ -111,25 +112,28 @@ export default function Layout() {
             {collapsed ? <ChevronRight size={18} strokeWidth={3} /> : <ChevronLeft size={16} />}
           </Button>
         </div>
-        <nav className="flex-1 p-3 space-y-1 overflow-x-hidden">
-          {navItems.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              className={({ isActive }) =>
-                cn(
-                  "flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all border border-transparent",
-                  isActive
-                    ? "bg-primary/10 text-primary border-primary/20 shadow-sm"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted/60",
-                  collapsed && "justify-center px-2"
-                )
-              }
-            >
-              <item.icon size={20} />
-              {!collapsed && <span>{item.label}</span>}
-            </NavLink>
-          ))}
+        <nav className="flex-1 p-3 overflow-x-hidden flex flex-col gap-3">
+          <div className="space-y-1">
+            {navItems.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                className={({ isActive }) =>
+                  cn(
+                    "flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all border border-transparent",
+                    isActive
+                      ? "bg-primary/10 text-primary border-primary/20 shadow-sm"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted/60",
+                    collapsed && "justify-center px-2"
+                  )
+                }
+              >
+                <item.icon size={20} />
+                {!collapsed && <span>{item.label}</span>}
+              </NavLink>
+            ))}
+          </div>
+          <CanvasSidebar collapsed={collapsed} />
         </nav>
         <div className="border-t border-border/70">
           <StatusBar collapsed={collapsed} />
