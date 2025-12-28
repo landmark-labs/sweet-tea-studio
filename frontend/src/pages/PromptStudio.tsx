@@ -811,6 +811,47 @@ export default function PromptStudio() {
     return def.type === "STRING" || def.type === "string";
   }, [visibleSchema]);
 
+  // Helper to generate a descriptive label for form changes
+  const getFormChangeLabel = useCallback((prev: Record<string, unknown>, next: Record<string, unknown>): string => {
+    // Find which keys changed
+    const allKeys = new Set([...Object.keys(prev || {}), ...Object.keys(next || {})]);
+    const changedKeys: string[] = [];
+
+    for (const key of allKeys) {
+      if (prev?.[key] !== next?.[key]) {
+        changedKeys.push(key);
+      }
+    }
+
+    if (changedKeys.length === 0) return "Form updated";
+    if (changedKeys.length > 2) return `Updated ${changedKeys.length} fields`;
+
+    // Extract a friendly field name from the key (e.g., "3.KSampler.seed" -> "seed")
+    const friendlyName = (key: string): string => {
+      // Handle keys like "3.KSampler.seed" or "CheckpointLoaderSimple.ckpt_name"
+      const parts = key.split(".");
+      const lastPart = parts[parts.length - 1] || key;
+      // Convert snake_case to readable format
+      return lastPart.replace(/_/g, " ").replace(/\b\w/g, c => c);
+    };
+
+    if (changedKeys.length === 1) {
+      const key = changedKeys[0];
+      const name = friendlyName(key);
+      // Check if it's a text/prompt field
+      const def = visibleSchema?.[key];
+      const isPrompt = key.toLowerCase().includes("prompt") ||
+        key.toLowerCase().includes("positive") ||
+        key.toLowerCase().includes("negative") ||
+        def?.widget === "textarea";
+      if (isPrompt) return `Updated ${name}`;
+      return `Changed ${name}`;
+    }
+
+    // Two fields changed
+    return `Changed ${friendlyName(changedKeys[0])} & ${friendlyName(changedKeys[1])}`;
+  }, [visibleSchema]);
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleFormChange = useCallback((newData: any, { immediateHistory }: { immediateHistory?: boolean } = {}) => {
     const previous = store.get(formDataAtom);
@@ -836,7 +877,8 @@ export default function PromptStudio() {
     // Only register undo after edits settle to avoid per-keystroke snapshots
     if (immediateHistory) {
       if (!skipUndo) {
-        registerStateChange("Form updated", previous, newData, persistForm, false, category);
+        const label = getFormChangeLabel(previous, newData);
+        registerStateChange(label, previous, newData, persistForm, false, category);
       }
       if (historyTimerRef.current) {
         clearTimeout(historyTimerRef.current);
@@ -851,8 +893,9 @@ export default function PromptStudio() {
     historyTimerRef.current = setTimeout(() => {
       if (pendingHistoryRef.current) {
         if (!pendingHistoryRef.current.skip) {
+          const label = getFormChangeLabel(pendingHistoryRef.current.prev, pendingHistoryRef.current.next);
           registerStateChange(
-            "Form updated",
+            label,
             pendingHistoryRef.current.prev,
             pendingHistoryRef.current.next,
             persistForm,
@@ -864,7 +907,7 @@ export default function PromptStudio() {
       }
       historyTimerRef.current = null;
     }, 350);
-  }, [isTextField, persistForm, registerStateChange, store]);
+  }, [getFormChangeLabel, isTextField, persistForm, registerStateChange, store]);
 
   const handleResetDefaults = useCallback(() => {
     if (!selectedWorkflow) return;
