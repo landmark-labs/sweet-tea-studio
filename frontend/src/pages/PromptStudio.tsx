@@ -619,6 +619,31 @@ export default function PromptStudio() {
     // Update the previous workflow ID ref for next run
     previousWorkflowIdRef.current = workflowKey;
 
+    // CRITICAL: Flush any pending persist for the OLD pipe BEFORE loading new pipe data.
+    // Without this, the old form data could get saved to the new pipe's localStorage key
+    // because persistForm uses selectedWorkflowId which has already changed.
+    // NOTE: We inline this logic rather than calling flushPendingPersist() because
+    // that function is declared later and creates a hoisting issue.
+    if (isWorkflowSwitch && pendingPersistRef.current) {
+      const pending = pendingPersistRef.current;
+      try {
+        localStorage.setItem(`ds_pipe_params_${pending.workflowId}`, JSON.stringify(pending.data));
+        workflowParamsCacheRef.current[pending.workflowId] = pending.data;
+      } catch (e) {
+        console.warn("Failed to persist form data", e);
+      }
+      pendingPersistRef.current = null;
+      if (persistHandleRef.current) {
+        const handle = persistHandleRef.current;
+        if (handle.type === "idle" && typeof window.cancelIdleCallback === "function") {
+          window.cancelIdleCallback(handle.id as number);
+        } else {
+          clearTimeout(handle.id as NodeJS.Timeout);
+        }
+        persistHandleRef.current = null;
+      }
+    }
+
     // IMPORTANT: If we have pendingLoadParams, let that effect handle the form data
     // to avoid race conditions where this effect overwrites the merged params with
     // stale localStorage data. This fixes sampler/scheduler/upscale slippage.
