@@ -329,7 +329,22 @@ export function ImageUpload({
     };
 
     const selectGalleryImage = async (path: string) => {
-        // "Upload" it by fetching blob and re-uploading to input dir
+        // Check if the image is already in ComfyUI's input directory
+        // If so, use the relative path directly without re-uploading
+        const inputDirMatch = path.match(/[/\\]input[/\\](.+)$/);
+        if (inputDirMatch) {
+            // Extract the relative path after /input/
+            const relativePath = inputDirMatch[1].replace(/\\/g, '/'); // Normalize to forward slashes
+            console.log(`[ImageUpload] Using existing input path: ${relativePath}`);
+            onChange(relativePath);
+            addToRecent(relativePath);
+            setPreviewKind(guessKindFromFilename(relativePath));
+            setPreview(`/api/v1/gallery/image/path?path=${encodeURIComponent(path)}`);
+            setIsBrowseOpen(false);
+            return;
+        }
+
+        // Image is NOT in input dir - need to copy/upload it
         setIsUploading(true);
         try {
             const url = `/api/v1/gallery/image/path?path=${encodeURIComponent(path)}`;
