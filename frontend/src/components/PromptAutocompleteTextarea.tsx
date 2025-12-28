@@ -470,8 +470,10 @@ export function PromptAutocompleteTextarea({
             cancelIdle(highlightHandleRef.current);
             highlightHandleRef.current = null;
         };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [debouncedValue, highlightSnippets]);
+        // Note: snippetIndex is included (via its entries.length check in body) so the effect
+        // re-runs when snippets load on startup. Without this, highlighting won't work until
+        // a snippet is added/removed after restart.
+    }, [debouncedValue, highlightSnippets, snippetIndex]);
 
 
     return (
