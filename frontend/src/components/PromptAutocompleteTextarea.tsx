@@ -440,10 +440,12 @@ export function PromptAutocompleteTextarea({
                 if (m.start > cursor) {
                     nodes.push(debouncedValue.slice(cursor, m.start));
                 }
+                // Extract only bg-* class from color to avoid text-* overriding text-transparent
+                const bgClass = (m.snippet.color || "bg-slate-200").split(" ").find(c => c.startsWith("bg-")) || "bg-slate-200";
                 nodes.push(
                     <span
                         key={`${m.start}-${idx}`}
-                        className={cn(m.snippet.color || "bg-slate-200", "rounded-sm opacity-70 text-transparent select-none")}
+                        className={cn(bgClass, "rounded-sm opacity-70 text-transparent select-none")}
                     >
                         {debouncedValue.slice(m.start, m.end)}
                     </span>
