@@ -475,8 +475,11 @@ export default function Gallery() {
             const keepIds = Array.from(selectedIds);
             await api.keepImages(keepIds, true);
 
-            // Step 2: Call cleanup which deletes all non-kept images in one server-side transaction
-            const result = await api.cleanupGallery();
+            // Step 2: Call cleanup which deletes all non-kept images SCOPED to current project/folder
+            const result = await api.cleanupGallery({
+                projectId: selectedProjectId,
+                folder: selectedFolder,
+            });
 
             // Step 3: Update local state - keep only the images that were marked as kept
             setItems(items.filter((item) => selectedIds.has(item.image.id)));

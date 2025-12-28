@@ -518,6 +518,8 @@ def keep_images(req: KeepRequest, session: Session = Depends(get_session)):
 
 class CleanupRequest(BaseModel):
     job_id: Optional[int] = None
+    project_id: Optional[int] = None  # Scope cleanup to a specific project
+    folder: Optional[str] = None  # Scope cleanup to a specific folder within the project
 
 
 class BulkDeleteRequest(BaseModel):
@@ -811,11 +813,45 @@ def move_images(req: MoveImagesRequest, session: Session = Depends(get_session))
 
 @router.post("/cleanup")
 def cleanup_images(req: CleanupRequest, session: Session = Depends(get_session)):
-    query = select(Image).where(Image.is_kept == False).where(Image.is_deleted == False)
+    """
+    Delete all non-kept images, optionally scoped to a specific project and/or folder.
+    
+    IMPORTANT: If project_id or folder is specified, cleanup is SCOPED to only those images.
+    This prevents accidental deletion of images from unrelated projects.
+    """
+    # Start with base query - must join with Job to filter by project_id
+    if req.project_id is not None:
+        query = (
+            select(Image)
+            .join(Job, Image.job_id == Job.id, isouter=True)
+            .where(Image.is_kept == False)
+            .where(Image.is_deleted == False)
+            .where(Job.project_id == req.project_id)
+        )
+    else:
+        query = select(Image).where(Image.is_kept == False).where(Image.is_deleted == False)
+    
     if req.job_id:
         query = query.where(Image.job_id == req.job_id)
 
+    # Execute query and filter by folder in Python (folder is path-based, not DB column)
     images_to_delete = session.exec(query).all()
+    
+    # If folder is specified, further filter images by exact parent folder match
+    if req.folder:
+        filtered_images = []
+        for img in images_to_delete:
+            if img.path:
+                path_normalized = img.path.replace("\\", "/")
+                path_segments = path_normalized.split("/")
+                if len(path_segments) >= 2:
+                    parent_folder = path_segments[-2]
+                    if parent_folder.lower() == req.folder.lower():
+                        filtered_images.append(img)
+        images_to_delete = filtered_images
+        logger.info(
+            f"Cleanup scoped to project_id={req.project_id}, folder='{req.folder}': {len(images_to_delete)} images to delete"
+        )
 
     count = 0
     deleted_files = 0

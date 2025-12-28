@@ -708,11 +708,17 @@ export const api = {
         return res.json();
     },
 
-    cleanupGallery: async (jobId?: number): Promise<{ status: string; count: number; files_deleted: number }> => {
+    cleanupGallery: async (
+        options?: { jobId?: number; projectId?: number | null; folder?: string | null }
+    ): Promise<{ status: string; count: number; files_deleted: number }> => {
         const res = await fetch(`${API_BASE}/gallery/cleanup`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ job_id: jobId }),
+            body: JSON.stringify({
+                job_id: options?.jobId,
+                project_id: options?.projectId,
+                folder: options?.folder,
+            }),
         });
         if (!res.ok) throw new Error("Failed to cleanup gallery");
         return res.json();
