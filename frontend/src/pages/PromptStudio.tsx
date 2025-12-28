@@ -619,6 +619,14 @@ export default function PromptStudio() {
     // Update the previous workflow ID ref for next run
     previousWorkflowIdRef.current = workflowKey;
 
+    // IMPORTANT: If we have pendingLoadParams, let that effect handle the form data
+    // to avoid race conditions where this effect overwrites the merged params with
+    // stale localStorage data. This fixes sampler/scheduler/upscale slippage.
+    if (pendingLoadParams) {
+      console.log("[WorkflowInit] Skipping - pendingLoadParams will handle form data");
+      return;
+    }
+
     const currentData = store.get(formDataAtom) || {};
     const hasExistingData = Object.keys(currentData).length > 0;
     const hasMissingDefaults = Object.entries(schema)
@@ -651,7 +659,7 @@ export default function PromptStudio() {
     setFormData(normalized);
     workflowParamsCacheRef.current[workflowKey] = normalized;
     initializedWorkflowsRef.current.add(workflowKey);
-  }, [selectedWorkflow, visibleSchema, setFormData, store]);
+  }, [selectedWorkflow, visibleSchema, setFormData, store, pendingLoadParams]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { registerStateChange } = useUndoRedo();
