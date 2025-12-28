@@ -1116,9 +1116,11 @@ export default function PromptStudio() {
       const jobParamsFiltered = filterParamsForSchema(schema, jobParams);
 
       const readStoredParams = () => {
-        if (targetWorkflowId && targetWorkflowId === selectedWorkflowId) {
-          return store.get(formDataAtom) || {};
-        }
+        // For use-in-pipe (not regenerate), we want the TARGET workflow's stored params.
+        // DON'T use formDataAtom even if targetWorkflowId === selectedWorkflowId because:
+        // - handleUseInPipe sets selectedWorkflowId BEFORE pendingLoadParams
+        // - So by now formDataAtom still contains the OLD pipe's values
+        // - We need to read from localStorage to get the TARGET pipe's saved values
         const cached = workflowParamsCacheRef.current[targetWorkflowId];
         if (cached) return cached;
         try {
