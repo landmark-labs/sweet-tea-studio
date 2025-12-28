@@ -294,6 +294,8 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
         const imageUrl = `/api/v1/gallery/image/path?path=${encodeURIComponent(image.path)}`;
         e.dataTransfer.setData("text/plain", imageUrl);
         e.dataTransfer.effectAllowed = "copy";
+        // Set the raw filesystem path so ImageUpload can detect it's internal and reuse the path
+        e.dataTransfer.setData("application/x-sweet-tea-image", image.path);
     }, []);
 
     // Multi-select handler
