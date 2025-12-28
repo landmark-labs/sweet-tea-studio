@@ -346,8 +346,13 @@ export function PromptAutocompleteTextarea({
         const before = localValue.slice(0, cursor);
         const after = localValue.slice(cursor);
 
-        const lastComma = before.lastIndexOf(",");
-        const segmentStart = lastComma === -1 ? 0 : lastComma + 1;
+        // Use same delimiter logic as currentToken: commas and parentheses
+        const lastDelimiter = Math.max(
+            before.lastIndexOf(","),
+            before.lastIndexOf("("),
+            before.lastIndexOf(")")
+        );
+        const segmentStart = lastDelimiter === -1 ? 0 : lastDelimiter + 1;
         const segmentText = before.slice(segmentStart);
         const leadingSpaces = segmentText.match(/^\s*/)?.[0] || "";
         const displayName = name.replace(/_/g, " ");
