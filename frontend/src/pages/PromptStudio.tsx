@@ -143,9 +143,7 @@ export default function PromptStudio() {
     const saved = localStorage.getItem("ds_batch_size");
     return saved ? Math.max(1, Math.min(100, parseInt(saved) || 1)) : 1;
   });
-  const [batchProgress, setBatchProgress] = useState<{ current: number; total: number }>({ current: 0, total: 0 });
   const batchCancelledRef = useRef(false);
-  const isBatchRunning = batchProgress.total > 1 && batchProgress.current < batchProgress.total;
 
   // Persist batch size to localStorage
   useEffect(() => {
@@ -1989,7 +1987,8 @@ export default function PromptStudio() {
   const handleGenerateRef = useRef(handleGenerate);
   handleGenerateRef.current = handleGenerate;
 
-  // Batch generation: run handleGenerate multiple times sequentially
+  // Batch generation: submit multiple jobs to backend queue
+  // Backend processes them sequentially - we track how many were submitted
   const handleBatchGenerate = useCallback(async (data: any) => {
     if (batchSize <= 1) {
       // Single generation - use original function
@@ -1998,96 +1997,62 @@ export default function PromptStudio() {
 
     // Reset batch state
     batchCancelledRef.current = false;
-    setBatchProgress({ current: 0, total: batchSize });
 
-    for (let i = 0; i < batchSize; i++) {
+    // Submit the first job via handleGenerate - this sets up UI state properly
+    await handleGenerate(data);
+
+    // Submit remaining jobs directly to the backend queue
+    // They will be processed after the first completes
+    for (let i = 1; i < batchSize; i++) {
       if (batchCancelledRef.current) {
-        console.log(`[Batch] Cancelled at iteration ${i + 1}/${batchSize}`);
+        console.log(`[Batch] Cancelled before submitting job ${i + 1}/${batchSize}`);
         break;
       }
 
-      setBatchProgress({ current: i + 1, total: batchSize });
-
-      // Use the same data for each iteration - backend handles seed=-1 randomization
-      const iterationData = data;
-
-      // Create a promise that resolves when the job completes
-      await new Promise<void>((resolve, reject) => {
-        const startGeneration = async () => {
-          try {
-            await handleGenerate(iterationData);
-
-            // Wait for job to complete by polling generationState
-            // We use a polling approach since the state updates are async
-            const checkComplete = () => {
-              // Check if cancelled
-              if (batchCancelledRef.current) {
-                resolve();
-                return;
-              }
-
-              // Poll for completion - we'll rely on the WebSocket effect to update state
-              // and use a simple interval check
-            };
-
-            // Set up an interval to check for completion
-            const pollInterval = setInterval(() => {
-              // Check cancelled
-              if (batchCancelledRef.current) {
-                clearInterval(pollInterval);
-                resolve();
-                return;
-              }
-            }, 100);
-
-            // Also listen for the lastJobId to become null (indicates job done)
-            // This is a bit tricky with hooks, so we'll use a different approach
-            // We'll resolve after a reasonable delay and let the WebSocket handle state
-
-            // For now, we'll wait for the WebSocket to indicate completion
-            // by observing when generationState changes back to idle/completed
-          } catch (err) {
-            reject(err);
-          }
-        };
-        startGeneration();
-
-        // Since we can't easily wait for async state changes from within the callback,
-        // we'll use a different approach: resolve immediately and let the next iteration
-        // start only after this resolves. The job will run in background.
-        resolve();
-      });
-
-      // Wait for this job to complete before starting the next
-      // We need to poll for completion since state updates are async
-      if (i < batchSize - 1) {
-        await new Promise<void>((resolve) => {
-          const checkInterval = setInterval(() => {
-            if (batchCancelledRef.current) {
-              clearInterval(checkInterval);
-              resolve();
-              return;
+      try {
+        // Build clean params (same logic as handleGenerate)
+        const schema = visibleSchema || {};
+        const bypassedNodeIds = new Set<string>();
+        Object.entries(schema).forEach(([key, field]: [string, any]) => {
+          if (field.widget === 'toggle' && (key.toLowerCase().includes('bypass') || field.title?.toLowerCase().includes('bypass'))) {
+            if (data[key]) {
+              if (field.x_node_id) bypassedNodeIds.add(field.x_node_id);
             }
-            // Check if the current job is done by checking if lastJobId is still set
-            // and generationState is back to idle/completed
-            // This is a simplified approach - we wait for the job to finish
-          }, 500);
-
-          // Also set a timeout based on typical job duration - if we don't have
-          // a good way to detect completion, we'll need to watch the WebSocket
-          // For now, we'll simplify and not wait between batch jobs
-          // The jobs will queue on the backend naturally
-          setTimeout(() => {
-            clearInterval(checkInterval);
-            resolve();
-          }, 200); // Small delay between jobs to prevent overwhelming the system
+          }
         });
+
+        const cleanParams = Object.keys(data).reduce((acc, key) => {
+          if (key.startsWith("__bypass_")) {
+            acc[key] = data[key];
+            return acc;
+          }
+          if (key in schema) {
+            const field = schema[key] as any;
+            if (field.x_node_id && bypassedNodeIds.has(field.x_node_id)) {
+              const isBypassToggle = field.widget === 'toggle' && (key.toLowerCase().includes('bypass') || field.title?.toLowerCase().includes('bypass'));
+              if (!isBypassToggle) return acc;
+            }
+            acc[key] = data[key];
+          }
+          return acc;
+        }, {} as Record<string, any>);
+
+        await api.createJob(
+          parseInt(selectedEngineId!),
+          parseInt(selectedWorkflowId!),
+          selectedProjectId ? parseInt(selectedProjectId) : null,
+          cleanParams,
+          generationTarget || null
+        );
+
+        console.log(`[Batch] Submitted job ${i + 1}/${batchSize}`);
+      } catch (err) {
+        console.error(`[Batch] Failed to submit job ${i + 1}:`, err);
       }
     }
 
-    // Reset batch progress when done
-    setBatchProgress({ current: 0, total: 0 });
-  }, [batchSize, handleGenerate, visibleSchema]);
+    console.log(`[Batch] All ${batchSize} jobs submitted to queue`);
+  }, [batchSize, handleGenerate, visibleSchema, selectedEngineId, selectedWorkflowId, selectedProjectId, generationTarget]);
 
   const handleBatchGenerateRef = useRef(handleBatchGenerate);
   handleBatchGenerateRef.current = handleBatchGenerate;
@@ -2108,7 +2073,6 @@ export default function PromptStudio() {
   const handleCancel = async () => {
     // Cancel any running batch
     batchCancelledRef.current = true;
-    setBatchProgress({ current: 0, total: 0 });
 
     if (!lastJobId) return;
     try {
@@ -2318,7 +2282,7 @@ export default function PromptStudio() {
                 {generationState === "queued" ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>{batchProgress.total > 1 ? `queue ${batchProgress.current}/${batchProgress.total} · ` : ""}queuing...</span>
+                    <span>queuing...</span>
                   </>
                 ) : generationState === "running" ? (
                   (() => {
@@ -2328,7 +2292,7 @@ export default function PromptStudio() {
                     return (
                       <>
                         <Loader2 className="w-4 h-4 animate-spin text-white/80" />
-                        <span>{batchProgress.total > 1 ? `${batchProgress.current}/${batchProgress.total} · ` : ""}{Math.round(progress)}% · ~{Math.round(remaining)}s</span>
+                        <span>{Math.round(progress)}% · ~{Math.round(remaining)}s</span>
                       </>
                     );
                   })()
