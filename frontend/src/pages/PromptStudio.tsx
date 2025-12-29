@@ -2008,23 +2008,8 @@ export default function PromptStudio() {
 
       setBatchProgress({ current: i + 1, total: batchSize });
 
-      // For iterations after the first, randomize seed if set to -1
-      let iterationData = { ...data };
-      if (i > 0) {
-        // Find seed fields and randomize them for variety
-        const schema = visibleSchema || {};
-        Object.keys(iterationData).forEach(key => {
-          if (key.toLowerCase().includes('seed')) {
-            const currentVal = iterationData[key];
-            // If seed is -1 (random), it will be randomized by backend anyway
-            // But if it's a specific value, we should randomize for batch variety
-            if (currentVal !== -1 && currentVal !== '-1') {
-              // Randomize the seed for this iteration
-              iterationData[key] = Math.floor(Math.random() * 1125899906842624);
-            }
-          }
-        });
-      }
+      // Use the same data for each iteration - backend handles seed=-1 randomization
+      const iterationData = data;
 
       // Create a promise that resolves when the job completes
       await new Promise<void>((resolve, reject) => {
