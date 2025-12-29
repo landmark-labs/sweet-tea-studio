@@ -1528,8 +1528,10 @@ export default function PromptStudio() {
       wsRef.current.close();
     }
 
-    setGenerationState(prev => (prev === "running" ? prev : "queued"));
-    setStatusLabel(prev => prev || "queued");
+    // Ensure UI shows "queued" state when connecting to a job (e.g., during model loading)
+    // Only keep "running" if already running (e.g., reconnecting mid-job)
+    setGenerationState(prev => prev === "running" ? prev : "queued");
+    setStatusLabel("queued");
     setProgress(prev => prev > 0 ? prev : 0);
     if (!jobStartTime) setJobStartTime(Date.now());
 
