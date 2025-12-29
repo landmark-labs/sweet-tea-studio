@@ -1,56 +1,59 @@
 # Sweet Tea Studio
 
-A modern, local-first interface for **ComfyUI**.
+A modern, local-first interface for **ComfyUI** that turns node graphs into project-based workflows with dynamic forms, rich galleries, and system tooling.
 
-Sweet Tea Studio replaces the raw node graph with a user-friendly, project-based workflow management system, while keeping the full power of ComfyUI's engine under the hood.
+Sweet Tea Studio replaces the raw node graph with a user-friendly Prompt Studio while keeping ComfyUI as the execution engine under the hood.
 
-## Feature Overview
-- 🚀 **Simply Powerful**: Run complex pipes with simple, auto-generated forms.
-- 📁 **Project Organization**: Organize generations into projects with automatic file management.
-- 🎛️ **Prompt Builder UI**: Resizable panels, drag handles, and quick switches for swapping pipes and engines without losing in-progress form data.
-- 🧩 **Pipe Composition**: Merge multiple pipes (e.g., Txt2Img + Upscale) into new custom pipelines.
-- ✂️ **Snippet Editing**: Save prompt presets with tags, reapply them to any compatible pipe, and edit snippets inline before running.
-- 👁️ **Vision Assist (VLM)**: Local image captioning and tag-based prompt expansion.
-- 🕸️ **Graph Visualization**: View the underlying node graph for any pipe with a single click.
-- 🔀 **Node Bypass**: Selectively disable specific nodes (like ControlNets) directly from the form.
-- 🖼️ **Generation Preview**: Live progress, queued runs, and an always-on running gallery for reviewing, reloading params, or dragging outputs back into new prompts.
-- 📊 **Status Bar**: Compact status indicators showing engine, queue, I/O, and model health at a glance.
-- 🎨 **Models Manager**: Discover installed models, view metadata, and download new models from Hugging Face or Civitai.
-- ⌨️ **Shortcuts**: Use standard **Undo**/**Redo** (`Cmd/Ctrl+Z` / `Cmd/Ctrl+Shift+Z`) in prompt fields, multi-select gallery cards with `Ctrl/Cmd/Shift` + click, and drag gallery items directly into file inputs.
-- 🧩 **Extension Manager**: Auto-detect and install missing custom nodes with ComfyUI Manager integration.
-- 🛠️ **Local First**: Runs entirely on your machine. No cloud dependencies.
+## Highlights
+- Dynamic Prompt Studio with auto-generated forms, prompt constructor blocks, and undo/redo in every field.
+- Workflow Library for import/export, schema editing, node bypass toggles, pipe composition, and graph visualization.
+- Projects with automatic folder management, per-project galleries, and run adoption.
+- Running Gallery and Image Viewer with metadata, regeneration, keep/discard, and drag-to-input.
+- Prompt Library and Snippets with tags, quick panel, and reusable presets.
+- Models Manager for browsing local models and downloading from Hugging Face or Civitai.
+- Extension Manager with missing-node detection and ComfyUI Manager integration.
+- Vision Assist (local VLM) for captions, ranked tags, and tag-to-prompt expansion.
+- ComfyUI control panel with launcher, watchdog health, and status bar indicators.
+- Local-first by default; all data stays on your machine.
 
-## Prompt Builder & Gestures
-- **Panel gestures**: The Prompt Studio splits into resizable panels (prompt form, file explorer, running gallery). Drag the vertical handles to favor prompt authoring or preview space.
-- **Form persistence**: Pipe inputs persist per-pipe in local storage so swapping templates or engines does not blow away the current draft.
-- **Drag interactions**: Gallery cards are draggable; drop their URLs into external tools or upload widgets to re-use outputs. Context menus avoid screen edges to stay visible.
-- **Multi-select controls**: Hold `Ctrl/Cmd/Shift` while clicking gallery cards to keep or delete batches.
+## Prompt Studio & Gestures
+- Panel layout with resizable columns for forms, explorer, and running gallery.
+- Form persistence per pipe keeps in-progress drafts between template switches.
+- Prompt constructor supports drag-and-drop snippet blocks and inline edits.
+- Gallery cards are draggable into file inputs or external tools.
+- Multi-select gallery controls with `Ctrl/Cmd/Shift` + click.
 
-## Snippet Editing & Prompt Library
-- Save any filled form as a **prompt preset** (with tags) and reload it later for the same workflow.
-- Type ahead in the prompt library search box to fetch suggestions; applying a preset restores fields, previews, and prompt metadata.
-- Vision Assist captions and ranked tags can be merged into your draft prompt to quickly build reusable snippets.
+## Workflow Library & Pipes
+- Import or export workflows as JSON bundles.
+- Edit schema annotations, mark fields as core or advanced, and hide nodes.
+- Node bypass toggles allow you to mute specific nodes without deleting them.
+- Compose multiple pipes into a single workflow and visualize the graph.
 
-## Generation Preview Flow
-1. **Select an engine and pipe**: Health indicators show whether ComfyUI is reachable before you launch a job.
-2. **Fill the dynamic form**: Inputs mirror the pipe schema; undo/redo works in every field.
-3. **Submit and monitor**: A job progress bar reports execution status. The running gallery streams new results and flags kept images.
-4. **Review outputs**: Click a card to preview, right-click to regenerate with the same params, or drag it into another pipe.
+## Projects & Gallery
+- Project-first organization with per-project folders and configurable inputs/outputs.
+- Project sidebar for quick navigation between folders and runs.
+- Gallery search, filters, keep/discard, bulk delete, and cleanup.
+- Image Viewer with pan/zoom, prompt metadata, and one-click regeneration.
 
-## Performance HUD & Status
-- **Engine health cards**: Each engine reports its last error, last check timestamp, and the seconds until the next automatic retry.
-- **Job watchdogs**: The UI interrupts unreachable jobs gracefully and surfaces clear connection errors for quick recovery.
-- **Install feedback**: The extension manager dialog polls progress so you know when custom nodes finish installing or fail with actionable messages.
+## Models, Extensions, and Vision Assist
+- Models Manager lists installed models and supports download queues.
+- Extension Manager installs missing custom nodes via ComfyUI Manager or git fallback.
+- Vision Assist runs locally to caption images and expand tags into prompts.
+
+## Status & Monitoring
+- Status bar indicators for engine, queue, I/O, and model health.
+- Performance HUD with system metrics and engine watchdog retries.
+- ComfyUI control panel for path/args configuration and launch/stop.
 
 ## Keyboard Shortcuts
-- **Undo / Redo**: `Cmd/Ctrl + Z` and `Cmd/Ctrl + Shift + Z` in any prompt or text field.
-- **Gallery multi-select**: Hold `Ctrl/Cmd/Shift` while clicking cards to select multiple images for batch delete or reuse.
-- **Drag-and-drop**: Drag gallery cards to file inputs or external editors; drag handles resize panels without breaking input focus.
+- Undo / Redo: `Cmd/Ctrl + Z` and `Cmd/Ctrl + Shift + Z` in any field.
+- Gallery multi-select: Hold `Ctrl/Cmd/Shift` while clicking cards.
+- Drag-and-drop: Drag gallery cards to file inputs or external editors.
 
 ## Quick Start
 
 ### Prerequisites
-- **ComfyUI** installed and running on default port `8188`.
+- **ComfyUI** installed and running on default port `8188` (or configure in Settings).
 - Python 3.10+
 - Node.js 18+
 
@@ -64,6 +67,8 @@ python -m venv venv
 source venv/bin/activate
 
 pip install -r requirements.txt
+# Optional: download VLM models for Vision Assist
+python scripts/download_models.py
 python -m uvicorn app.main:app --reload
 ```
 
@@ -77,16 +82,17 @@ npm run dev
 Visit `http://localhost:5173` to start.
 
 ## Troubleshooting
-- **Cannot reach ComfyUI**: Verify ComfyUI is running on `http://localhost:8188`. The engine health card shows the last error and when the next retry will occur.
-- **WebSocket drops during generation**: The client retries with exponential backoff automatically. If failures persist, restart ComfyUI and click **Run** again.
-- **Images not appearing**: Use the refresh action in the running gallery. If files are missing on disk, ensure the backend has access to the ComfyUI `output` directory.
-- **Extension installs stalled**: Open the Extension Manager dialog to see queued installs. Check ComfyUI logs for permission issues and rerun the install.
-- **VLM disabled**: Captioning depends on local model availability; confirm the VLM service starts without errors and reload the page to recheck health.
+- Cannot reach ComfyUI: Confirm ComfyUI is running on `http://localhost:8188` or use the ComfyUI control panel to set the path and URL.
+- WebSocket drops during generation: The client retries with exponential backoff; restart ComfyUI if failures persist.
+- Images not appearing: Use the running gallery refresh and verify the backend has access to the ComfyUI output directory.
+- Extension installs stalled: Open the Extension Manager dialog to check queued installs and review ComfyUI logs.
+- Vision Assist disabled: Run `python scripts/download_models.py` and reload the page.
 
 ## Documentation
-- [Development Handoff (v0.6.0)](./HANDOFF_CONTEXT.md) - **Start Here for Development** (Architecture, Context, Roadmap)
-- [Roadmap](./docs/ROADMAP.md) - Detailed Feature Status
-- jko
+- [Product Documentation](./docs/PRODUCT_DOCUMENTATION.md) - Comprehensive feature and architecture reference
+- [Feature Inventory](./docs/feature_inventory.md) - Generated feature index with file pointers
+- [Development Handoff (v0.6.0)](./HANDOFF_CONTEXT.md) - Architecture, context, roadmap notes
+- [Roadmap](./docs/ROADMAP.md) - Detailed feature status
 
 ## License
 MIT
