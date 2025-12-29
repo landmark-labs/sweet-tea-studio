@@ -1573,8 +1573,12 @@ export default function PromptStudio() {
 
       if (data.type === "status") {
         const nextState = mapStatusToGenerationState(data.status);
-        setGenerationState(nextState);
-        setStatusLabel(data.status || "");
+        // Only update if we got a recognized status (not defaulting to idle)
+        // This prevents unknown statuses from resetting the UI
+        if (nextState !== "idle") {
+          setGenerationState(nextState);
+          setStatusLabel(data.status || "");
+        }
         const statusUpdates: { status: string; previewBlob?: string | null } = { status: data.status };
         if (data.status === "failed" || data.status === "cancelled") {
           statusUpdates.previewBlob = null;
