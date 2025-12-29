@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Upload, X, Loader2, Grid, PenTool, FolderOpen, ChevronRight } from "lucide-react";
+import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
+import { Upload, X, Loader2, Grid, PenTool, FolderOpen, ChevronRight, Image as ImageIcon, Video as VideoIcon } from "lucide-react";
 import { api, Project, FolderImage } from "@/lib/api";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -15,6 +16,7 @@ interface ImageUploadProps {
     projectSlug?: string; // If provided, uploads go to /ComfyUI/input/<project>/
     destinationFolder?: string; // If provided with projectSlug, uploads go to /ComfyUI/input/<project>/<folder>/
     mediaKind?: "image" | "video" | "any";
+    compact?: boolean;
 }
 
 const IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tif", ".tiff"]);
@@ -46,6 +48,7 @@ export function ImageUpload({
     projectSlug,
     destinationFolder,
     mediaKind = "image",
+    compact = false,
 }: ImageUploadProps) {
     const [isUploading, setIsUploading] = useState(false);
     const [preview, setPreview] = useState<string | null>(null);
@@ -66,6 +69,12 @@ export function ImageUpload({
     // Mask Editor State
     const [isMaskEditorOpen, setIsMaskEditorOpen] = useState(false);
     const objectUrlRef = useRef<string | null>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const inputId = useId();
+    const hoverOpenTimerRef = useRef<NodeJS.Timeout | null>(null);
+    const hoverCloseTimerRef = useRef<NodeJS.Timeout | null>(null);
+    const [hoverOpen, setHoverOpen] = useState(false);
+    const popoverContentRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         if (objectUrlRef.current && objectUrlRef.current !== preview) {
@@ -84,6 +93,12 @@ export function ImageUpload({
             if (objectUrlRef.current && objectUrlRef.current.startsWith("blob:")) {
                 URL.revokeObjectURL(objectUrlRef.current);
             }
+        };
+    }, []);
+    useEffect(() => {
+        return () => {
+            if (hoverOpenTimerRef.current) clearTimeout(hoverOpenTimerRef.current);
+            if (hoverCloseTimerRef.current) clearTimeout(hoverCloseTimerRef.current);
         };
     }, []);
 
@@ -379,17 +394,61 @@ export function ImageUpload({
     const browseTitle = mediaKind === "video" ? "browse videos" : mediaKind === "any" ? "browse media" : "browse images";
     const resolvedKind = previewKind || (value ? guessKindFromFilename(value) : null) || (mediaKind === "video" ? "video" : "image");
     const isVideoPreview = resolvedKind === "video";
+    const hasValue = Boolean(preview || value);
+    const displayValue = value || "no media selected";
+    const focusWithin = (target: Element | null) => {
+        if (!target) return false;
+        return Boolean(popoverContentRef.current?.contains(target));
+    };
+
+    const clearHoverTimers = useCallback(() => {
+        if (hoverOpenTimerRef.current) {
+            clearTimeout(hoverOpenTimerRef.current);
+            hoverOpenTimerRef.current = null;
+        }
+        if (hoverCloseTimerRef.current) {
+            clearTimeout(hoverCloseTimerRef.current);
+            hoverCloseTimerRef.current = null;
+        }
+    }, []);
+
+    const requestHoverOpen = useCallback((immediate = false) => {
+        clearHoverTimers();
+        if (immediate) {
+            setHoverOpen(true);
+            return;
+        }
+        hoverOpenTimerRef.current = setTimeout(() => {
+            setHoverOpen(true);
+        }, 150);
+    }, [clearHoverTimers]);
+
+    const requestHoverClose = useCallback(() => {
+        clearHoverTimers();
+        hoverCloseTimerRef.current = setTimeout(() => {
+            setHoverOpen(false);
+        }, 200);
+    }, [clearHoverTimers]);
+
+    const holdHoverOpen = useCallback(() => {
+        if (hoverCloseTimerRef.current) {
+            clearTimeout(hoverCloseTimerRef.current);
+            hoverCloseTimerRef.current = null;
+        }
+        setHoverOpen(true);
+    }, []);
 
     // Calculate current media URL for editor
     const currentMediaUrl = preview || (value ? `/api/v1/gallery/image/path?path=${encodeURIComponent(value)}` : "");
     const currentImageUrl = isVideoPreview ? "" : currentMediaUrl;
 
-    return (
-        <div className="space-y-3">
+    const renderExpanded = (layoutCompact: boolean) => (
+        <div className={cn("space-y-3", layoutCompact && "space-y-2")}>
             {!preview && !value ? (
                 <div
                     className={cn(
-                        "flex flex-col items-center justify-center border-2 border-dashed rounded-lg p-4 transition-colors gap-3",
+                        "flex flex-col items-center justify-center border-2 border-dashed rounded-lg transition-colors gap-3",
+                        layoutCompact ? "p-2 gap-2" : "p-4",
                         isDragging ? "border-blue-500 bg-blue-50" : "border-slate-200 hover:bg-slate-50"
                     )}
                     onDragEnter={handleDragEnter}
@@ -398,20 +457,20 @@ export function ImageUpload({
                     onDrop={handleDrop}
                 >
                     <div className="flex flex-col items-center gap-1 text-center">
-                        {isUploading ? <Loader2 className="h-5 w-5 animate-spin text-blue-500" /> : <Upload className="h-5 w-5 text-slate-300" />}
-                        <div className="text-xs text-slate-500">
+                        {isUploading ? <Loader2 className={cn("animate-spin text-blue-500", layoutCompact ? "h-4 w-4" : "h-5 w-5")} /> : <Upload className={cn("text-slate-300", layoutCompact ? "h-4 w-4" : "h-5 w-5")} />}
+                        <div className={cn("text-slate-500", layoutCompact ? "text-[10px]" : "text-xs")}>
                             {isUploading ? "Uploading..." : "Drag & drop here"}
                         </div>
                     </div>
 
                     {/* Side-by-side buttons */}
-                    <div className="flex gap-2 w-full">
+                    <div className={cn("flex gap-2 w-full", layoutCompact && "gap-1")}>
                         <Button
                             type="button"
                             variant="outline"
                             size="sm"
-                            className="flex-1"
-                            onClick={() => document.getElementById("file-upload")?.click()}
+                            className={cn("flex-1", layoutCompact && "h-7 text-[10px]")}
+                            onClick={() => fileInputRef.current?.click()}
                             disabled={isUploading}
                         >
                             Select File
@@ -420,18 +479,19 @@ export function ImageUpload({
                             type="button"
                             variant="outline"
                             size="sm"
-                            className="flex-1"
+                            className={cn("flex-1", layoutCompact && "h-7 text-[10px]")}
                             onClick={() => setIsBrowseOpen(true)}
                         >
-                            <Grid className="w-3 h-3 mr-1" /> Browse
+                            <Grid className="mr-1 w-3 h-3" /> Browse
                         </Button>
                     </div>
                     <input
-                        id="file-upload"
+                        id={inputId}
                         type="file"
                         className="hidden"
                         accept={accept}
                         onChange={handleFileChange}
+                        ref={fileInputRef}
                     />
 
 
@@ -439,7 +499,8 @@ export function ImageUpload({
             ) : (
                 <div
                     className={cn(
-                        "relative w-full h-48 bg-slate-100 rounded-lg overflow-hidden border group transition-colors",
+                        "relative w-full bg-slate-100 rounded-lg overflow-hidden border group transition-colors",
+                        layoutCompact ? "h-28" : "h-48",
                         isDragging ? "border-blue-500 ring-2 ring-blue-500 ring-opacity-50" : ""
                     )}
                     onDragEnter={handleDragEnter}
@@ -504,7 +565,7 @@ export function ImageUpload({
                         </button>
                     </div>
 
-                    <div className="absolute bottom-0 w-full bg-black/60 text-white text-xs p-2 truncate text-center backdrop-blur-sm z-20">
+                    <div className={cn("absolute bottom-0 w-full bg-black/60 text-white truncate text-center backdrop-blur-sm z-20", layoutCompact ? "text-[10px] p-1" : "text-xs p-2")}>
                         {value}
                     </div>
                 </div>
@@ -733,5 +794,66 @@ export function ImageUpload({
                 onSave={handleMaskSave}
             />
         </div>
+    );
+
+    if (!compact) {
+        return renderExpanded(false);
+    }
+
+    return (
+        <Popover open={hoverOpen} onOpenChange={setHoverOpen}>
+            <PopoverAnchor asChild>
+                <div
+                    className={cn(
+                        "flex items-center justify-between gap-3 rounded-md border border-dashed px-3 py-2 bg-slate-50 transition-colors",
+                        isDragging ? "border-blue-500 bg-blue-50" : "border-slate-200 hover:bg-slate-100"
+                    )}
+                    tabIndex={0}
+                    onPointerEnter={() => requestHoverOpen()}
+                    onPointerLeave={() => requestHoverClose()}
+                    onFocus={() => requestHoverOpen(true)}
+                    onBlur={(e) => {
+                        if (focusWithin(e.relatedTarget as Element | null)) return;
+                        requestHoverClose();
+                    }}
+                    onDragEnter={handleDragEnter}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                >
+                    <div className="flex items-center gap-2 min-w-0">
+                        {isVideoPreview ? (
+                            <VideoIcon className="h-4 w-4 text-slate-400" />
+                        ) : (
+                            <ImageIcon className="h-4 w-4 text-slate-400" />
+                        )}
+                        <span className="text-xs text-slate-600 truncate" title={displayValue}>
+                            {displayValue}
+                        </span>
+                    </div>
+                    <span className="text-[10px] text-slate-400 uppercase tracking-wider">
+                        {hasValue ? "hover preview" : "hover to select"}
+                    </span>
+                </div>
+            </PopoverAnchor>
+            <PopoverContent
+                ref={popoverContentRef}
+                side="right"
+                align="start"
+                sideOffset={12}
+                className="w-[360px] max-h-[75vh] overflow-y-auto p-3 shadow-xl border-slate-200"
+                onPointerEnter={holdHoverOpen}
+                onPointerLeave={requestHoverClose}
+                onFocusCapture={holdHoverOpen}
+                onBlurCapture={(e) => {
+                    if (focusWithin(e.relatedTarget as Element | null)) return;
+                    requestHoverClose();
+                }}
+                onOpenAutoFocus={(e) => e.preventDefault()}
+                onCloseAutoFocus={(e) => e.preventDefault()}
+            >
+                {renderExpanded(false)}
+            </PopoverContent>
+        </Popover>
     );
 }

@@ -1312,6 +1312,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
                             value={snippetContent}
                             onValueChange={setSnippetContent}
                             onKeyDown={handleKeyDown}
+                            showAutocompleteToggle={true}
                         />
                     </div>
                     <div className="flex flex-col gap-2">

@@ -23,6 +23,7 @@ interface PromptAutocompleteTextareaProps extends React.TextareaHTMLAttributes<H
     snippets?: PromptItem[];
     highlightSnippets?: boolean;
     externalValueSyncKey?: number;
+    showAutocompleteToggle?: boolean;
 }
 
 function computeScore(query: string, candidate: string): number {
@@ -77,6 +78,7 @@ export function PromptAutocompleteTextarea({
     snippets = [],
     highlightSnippets,
     externalValueSyncKey,
+    showAutocompleteToggle = true,
     ...props
 }: PromptAutocompleteTextareaProps) {
     const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -478,25 +480,27 @@ export function PromptAutocompleteTextarea({
 
     return (
         <div className="flex flex-col gap-1 w-full group/container">
-            <div className="flex justify-end px-1">
-                <button
-                    type="button"
-                    className={cn(
-                        "rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors",
-                        autocompleteEnabled
-                            ? "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
-                            : "bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200",
-                    )}
-                    title={autocompleteEnabled ? "Disable autocomplete" : "Enable autocomplete"}
-                    onMouseDown={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        toggleAutocomplete();
-                    }}
-                >
-                    {autocompleteEnabled ? "Autocomplete" : "Autocomplete off"}
-                </button>
-            </div>
+            {showAutocompleteToggle && (
+                <div className="flex justify-end px-1">
+                    <button
+                        type="button"
+                        className={cn(
+                            "rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors",
+                            autocompleteEnabled
+                                ? "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                                : "bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200",
+                        )}
+                        title={autocompleteEnabled ? "Disable autocomplete" : "Enable autocomplete"}
+                        onMouseDown={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            toggleAutocomplete();
+                        }}
+                    >
+                        {autocompleteEnabled ? "Autocomplete" : "Autocomplete off"}
+                    </button>
+                </div>
+            )}
 
             <div className="relative w-full">
                 {/* Overlay for highlighting */}

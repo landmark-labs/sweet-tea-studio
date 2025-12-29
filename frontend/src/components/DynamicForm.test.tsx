@@ -1,5 +1,5 @@
 import type { PropsWithChildren, ReactElement } from "react";
-import { render, fireEvent } from "@testing-library/react";
+import { render } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { Provider as JotaiProvider } from "jotai";
 import { DynamicForm } from "./DynamicForm";
@@ -41,24 +41,27 @@ describe("DynamicForm grouping", () => {
             }
         };
 
-        const { container } = renderForm(
+        const { getByText } = renderForm(
             <DynamicForm schema={annotatedSchema} onSubmit={noop} submitLabel="Submit" />
         );
 
-        expect(container).toMatchSnapshot();
+        expect(getByText("input images")).toBeTruthy();
+        expect(getByText("Story Node")).toBeTruthy();
+        expect(getByText("Custom Node")).toBeTruthy();
     });
 
-    it("falls back to heuristic grouping", async () => {
+    it("falls back to heuristic grouping", () => {
         const heuristicSchema = {
             mystery_value: { title: "Mystery (NodeX)", type: "integer" },
             unexplained_text: { widget: "textarea", title: "Unknown Text" }
         };
 
-        const { container } = renderForm(
+        const { getByText } = renderForm(
             <DynamicForm schema={heuristicSchema} onSubmit={noop} submitLabel="Submit" />
         );
 
-        expect(container).toMatchSnapshot();
+        expect(getByText("NodeX")).toBeTruthy();
+        expect(getByText("Unknown Text")).toBeTruthy();
     });
 
     it("orders core and expanded nodes by provided node order", () => {
@@ -89,7 +92,7 @@ describe("DynamicForm grouping", () => {
 
         const nodeOrder = ["node-b", "node-a"]; // B should render before A everywhere
 
-        const { container, getByText } = renderForm(
+        const { container } = renderForm(
             <DynamicForm
                 schema={orderedSchema}
                 nodeOrder={nodeOrder}
@@ -98,16 +101,16 @@ describe("DynamicForm grouping", () => {
             />
         );
 
-        const coreSection = getByText("core pipe controls").parentElement?.parentElement;
-        const coreTitles = Array.from(coreSection?.querySelectorAll("h4") || [])
-            .map(el => el.textContent?.trim())
+        const coreStack = container.querySelector("[data-core-stack]");
+        const coreTitles = Array.from(coreStack?.querySelectorAll("[data-node-stack-item]") || [])
+            .map(el => el.getAttribute("data-node-title"))
             .filter(Boolean);
         expect(coreTitles).toEqual(["Node B", "Node A"]);
 
-        fireEvent.click(getByText("EXPANDED CONTROLS"));
-        const expandedTitles = Array.from(container.querySelectorAll("[data-radix-collection-item]"))
-            .map(el => el.textContent?.replace(/\s+/g, " ").trim())
-            .filter(text => /Node [AB]/.test(text));
+        const expandedStack = container.querySelector("[data-expanded-stack]");
+        const expandedTitles = Array.from(expandedStack?.querySelectorAll("[data-node-stack-item]") || [])
+            .map(el => el.getAttribute("data-node-title"))
+            .filter(Boolean);
         expect(expandedTitles).toEqual(["Node B", "Node A"]);
     });
 

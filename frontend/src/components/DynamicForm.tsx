@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useAtomValue, useSetAtom, useStore } from "jotai";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,13 +7,14 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ImageUpload } from "@/components/ImageUpload";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { PromptAutocompleteTextarea } from "@/components/PromptAutocompleteTextarea";
 import { api } from "@/lib/api";
 import { PromptItem } from "@/lib/types";
 import { formDataAtom, formFieldAtom, setFormDataAtom } from "@/lib/atoms/formAtoms";
+import { ChevronDown, ChevronUp, Pin } from "lucide-react";
 
 type FormSection = "inputs" | "prompts" | "loras" | "nodes";
 
@@ -48,9 +50,13 @@ interface FieldRendererProps {
     projectSlug?: string;
     destinationFolder?: string;
     externalValueSyncKey?: number;
+    mediaVariant?: "default" | "compact";
+    hideLabel?: boolean;
 }
 
 const BYPASS_PLACEHOLDER_KEY = "__sts_bypass_placeholder__";
+const NODE_HOVER_OPEN_DELAY = 150;
+const NODE_HOVER_CLOSE_DELAY = 220;
 
 const resolveMediaKind = (fieldKey: string, field: Record<string, unknown>) => {
     const explicit = typeof field.x_media_kind === "string" ? field.x_media_kind.toLowerCase() : null;
@@ -65,6 +71,23 @@ const resolveMediaKind = (fieldKey: string, field: Record<string, unknown>) => {
         return "video";
     }
     return "image";
+};
+
+const resolveNodeTitle = (field: Record<string, unknown>, fallback = "Configuration") => {
+    const alias = typeof field.x_node_alias === "string" ? field.x_node_alias.trim() : "";
+    if (alias) return alias;
+
+    const explicit = typeof field.x_title === "string" ? field.x_title.trim() : "";
+    if (explicit) return explicit;
+
+    const title = String(field.title || "").trim();
+    const match = title.match(/\(([^)]+)\)\s*$/);
+    if (match && match[1]) return match[1];
+
+    const classType = String(field.x_class_type || "").trim();
+    if (classType) return classType;
+
+    return title || fallback;
 };
 
 const isMediaUploadField = (fieldKey: string, field: Record<string, unknown>) => {
@@ -97,6 +120,8 @@ const FieldRenderer = React.memo(function FieldRenderer({
     projectSlug,
     destinationFolder,
     externalValueSyncKey,
+    mediaVariant = "default",
+    hideLabel = false,
 }: FieldRendererProps) {
     const value = useAtomValue(formFieldAtom(fieldKey));
     const isMediaUpload = isMediaUploadField(fieldKey, field);
@@ -106,7 +131,7 @@ const FieldRenderer = React.memo(function FieldRenderer({
 
         return (
             <div className="space-y-2">
-                <Label>{field.title || fieldKey}</Label>
+                {!hideLabel && <Label>{field.title || fieldKey}</Label>}
                 <ImageUpload
                     value={value as string | undefined}
                     onChange={(val) => onValueChange(fieldKey, val)}
@@ -115,6 +140,7 @@ const FieldRenderer = React.memo(function FieldRenderer({
                     projectSlug={projectSlug}
                     destinationFolder={destinationFolder}
                     mediaKind={mediaKind}
+                    compact={mediaVariant === "compact"}
                 />
             </div>
         );
@@ -139,6 +165,7 @@ const FieldRenderer = React.memo(function FieldRenderer({
                         snippets={snippets}
                         highlightSnippets={true}
                         externalValueSyncKey={externalValueSyncKey}
+                        showAutocompleteToggle={false}
                     />
                 ) : (
                     <Textarea
@@ -262,40 +289,54 @@ interface GroupWithBypass {
     hasBypass: boolean;
 }
 
-interface CoreGroupSectionProps {
+interface NodePromptGroupProps {
     group: GroupWithBypass;
+    promptKeys: string[];
+    nonPromptKeys: string[];
+    isExpanded: boolean;
+    onToggleExpanded: () => void;
     renderField: (key: string) => JSX.Element;
     onToggleChange: (key: string, value: boolean) => void;
-    showHeader: boolean;
 }
 
-const CoreGroupSection = React.memo(function CoreGroupSection({
+const NodePromptGroup = React.memo(function NodePromptGroup({
     group,
+    promptKeys,
+    nonPromptKeys,
+    isExpanded,
+    onToggleExpanded,
     renderField,
     onToggleChange,
-    showHeader,
-}: CoreGroupSectionProps) {
+}: NodePromptGroupProps) {
     const bypassValue = useAtomValue(formFieldAtom(group.bypassKey ?? BYPASS_PLACEHOLDER_KEY));
     const isBypassed = group.hasBypass && Boolean(bypassValue);
-    const fieldsToRender = group.keys.filter(k => k !== group.bypassKey);
-    const orderBase = Number.isFinite(group.order) ? group.order : 999;
-    const order = isBypassed ? orderBase + 1000 : orderBase;
 
     return (
-        <div key={group.id} className="space-y-2" style={{ order }}>
-            {(showHeader || group.hasBypass) && (
-                <div className="flex items-center justify-between border-b border-slate-100 pb-1">
-                    <h4 className="text-[11px] font-semibold uppercase text-slate-400 tracking-wide flex items-center gap-2">
-                        <span>{group.title}</span>
-                        {isBypassed && (
-                            <span className="text-[9px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5">
-                                Bypassed
-                            </span>
-                        )}
-                    </h4>
+        <div
+            className={cn(
+                "rounded-lg border bg-white p-3 space-y-3 shadow-sm transition-opacity",
+                isBypassed && "opacity-60"
+            )}
+            data-node-inline
+            data-node-prompt
+            data-node-id={group.id}
+            data-node-title={group.title}
+        >
+            <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-semibold uppercase text-slate-500 tracking-wide">
+                        {group.title}
+                    </span>
+                    {isBypassed && (
+                        <span className="text-[9px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5">
+                            Bypassed
+                        </span>
+                    )}
+                </div>
+                <div className="flex items-center gap-2">
                     {group.hasBypass && group.bypassKey && (
                         <div className="flex items-center gap-2">
-                            <span className="text-[9px] text-slate-300 uppercase  tracking-wider">
+                            <span className="text-[9px] text-slate-300 uppercase tracking-wider">
                                 {isBypassed ? "bypassed" : "active"}
                             </span>
                             <Switch
@@ -307,67 +348,308 @@ const CoreGroupSection = React.memo(function CoreGroupSection({
                             />
                         </div>
                     )}
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-slate-400 hover:text-slate-700"
+                        onClick={onToggleExpanded}
+                        aria-expanded={isExpanded}
+                        aria-label={isExpanded ? "Collapse prompts" : "Expand prompts"}
+                    >
+                        {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                    </Button>
+                </div>
+            </div>
+            {!isBypassed ? (
+                <div className="space-y-3">
+                    {nonPromptKeys.map(renderField)}
+                    {isExpanded ? (
+                        promptKeys.map(renderField)
+                    ) : (
+                        <div className="text-[10px] text-slate-400 italic px-1">
+                            Prompts hidden. Expand to edit.
+                        </div>
+                    )}
+                </div>
+            ) : (
+                <div className="text-[10px] text-slate-400 italic px-1">
+                    Node bypassed. Parameters hidden.
                 </div>
             )}
-            <div className="space-y-3">
-                {!isBypassed ? (
-                    fieldsToRender.map(renderField)
-                ) : (
-                    <div className="text-[10px] text-slate-400 italic px-1 opacity-60">
-                        Node bypassed. Parameters hidden.
-                    </div>
-                )}
-            </div>
         </div>
     );
 });
 
-interface SettingsGroupSectionProps {
+interface NodeMediaGroupProps {
     group: GroupWithBypass;
+    mediaKeys: string[];
+    nonMediaKeys: string[];
+    isExpanded: boolean;
+    onToggleExpanded: () => void;
+    renderField: (key: string) => JSX.Element;
+    renderMediaField: (key: string, variant: "default" | "compact", hideLabel: boolean) => JSX.Element;
+    onToggleChange: (key: string, value: boolean) => void;
+}
+
+const NodeMediaGroup = React.memo(function NodeMediaGroup({
+    group,
+    mediaKeys,
+    nonMediaKeys,
+    isExpanded,
+    onToggleExpanded,
+    renderField,
+    renderMediaField,
+    onToggleChange,
+}: NodeMediaGroupProps) {
+    const bypassValue = useAtomValue(formFieldAtom(group.bypassKey ?? BYPASS_PLACEHOLDER_KEY));
+    const isBypassed = group.hasBypass && Boolean(bypassValue);
+
+    return (
+        <div
+            className={cn(
+                "rounded-lg border bg-white p-3 space-y-3 shadow-sm transition-opacity",
+                isBypassed && "opacity-60"
+            )}
+            data-node-inline
+            data-node-media
+            data-node-id={group.id}
+            data-node-title={group.title}
+        >
+            <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-semibold uppercase text-slate-500 tracking-wide">
+                        {group.title}
+                    </span>
+                    {isBypassed && (
+                        <span className="text-[9px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5">
+                            Bypassed
+                        </span>
+                    )}
+                </div>
+                <div className="flex items-center gap-2">
+                    {group.hasBypass && group.bypassKey && (
+                        <div className="flex items-center gap-2">
+                            <span className="text-[9px] text-slate-300 uppercase tracking-wider">
+                                {isBypassed ? "bypassed" : "active"}
+                            </span>
+                            <Switch
+                                checked={Boolean(bypassValue)}
+                                onCheckedChange={(c) => onToggleChange(group.bypassKey!, Boolean(c))}
+                                className={cn(
+                                    "h-3.5 w-6 data-[state=checked]:bg-amber-500 data-[state=unchecked]:bg-slate-200"
+                                )}
+                            />
+                        </div>
+                    )}
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-slate-400 hover:text-slate-700"
+                        onClick={onToggleExpanded}
+                        aria-expanded={isExpanded}
+                        aria-label={isExpanded ? "Collapse media settings" : "Expand media settings"}
+                    >
+                        {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                    </Button>
+                </div>
+            </div>
+            {!isBypassed ? (
+                <div className="space-y-3">
+                    {mediaKeys.map((key) => renderMediaField(key, isExpanded ? "default" : "compact", mediaKeys.length === 1 && nonMediaKeys.length === 0))}
+                    {isExpanded && nonMediaKeys.length > 0 && (
+                        <div className="space-y-3 pt-1">
+                            {nonMediaKeys.map(renderField)}
+                        </div>
+                    )}
+                </div>
+            ) : (
+                <div className="text-[10px] text-slate-400 italic px-1">
+                    Node bypassed. Parameters hidden.
+                </div>
+            )}
+        </div>
+    );
+});
+
+interface PinnedInspectorPanelProps {
+    group: GroupWithBypass;
+    scopeLabel: string;
+    onUnpin: () => void;
+    renderField: (key: string) => JSX.Element;
+    onToggleChange: (key: string, value: boolean) => void;
+    maxPanelHeight?: number;
+}
+
+const PinnedInspectorPanel = React.memo(function PinnedInspectorPanel({
+    group,
+    scopeLabel,
+    onUnpin,
+    renderField,
+    onToggleChange,
+    maxPanelHeight,
+}: PinnedInspectorPanelProps) {
+    const bypassValue = useAtomValue(formFieldAtom(group.bypassKey ?? BYPASS_PLACEHOLDER_KEY));
+    const isBypassed = group.hasBypass && Boolean(bypassValue);
+    const fieldsToRender = group.keys.filter(k => k !== group.bypassKey);
+
+    return (
+        <div
+            className="rounded-lg border bg-white/95 shadow-lg backdrop-blur p-3 flex flex-col"
+            style={{ maxHeight: maxPanelHeight ?? "70vh" }}
+        >
+            <div className="flex items-start justify-between gap-3 mb-2">
+                <div className="min-w-0">
+                    <div className="text-[10px] uppercase tracking-wider text-slate-400">
+                        pinned inspector - {scopeLabel}
+                    </div>
+                    <div className="text-sm font-semibold text-slate-800 truncate">{group.title}</div>
+                </div>
+                <div className="flex items-center gap-2">
+                    {group.hasBypass && group.bypassKey && (
+                        <div className="flex items-center gap-2">
+                            <span className="text-[9px] text-slate-300 uppercase tracking-wider">
+                                {isBypassed ? "bypassed" : "active"}
+                            </span>
+                            <Switch
+                                checked={Boolean(bypassValue)}
+                                onCheckedChange={(c) => onToggleChange(group.bypassKey!, Boolean(c))}
+                                className={cn(
+                                    "h-3.5 w-6 data-[state=checked]:bg-amber-500 data-[state=unchecked]:bg-slate-200"
+                                )}
+                            />
+                        </div>
+                    )}
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-blue-600 hover:text-blue-700"
+                        title="Unpin inspector"
+                        onClick={onUnpin}
+                    >
+                        <Pin className="w-4 h-4" />
+                    </Button>
+                </div>
+            </div>
+            {!isBypassed ? (
+                <div className="space-y-3 overflow-y-auto pr-1 min-h-0 flex-1 pb-1">
+                    {fieldsToRender.length > 0 ? (
+                        fieldsToRender.map(renderField)
+                    ) : (
+                        <div className="text-[10px] text-slate-400 italic px-1">
+                            No parameters exposed for this node.
+                        </div>
+                    )}
+                </div>
+            ) : (
+                <div className="text-[10px] text-slate-400 italic px-1">
+                    Node bypassed. Parameters hidden.
+                </div>
+            )}
+        </div>
+    );
+});
+
+interface NodeStackRowProps {
+    group: GroupWithBypass;
+    stackId: string;
+    isOpen: boolean;
+    isPinned: boolean;
+    onHoverOpen: () => void;
+    onFocusOpen: () => void;
+    onHoverClose: () => void;
+    onHoldOpen: () => void;
+    onCloseImmediate: () => void;
+    onTogglePin: () => void;
     renderField: (key: string) => JSX.Element;
     onToggleChange: (key: string, value: boolean) => void;
 }
 
-const SettingsGroupSection = React.memo(function SettingsGroupSection({
+const NodeStackRow = React.memo(function NodeStackRow({
     group,
+    stackId,
+    isOpen,
+    isPinned,
+    onHoverOpen,
+    onFocusOpen,
+    onHoverClose,
+    onHoldOpen,
+    onCloseImmediate,
+    onTogglePin,
     renderField,
     onToggleChange,
-}: SettingsGroupSectionProps) {
+}: NodeStackRowProps) {
     const bypassValue = useAtomValue(formFieldAtom(group.bypassKey ?? BYPASS_PLACEHOLDER_KEY));
     const isBypassed = group.hasBypass && Boolean(bypassValue);
     const fieldsToRender = group.keys.filter(k => k !== group.bypassKey);
-    const orderBase = Number.isFinite(group.order) ? group.order : 999;
-    const order = isBypassed ? orderBase + 1000 : orderBase;
+    const paramCount = fieldsToRender.length;
+    const rowRef = useRef<HTMLDivElement>(null);
+    const contentRef = useRef<HTMLDivElement>(null);
+    const shouldShowPopover = isOpen && !isPinned;
+
+    const focusWithin = (target: Element | null) => {
+        if (!target) return false;
+        return Boolean(rowRef.current?.contains(target) || contentRef.current?.contains(target));
+    };
 
     return (
-        <AccordionItem
-            key={group.id}
-            value={group.id}
-            className={cn(
-                "border rounded-lg px-2 bg-white transition-opacity",
-                isBypassed && "opacity-60"
-            )}
-            style={{ order }}
+        <Popover
+            open={shouldShowPopover}
+            onOpenChange={(nextOpen) => {
+                if (!nextOpen && !isPinned) {
+                    onCloseImmediate();
+                }
+            }}
         >
-            <AccordionTrigger
-                className="text-xs font-semibold uppercase text-slate-500 hover:no-underline py-2 [&>svg]:ml-auto"
-                aria-label={`${group.title} controls (${isBypassed ? "bypassed" : "active"})`}
-            >
-                <div className="flex flex-1 items-center justify-between" role="button" tabIndex={0}>
-                    <div className="flex items-center gap-3">
-                        <span className="flex items-center gap-2">
-                            <span>{group.title}</span>
-                            {isBypassed && (
-                                <span className="text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5">
-                                    Bypassed
-                                </span>
-                            )}
-                        </span>
+            <PopoverAnchor asChild>
+                <div
+                    ref={rowRef}
+                    className={cn(
+                        "flex items-center justify-between rounded-lg border bg-white px-3 py-2 shadow-sm transition-colors",
+                        isBypassed && "opacity-60",
+                        isOpen && "border-blue-200 ring-1 ring-blue-100"
+                    )}
+                    data-node-stack-item
+                    data-node-stack-id={stackId}
+                    data-node-id={group.id}
+                    data-node-title={group.title}
+                    tabIndex={0}
+                    role="button"
+                    aria-haspopup="dialog"
+                    aria-expanded={isOpen}
+                    onPointerEnter={onHoverOpen}
+                    onPointerLeave={onHoverClose}
+                    onFocus={onFocusOpen}
+                    onBlur={(e) => {
+                        if (isPinned) return;
+                        if (focusWithin(e.relatedTarget as Element | null)) return;
+                        onHoverClose();
+                    }}
+                    onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            onTogglePin();
+                        }
+                    }}
+                >
+                    <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-xs font-semibold text-slate-700 truncate">{group.title}</span>
+                        {paramCount > 0 && (
+                            <span className="text-[10px] text-slate-400">
+                                {paramCount} params
+                            </span>
+                        )}
+                        {isBypassed && (
+                            <span className="text-[9px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5">
+                                Bypassed
+                            </span>
+                        )}
+                    </div>
+                    <div className="flex items-center gap-2">
                         {group.hasBypass && group.bypassKey && (
-                            <div
-                                className="flex items-center gap-2"
-                                onClick={(e) => e.stopPropagation()}
-                            >
+                            <div className="flex items-center gap-2">
                                 <span className="text-[9px] text-slate-300 uppercase tracking-wider">
                                     {isBypassed ? "bypassed" : "active"}
                                 </span>
@@ -380,19 +662,96 @@ const SettingsGroupSection = React.memo(function SettingsGroupSection({
                                 />
                             </div>
                         )}
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className={cn(
+                                "h-7 w-7 text-slate-400 hover:text-slate-700",
+                                isPinned && "text-blue-600"
+                            )}
+                            title={isPinned ? "Unpin inspector" : "Pin inspector"}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onTogglePin();
+                            }}
+                        >
+                            <Pin className="w-4 h-4" />
+                        </Button>
                     </div>
                 </div>
-            </AccordionTrigger>
-            <AccordionContent className="space-y-4 pt-0 pb-4">
+            </PopoverAnchor>
+            <PopoverContent
+                ref={contentRef}
+                side="right"
+                align="start"
+                sideOffset={12}
+                className="w-[360px] max-h-[70vh] overflow-y-auto p-3 shadow-xl border-slate-200"
+                onPointerEnter={onHoldOpen}
+                onPointerLeave={onHoverClose}
+                onFocusCapture={onHoldOpen}
+                onBlurCapture={(e) => {
+                    if (isPinned) return;
+                    if (focusWithin(e.relatedTarget as Element | null)) return;
+                    onHoverClose();
+                }}
+                onOpenAutoFocus={(e) => e.preventDefault()}
+                onCloseAutoFocus={(e) => e.preventDefault()}
+            >
+                <div className="flex items-center justify-between mb-2">
+                    <div className="text-[11px] font-semibold uppercase text-slate-500 tracking-wide">
+                        {group.title}
+                    </div>
+                    <div className="flex items-center gap-2">
+                        {group.hasBypass && group.bypassKey && (
+                            <div className="flex items-center gap-2">
+                                <span className="text-[9px] text-slate-300 uppercase tracking-wider">
+                                    {isBypassed ? "bypassed" : "active"}
+                                </span>
+                                <Switch
+                                    checked={Boolean(bypassValue)}
+                                    onCheckedChange={(c) => onToggleChange(group.bypassKey!, Boolean(c))}
+                                    className={cn(
+                                        "h-3.5 w-6 data-[state=checked]:bg-amber-500 data-[state=unchecked]:bg-slate-200"
+                                    )}
+                                />
+                            </div>
+                        )}
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className={cn(
+                                "h-7 w-7 text-slate-400 hover:text-slate-700",
+                                isPinned && "text-blue-600"
+                            )}
+                            title={isPinned ? "Unpin inspector" : "Pin inspector"}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onTogglePin();
+                            }}
+                        >
+                            <Pin className="w-4 h-4" />
+                        </Button>
+                    </div>
+                </div>
                 {!isBypassed ? (
-                    fieldsToRender.map(renderField)
+                    <div className="space-y-3">
+                        {paramCount > 0 ? (
+                            fieldsToRender.map(renderField)
+                        ) : (
+                            <div className="text-[10px] text-slate-400 italic px-1">
+                                No parameters exposed for this node.
+                            </div>
+                        )}
+                    </div>
                 ) : (
                     <div className="text-[10px] text-slate-400 italic px-1">
                         Node bypassed. Parameters hidden.
                     </div>
                 )}
-            </AccordionContent>
-        </AccordionItem>
+            </PopoverContent>
+        </Popover>
     );
 });
 
@@ -594,8 +953,7 @@ export const DynamicForm = React.memo(function DynamicForm({
             const isMediaUpload = isMediaUploadField(key, field);
             if (isMediaUpload) {
                 const nodeGroupId = field.x_node_id ? String(field.x_node_id) : "media";
-                // Use same title chain as other nodes: alias > x_title > field.title > fallback
-                const groupTitle = field.x_node_alias || field.x_title || field.title || "Media Input";
+                const groupTitle = resolveNodeTitle(field, "Media Input");
                 return {
                     key,
                     section: "nodes",
@@ -759,36 +1117,6 @@ export const DynamicForm = React.memo(function DynamicForm({
             .sort((a, b) => a.order - b.order);
     }, [schema, strictCoreKeys, groups.placements, nodeOrder]);
 
-
-
-
-    // Re-calculate settingsFields using strictCoreKeys
-    const strictSettingsFields = useMemo(() => {
-        const promptExtras = groups.prompts.filter((key) => !strictCoreKeys.has(key));
-        const loraExtras = groups.loras.filter((key) => !strictCoreKeys.has(key));
-        const orderArr = nodeOrder || [];
-        const nodeEntries = Object.entries(groups.nodes).map(([id, group]) => {
-            const orderIndex = orderArr.indexOf(String(id));
-            return {
-                id,
-                title: group.title,
-                order: orderIndex >= 0 ? orderIndex : 999,
-                keys: group.keys.filter((key) => !strictCoreKeys.has(key)),
-            };
-        })
-            .filter((group) => group.keys.length > 0)
-            .sort((a, b) => a.order - b.order);
-        return { promptExtras, loraExtras, nodeEntries };
-    }, [groups.loras, groups.nodes, groups.prompts, strictCoreKeys, nodeOrder]);
-
-
-    const [settingsOpen, setSettingsOpen] = useState(false);
-
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        onSubmit(store.get(formDataAtom));
-    };
-
     const getBypassMeta = (group: { id?: string; keys: string[] }) => {
         if (!schema) return { bypassKey: undefined, hasBypass: false };
         let bypassKey = group.keys.find(k => {
@@ -806,6 +1134,54 @@ export const DynamicForm = React.memo(function DynamicForm({
 
         const hasBypass = !!bypassKey;
         return { bypassKey, hasBypass };
+    };
+
+    const stackGroups = useMemo(() => {
+        if (!schema) return [] as { id: string; title: string; keys: string[]; order: number }[];
+
+        const groupMap: Record<string, { id: string; title: string; keys: string[]; order: number }> = {};
+
+        Object.keys(schema).forEach((key) => {
+            if (strictCoreKeys.has(key)) return;
+            const placement = groups.placements[key];
+            if (!placement) return;
+            if (placement.section === "inputs" && placement.source === "annotation") return;
+
+            const groupId = String(placement.groupId || "default");
+            const groupTitle = placement.groupTitle || "Configuration";
+            const order = Number.isFinite(placement.order) ? placement.order : 999;
+
+            if (!groupMap[groupId]) {
+                groupMap[groupId] = {
+                    id: groupId,
+                    title: groupTitle,
+                    keys: [key],
+                    order,
+                };
+            } else {
+                groupMap[groupId].keys.push(key);
+                groupMap[groupId].order = Math.min(groupMap[groupId].order, order);
+                if (groupMap[groupId].title.startsWith("Bypass") && !groupTitle.startsWith("Bypass")) {
+                    groupMap[groupId].title = groupTitle;
+                }
+            }
+        });
+
+        return Object.values(groupMap).sort(compareGroups);
+    }, [schema, strictCoreKeys, groups.placements]);
+
+    const stackGroupsWithMeta = useMemo(() => {
+        return stackGroups.map((group) => ({
+            ...group,
+            ...getBypassMeta(group),
+        }));
+    }, [stackGroups, schema]);
+
+    const promptKeySet = useMemo(() => new Set(groups.prompts), [groups.prompts]);
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        onSubmit(store.get(formDataAtom));
     };
 
     const handleToggleChange = useCallback((key: string, checked: boolean) => {
@@ -835,6 +1211,119 @@ export const DynamicForm = React.memo(function DynamicForm({
 
         handleUpdate(updates);
     }, [groups.nodes, groups.placements, handleUpdate, schema, store]);
+
+    const [activeStackId, setActiveStackId] = useState<string | null>(null);
+    const [pinnedStackId, setPinnedStackId] = useState<string | null>(null);
+    const openStackId = pinnedStackId ?? activeStackId;
+    const hoverOpenTimerRef = useRef<NodeJS.Timeout | null>(null);
+    const hoverCloseTimerRef = useRef<NodeJS.Timeout | null>(null);
+    const [mediaExpanded, setMediaExpanded] = useState<Record<string, boolean>>({});
+    const [promptExpanded, setPromptExpanded] = useState<Record<string, boolean>>({});
+    const [pinnedPosition, setPinnedPosition] = useState<{
+        top: number;
+        left: number;
+        maxPanelHeight: number;
+    } | null>(null);
+    const formRef = useRef<HTMLFormElement | null>(null);
+
+    const clearHoverTimers = useCallback(() => {
+        if (hoverOpenTimerRef.current) {
+            clearTimeout(hoverOpenTimerRef.current);
+            hoverOpenTimerRef.current = null;
+        }
+        if (hoverCloseTimerRef.current) {
+            clearTimeout(hoverCloseTimerRef.current);
+            hoverCloseTimerRef.current = null;
+        }
+    }, []);
+
+    const requestOpenNode = useCallback((id: string, immediate = false) => {
+        if (pinnedStackId && pinnedStackId !== id) return;
+        clearHoverTimers();
+        if (immediate) {
+            setActiveStackId(id);
+            return;
+        }
+        hoverOpenTimerRef.current = setTimeout(() => {
+            setActiveStackId(id);
+        }, NODE_HOVER_OPEN_DELAY);
+    }, [clearHoverTimers, pinnedStackId]);
+
+    const requestCloseNode = useCallback((id: string) => {
+        if (pinnedStackId) return;
+        clearHoverTimers();
+        hoverCloseTimerRef.current = setTimeout(() => {
+            setActiveStackId((current) => (current === id ? null : current));
+        }, NODE_HOVER_CLOSE_DELAY);
+    }, [clearHoverTimers, pinnedStackId]);
+
+    const closeNodeImmediate = useCallback((id: string) => {
+        if (pinnedStackId && pinnedStackId === id) return;
+        clearHoverTimers();
+        setActiveStackId((current) => (current === id ? null : current));
+    }, [clearHoverTimers, pinnedStackId]);
+
+    const holdNodeOpen = useCallback(() => {
+        if (hoverCloseTimerRef.current) {
+            clearTimeout(hoverCloseTimerRef.current);
+            hoverCloseTimerRef.current = null;
+        }
+    }, []);
+
+    const togglePinnedNode = useCallback((id: string) => {
+        clearHoverTimers();
+        setPinnedStackId((current) => {
+            const next = current === id ? null : id;
+            setActiveStackId(next ? id : null);
+            return next;
+        });
+    }, [clearHoverTimers]);
+
+    const unpinStack = useCallback(() => {
+        clearHoverTimers();
+        setPinnedStackId(null);
+        setActiveStackId(null);
+    }, [clearHoverTimers]);
+
+    const toggleMediaGroup = useCallback((id: string) => {
+        setMediaExpanded((prev) => {
+            const current = prev[id];
+            const next = current === undefined ? false : !current;
+            return { ...prev, [id]: next };
+        });
+    }, []);
+
+    const togglePromptGroup = useCallback((id: string) => {
+        setPromptExpanded((prev) => {
+            const current = prev[id];
+            const next = current === undefined ? false : !current;
+            return { ...prev, [id]: next };
+        });
+    }, []);
+
+    useEffect(() => {
+        setActiveStackId(null);
+        setPinnedStackId(null);
+        setMediaExpanded({});
+        setPromptExpanded({});
+    }, [schema]);
+
+    useEffect(() => {
+        if (!openStackId) return;
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === "Escape") {
+                clearHoverTimers();
+                setActiveStackId(null);
+                setPinnedStackId(null);
+            }
+        };
+        window.addEventListener("keydown", handleKeyDown);
+        return () => window.removeEventListener("keydown", handleKeyDown);
+    }, [clearHoverTimers, openStackId]);
+
+    useEffect(() => {
+        return () => clearHoverTimers();
+    }, [clearHoverTimers]);
 
     const renderField = useCallback((key: string) => {
         const field = schema[key];
@@ -876,6 +1365,48 @@ export const DynamicForm = React.memo(function DynamicForm({
         snippets
     ]);
 
+    const renderMediaField = useCallback((key: string, mediaVariant: "default" | "compact", hideLabel: boolean) => {
+        const field = schema[key];
+        const isActive = key === activeField;
+        const isPromptField = groups.prompts.includes(key);
+
+        return (
+            <FieldRenderer
+                key={key}
+                fieldKey={key}
+                field={field}
+                isActive={isActive}
+                isPromptField={isPromptField}
+                dynamicOptions={dynamicOptions}
+                onFieldFocus={onFieldFocus}
+                onFieldBlur={onFieldBlur}
+                onValueChange={handleChange}
+                onToggleChange={handleToggleChange}
+                snippets={snippets}
+                engineId={engineId}
+                projectSlug={projectSlug}
+                destinationFolder={destinationFolder}
+                externalValueSyncKey={externalValueSyncKey}
+                mediaVariant={mediaVariant}
+                hideLabel={hideLabel}
+            />
+        );
+    }, [
+        activeField,
+        destinationFolder,
+        dynamicOptions,
+        engineId,
+        externalValueSyncKey,
+        groups.prompts,
+        handleChange,
+        handleToggleChange,
+        onFieldBlur,
+        onFieldFocus,
+        projectSlug,
+        schema,
+        snippets
+    ]);
+
     const coreGroups = useMemo(() => {
         return strictCoreGroups.map((group) => ({
             ...group,
@@ -883,17 +1414,75 @@ export const DynamicForm = React.memo(function DynamicForm({
         }));
     }, [strictCoreGroups, schema]);
 
-    const settingsGroups = useMemo(() => {
-        return strictSettingsFields.nodeEntries.map((group) => ({
-            ...group,
-            ...getBypassMeta(group),
-        }));
-    }, [strictSettingsFields.nodeEntries, schema]);
+    const pinnedGroupInfo = useMemo(() => {
+        if (!pinnedStackId) return null;
+        const [scope, id] = pinnedStackId.split(":");
+        const list = scope === "core" ? coreGroups : stackGroupsWithMeta;
+        const group = list.find((entry) => entry.id === id);
+        if (!group) return null;
+        return {
+            group,
+            scopeLabel: scope === "core" ? "core controls" : "expanded controls",
+        };
+    }, [coreGroups, pinnedStackId, stackGroupsWithMeta]);
+
+    useEffect(() => {
+        if (!pinnedGroupInfo) {
+            setPinnedPosition(null);
+            return;
+        }
+
+        const container = formRef.current?.parentElement || (document.querySelector("[data-configurator-scroll]") as HTMLElement | null);
+        if (!container) {
+            setPinnedPosition(null);
+            return;
+        }
+
+        const panelWidth = 360;
+        const minPanelHeight = 420;
+        const updatePosition = () => {
+            const rect = container.getBoundingClientRect();
+            const fallbackLeft = rect.right + 12;
+            const maxLeft = window.innerWidth - panelWidth - 12;
+            const left = Math.max(12, Math.min(fallbackLeft, maxLeft));
+            const preferredTop = rect.top + rect.height * 0.55;
+            const maxTop = window.innerHeight - minPanelHeight - 12;
+            const top = Math.max(rect.top + 12, Math.min(preferredTop, maxTop));
+            const maxPanelHeight = Math.max(minPanelHeight, window.innerHeight - top - 24);
+            setPinnedPosition({ top, left, maxPanelHeight });
+        };
+
+        updatePosition();
+        window.addEventListener("resize", updatePosition);
+        window.addEventListener("scroll", updatePosition, true);
+        return () => {
+            window.removeEventListener("resize", updatePosition);
+            window.removeEventListener("scroll", updatePosition, true);
+        };
+    }, [pinnedGroupInfo]);
 
     if (!schema) return null;
 
     return (
         <form onSubmit={handleSubmit} className="space-y-6 pb-20">
+            {pinnedGroupInfo && pinnedPosition && createPortal(
+                <div
+                    className="pointer-events-none z-50"
+                    style={{ position: "fixed", top: pinnedPosition.top, left: pinnedPosition.left, width: 360 }}
+                >
+                    <div className="pointer-events-auto">
+                        <PinnedInspectorPanel
+                            group={pinnedGroupInfo.group}
+                            scopeLabel={pinnedGroupInfo.scopeLabel}
+                            onUnpin={unpinStack}
+                            renderField={renderField}
+                            onToggleChange={handleToggleChange}
+                            maxPanelHeight={pinnedPosition.maxPanelHeight}
+                        />
+                    </div>
+                </div>,
+                document.body
+            )}
             {/* 1. Main Inputs (Images) */}
             {groups.inputs.length > 0 && (
                 <div className="space-y-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
@@ -924,59 +1513,155 @@ export const DynamicForm = React.memo(function DynamicForm({
                         No core controls configured. Edit the pipe to add nodes to this section.
                     </div>
                 ) : (
-                    <div className="flex flex-col gap-4">
-                        {coreGroups.map((group) => (
-                            <CoreGroupSection
-                                key={group.id}
-                                group={group}
-                                renderField={renderField}
-                                onToggleChange={handleToggleChange}
-                                showHeader={strictCoreGroups.length > 1}
-                            />
-                        ))}
+                    <div className="flex flex-col gap-3" data-core-stack>
+                        {coreGroups.map((group) => {
+                            const stackId = `core:${group.id}`;
+                            const contentKeys = group.keys.filter((key) => key !== group.bypassKey);
+                            const mediaKeys = contentKeys.filter((key) => isMediaUploadField(key, schema[key]));
+                            const nonMediaKeys = contentKeys.filter((key) => !isMediaUploadField(key, schema[key]));
+                            const promptKeys = contentKeys.filter((key) => promptKeySet.has(key));
+                            const nonPromptKeys = contentKeys.filter((key) => !promptKeySet.has(key));
+                            const hasPromptField = promptKeys.length > 0;
+                            const hasMediaField = mediaKeys.length > 0;
+                            const isOpen = openStackId === stackId;
+                            const isPinned = pinnedStackId === stackId;
+
+                            if (hasPromptField) {
+                                const promptStateId = `core:${group.id}`;
+                                const isExpanded = promptExpanded[promptStateId] ?? true;
+                                return (
+                                    <NodePromptGroup
+                                        key={group.id}
+                                        group={group}
+                                        promptKeys={promptKeys}
+                                        nonPromptKeys={nonPromptKeys}
+                                        isExpanded={isExpanded}
+                                        onToggleExpanded={() => togglePromptGroup(promptStateId)}
+                                        renderField={renderField}
+                                        onToggleChange={handleToggleChange}
+                                    />
+                                );
+                            }
+
+                            if (hasMediaField) {
+                                const mediaStateId = `core:${group.id}`;
+                                const isExpanded = mediaExpanded[mediaStateId] ?? true;
+                                return (
+                                    <NodeMediaGroup
+                                        key={group.id}
+                                        group={group}
+                                        mediaKeys={mediaKeys}
+                                        nonMediaKeys={nonMediaKeys}
+                                        isExpanded={isExpanded}
+                                        onToggleExpanded={() => toggleMediaGroup(mediaStateId)}
+                                        renderField={renderField}
+                                        renderMediaField={renderMediaField}
+                                        onToggleChange={handleToggleChange}
+                                    />
+                                );
+                            }
+
+                            return (
+                                <NodeStackRow
+                                    key={group.id}
+                                    group={group}
+                                    stackId={stackId}
+                                    isOpen={isOpen}
+                                    isPinned={isPinned}
+                                    onHoverOpen={() => requestOpenNode(stackId)}
+                                    onFocusOpen={() => requestOpenNode(stackId, true)}
+                                    onHoverClose={() => requestCloseNode(stackId)}
+                                    onHoldOpen={holdNodeOpen}
+                                    onCloseImmediate={() => closeNodeImmediate(stackId)}
+                                    onTogglePin={() => togglePinnedNode(stackId)}
+                                    renderField={renderField}
+                                    onToggleChange={handleToggleChange}
+                                />
+                            );
+                        })}
                     </div>
                 )}
             </div>
 
-            {/* 3. Settings - Renamed to EXPANDED CONTROLS */}
-            <Accordion
-                type="single"
-                collapsible
-                value={settingsOpen ? "settings" : undefined}
-                onValueChange={(val) => setSettingsOpen(Boolean(val))}
-                className="w-full"
-            >
-                <AccordionItem value="settings" className="border rounded-lg px-2 bg-white">
-                    <AccordionTrigger className="text-xs font-semibold uppercase text-slate-500 hover:no-underline py-2">
-                        EXPANDED CONTROLS
-                    </AccordionTrigger>
-                    <AccordionContent className="space-y-4 pt-0 pb-4">
+            <div className="space-y-3 p-4 bg-white rounded-lg border border-slate-200">
+                <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider">EXPANDED CONTROLS</h3>
+                    <span className="text-[10px] text-slate-400 uppercase tracking-wider">hover a node to edit</span>
+                </div>
+                {stackGroupsWithMeta.length === 0 ? (
+                    <div className="text-xs text-slate-400 italic py-1">
+                        No expanded controls configured.
+                    </div>
+                ) : (
+                    <div className="flex flex-col gap-2" data-expanded-stack>
+                        {stackGroupsWithMeta.map((group) => {
+                            const stackId = `expanded:${group.id}`;
+                            const contentKeys = group.keys.filter((key) => key !== group.bypassKey);
+                            const mediaKeys = contentKeys.filter((key) => isMediaUploadField(key, schema[key]));
+                            const nonMediaKeys = contentKeys.filter((key) => !isMediaUploadField(key, schema[key]));
+                            const promptKeys = contentKeys.filter((key) => promptKeySet.has(key));
+                            const nonPromptKeys = contentKeys.filter((key) => !promptKeySet.has(key));
+                            const hasPromptField = promptKeys.length > 0;
+                            const hasMediaField = mediaKeys.length > 0;
+                            const isOpen = openStackId === stackId;
+                            const isPinned = pinnedStackId === stackId;
 
-                        {strictSettingsFields.promptExtras.length > 0 && (
-                            <div className="space-y-2">
-                                <h4 className="text-[11px] font-semibold uppercase text-slate-500">additional prompts</h4>
-                                <div className="space-y-4">
-                                    {strictSettingsFields.promptExtras.map(renderField)}
-                                </div>
-                            </div>
-                        )}
-
-                        {strictSettingsFields.nodeEntries.length > 0 && (
-                            <Accordion type="multiple" className="w-full flex flex-col gap-2">
-                                {settingsGroups.map((group) => (
-                                    <SettingsGroupSection
+                            if (hasPromptField) {
+                                const promptStateId = `expanded:${group.id}`;
+                                const isExpanded = promptExpanded[promptStateId] ?? true;
+                                return (
+                                    <NodePromptGroup
                                         key={group.id}
                                         group={group}
+                                        promptKeys={promptKeys}
+                                        nonPromptKeys={nonPromptKeys}
+                                        isExpanded={isExpanded}
+                                        onToggleExpanded={() => togglePromptGroup(promptStateId)}
                                         renderField={renderField}
                                         onToggleChange={handleToggleChange}
                                     />
-                                ))}
-                            </Accordion>
-                        )}
+                                );
+                            }
 
-                    </AccordionContent>
-                </AccordionItem>
-            </Accordion>
+                            if (hasMediaField) {
+                                const mediaStateId = `expanded:${group.id}`;
+                                const isExpanded = mediaExpanded[mediaStateId] ?? true;
+                                return (
+                                    <NodeMediaGroup
+                                        key={group.id}
+                                        group={group}
+                                        mediaKeys={mediaKeys}
+                                        nonMediaKeys={nonMediaKeys}
+                                        isExpanded={isExpanded}
+                                        onToggleExpanded={() => toggleMediaGroup(mediaStateId)}
+                                        renderField={renderField}
+                                        renderMediaField={renderMediaField}
+                                        onToggleChange={handleToggleChange}
+                                    />
+                                );
+                            }
+
+                            return (
+                                <NodeStackRow
+                                    key={group.id}
+                                    group={group}
+                                    stackId={stackId}
+                                    isOpen={isOpen}
+                                    isPinned={isPinned}
+                                    onHoverOpen={() => requestOpenNode(stackId)}
+                                    onFocusOpen={() => requestOpenNode(stackId, true)}
+                                    onHoverClose={() => requestCloseNode(stackId)}
+                                    onHoldOpen={holdNodeOpen}
+                                    onCloseImmediate={() => closeNodeImmediate(stackId)}
+                                    onTogglePin={() => togglePinnedNode(stackId)}
+                                    renderField={renderField}
+                                    onToggleChange={handleToggleChange}
+                                />
+                            );
+                        })}
+                    </div>
+                )}
+            </div>
         </form>
     );
 });
