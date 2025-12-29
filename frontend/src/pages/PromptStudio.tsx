@@ -1625,11 +1625,13 @@ export default function PromptStudio() {
         });
       } else if (data.type === "execution_complete" || data.type === "generation_done") {
         // ComfyUI finished rendering
+        console.log(`[Batch] Job completed (${data.type}). Pending queue: [${pendingJobIdsRef.current.join(', ')}]`);
         logWs(`[WS] Received ${data.type}`);
 
         // Check if there are more jobs in the batch queue
         if (pendingJobIdsRef.current.length > 0) {
           const nextJobId = pendingJobIdsRef.current.shift()!;
+          console.log(`[Batch] Chaining to next job: ${nextJobId}`);
           logWs(`[WS] Chaining to next batch job: ${nextJobId}, remaining: [${pendingJobIdsRef.current.join(', ')}]`);
 
           // Reset progress for next job but keep showing busy state
@@ -1644,6 +1646,7 @@ export default function PromptStudio() {
           setLastJobId(nextJobId);
           trackFeedStart(nextJobId);
         } else {
+          console.log(`[Batch] No more jobs in queue, resetting UI`);
           // No more jobs - reset button
           setGenerationState("completed");
           setStatusLabel("");
@@ -2029,17 +2032,23 @@ export default function PromptStudio() {
   // Batch generation: submit multiple jobs to backend queue
   // Backend processes them sequentially - we track job IDs to show progress for each
   const handleBatchGenerate = useCallback(async (data: any) => {
+    console.log(`[Batch] handleBatchGenerate called with batchSize=${batchSize}`);
+
     if (batchSize <= 1) {
       // Single generation - use original function
+      console.log(`[Batch] batchSize <= 1, using single generation`);
       pendingJobIdsRef.current = []; // Clear any stale queue
       return handleGenerate(data);
     }
+
+    console.log(`[Batch] Starting batch of ${batchSize} jobs`);
 
     // Reset batch state
     batchCancelledRef.current = false;
     pendingJobIdsRef.current = []; // Clear queue for new batch
 
     // Submit the first job via handleGenerate - this sets up UI state properly
+    console.log(`[Batch] Submitting first job via handleGenerate`);
     await handleGenerate(data);
 
     // Submit remaining jobs directly to the backend queue
