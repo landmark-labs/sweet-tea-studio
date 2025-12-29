@@ -144,6 +144,7 @@ export default function PromptStudio() {
     return saved ? Math.max(1, Math.min(100, parseInt(saved) || 1)) : 1;
   });
   const batchCancelledRef = useRef(false);
+  const pendingJobIdsRef = useRef<number[]>([]); // Queue of job IDs waiting to run
 
   // Persist batch size to localStorage
   useEffect(() => {
@@ -1617,27 +1618,59 @@ export default function PromptStudio() {
           });
         });
       } else if (data.type === "execution_complete" || data.type === "generation_done") {
-        // ComfyUI finished rendering - reset button immediately
-        // Don't wait for image download/saving (5-7s)
-        logWs(`[WS] Received ${data.type} - resetting button and clearing job state`);
-        setGenerationState("completed");  // Clear status to show "generate" button
-        setStatusLabel("");
-        setProgress(0);    // Reset progress
-        // Update feed to prevent sync effects from re-setting status
-        updateFeed(lastJobId, { status: "completed", progress: 100, previewBlob: null });
-        // Note: Keep lastJobId so the 'completed' message can still update gallery
-        // but the button is already reset
-      } else if (data.type === "executing") {
-        // Check if this is the final "executing" message with node=null (ComfyUI finished)
-        if (data.data?.node === null) {
-          // ComfyUI finished rendering - reset button immediately!
-          logWs(`[WS] Received executing with node=null - ComfyUI done, resetting button`);
+        // ComfyUI finished rendering
+        logWs(`[WS] Received ${data.type}`);
+
+        // Check if there are more jobs in the batch queue
+        if (pendingJobIdsRef.current.length > 0) {
+          const nextJobId = pendingJobIdsRef.current.shift()!;
+          logWs(`[WS] Chaining to next batch job: ${nextJobId}, remaining: [${pendingJobIdsRef.current.join(', ')}]`);
+
+          // Reset progress for next job but keep showing busy state
+          setProgress(0);
+          progressHistoryRef.current = [];
+          setJobStartTime(Date.now());
+          setGenerationState("queued");
+          setStatusLabel("queued");
+
+          // Update current feed and start tracking next job
+          updateFeed(lastJobId, { status: "completed", progress: 100, previewBlob: null });
+          setLastJobId(nextJobId);
+          trackFeedStart(nextJobId);
+        } else {
+          // No more jobs - reset button
           setGenerationState("completed");
           setStatusLabel("");
           setProgress(0);
-          updateFeed(lastJobId, { status: "completed", progress: 100 });
+          updateFeed(lastJobId, { status: "completed", progress: 100, previewBlob: null });
+        }
+      } else if (data.type === "executing") {
+        // Check if this is the final "executing" message with node=null (ComfyUI finished)
+        if (data.data?.node === null) {
+          // ComfyUI finished rendering - check for more batch jobs
+          logWs(`[WS] Received executing with node=null - ComfyUI done`);
+
+          if (pendingJobIdsRef.current.length > 0) {
+            const nextJobId = pendingJobIdsRef.current.shift()!;
+            logWs(`[WS] Chaining to next batch job: ${nextJobId}`);
+
+            setProgress(0);
+            progressHistoryRef.current = [];
+            setJobStartTime(Date.now());
+            setGenerationState("queued");
+            setStatusLabel("queued");
+
+            updateFeed(lastJobId, { status: "completed", progress: 100 });
+            setLastJobId(nextJobId);
+            trackFeedStart(nextJobId);
+          } else {
+            setGenerationState("completed");
+            setStatusLabel("");
+            setProgress(0);
+            updateFeed(lastJobId, { status: "completed", progress: 100 });
+          }
         } else {
-          // Still processing a node
+          // Still processing a node - show running state (not queued)
           setGenerationState("running");
           setStatusLabel("processing");
           updateFeed(lastJobId, { status: "processing" });
@@ -1988,15 +2021,17 @@ export default function PromptStudio() {
   handleGenerateRef.current = handleGenerate;
 
   // Batch generation: submit multiple jobs to backend queue
-  // Backend processes them sequentially - we track how many were submitted
+  // Backend processes them sequentially - we track job IDs to show progress for each
   const handleBatchGenerate = useCallback(async (data: any) => {
     if (batchSize <= 1) {
       // Single generation - use original function
+      pendingJobIdsRef.current = []; // Clear any stale queue
       return handleGenerate(data);
     }
 
     // Reset batch state
     batchCancelledRef.current = false;
+    pendingJobIdsRef.current = []; // Clear queue for new batch
 
     // Submit the first job via handleGenerate - this sets up UI state properly
     await handleGenerate(data);
@@ -2037,7 +2072,7 @@ export default function PromptStudio() {
           return acc;
         }, {} as Record<string, any>);
 
-        await api.createJob(
+        const job = await api.createJob(
           parseInt(selectedEngineId!),
           parseInt(selectedWorkflowId!),
           selectedProjectId ? parseInt(selectedProjectId) : null,
@@ -2045,13 +2080,15 @@ export default function PromptStudio() {
           generationTarget || null
         );
 
-        console.log(`[Batch] Submitted job ${i + 1}/${batchSize}`);
+        // Add to pending queue - WebSocket completion handler will pick this up
+        pendingJobIdsRef.current.push(job.id);
+        console.log(`[Batch] Submitted job ${i + 1}/${batchSize} (id=${job.id}), queue: [${pendingJobIdsRef.current.join(', ')}]`);
       } catch (err) {
         console.error(`[Batch] Failed to submit job ${i + 1}:`, err);
       }
     }
 
-    console.log(`[Batch] All ${batchSize} jobs submitted to queue`);
+    console.log(`[Batch] All ${batchSize} jobs submitted. Pending queue: [${pendingJobIdsRef.current.join(', ')}]`);
   }, [batchSize, handleGenerate, visibleSchema, selectedEngineId, selectedWorkflowId, selectedProjectId, generationTarget]);
 
   const handleBatchGenerateRef = useRef(handleBatchGenerate);
@@ -2071,8 +2108,9 @@ export default function PromptStudio() {
   }, [generation, store]);
 
   const handleCancel = async () => {
-    // Cancel any running batch
+    // Cancel any running batch and clear pending queue
     batchCancelledRef.current = true;
+    pendingJobIdsRef.current = [];
 
     if (!lastJobId) return;
     try {
