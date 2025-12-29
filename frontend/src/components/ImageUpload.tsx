@@ -44,7 +44,7 @@ export function ImageUpload({
     value,
     onChange,
     engineId,
-    options = [],
+    options: _options = [], // eslint-disable-line @typescript-eslint/no-unused-vars
     projectSlug,
     destinationFolder,
     mediaKind = "image",
@@ -329,13 +329,7 @@ export function ImageUpload({
         }
     };
 
-    const selectOption = (filename: string) => {
-        onChange(filename);
-        addToRecent(filename);
-        setIsBrowseOpen(false);
-        setPreview(null); // Clear local preview forcing usage of filename
-        setPreviewKind(guessKindFromFilename(filename));
-    };
+
 
     const clear = () => {
         setPreview(null);
@@ -711,42 +705,6 @@ export function ImageUpload({
                             {/* Default: Recent Gallery view (when no project selected) */}
                             {!selectedProjectId && (
                                 <>
-                                    {(options.length > 0) && (
-                                        <div className="mb-6">
-                                            <h4 className="font-semibold mb-2 text-slate-500 uppercase text-xs">inputs</h4>
-                                            <div className="grid grid-cols-5 gap-3">
-                                                {options.slice(0, 25).map(opt => (
-                                                    <button
-                                                        key={opt}
-                                                        type="button"
-                                                        onClick={() => selectOption(opt)}
-                                                        className="aspect-square relative group bg-white border rounded-md overflow-hidden hover:ring-2 hover:ring-blue-500 focus:outline-none"
-                                                    >
-                                                        {guessKindFromFilename(opt) === "video" ? (
-                                                            <video
-                                                                src={`/api/v1/gallery/image/path?path=${encodeURIComponent(opt)}`}
-                                                                className="w-full h-full object-cover"
-                                                                preload="metadata"
-                                                                muted
-                                                                playsInline
-                                                            />
-                                                        ) : (
-                                                            <img
-                                                                loading="lazy"
-                                                                src={`/api/v1/gallery/image/path?path=${encodeURIComponent(opt)}`}
-                                                                alt={opt}
-                                                                className="w-full h-full object-cover"
-                                                            />
-                                                        )}
-                                                        <div className="absolute inset-x-0 bottom-0 bg-black/70 text-white text-[10px] p-1 truncate opacity-0 group-hover:opacity-100 transition-opacity">
-                                                            {opt}
-                                                        </div>
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
-
                                     <div>
                                         <div className="grid grid-cols-5 gap-3">
                                             {galleryImages.map((path, i) => (
