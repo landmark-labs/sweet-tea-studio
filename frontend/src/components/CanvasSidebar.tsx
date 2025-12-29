@@ -140,16 +140,18 @@ export function CanvasSidebar({ collapsed }: CanvasSidebarProps) {
                   const savedAt = formatShortTimestamp(canvas.updated_at);
                   const title = savedAt ? `${canvas.name} • saved ${savedAt}` : canvas.name;
 
+                  const isActive = selectedCanvasId === canvas.id;
+
                   return (
                     <div key={canvas.id} className="group relative flex items-center">
                       <Button
-                        variant={selectedCanvasId === canvas.id ? "secondary" : "ghost"}
+                        variant={isActive ? "secondary" : "ghost"}
                         className={cn(
                           "w-full justify-start text-xs gap-2",
-                          selectedCanvasId === canvas.id && "text-slate-800"
+                          isActive && "bg-blue-100 text-blue-900 font-medium hover:bg-blue-200"
                         )}
                         onClick={() => handleOpenCanvas(canvas.id)}
-                        title={title}
+                        title={isActive ? `${title} (active - Ctrl+S saves here)` : title}
                       >
                         <span className="min-w-0 flex-1 truncate text-left">{canvas.name}</span>
                       </Button>
