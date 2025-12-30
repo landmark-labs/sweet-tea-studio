@@ -1,20 +1,24 @@
 import sqlite3
 import os
+import sys
 
 # Path to the database. 
 # It's usually in the root of the backend execution `backend/` or `backend/app/` depending on how it's run.
 # The `engine.py` says `database.db`.
 # We are running from the project root usually, but let's check both or assume backend/
+# Can also be passed as command line argument for remote deployments.
 
-DB_PATH = "database.db"
+DB_PATH = sys.argv[1] if len(sys.argv) > 1 else "database.db"
 
 def migrate():
+    global DB_PATH
     if not os.path.exists(DB_PATH):
         print(f"Database not found at {DB_PATH}. Checking current directory...")
         if os.path.exists("database.db"):
-             DB_PATH_LOCAL = "database.db"
+             DB_PATH = "database.db"
         else:
              print("Could not find database.db")
+             print("Usage: python migrate_db.py [path/to/database.db]")
              return
 
     print(f"Migrating database at {DB_PATH}...")
@@ -108,6 +112,12 @@ def migrate():
             cursor.execute("ALTER TABLE image ADD COLUMN file_exists BOOLEAN DEFAULT NULL")
             conn.commit()
             print("Migration successful: Added file_exists column.")
+
+        if "trash_path" not in columns:
+            print("Adding trash_path column to image table...")
+            cursor.execute("ALTER TABLE image ADD COLUMN trash_path TEXT DEFAULT NULL")
+            conn.commit()
+            print("Migration successful: Added trash_path column.")
 
         # Add indexes to speed up gallery ordering and filtering.
         cursor.execute("CREATE INDEX IF NOT EXISTS ix_image_created_at ON image (created_at)")
