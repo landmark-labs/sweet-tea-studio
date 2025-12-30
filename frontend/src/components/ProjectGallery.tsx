@@ -130,6 +130,8 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
     const lastSelectedPath = useRef<string | null>(null);
     const imagesRef = useRef<FolderImage[]>([]);
     const [gridResetKey, setGridResetKey] = useState(0);
+    // Track previous project to avoid resetting folder on transient empty states
+    const prevProjectIdRef = useRef<string>(selectedProjectId);
 
     // Keep imagesRef in sync with images state for stable callbacks
     imagesRef.current = images;
@@ -166,9 +168,18 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
     const selectedProject = sortedProjects.find(p => String(p.id) === selectedProjectId);
 
     // Memoize folders for referential stability - prevents effect re-runs on every render
+    // Use a ref to preserve folders when selectedProject temporarily becomes undefined
+    const prevFoldersRef = useRef<string[]>([]);
     const folders = useMemo(() => {
-        return (selectedProject?.config_json as { folders?: string[] })?.folders || [];
-    }, [selectedProject?.config_json]);
+        const currentFolders = (selectedProject?.config_json as { folders?: string[] })?.folders || [];
+        // If we have a selectedProjectId but no project found, preserve previous folders
+        // This handles transient states where projects array might temporarily be empty
+        if (selectedProjectId && !selectedProject && prevFoldersRef.current.length > 0) {
+            return prevFoldersRef.current;
+        }
+        prevFoldersRef.current = currentFolders;
+        return currentFolders;
+    }, [selectedProject?.config_json, selectedProjectId, selectedProject]);
 
     // Persist collapsed state
     useEffect(() => {
@@ -254,11 +265,23 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
 
     // Reset folder when project changes
     useEffect(() => {
-        if (folders.length > 0 && !folders.includes(selectedFolder)) {
+        const projectChanged = selectedProjectId !== prevProjectIdRef.current;
+        prevProjectIdRef.current = selectedProjectId;
+
+        if (projectChanged) {
+            // Project changed - reset folder selection to first available or empty
+            if (folders.length > 0) {
+                setSelectedFolder(folders[0]);
+            } else {
+                setSelectedFolder("");
+            }
+        } else if (folders.length > 0 && !folders.includes(selectedFolder)) {
+            // Same project, but current folder no longer exists (e.g., was deleted)
+            // Switch to first available folder
             setSelectedFolder(folders[0]);
-        } else if (folders.length === 0) {
-            setSelectedFolder("");
         }
+        // Note: Don't reset folder to empty when folders.length === 0 and project hasn't changed
+        // This handles transient empty states during re-renders
     }, [selectedProjectId, folders, selectedFolder]);
 
     const galleryItems = !isLoading && selectedProjectId && images.length > 0 ? images : [];
@@ -337,13 +360,22 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
         if (selectedPaths.size === 0 || !selectedProjectId || !selectedFolder) return;
         if (!confirm(`Delete ${selectedPaths.size} images? This cannot be undone.`)) return;
 
+        // Capture the paths to delete before any async operations
+        // This prevents stale closure issues where selectedPaths might change during the await
+        const pathsToDelete = new Set(selectedPaths);
+
+        // Clear selection immediately for better UX
+        setSelectedPaths(new Set());
+
         try {
-            await api.deleteFolderImages(parseInt(selectedProjectId), selectedFolder, Array.from(selectedPaths));
-            setImages(prev => prev.filter(img => !selectedPaths.has(img.path)));
-            setSelectedPaths(new Set());
+            await api.deleteFolderImages(parseInt(selectedProjectId), selectedFolder, Array.from(pathsToDelete));
+            // Use the captured Set for filtering to ensure we remove exactly the deleted paths
+            setImages(prev => prev.filter(img => !pathsToDelete.has(img.path)));
         } catch (e) {
             console.error("Bulk delete failed", e);
             alert("Failed to delete some images");
+            // Restore selection if delete failed
+            setSelectedPaths(pathsToDelete);
         }
     };
 
