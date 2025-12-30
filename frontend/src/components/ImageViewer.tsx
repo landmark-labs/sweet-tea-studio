@@ -898,12 +898,27 @@ export const ImageViewer = React.memo(function ImageViewer({
                                     variant="outline"
                                     size="sm"
                                     className="h-7 text-xs text-red-600 border-red-200 hover:bg-red-50"
-                                    onClick={() => {
+                                    onClick={async () => {
                                         // Use matchingGalleryItem ID if available (for locked images selected via selectedImagePath)
                                         // fallback to currentImage.id for in-array images
                                         const imageId = matchingGalleryItem?.image.id ?? currentImage.id;
-                                        if (imageId > 0 && confirm("Delete this image permanently?")) {
+                                        if (!confirm("Delete this image permanently?")) {
+                                            return;
+                                        }
+
+                                        if (imageId > 0) {
                                             onDelete(imageId);
+                                        } else {
+                                            // Path-based deletion for images without valid DB ID (e.g., from ProjectGallery)
+                                            const rawPath = extractRawPath(currentImage.path);
+                                            try {
+                                                await api.deleteImageByPath(rawPath);
+                                                // Trigger parent refresh by calling onDelete with -1 to signal path-based delete completed
+                                                onDelete(-1);
+                                            } catch (e) {
+                                                console.error("Failed to delete image by path", e);
+                                                alert("Failed to delete image");
+                                            }
                                         }
                                     }}
                                 >
