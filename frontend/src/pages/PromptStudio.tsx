@@ -1856,13 +1856,13 @@ export default function PromptStudio() {
           // Both empty - fall through to trigger generation
         }
 
-        if (!selectedWorkflowId || isBusy || engineOffline) return;
+        if (!selectedWorkflowId || !selectedWorkflow || isBusy || engineOffline) return;
         handleBatchGenerate(store.get(formDataAtom));
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectedWorkflowId, isBusy, engineOffline, store]);
+  }, [selectedWorkflowId, selectedWorkflow, isBusy, engineOffline, store]);
 
   // Use data from GenerationContext if available to avoid duplicate API calls
   const generation = useGeneration();
@@ -1969,6 +1969,13 @@ export default function PromptStudio() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleGenerate = async (data: any) => {
     if (!selectedEngineId || !selectedWorkflowId) return;
+
+    // Guard: Don't proceed if workflow hasn't loaded yet
+    // This prevents first generation using empty params when workflows array is still loading
+    if (!selectedWorkflow) {
+      console.warn("[Generation] Workflow not loaded yet, skipping");
+      return;
+    }
 
     if (engineOffline) {
       setError(selectedEngineHealth?.last_error || "ComfyUI is unreachable. Waiting for reconnection...");
@@ -2352,7 +2359,7 @@ export default function PromptStudio() {
             <Button
               size="lg"
               className="flex-1 relative overflow-hidden transition-all active:scale-[0.98] shadow-sm hover:shadow-md"
-              disabled={!selectedWorkflowId || engineOffline || isBusy}
+              disabled={!selectedWorkflowId || !selectedWorkflow || engineOffline || isBusy}
               onClick={() => handleBatchGenerate(store.get(formDataAtom))}
               style={{
                 background: isBusy
