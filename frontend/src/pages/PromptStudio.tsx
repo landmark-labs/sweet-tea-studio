@@ -320,28 +320,39 @@ export default function PromptStudio() {
     const idsToDelete = typeof ids === 'number' ? new Set([ids]) : ids;
     if (idsToDelete.size === 0) return;
 
-    try {
-      // Optimistic update
-      setGalleryImages(prev => prev.filter(item => !idsToDelete.has(item.image.id)));
-      setSelectedGalleryIds(prev => {
-        const next = new Set(prev);
-        idsToDelete.forEach(id => next.delete(id));
-        return next;
-      });
+    // Filter out negative IDs - these indicate path-based deletes that are already completed
+    // We just need to refresh the gallery in this case
+    const validIds = Array.from(idsToDelete).filter(id => id > 0);
+    const hadPathBasedDelete = Array.from(idsToDelete).some(id => id <= 0);
 
-      // Prefer bulk API to avoid hammering the backend (especially with many deletes)
-      const idsArr = Array.from(idsToDelete);
-      try {
-        await api.bulkDeleteImages(idsArr);
-      } catch (e) {
-        console.error("Bulk delete failed, falling back to sequential", e);
-        for (const id of idsArr) {
-          try {
-            await api.deleteImage(id);
-          } catch (err) {
-            console.error("Failed to delete image", id, err);
+    try {
+      // Optimistic update for valid IDs
+      if (validIds.length > 0) {
+        setGalleryImages(prev => prev.filter(item => !validIds.includes(item.image.id)));
+        setSelectedGalleryIds(prev => {
+          const next = new Set(prev);
+          validIds.forEach(id => next.delete(id));
+          return next;
+        });
+
+        // Prefer bulk API to avoid hammering the backend (especially with many deletes)
+        try {
+          await api.bulkDeleteImages(validIds);
+        } catch (e) {
+          console.error("Bulk delete failed, falling back to sequential", e);
+          for (const id of validIds) {
+            try {
+              await api.deleteImage(id);
+            } catch (err) {
+              console.error("Failed to delete image", id, err);
+            }
           }
         }
+      }
+
+      // If there was a path-based delete, refresh the gallery to remove the deleted item
+      if (hadPathBasedDelete) {
+        loadGallery();
       }
     } catch (e) {
       console.error("Failed to delete images", e);

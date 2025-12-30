@@ -182,6 +182,8 @@ export interface GalleryItem {
 
 export interface ImageMetadata {
     path: string;
+    image_id?: number;
+    job_id?: number;
     prompt?: string | null;
     negative_prompt?: string | null;
     workflow?: unknown;

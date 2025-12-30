@@ -140,7 +140,6 @@ export interface GalleryQuery {
     folder?: string | null;
     unassignedOnly?: boolean;
     includeThumbnails?: boolean;
-    includeParams?: boolean;
 }
 
 export interface PromptSuggestion {
@@ -286,6 +285,8 @@ export interface InstallStatus {
 
 export interface ImageMetadata {
     path: string;
+    image_id?: number;
+    job_id?: number;
     prompt?: string | null;
     negative_prompt?: string | null;
     workflow?: unknown;
@@ -618,9 +619,6 @@ export const api = {
             if (query.includeThumbnails !== undefined) {
                 params.append("include_thumbnails", query.includeThumbnails ? "true" : "false");
             }
-            if (query.includeParams !== undefined) {
-                params.append("include_params", query.includeParams ? "true" : "false");
-            }
         } else {
             // Handle both old (skip, limit) and new (search, limit) signatures
             if (typeof searchOrSkip === "string") {
@@ -644,9 +642,8 @@ export const api = {
 
         const baseUrl = `${API_BASE}/gallery/?${params.toString()}`;
         let res = await fetch(baseUrl);
-        if (!res.ok && usedNewParams && (params.has("include_thumbnails") || params.has("include_params"))) {
+        if (!res.ok && usedNewParams && params.has("include_thumbnails")) {
             params.delete("include_thumbnails");
-            params.delete("include_params");
             res = await fetch(`${API_BASE}/gallery/?${params.toString()}`);
         }
         if (!res.ok) throw new Error("Failed to fetch gallery");
@@ -658,6 +655,18 @@ export const api = {
         await api.bulkDeleteImages([imageId]);
     },
 
+    deleteImageByPath: async (path: string): Promise<{ deleted: boolean; error?: string }> => {
+        const res = await fetch(`${API_BASE}/gallery/image/path/delete`, {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ path }),
+        });
+        if (!res.ok) {
+            const errorData = await res.json().catch(() => ({}));
+            throw new Error(errorData.detail || "Failed to delete image");
+        }
+        return res.json();
+    },
     bulkDeleteImages: async (imageIds: number[]): Promise<{ deleted: number; not_found: number[]; file_errors: number[] }> => {
         const res = await fetch(`${API_BASE}/gallery/bulk_delete`, {
             method: "POST",
@@ -665,16 +674,6 @@ export const api = {
             body: JSON.stringify({ image_ids: imageIds }),
         });
         if (!res.ok) throw new Error("Failed to delete images");
-        return res.json();
-    },
-
-    restoreImages: async (imageIds: number[]): Promise<{ restored: number; not_found: number[]; file_errors: number[] }> => {
-        const res = await fetch(`${API_BASE}/gallery/restore`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ image_ids: imageIds }),
-        });
-        if (!res.ok) throw new Error("Failed to restore images");
         return res.json();
     },
 
@@ -708,11 +707,8 @@ export const api = {
         if (!res.ok) throw new Error("Failed to update image");
     },
 
-    getImageMetadata: async (path: string, options: { signal?: AbortSignal } = {}): Promise<ImageMetadata> => {
-        const res = await fetch(
-            `${API_BASE}/gallery/image/path/metadata?path=${encodeURIComponent(path)}`,
-            { signal: options.signal }
-        );
+    getImageMetadata: async (path: string): Promise<ImageMetadata> => {
+        const res = await fetch(`${API_BASE}/gallery/image/path/metadata?path=${encodeURIComponent(path)}`);
         if (!res.ok) throw new Error("Failed to fetch image metadata");
         return res.json();
     },
@@ -981,20 +977,8 @@ export const api = {
     },
 
     // --- Project Folder Images ---
-    getProjectFolderImages: async (
-        projectId: number,
-        folderName: string,
-        options: { includeDimensions?: boolean; signal?: AbortSignal } = {}
-    ): Promise<FolderImage[]> => {
-        const params = new URLSearchParams();
-        if (options.includeDimensions !== undefined) {
-            params.set("include_dimensions", String(options.includeDimensions));
-        }
-        const query = params.toString();
-        const res = await fetch(
-            `${API_BASE}/projects/${projectId}/folders/${encodeURIComponent(folderName)}/images${query ? `?${query}` : ""}`,
-            { signal: options.signal }
-        );
+    getProjectFolderImages: async (projectId: number, folderName: string): Promise<FolderImage[]> => {
+        const res = await fetch(`${API_BASE}/projects/${projectId}/folders/${encodeURIComponent(folderName)}/images`);
         if (!res.ok) throw new Error("Failed to fetch folder images");
         return res.json();
     },

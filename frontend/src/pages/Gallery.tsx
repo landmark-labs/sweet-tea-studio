@@ -19,7 +19,6 @@ import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/h
 import { ProjectSidebar } from "@/components/ProjectSidebar";
 import { VirtualGrid } from "@/components/VirtualGrid";
 import { MoveImagesDialog } from "@/components/MoveImagesDialog";
-import { useUndoToast } from "@/components/ui/undo-toast";
 import React from "react";
 
 const MISSING_IMAGE_SRC =
@@ -126,7 +125,6 @@ export default function Gallery() {
     const [nextSkip, setNextSkip] = useState(0);
     const [gridResetKey, setGridResetKey] = useState(0);
     const [moveDialogOpen, setMoveDialogOpen] = useState(false);
-    const { showUndoToast } = useUndoToast();
 
     const searchRef = useRef(search);
     const selectedProjectIdRef = useRef(selectedProjectId);
@@ -223,7 +221,6 @@ export default function Gallery() {
                 folder: folderValue,
                 unassignedOnly,
                 includeThumbnails: false,
-                includeParams: false,
             });
             if (token !== queryTokenRef.current) return;
             setItems((prev) => (append ? [...prev, ...data] : data));
@@ -412,35 +409,38 @@ export default function Gallery() {
 
     const handleBulkDelete = async () => {
         if (selectedIds.size === 0) return;
+        if (!confirm(`Delete ${selectedIds.size} images?`)) return;
 
         const ids = Array.from(selectedIds);
-        const count = ids.length;
-
-        // Optimistically remove from UI
-        const deletedItems = items.filter(i => selectedIds.has(i.image.id));
-        setItems(prev => prev.filter(i => !selectedIds.has(i.image.id)));
-        setSelectedIds(new Set());
 
         try {
-            // Delete via API (moves files to .trash)
-            await api.bulkDeleteImages(ids);
+            // Prefer single bulk call to avoid hammering the API and DB
+            const res = await api.bulkDeleteImages(ids);
 
-            // Show undo toast
-            showUndoToast(
-                `Deleted ${count} image${count > 1 ? 's' : ''}`,
-                ids,
-                async (imageIds) => {
-                    // Restore from trash
-                    await api.restoreImages(imageIds);
-                    // Re-add items to gallery
-                    setItems(prev => [...deletedItems, ...prev]);
-                }
-            );
+            // Update UI for all deleted IDs
+            const deletedSet = new Set(ids);
+            setItems(prev => prev.filter(i => !deletedSet.has(i.image.id)));
+            setSelectedIds(new Set());
+
+            if (res.not_found.length || res.file_errors.length) {
+                alert(`Deleted ${res.deleted} images. Skipped ${res.not_found.length} missing. File errors: ${res.file_errors.length}.`);
+            }
         } catch (e) {
-            console.error("Bulk delete failed", e);
-            // Restore items on error
-            setItems(prev => [...deletedItems, ...prev]);
-            alert("Failed to delete images");
+            console.error("Bulk delete failed, retrying sequentially", e);
+            // Fallback: delete sequentially to reduce concurrent load
+            let failed = 0;
+            for (const id of ids) {
+                try {
+                    await api.deleteImage(id);
+                } catch {
+                    failed += 1;
+                }
+            }
+            const deletedSet = new Set(ids);
+            setItems(prev => prev.filter(i => !deletedSet.has(i.image.id)));
+            setSelectedIds(new Set());
+
+            if (failed > 0) alert(`Failed to delete ${failed} images`);
         }
     };
 
@@ -513,37 +513,17 @@ export default function Gallery() {
     const projectFolders = selectedProject?.config_json?.folders || [];
 
     const handleDelete = async (id: number) => {
-        // Find the item before removing
-        const deletedItem = items.find((item) => item.image.id === id);
-        if (!deletedItem) return;
-
-        // Optimistically remove from UI
-        setItems((prev) => prev.filter((item) => item.image.id !== id));
-        setSelectedIds((prev) => {
-            if (!prev.has(id)) return prev;
-            const next = new Set(prev);
-            next.delete(id);
-            return next;
-        });
-
+        if (!confirm("Are you sure you want to delete this image?")) return;
         try {
-            // Delete via API (moves file to .trash)
             await api.deleteImage(id);
-
-            // Show undo toast
-            showUndoToast(
-                "Image deleted",
-                [id],
-                async (imageIds) => {
-                    // Restore from trash
-                    await api.restoreImages(imageIds);
-                    // Re-add item to gallery
-                    setItems(prev => [deletedItem, ...prev]);
-                }
-            );
+            setItems((prev) => prev.filter((item) => item.image.id !== id));
+            setSelectedIds((prev) => {
+                if (!prev.has(id)) return prev;
+                const next = new Set(prev);
+                next.delete(id);
+                return next;
+            });
         } catch (err) {
-            // Restore item on error
-            setItems(prev => [deletedItem, ...prev]);
             alert("Failed to delete image");
         }
     };
@@ -582,45 +562,13 @@ export default function Gallery() {
         }
     };
 
-    const normalizeJobParams = (value: unknown) => {
-        if (!value) return {};
-        if (typeof value === "string") {
-            try {
-                return JSON.parse(value);
-            } catch {
-                return {};
-            }
-        }
-        if (typeof value === "object") return value as Record<string, unknown>;
-        return {};
-    };
-
-    const handleRegenerate = async (item: GalleryItem) => {
-        let loadParams = item;
-        if (!item.job_params || Object.keys(item.job_params).length === 0) {
-            const jobId = item.image?.job_id;
-            if (jobId) {
-                try {
-                    const job = await api.getJob(jobId);
-                    const jobParams = normalizeJobParams(job.input_params);
-                    loadParams = {
-                        ...item,
-                        job_params: jobParams,
-                        workflow_template_id: job.workflow_template_id ?? item.workflow_template_id,
-                        prompt: item.prompt ?? (jobParams as any)?.prompt,
-                        negative_prompt: item.negative_prompt ?? (jobParams as any)?.negative_prompt,
-                    };
-                } catch (e) {
-                    console.error("Failed to fetch job params for regenerate", e);
-                }
-            }
-        }
-        navigate("/", { state: { loadParams, isRegenerate: true } });
+    const handleRegenerate = (item: GalleryItem) => {
+        navigate("/", { state: { loadParams: item, isRegenerate: true } });
     };
 
     // Helper to extract relevant prompts
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const getPrompts = (params: any, fallback?: { prompt?: string | null; negative_prompt?: string | null }) => {
+    const getPrompts = (params: any) => {
         let positive = "";
         let negative = "";
 
@@ -652,9 +600,6 @@ export default function Gallery() {
                 }
             });
         }
-
-        if (!positive && fallback?.prompt) positive = fallback.prompt;
-        if (!negative && fallback?.negative_prompt) negative = fallback.negative_prompt;
 
         return { positive, negative };
     };
@@ -872,10 +817,7 @@ export default function Gallery() {
                                                 )}
 
                                                 {(() => {
-                                                    const { positive, negative } = getPrompts(item.job_params, {
-                                                        prompt: item.prompt,
-                                                        negative_prompt: item.negative_prompt,
-                                                    });
+                                                    const { positive, negative } = getPrompts(item.job_params);
                                                     return (
                                                         <div className="mt-2 space-y-2">
                                                             {positive && (

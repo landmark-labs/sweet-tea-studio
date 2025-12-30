@@ -730,11 +730,42 @@ export const ImageViewer = React.memo(function ImageViewer({
                                 <div className="h-px bg-slate-100 my-1" />
                                 <div
                                     className="px-3 py-2 hover:bg-red-50 cursor-pointer flex items-center gap-2 text-red-600"
-                                    onClick={() => {
+                                    onClick={async () => {
                                         // Use matchingGalleryItem ID if available (for locked images selected via selectedImagePath)
                                         const imageId = matchingGalleryItem?.image.id ?? currentImage.id;
-                                        if (imageId > 0 && confirm("Delete this image permanently?")) {
+                                        if (!confirm("Delete this image permanently?")) {
+                                            setContextMenu(null);
+                                            return;
+                                        }
+
+                                        // Navigate to next image before deletion (so deleted image doesn't linger)
+                                        const currentIdx = displayImages.findIndex(img =>
+                                            extractRawPath(img.path) === extractRawPath(currentImage.path)
+                                        );
+                                        if (currentIdx >= 0 && displayImages.length > 1) {
+                                            // Enter navigation mode and move to next image (or previous if at end)
+                                            setNavigationMode(true);
+                                            if (currentIdx < displayImages.length - 1) {
+                                                setSelectedIndex(currentIdx); // Will show next after array updates
+                                            } else {
+                                                setSelectedIndex(Math.max(0, currentIdx - 1));
+                                            }
+                                        }
+
+                                        if (imageId > 0) {
+                                            // Standard deletion by ID
                                             onDelete(imageId);
+                                        } else {
+                                            // Path-based deletion for images without valid DB ID (e.g., from ProjectGallery)
+                                            const rawPath = extractRawPath(currentImage.path);
+                                            try {
+                                                await api.deleteImageByPath(rawPath);
+                                                // Trigger parent refresh by calling onDelete with -1 to signal path-based delete completed
+                                                onDelete(-1);
+                                            } catch (e) {
+                                                console.error("Failed to delete image by path", e);
+                                                alert("Failed to delete image");
+                                            }
                                         }
                                         setContextMenu(null);
                                     }}
