@@ -419,6 +419,7 @@ const SortableLibrarySnippet = React.memo(function SortableLibrarySnippet({ snip
                 </ContextMenuTrigger>
                 <HoverCardContent
                     className="w-80 shadow-xl border-slate-200"
+                    sideOffset={2}
                     onMouseEnter={handleHoverContentEnter}
                     onMouseLeave={handleHoverContentLeave}
                 >
