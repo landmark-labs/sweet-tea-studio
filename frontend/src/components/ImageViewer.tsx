@@ -906,6 +906,20 @@ export const ImageViewer = React.memo(function ImageViewer({
                                             return;
                                         }
 
+                                        // Navigate to next image before deletion (so deleted image doesn't linger)
+                                        const currentIdx = displayImages.findIndex(img =>
+                                            extractRawPath(img.path) === extractRawPath(currentImage.path)
+                                        );
+                                        if (currentIdx >= 0 && displayImages.length > 1) {
+                                            // Enter navigation mode and move to next image (or previous if at end)
+                                            setNavigationMode(true);
+                                            if (currentIdx < displayImages.length - 1) {
+                                                setSelectedIndex(currentIdx); // Will show next after array updates
+                                            } else {
+                                                setSelectedIndex(Math.max(0, currentIdx - 1));
+                                            }
+                                        }
+
                                         if (imageId > 0) {
                                             onDelete(imageId);
                                         } else {

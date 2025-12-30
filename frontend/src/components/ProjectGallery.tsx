@@ -429,8 +429,25 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
         }
 
         try {
+            // Find the next image to navigate to before deleting
+            const currentIdx = images.findIndex(img => img.path === image.path);
+            let nextImage: FolderImage | null = null;
+            if (images.length > 1) {
+                if (currentIdx < images.length - 1) {
+                    nextImage = images[currentIdx + 1];
+                } else {
+                    nextImage = images[currentIdx - 1];
+                }
+            }
+
             await api.deleteFolderImages(parseInt(selectedProjectId), selectedFolder, [image.path]);
-            setImages(prev => prev.filter(img => img.path !== image.path));
+            const newImages = images.filter(img => img.path !== image.path);
+            setImages(newImages);
+
+            // Navigate to next image after deletion
+            if (nextImage && onSelectImage) {
+                onSelectImage(nextImage.path, newImages);
+            }
         } catch (e) {
             console.error("Delete failed", e);
             alert("Failed to delete image");
