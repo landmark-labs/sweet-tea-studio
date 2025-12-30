@@ -117,6 +117,26 @@ export function ImageUpload({
         } catch (e) { console.error(e); }
     }, []);
 
+    // Clear stale preview when value changes externally (e.g., from "use in pipe")
+    // The preview state is set during local uploads but becomes stale when value is updated externally
+    const prevValueRef = useRef(value);
+    useEffect(() => {
+        if (value !== prevValueRef.current) {
+            // Value changed externally - clear preview so we use the API path for the new value
+            if (preview && !preview.startsWith("blob:")) {
+                setPreview(null);
+            } else if (preview && value) {
+                // If we have a blob preview but value changed, clear it
+                setPreview(null);
+            }
+            // Update preview kind based on new value
+            if (value) {
+                setPreviewKind(guessKindFromFilename(value));
+            }
+            prevValueRef.current = value;
+        }
+    }, [value, preview]);
+
     useEffect(() => {
         if (isBrowseOpen) {
             // Load gallery images for the "Recent" tab (default view)
