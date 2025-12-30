@@ -377,11 +377,21 @@ export function PromptAutocompleteTextarea({
         if (isOpen && rankedSuggestions.length > 0) {
             if (e.key === "ArrowDown") {
                 e.preventDefault();
-                setHighlightIndex((idx) => (idx + 1) % rankedSuggestions.length);
+                if (highlightIndex >= rankedSuggestions.length - 1) {
+                    // At the bottom - close autocomplete to let arrow keys navigate textarea
+                    setIsOpen(false);
+                } else {
+                    setHighlightIndex((idx) => idx + 1);
+                }
                 return;
             } else if (e.key === "ArrowUp") {
                 e.preventDefault();
-                setHighlightIndex((idx) => (idx - 1 + rankedSuggestions.length) % rankedSuggestions.length);
+                if (highlightIndex <= 0) {
+                    // At the top - close autocomplete to let arrow keys navigate textarea
+                    setIsOpen(false);
+                } else {
+                    setHighlightIndex((idx) => idx - 1);
+                }
                 return;
             } else if (e.key === "Tab" || (e.key === "Enter" && !e.ctrlKey && !e.metaKey)) {
                 e.preventDefault();
