@@ -1005,6 +1005,76 @@ def serve_image_by_path(path: str, session: Session = Depends(get_session)):
     raise HTTPException(status_code=404, detail=f"File not found: {path}")
 
 
+class DeleteByPathRequest(BaseModel):
+    path: str
+
+
+@router.delete("/image/path/delete")
+def delete_image_by_path(req: DeleteByPathRequest, session: Session = Depends(get_session)):
+    """
+    Delete an image by its file path.
+    
+    This endpoint is used when the image doesn't have a valid database ID
+    (e.g., images from ProjectGallery that are loaded from disk).
+    """
+    path = req.path
+    
+    # Resolve the actual file path (same logic as serve_image_by_path)
+    actual_path = None
+    if os.path.exists(path):
+        actual_path = path
+    else:
+        engine = session.exec(select(Engine).where(Engine.name == "Local ComfyUI")).first()
+        if not engine:
+            engine = session.exec(select(Engine)).first()
+        
+        if engine:
+            if engine.input_dir:
+                input_path = os.path.join(engine.input_dir, path)
+                if os.path.exists(input_path):
+                    actual_path = input_path
+            if not actual_path and engine.output_dir:
+                output_path = os.path.join(engine.output_dir, path)
+                if os.path.exists(output_path):
+                    actual_path = output_path
+    
+    if not actual_path:
+        raise HTTPException(status_code=404, detail=f"File not found: {path}")
+    
+    # Try to find matching image in database and soft-delete it
+    image = session.exec(
+        select(Image).where(Image.path == actual_path).order_by(Image.created_at.desc())
+    ).first()
+    
+    if not image:
+        # Also try the original path in case it's stored differently
+        image = session.exec(
+            select(Image).where(Image.path == path).order_by(Image.created_at.desc())
+        ).first()
+    
+    # Delete the file from disk
+    try:
+        os.remove(actual_path)
+        # Also delete associated .json metadata file if it exists
+        json_path = os.path.splitext(actual_path)[0] + ".json"
+        if os.path.exists(json_path):
+            os.remove(json_path)
+        logger.info("Deleted image file", extra={"path": actual_path})
+    except OSError as e:
+        logger.exception("Failed to delete file", extra={"path": actual_path})
+        raise HTTPException(status_code=500, detail=f"Failed to delete file: {e}")
+    
+    # Soft delete in database if found
+    if image:
+        image.is_deleted = True
+        image.deleted_at = datetime.utcnow()
+        session.add(image)
+        session.commit()
+        logger.info("Soft-deleted image from database", extra={"image_id": image.id, "path": actual_path})
+    
+    return {"deleted": True, "path": actual_path, "db_updated": image is not None}
+
+
 @router.get("/image/{image_id}")
 def serve_image(image_id: int, session: Session = Depends(get_session)):
     image = session.get(Image, image_id)
@@ -1074,12 +1144,20 @@ def get_image_metadata_by_path(path: str, session: Session = Depends(get_session
                 else:
                     exif = img.getexif()
                     if exif:
-                        for tag_id, value in exif.items():
-                            tag_name = ExifTags.TAGS.get(tag_id, tag_id)
-                            if str(tag_name).lower() in {"xpcomment", "usercomment", "comment"}:
-                                comment_text = _decode_xp_comment(value)
-                                if comment_text:
-                                    break
+                        # XPComment tag ID is 0x9C9C (40092)
+                        # Check by tag ID first since ExifTags.TAGS may not include XPComment
+                        XP_COMMENT_TAG = 0x9C9C  # 40092
+                        if XP_COMMENT_TAG in exif:
+                            comment_text = _decode_xp_comment(exif[XP_COMMENT_TAG])
+                        
+                        if not comment_text:
+                            # Fallback to name-based lookup
+                            for tag_id, value in exif.items():
+                                tag_name = ExifTags.TAGS.get(tag_id, tag_id)
+                                if str(tag_name).lower() in {"xpcomment", "usercomment", "comment"}:
+                                    comment_text = _decode_xp_comment(value)
+                                    if comment_text:
+                                        break
 
                 if comment_text:
                     parsed_comment = _extract_prompts_from_comment_blob(comment_text)
