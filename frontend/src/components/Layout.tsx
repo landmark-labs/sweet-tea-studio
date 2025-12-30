@@ -25,6 +25,7 @@ import { DraggablePanel } from "@/components/ui/draggable-panel";
 import { GenerationFeed } from "@/components/GenerationFeed";
 import { PromptLibraryQuickPanel } from "@/components/PromptLibraryQuickPanel";
 import { useGenerationFeedStore, usePromptLibraryStore } from "@/lib/stores/promptDataStore";
+import { useStatusPollingStore } from "@/lib/stores/statusPollingStore";
 import { useGeneration } from "@/lib/GenerationContext";
 import { initClientDiagnostics } from "@/lib/clientDiagnostics";
 import { CanvasSidebar } from "@/components/CanvasSidebar";
@@ -53,6 +54,12 @@ export default function Layout() {
   useEffect(() => {
     initClientDiagnostics();
   }, []);
+  const startStatusPolling = useStatusPollingStore(useCallback(state => state.startPolling, []));
+  const stopStatusPolling = useStatusPollingStore(useCallback(state => state.stopPolling, []));
+  useEffect(() => {
+    startStatusPolling();
+    return () => stopStatusPolling();
+  }, [startStatusPolling, stopStatusPolling]);
 
   const handleRestartBackend = async () => {
     if (!confirm("Are you sure you want to restart the backend? This will temporarily disconnect all services.")) {

@@ -2,7 +2,7 @@
 Projects API endpoints.
 Manages project creation, listing, and run organization.
 """
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
 from sqlmodel import Session, select, SQLModel
 from typing import List, Optional
 from datetime import datetime
@@ -411,6 +411,7 @@ class FolderImage(SQLModel):
 def list_project_folder_images(
     project_id: int,
     folder_name: str,
+    include_dimensions: bool = Query(True, description="Include width/height by inspecting image files."),
     session: Session = Depends(get_session)
 ):
     """
@@ -468,14 +469,15 @@ def list_project_folder_images(
         if local_path.exists():
             folder_path = local_path
     
-    # Debug: log path resolution
+    # Debug: log path resolution (guarded to avoid noisy logs on frequent polls)
     import logging
     logger = logging.getLogger(__name__)
-    logger.info(f"[ProjectGallery] project={project.slug}, folder={folder_name}")
-    logger.info(f"[ProjectGallery] active_engine={active_engine.name if active_engine else 'None'}")
-    if active_engine:
-        logger.info(f"[ProjectGallery] input_dir='{active_engine.input_dir}', output_dir='{active_engine.output_dir}'")
-    logger.info(f"[ProjectGallery] folder_path={folder_path}, exists={folder_path.exists() if folder_path else False}")
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug("[ProjectGallery] project=%s, folder=%s", project.slug, folder_name)
+        logger.debug("[ProjectGallery] active_engine=%s", active_engine.name if active_engine else "None")
+        if active_engine:
+            logger.debug("[ProjectGallery] input_dir=%s, output_dir=%s", active_engine.input_dir, active_engine.output_dir)
+        logger.debug("[ProjectGallery] folder_path=%s, exists=%s", folder_path, folder_path.exists() if folder_path else False)
     
     if not folder_path or not folder_path.exists():
         return []
@@ -493,7 +495,9 @@ def list_project_folder_images(
     
     images = []
     try:
-        from PIL import Image as PILImage
+        PILImage = None
+        if include_dimensions:
+            from PIL import Image as PILImage
         
         for entry in os.scandir(folder_path):
             if entry.is_file():
@@ -506,12 +510,12 @@ def list_project_folder_images(
                     
                     # Try to read image dimensions
                     width, height = None, None
-                    try:
-                        if ext in image_extensions:
+                    if include_dimensions and PILImage and ext in image_extensions:
+                        try:
                             with PILImage.open(entry.path) as img:
                                 width, height = img.size
-                    except Exception:
-                        pass  # Dimensions will remain None
+                        except Exception:
+                            pass  # Dimensions will remain None
                     
                     images.append({
                         "path": entry.path,
@@ -520,8 +524,8 @@ def list_project_folder_images(
                         "width": width,
                         "height": height
                     })
-    except Exception as e:
-        print(f"Error scanning folder {folder_path}: {e}")
+    except Exception:
+        logger.exception("Error scanning folder %s", folder_path)
         return []
     
     # Sort by modification time, newest first

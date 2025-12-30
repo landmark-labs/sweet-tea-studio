@@ -120,7 +120,7 @@ export function ImageUpload({
     useEffect(() => {
         if (isBrowseOpen) {
             // Load gallery images for the "Recent" tab (default view)
-            api.getGallery({ limit: 25, includeThumbnails: false }).then(items => {
+            api.getGallery({ limit: 25, includeThumbnails: false, includeParams: false }).then(items => {
                 // Sort by created_at desc (newest first)
                 const sorted = items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
                 setGalleryImages(sorted.slice(0, 25).map(i => i.image.path));
@@ -140,7 +140,7 @@ export function ImageUpload({
     useEffect(() => {
         if (selectedProjectId && selectedFolder) {
             setIsLoadingProjectImages(true);
-            api.getProjectFolderImages(selectedProjectId, selectedFolder)
+            api.getProjectFolderImages(selectedProjectId, selectedFolder, { includeDimensions: false })
                 .then(images => {
                     // Sort by mtime desc (newest first)
                     const sorted = images.sort((a, b) =>
@@ -160,7 +160,7 @@ export function ImageUpload({
             // Fetch images from each folder and merge
             Promise.all(
                 folders.map(folder =>
-                    api.getProjectFolderImages(selectedProjectId, folder).catch(() => [])
+                    api.getProjectFolderImages(selectedProjectId, folder, { includeDimensions: false }).catch(() => [])
                 )
             ).then(results => {
                 // Flatten and dedupe by path

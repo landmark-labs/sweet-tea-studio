@@ -221,6 +221,7 @@ export default function Gallery() {
                 folder: folderValue,
                 unassignedOnly,
                 includeThumbnails: false,
+                includeParams: false,
             });
             if (token !== queryTokenRef.current) return;
             setItems((prev) => (append ? [...prev, ...data] : data));
@@ -562,13 +563,45 @@ export default function Gallery() {
         }
     };
 
-    const handleRegenerate = (item: GalleryItem) => {
-        navigate("/", { state: { loadParams: item, isRegenerate: true } });
+    const normalizeJobParams = (value: unknown) => {
+        if (!value) return {};
+        if (typeof value === "string") {
+            try {
+                return JSON.parse(value);
+            } catch {
+                return {};
+            }
+        }
+        if (typeof value === "object") return value as Record<string, unknown>;
+        return {};
+    };
+
+    const handleRegenerate = async (item: GalleryItem) => {
+        let loadParams = item;
+        if (!item.job_params || Object.keys(item.job_params).length === 0) {
+            const jobId = item.image?.job_id;
+            if (jobId) {
+                try {
+                    const job = await api.getJob(jobId);
+                    const jobParams = normalizeJobParams(job.input_params);
+                    loadParams = {
+                        ...item,
+                        job_params: jobParams,
+                        workflow_template_id: job.workflow_template_id ?? item.workflow_template_id,
+                        prompt: item.prompt ?? (jobParams as any)?.prompt,
+                        negative_prompt: item.negative_prompt ?? (jobParams as any)?.negative_prompt,
+                    };
+                } catch (e) {
+                    console.error("Failed to fetch job params for regenerate", e);
+                }
+            }
+        }
+        navigate("/", { state: { loadParams, isRegenerate: true } });
     };
 
     // Helper to extract relevant prompts
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const getPrompts = (params: any) => {
+    const getPrompts = (params: any, fallback?: { prompt?: string | null; negative_prompt?: string | null }) => {
         let positive = "";
         let negative = "";
 
@@ -600,6 +633,9 @@ export default function Gallery() {
                 }
             });
         }
+
+        if (!positive && fallback?.prompt) positive = fallback.prompt;
+        if (!negative && fallback?.negative_prompt) negative = fallback.negative_prompt;
 
         return { positive, negative };
     };
@@ -817,7 +853,10 @@ export default function Gallery() {
                                                 )}
 
                                                 {(() => {
-                                                    const { positive, negative } = getPrompts(item.job_params);
+                                                    const { positive, negative } = getPrompts(item.job_params, {
+                                                        prompt: item.prompt,
+                                                        negative_prompt: item.negative_prompt,
+                                                    });
                                                     return (
                                                         <div className="mt-2 space-y-2">
                                                             {positive && (

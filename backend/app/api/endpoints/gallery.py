@@ -200,6 +200,7 @@ def read_gallery(
     limit: Optional[int] = Query(None, ge=1, description="Max items to return. If omitted, returns all."),
     search: Optional[str] = Query(None, description="Search by prompt text, tags, or caption"),
     include_thumbnails: bool = Query(True, description="Include inline thumbnail bytes"),
+    include_params: bool = Query(True, description="Include job params and prompt history in response"),
     kept_only: bool = Query(False),
     collection_id: Optional[int] = Query(None),
     project_id: Optional[int] = Query(None),
@@ -367,9 +368,10 @@ def read_gallery(
 
         history = []
         if isinstance(metadata, dict):
-            raw_history = metadata.get("prompt_history", [])
-            if isinstance(raw_history, list):
-                history = [entry for entry in raw_history if isinstance(entry, dict)]
+            if include_params:
+                raw_history = metadata.get("prompt_history", [])
+                if isinstance(raw_history, list):
+                    history = [entry for entry in raw_history if isinstance(entry, dict)]
 
             active_prompt = metadata.get("active_prompt")
             if isinstance(active_prompt, dict):
@@ -440,10 +442,10 @@ def read_gallery(
 
         item = GalleryItem(
             image=image_payload,
-            job_params=params if isinstance(params, dict) else {},
+            job_params=params if include_params and isinstance(params, dict) else {},
             prompt=prompt_text,
             negative_prompt=negative_prompt,
-            prompt_history=history,
+            prompt_history=history if include_params else [],
             workflow_template_id=job.workflow_template_id if job else None,
             workflow_name=workflow.name if workflow else None,
             width=img_width,

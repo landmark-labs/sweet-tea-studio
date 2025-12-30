@@ -140,6 +140,7 @@ export interface GalleryQuery {
     folder?: string | null;
     unassignedOnly?: boolean;
     includeThumbnails?: boolean;
+    includeParams?: boolean;
 }
 
 export interface PromptSuggestion {
@@ -617,6 +618,9 @@ export const api = {
             if (query.includeThumbnails !== undefined) {
                 params.append("include_thumbnails", query.includeThumbnails ? "true" : "false");
             }
+            if (query.includeParams !== undefined) {
+                params.append("include_params", query.includeParams ? "true" : "false");
+            }
         } else {
             // Handle both old (skip, limit) and new (search, limit) signatures
             if (typeof searchOrSkip === "string") {
@@ -640,8 +644,9 @@ export const api = {
 
         const baseUrl = `${API_BASE}/gallery/?${params.toString()}`;
         let res = await fetch(baseUrl);
-        if (!res.ok && usedNewParams && params.has("include_thumbnails")) {
+        if (!res.ok && usedNewParams && (params.has("include_thumbnails") || params.has("include_params"))) {
             params.delete("include_thumbnails");
+            params.delete("include_params");
             res = await fetch(`${API_BASE}/gallery/?${params.toString()}`);
         }
         if (!res.ok) throw new Error("Failed to fetch gallery");
@@ -692,8 +697,11 @@ export const api = {
         if (!res.ok) throw new Error("Failed to update image");
     },
 
-    getImageMetadata: async (path: string): Promise<ImageMetadata> => {
-        const res = await fetch(`${API_BASE}/gallery/image/path/metadata?path=${encodeURIComponent(path)}`);
+    getImageMetadata: async (path: string, options: { signal?: AbortSignal } = {}): Promise<ImageMetadata> => {
+        const res = await fetch(
+            `${API_BASE}/gallery/image/path/metadata?path=${encodeURIComponent(path)}`,
+            { signal: options.signal }
+        );
         if (!res.ok) throw new Error("Failed to fetch image metadata");
         return res.json();
     },
@@ -962,8 +970,20 @@ export const api = {
     },
 
     // --- Project Folder Images ---
-    getProjectFolderImages: async (projectId: number, folderName: string): Promise<FolderImage[]> => {
-        const res = await fetch(`${API_BASE}/projects/${projectId}/folders/${encodeURIComponent(folderName)}/images`);
+    getProjectFolderImages: async (
+        projectId: number,
+        folderName: string,
+        options: { includeDimensions?: boolean; signal?: AbortSignal } = {}
+    ): Promise<FolderImage[]> => {
+        const params = new URLSearchParams();
+        if (options.includeDimensions !== undefined) {
+            params.set("include_dimensions", String(options.includeDimensions));
+        }
+        const query = params.toString();
+        const res = await fetch(
+            `${API_BASE}/projects/${projectId}/folders/${encodeURIComponent(folderName)}/images${query ? `?${query}` : ""}`,
+            { signal: options.signal }
+        );
         if (!res.ok) throw new Error("Failed to fetch folder images");
         return res.json();
     },

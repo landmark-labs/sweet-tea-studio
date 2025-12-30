@@ -2,13 +2,14 @@
  * ConnectionIndicator - Compact connection status indicator for the header
  * Shows green/red dot, connection status, port, and allows editing
  */
-import { useState, useEffect } from "react";
-import { api, EngineHealth } from "@/lib/api";
+import { useEffect, useState } from "react";
+import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Settings2 } from "lucide-react";
+import { useStatusPollingStore } from "@/lib/stores/statusPollingStore";
 
 
 interface VersionInfo {
@@ -19,26 +20,15 @@ interface VersionInfo {
 }
 
 export function ConnectionIndicator() {
-    const [health, setHealth] = useState<EngineHealth | null>(null);
     const [port, setPort] = useState(() => localStorage.getItem("ds_comfyui_port") || "8188");
     const [tempPort, setTempPort] = useState(port);
     const [isEditing, setIsEditing] = useState(false);
     const [versions, setVersions] = useState<VersionInfo | null>(null);
 
-    const isConnected = health?.healthy ?? false;
+    const engineStatus = useStatusPollingStore((state) => state.status?.engine);
+    const isConnected = engineStatus?.is_connected ?? engineStatus?.state === "ok";
 
     useEffect(() => {
-        const checkHealth = async () => {
-            try {
-                const healths = await api.getEngineHealth();
-                if (healths.length > 0) {
-                    setHealth(healths[0]);
-                }
-            } catch {
-                setHealth(null);
-            }
-        };
-
         const fetchVersions = async () => {
             if (!isConnected) return;
             try {
@@ -49,14 +39,11 @@ export function ConnectionIndicator() {
             }
         };
 
-        checkHealth();
         fetchVersions();
-        const interval = setInterval(checkHealth, 5000);
         // Refresh versions every 30s
         const versionInterval = setInterval(fetchVersions, 30000);
 
         return () => {
-            clearInterval(interval);
             clearInterval(versionInterval);
         };
     }, [isConnected]);

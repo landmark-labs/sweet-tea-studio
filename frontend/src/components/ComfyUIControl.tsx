@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Power, Loader2, Terminal } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useStatusPollingStore } from "@/lib/stores/statusPollingStore";
 
 type ConnectionState = "connected" | "starting" | "stopped" | "stopping";
 
@@ -20,6 +21,7 @@ export function ComfyUIControl() {
     const pollCountRef = useRef(0);
     const isStartingRef = useRef(false);
     const isStoppingRef = useRef(false);
+    const engineStatus = useStatusPollingStore((statusState) => statusState.status?.engine);
 
     // Poll logs when dialog is open
     useEffect(() => {
@@ -39,57 +41,44 @@ export function ComfyUIControl() {
         return () => clearInterval(interval);
     }, [logsOpen]);
 
-    // Fetch both managed process status AND actual connection health
-    const checkStatus = useCallback(async () => {
-        try {
-            const healths = await api.getEngineHealth();
-            const isConnected = healths.length > 0 && healths[0].healthy;
+    useEffect(() => {
+        if (!engineStatus) return;
+        const isConnected = engineStatus.is_connected ?? false;
+        setCanLaunch(engineStatus.can_launch ?? false);
+        if (!isStoppingRef.current) {
+            setLastError(engineStatus.launcher_error || null);
+        }
 
-            const processStatus = await api.getComfyUIStatus();
-            setCanLaunch(processStatus.can_launch);
-            if (!isStoppingRef.current) {
-                setLastError(processStatus.error || null);
-            }
-
-            if (isStartingRef.current || isStoppingRef.current) {
-                if (isStartingRef.current && isConnected) {
-                    setState("connected");
-                    isStartingRef.current = false;
-                    if (pollingRef.current) {
-                        clearInterval(pollingRef.current);
-                        pollingRef.current = null;
-                        pollCountRef.current = 0;
-                    }
-                }
-                return;
-            }
-
-            if (isConnected) {
+        if (isStartingRef.current || isStoppingRef.current) {
+            if (isStartingRef.current && isConnected) {
                 setState("connected");
+                isStartingRef.current = false;
                 if (pollingRef.current) {
                     clearInterval(pollingRef.current);
                     pollingRef.current = null;
                     pollCountRef.current = 0;
                 }
-            } else if (state === "starting") {
-                // Keep starting state
-            } else {
-                setState("stopped");
             }
-        } catch {
-            console.warn("Failed to check ComfyUI status");
-            if (state !== "starting" && state !== "stopping") {
+            if (isStoppingRef.current && !engineStatus.is_process_running && !isConnected) {
                 setState("stopped");
+                isStoppingRef.current = false;
+                if (pollingRef.current) {
+                    clearInterval(pollingRef.current);
+                    pollingRef.current = null;
+                    pollCountRef.current = 0;
+                }
             }
+            return;
         }
-    }, [state]);
 
-    // Initialize and poll for status
-    useEffect(() => {
-        checkStatus();
-        const interval = setInterval(checkStatus, 3000);
-        return () => clearInterval(interval);
-    }, [checkStatus]);
+        if (isConnected) {
+            setState("connected");
+        } else if (engineStatus.is_process_running) {
+            setState("starting");
+        } else {
+            setState("stopped");
+        }
+    }, [engineStatus]);
 
     // Start ComfyUI
     const handleStart = async () => {

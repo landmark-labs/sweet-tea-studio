@@ -14,6 +14,7 @@ import {
     TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Play, Loader2 } from "lucide-react";
+import { useStatusPollingStore } from "@/lib/stores/statusPollingStore";
 
 interface StatusItem {
     state: "ok" | "warn" | "error";
@@ -111,41 +112,21 @@ function StatusPill({ label, status, extraInfo, onClick, actionLabel, actionLoad
 }
 
 export const StatusBar = React.memo(function StatusBar({ collapsed }: { collapsed?: boolean }) {
-    const [status, setStatus] = useState<StatusSummary | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
+    const status = useStatusPollingStore((state) => state.status) as StatusSummary | null;
+    const fetchStatus = useStatusPollingStore((state) => state.fetchStatus);
     const [isLaunching, setIsLaunching] = useState(false);
     const [actionFeedback, setActionFeedback] = useState<string | null>(null);
     const [engineAction, setEngineAction] = useState<"starting" | "stopping" | null>(null);
 
-    const fetchStatus = async () => {
-        try {
-            const res = await fetch(`${getApiBase()}/monitoring/status/summary`);
-            if (res.ok) {
-                const data = await res.json();
-                setStatus(data);
-
-                if (data?.engine) {
-                    if (engineAction === "starting" && data.engine.is_connected) {
-                        setEngineAction(null);
-                    }
-
-                    if (engineAction === "stopping" && !data.engine.is_process_running && !data.engine.is_connected) {
-                        setEngineAction(null);
-                    }
-                }
-            }
-        } catch (e) {
-            console.error("Failed to fetch status:", e);
-            setStatus({
-                engine: { state: "error", detail: "cannot reach backend", is_connected: false, can_launch: false },
-                queue: { state: "error", detail: "unknown", pending_jobs: 0, oldest_job_age_s: 0 },
-                io: { state: "error", detail: "unknown" },
-                models: { state: "error", detail: "unknown", missing_models: 0 },
-            });
-        } finally {
-            setIsLoading(false);
+    useEffect(() => {
+        if (!status?.engine) return;
+        if (engineAction === "starting" && status.engine.is_connected) {
+            setEngineAction(null);
         }
-    };
+        if (engineAction === "stopping" && !status.engine.is_process_running && !status.engine.is_connected) {
+            setEngineAction(null);
+        }
+    }, [engineAction, status?.engine?.is_connected, status?.engine?.is_process_running]);
 
     const toggleComfyUI = async (action: "start" | "stop") => {
         setIsLaunching(true);
@@ -176,16 +157,6 @@ export const StatusBar = React.memo(function StatusBar({ collapsed }: { collapse
             setIsLaunching(false);
         }
     };
-
-    useEffect(() => {
-        fetchStatus();
-        const interval = setInterval(fetchStatus, 5000);
-        return () => clearInterval(interval);
-    }, []);
-
-    if (isLoading && !status) {
-        return null;
-    }
 
     if (!status) {
         return null;

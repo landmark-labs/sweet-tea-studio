@@ -129,6 +129,8 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
     const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set());
     const lastSelectedPath = useRef<string | null>(null);
     const imagesRef = useRef<FolderImage[]>([]);
+    const imagesSignatureRef = useRef<string>("");
+    const pollAbortRef = useRef<AbortController | null>(null);
     const [gridResetKey, setGridResetKey] = useState(0);
     // Track previous project to avoid resetting folder on transient empty states
     const prevProjectIdRef = useRef<string>(selectedProjectId);
@@ -181,10 +183,24 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
         return currentFolders;
     }, [selectedProject?.config_json, selectedProjectId, selectedProject]);
 
+    const imageWorkflows = useMemo(() => {
+        if (!workflows.length) return [];
+        return workflows.filter(w => {
+            const graphText = typeof w.graph_json === "string"
+                ? w.graph_json
+                : JSON.stringify(w.graph_json || {});
+            return graphText.includes("LoadImage") || graphText.includes("VAEEncode");
+        });
+    }, [workflows]);
+
     // Persist collapsed state
     useEffect(() => {
         localStorage.setItem("ds_project_gallery_collapsed", String(collapsed));
     }, [collapsed]);
+
+    useEffect(() => {
+        imagesSignatureRef.current = "";
+    }, [selectedProjectId, selectedFolder]);
 
     useEffect(() => {
         if (!externalSelection) return;
@@ -219,27 +235,72 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
     // Load images when project/folder changes
     useEffect(() => {
         let mounted = true;
-        let timeoutId: NodeJS.Timeout;
+        let timeoutId: NodeJS.Timeout | null = null;
 
         // Reset VirtualGrid scroll position when switching folders
         setGridResetKey(prev => prev + 1);
 
-        const loadImages = async (showLoading = true) => {
-            if (!selectedProjectId || !selectedFolder) {
-                if (mounted) setImages([]);
-                return;
+        if (collapsed) {
+            return () => {
+                mounted = false;
+                if (pollAbortRef.current) {
+                    pollAbortRef.current.abort();
+                    pollAbortRef.current = null;
+                }
+                if (timeoutId) clearTimeout(timeoutId);
+            };
+        }
+
+        const buildSignature = (next: FolderImage[]) => {
+            if (!next.length) return "0";
+            const head = next[0];
+            const tail = next[next.length - 1];
+            return `${next.length}|${head.path}|${head.mtime}|${tail.path}|${tail.mtime}`;
+        };
+
+        if (!selectedProjectId || !selectedFolder) {
+            if (mounted) {
+                imagesSignatureRef.current = "";
+                setImages([]);
             }
+            return () => {
+                mounted = false;
+                if (pollAbortRef.current) {
+                    pollAbortRef.current.abort();
+                    pollAbortRef.current = null;
+                }
+                if (timeoutId) clearTimeout(timeoutId);
+            };
+        }
+
+        const loadImages = async (showLoading = true) => {
 
             if (showLoading) setIsLoading(true);
             try {
+                if (pollAbortRef.current) {
+                    pollAbortRef.current.abort();
+                }
+                const controller = new AbortController();
+                pollAbortRef.current = controller;
+
                 const data = await api.getProjectFolderImages(
                     parseInt(selectedProjectId),
-                    selectedFolder
+                    selectedFolder,
+                    { includeDimensions: false, signal: controller.signal }
                 );
-                if (mounted) setImages(data);
+                if (!mounted || controller.signal.aborted) return;
+                const nextSignature = buildSignature(data);
+                if (nextSignature !== imagesSignatureRef.current) {
+                    imagesSignatureRef.current = nextSignature;
+                    setImages(data);
+                }
             } catch (e) {
+                if (e instanceof DOMException && e.name === "AbortError") return;
                 console.error("Failed to load folder images", e);
-                if (mounted) setImages([]);
+                if (mounted) {
+                    imagesSignatureRef.current = "";
+                    setImages([]);
+                }
             } finally {
                 if (mounted && showLoading) setIsLoading(false);
             }
@@ -259,9 +320,13 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
 
         return () => {
             mounted = false;
-            clearTimeout(timeoutId);
+            if (pollAbortRef.current) {
+                pollAbortRef.current.abort();
+                pollAbortRef.current = null;
+            }
+            if (timeoutId) clearTimeout(timeoutId);
         };
-    }, [selectedProjectId, selectedFolder]);
+    }, [selectedProjectId, selectedFolder, collapsed]);
 
     // Reset folder when project changes
     useEffect(() => {
@@ -684,10 +749,7 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
                     )}
 
                     {/* Use in pipe with workflow submenu */}
-                    {onUseInPipe && workflows.filter(w => {
-                        const jsonStr = JSON.stringify(w.graph_json || {});
-                        return jsonStr.includes("LoadImage") || jsonStr.includes("VAEEncode");
-                    }).length > 0 && (
+                    {onUseInPipe && imageWorkflows.length > 0 && (
                             <div className="relative group">
                                 <div className="w-full px-3 py-1.5 text-left text-xs hover:bg-slate-100 flex items-center justify-between cursor-pointer">
                                     <span className="flex items-center gap-2">use in pipe</span>
@@ -695,10 +757,7 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
                                 </div>
                                 <div className="absolute right-full top-0 pr-1 hidden group-hover:block">
                                     <div className="bg-white border border-slate-200 rounded-md shadow-lg py-1 w-40 max-h-48 overflow-y-auto">
-                                        {workflows.filter(w => {
-                                            const jsonStr = JSON.stringify(w.graph_json || {});
-                                            return jsonStr.includes("LoadImage") || jsonStr.includes("VAEEncode");
-                                        }).map((w: any) => (
+                                        {imageWorkflows.map((w: any) => (
                                             <button
                                                 key={w.id}
                                                 className="w-full px-3 py-1.5 text-left text-xs hover:bg-slate-100 truncate"

@@ -23,6 +23,8 @@ interface ImageViewerProps {
     resetKey?: number;  // When changed, reset selectedIndex to 0 (for new generations)
 }
 
+const METADATA_CACHE_LIMIT = 200;
+
 export const ImageViewer = React.memo(function ImageViewer({
     images,
     galleryItems,
@@ -142,11 +144,20 @@ export const ImageViewer = React.memo(function ImageViewer({
     const [metadataLoading, setMetadataLoading] = React.useState(false);
     const [useInPipeMenuOpen, setUseInPipeMenuOpen] = React.useState(false);
     const [regenerateMenuOpen, setRegenerateMenuOpen] = React.useState(false);
+    const metadataCacheRef = React.useRef(new Map<string, {
+        prompt?: string | null;
+        negative_prompt?: string | null;
+        parameters: Record<string, unknown>;
+        source: string;
+    }>());
+    const metadataAbortRef = React.useRef<AbortController | null>(null);
+    const metadataRequestIdRef = React.useRef(0);
 
     // Fetch metadata from PNG when image path changes
     React.useEffect(() => {
         if (!imagePath) {
             setPngMetadata(null);
+            setMetadataLoading(false);
             return;
         }
 
@@ -165,21 +176,56 @@ export const ImageViewer = React.memo(function ImageViewer({
             }
         }
 
+        const cacheKey = rawPath || imagePath;
+        const cached = metadataCacheRef.current.get(cacheKey);
+        if (cached) {
+            metadataCacheRef.current.delete(cacheKey);
+            metadataCacheRef.current.set(cacheKey, cached);
+            setPngMetadata(cached);
+            setMetadataLoading(false);
+            return;
+        }
+
+        if (metadataAbortRef.current) {
+            metadataAbortRef.current.abort();
+        }
+        const controller = new AbortController();
+        metadataAbortRef.current = controller;
+        const requestId = ++metadataRequestIdRef.current;
+
         setMetadataLoading(true);
-        api.getImageMetadata(rawPath)
+        api.getImageMetadata(rawPath, { signal: controller.signal })
             .then((data) => {
-                setPngMetadata({
+                if (controller.signal.aborted || requestId !== metadataRequestIdRef.current) return;
+                const nextMetadata = {
                     prompt: data.prompt,
                     negative_prompt: data.negative_prompt,
                     parameters: data.parameters,
                     source: data.source
-                });
+                };
+                metadataCacheRef.current.set(cacheKey, nextMetadata);
+                if (metadataCacheRef.current.size > METADATA_CACHE_LIMIT) {
+                    const oldestKey = metadataCacheRef.current.keys().next().value;
+                    if (oldestKey) metadataCacheRef.current.delete(oldestKey);
+                }
+                setPngMetadata(nextMetadata);
             })
             .catch((err) => {
+                if (controller.signal.aborted) return;
                 console.warn("Failed to fetch image metadata:", err);
                 setPngMetadata(null);
             })
-            .finally(() => setMetadataLoading(false));
+            .finally(() => {
+                if (controller.signal.aborted || requestId !== metadataRequestIdRef.current) return;
+                setMetadataLoading(false);
+            });
+
+        return () => {
+            controller.abort();
+            if (metadataAbortRef.current === controller) {
+                metadataAbortRef.current = null;
+            }
+        };
     }, [imagePath]);
 
     // Use PNG metadata as the authoritative source for prompts display
@@ -190,17 +236,27 @@ export const ImageViewer = React.memo(function ImageViewer({
         source: pngMetadata.source
     } : metadata;
 
+    const galleryItemByPath = React.useMemo(() => {
+        if (!galleryItems?.length) return null;
+        const map = new Map<string, GalleryItem>();
+        for (const item of galleryItems) {
+            const path = item.image?.path;
+            if (path) {
+                map.set(path, item);
+                const raw = extractRawPath(path);
+                if (raw) map.set(raw, item);
+            }
+        }
+        return map;
+    }, [galleryItems, extractRawPath]);
+
     // Find matching gallery item for full metadata (including workflow_template_id)
     // This is critical for regenerate to work correctly - we need the pipe ID
     const matchingGalleryItem = React.useMemo(() => {
-        if (!imagePath || !galleryItems?.length) return null;
+        if (!imagePath || !galleryItemByPath) return null;
         const rawPath = extractRawPath(imagePath);
-        // Try exact path match first, then raw path match
-        return galleryItems.find(g => g.image.path === imagePath)
-            || galleryItems.find(g => g.image.path === rawPath)
-            || galleryItems.find(g => extractRawPath(g.image.path) === rawPath)
-            || null;
-    }, [imagePath, galleryItems, extractRawPath]);
+        return galleryItemByPath.get(imagePath) || (rawPath ? galleryItemByPath.get(rawPath) : null) || null;
+    }, [imagePath, galleryItemByPath, extractRawPath]);
 
     // For regenerate, we need the full gallery item with workflow_template_id
     // Merge PNG metadata (latest prompts from file) with gallery item metadata (for pipe ID)
@@ -459,11 +515,15 @@ export const ImageViewer = React.memo(function ImageViewer({
         setContextMenu({ x, y });
     };
 
-    // Filter workflows that take an image
-    const imgWorkflows = workflows.filter(w => {
-        const jsonStr = JSON.stringify(w.graph_json || {});
-        return jsonStr.includes("LoadImage") || jsonStr.includes("VAEEncode");
-    });
+    const imageWorkflows = React.useMemo(() => {
+        if (!workflows.length) return [];
+        return workflows.filter(w => {
+            const graphText = typeof w.graph_json === "string"
+                ? w.graph_json
+                : JSON.stringify(w.graph_json || {});
+            return graphText.includes("LoadImage") || graphText.includes("VAEEncode");
+        });
+    }, [workflows]);
 
     // Helper to get a raw path (strip API wrapper if needed)
     const resolveRawPath = (pathStr?: string) => {
@@ -612,7 +672,7 @@ export const ImageViewer = React.memo(function ImageViewer({
                             </div>
                         )}
 
-                        {imgWorkflows.length > 0 && (
+                        {imageWorkflows.length > 0 && (
                             <div className="relative group">
                                 <div className="px-3 py-2 hover:bg-slate-100 cursor-pointer flex items-center justify-between">
                                     <span className="flex items-center gap-2">use in pipe</span>
@@ -621,13 +681,13 @@ export const ImageViewer = React.memo(function ImageViewer({
                                 {/* pl-2 + -ml-1 creates an invisible hover bridge to the right for horizontal submenus */}
                                 <div className="absolute left-full top-0 pl-2 -ml-1 hidden group-hover:block">
                                     <div className="bg-white border border-slate-200 rounded-md shadow-lg py-1 w-48 max-h-64 overflow-y-auto">
-                                        {imgWorkflows.map(w => (
+                                        {imageWorkflows.map(w => (
                                             <div
                                                 key={w.id}
                                                 className="px-3 py-2 hover:bg-slate-100 cursor-pointer truncate"
                                                 onClick={() => {
                                                     const rawPath = resolveRawPath(imagePath);
-                                                    const item = galleryItems?.find(g => g.image.path === rawPath) || galleryItems?.find(g => g.image.path === imagePath);
+                                                    const item = matchingGalleryItem;
                                                     onUseInPipe?.({
                                                         workflowId: String(w.id),
                                                         imagePath: rawPath || imagePath || "",
@@ -692,7 +752,7 @@ export const ImageViewer = React.memo(function ImageViewer({
                     <div className="px-4 py-2 border-b bg-slate-50 flex flex-wrap items-center justify-between gap-2 flex-shrink-0">
                         {/* Left: Actions */}
                         <div className="flex items-center gap-2">
-                            {imgWorkflows.length > 0 && (
+                            {imageWorkflows.length > 0 && (
                                 <div
                                     className="relative"
                                     onMouseEnter={() => setUseInPipeMenuOpen(true)}
@@ -712,10 +772,10 @@ export const ImageViewer = React.memo(function ImageViewer({
                                     {/* pt-2 + -mt-2 creates an invisible hover bridge between button and menu */}
                                     <div className={`absolute left-0 top-full pt-2 -mt-1 z-50 ${useInPipeMenuOpen ? "block" : "hidden"}`}>
                                         <div className="bg-white border border-slate-200 rounded-md shadow-lg py-1 w-48 max-h-64 overflow-y-auto">
-                                            {imgWorkflows.map(w => (
+                                            {imageWorkflows.map(w => (
                                                 <div key={w.id} className="px-3 py-2 hover:bg-slate-100 cursor-pointer truncate text-xs" onClick={() => {
                                                     const rawPath = resolveRawPath(imagePath);
-                                                    const item = galleryItems?.find(g => g.image.path === rawPath) || galleryItems?.find(g => g.image.path === imagePath);
+                                                    const item = matchingGalleryItem;
                                                     onUseInPipe?.({
                                                         workflowId: String(w.id),
                                                         imagePath: rawPath || imagePath || "",

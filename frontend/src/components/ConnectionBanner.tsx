@@ -7,38 +7,21 @@ import { Button } from "@/components/ui/button";
 import { X, Play, Loader2, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getApiBase } from "@/lib/api";
+import { useStatusPollingStore } from "@/lib/stores/statusPollingStore";
 
 interface ConnectionBannerProps {
     className?: string;
 }
 
 export function ConnectionBanner({ className }: ConnectionBannerProps) {
-    const [isConnected, setIsConnected] = useState(true);
-    const [canLaunch, setCanLaunch] = useState(false);
     const [isDismissed, setIsDismissed] = useState(false);
     const [isLaunching, setIsLaunching] = useState(false);
     const retryCountRef = useRef(0);
+    const engineStatus = useStatusPollingStore((state) => state.status?.engine);
+    const fetchStatus = useStatusPollingStore((state) => state.fetchStatus);
 
-    const checkConnection = async () => {
-        try {
-            const res = await fetch(`${getApiBase()}/monitoring/status/summary`);
-            if (res.ok) {
-                const data = await res.json();
-                const connected = data.engine?.is_connected ?? data.engine?.state === "ok";
-                const launch = data.engine?.can_launch ?? false;
-
-                setIsConnected(connected);
-                setCanLaunch(launch);
-
-                // Auto-dismiss if connected
-                if (connected && isDismissed) {
-                    setIsDismissed(false);
-                }
-            }
-        } catch {
-            setIsConnected(false);
-        }
-    };
+    const isConnected = engineStatus?.is_connected ?? engineStatus?.state === "ok";
+    const canLaunch = engineStatus?.can_launch ?? false;
 
     const launchComfyUI = async () => {
         setIsLaunching(true);
@@ -56,7 +39,7 @@ export function ConnectionBanner({ className }: ConnectionBannerProps) {
                         setIsLaunching(false);
                         return;
                     }
-                    checkConnection();
+                    fetchStatus();
                 }, 2000);
             }
         } catch {
@@ -65,10 +48,10 @@ export function ConnectionBanner({ className }: ConnectionBannerProps) {
     };
 
     useEffect(() => {
-        checkConnection();
-        const interval = setInterval(checkConnection, 5000);
-        return () => clearInterval(interval);
-    }, []);
+        if (isConnected && isDismissed) {
+            setIsDismissed(false);
+        }
+    }, [isConnected, isDismissed]);
 
     // Don't show if connected or dismissed
     if (isConnected || isDismissed) {
