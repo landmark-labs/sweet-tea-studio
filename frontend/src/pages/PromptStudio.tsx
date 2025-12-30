@@ -1511,6 +1511,9 @@ export default function PromptStudio() {
   const wsRef = useRef<WebSocket | null>(null);
   const lastPreviewUpdateRef = useRef<number>(0);
   const lastProgressUpdateRef = useRef<number>(0);
+  // Guard to prevent processing multiple completion events for the same job
+  // (both execution_complete AND generation_done can fire for a single job)
+  const completionProcessedRef = useRef<boolean>(false);
   const PROGRESS_THROTTLE_MS = 100; // Minimum ms between progress updates
   const wsDebug = useMemo(
     () => import.meta.env.DEV && localStorage.getItem("ds_debug_ws") === "1",
@@ -1534,6 +1537,8 @@ export default function PromptStudio() {
     setStatusLabel("queued");
     setProgress(prev => prev > 0 ? prev : 0);
     if (!jobStartTime) setJobStartTime(Date.now());
+    // Reset completion guard for new job
+    completionProcessedRef.current = false;
 
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsApiPath = window.location.pathname.startsWith('/studio') ? '/sts-api/api/v1' : '/api/v1';
@@ -1625,13 +1630,17 @@ export default function PromptStudio() {
         });
       } else if (data.type === "execution_complete" || data.type === "generation_done") {
         // ComfyUI finished rendering
-        console.log(`[Batch] Job completed (${data.type}). Pending queue: [${pendingJobIdsRef.current.join(', ')}]`);
+        // Guard: only process the first completion event (both events fire for the same job)
+        if (completionProcessedRef.current) {
+          logWs(`[WS] Ignoring duplicate ${data.type} - already processed`);
+          return;
+        }
+        completionProcessedRef.current = true;
         logWs(`[WS] Received ${data.type}`);
 
         // Check if there are more jobs in the batch queue
         if (pendingJobIdsRef.current.length > 0) {
           const nextJobId = pendingJobIdsRef.current.shift()!;
-          console.log(`[Batch] Chaining to next job: ${nextJobId}`);
           logWs(`[WS] Chaining to next batch job: ${nextJobId}, remaining: [${pendingJobIdsRef.current.join(', ')}]`);
 
           // Reset progress for next job but keep showing busy state
@@ -1640,13 +1649,13 @@ export default function PromptStudio() {
           setJobStartTime(Date.now());
           setGenerationState("queued");
           setStatusLabel("queued");
+          completionProcessedRef.current = false; // Reset for next job
 
           // Update current feed and start tracking next job
           updateFeed(lastJobId, { status: "completed", progress: 100, previewBlob: null });
           setLastJobId(nextJobId);
           trackFeedStart(nextJobId);
         } else {
-          console.log(`[Batch] No more jobs in queue, resetting UI`);
           // No more jobs - reset button
           setGenerationState("completed");
           setStatusLabel("");
@@ -1656,6 +1665,12 @@ export default function PromptStudio() {
       } else if (data.type === "executing") {
         // Check if this is the final "executing" message with node=null (ComfyUI finished)
         if (data.data?.node === null) {
+          // Guard: skip if already processed by execution_complete/generation_done
+          if (completionProcessedRef.current) {
+            logWs(`[WS] Ignoring executing node=null - completion already processed`);
+            return;
+          }
+          completionProcessedRef.current = true;
           // ComfyUI finished rendering - check for more batch jobs
           logWs(`[WS] Received executing with node=null - ComfyUI done`);
 
@@ -1668,6 +1683,7 @@ export default function PromptStudio() {
             setJobStartTime(Date.now());
             setGenerationState("queued");
             setStatusLabel("queued");
+            completionProcessedRef.current = false; // Reset for next job
 
             updateFeed(lastJobId, { status: "completed", progress: 100 });
             setLastJobId(nextJobId);
@@ -1959,6 +1975,25 @@ export default function PromptStudio() {
       return;
     }
 
+    // SAFETY: If data is empty (uninitialized form atom), load saved/default values first
+    // This prevents the first generation after restart from using empty parameters
+    const schema = visibleSchema || {};
+    let effectiveData = data;
+    if (!data || Object.keys(data).length === 0) {
+      console.warn("[Generation] Form data is empty, loading saved/defaults before generating");
+      let initialData: Record<string, unknown> = buildSchemaDefaults(schema);
+      try {
+        const saved = localStorage.getItem(`ds_pipe_params_${selectedWorkflowId}`);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          initialData = { ...initialData, ...parsed };
+        }
+      } catch (e) { /* ignore */ }
+      effectiveData = normalizeParamsWithDefaults(schema, initialData);
+      // Also update the atom so subsequent renders have the data
+      setFormData(effectiveData);
+    }
+
     setError(null);
     setGenerationState("queued");
     setStatusLabel("queued");
@@ -1968,23 +2003,22 @@ export default function PromptStudio() {
       // This prevents "pollution" from previous workflows or uncleaned state
       // Filter params to only include those in the current schema AND not bypassed
       // This prevents "pollution" from previous workflows or bypassed nodes
-      const schema = visibleSchema || {};
 
       // Identify bypassed nodes
       const bypassedNodeIds = new Set<string>();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       Object.entries(schema).forEach(([key, field]: [string, any]) => {
         if (field.widget === 'toggle' && (key.toLowerCase().includes('bypass') || field.title?.toLowerCase().includes('bypass'))) {
-          if (data[key]) {
+          if (effectiveData[key]) {
             if (field.x_node_id) bypassedNodeIds.add(field.x_node_id);
           }
         }
       });
 
-      const cleanParams = Object.keys(data).reduce((acc, key) => {
+      const cleanParams = Object.keys(effectiveData).reduce((acc, key) => {
         // Always preserve __bypass_ keys - they control which nodes are bypassed
         if (key.startsWith("__bypass_")) {
-          acc[key] = data[key];
+          acc[key] = effectiveData[key];
           return acc;
         }
         if (key in schema) {
@@ -1996,7 +2030,7 @@ export default function PromptStudio() {
             const isBypassToggle = field.widget === 'toggle' && (key.toLowerCase().includes('bypass') || field.title?.toLowerCase().includes('bypass'));
             if (!isBypassToggle) return acc;
           }
-          acc[key] = data[key];
+          acc[key] = effectiveData[key];
         }
         return acc;
       }, {} as Record<string, any>);
@@ -2032,16 +2066,11 @@ export default function PromptStudio() {
   // Batch generation: submit multiple jobs to backend queue
   // Backend processes them sequentially - we track job IDs to show progress for each
   const handleBatchGenerate = useCallback(async (data: any) => {
-    console.log(`[Batch] handleBatchGenerate called with batchSize=${batchSize}`);
-
     if (batchSize <= 1) {
       // Single generation - use original function
-      console.log(`[Batch] batchSize <= 1, using single generation`);
       pendingJobIdsRef.current = []; // Clear any stale queue
       return handleGenerate(data);
     }
-
-    console.log(`[Batch] Starting batch of ${batchSize} jobs`);
 
     // Reset batch state
     batchCancelledRef.current = false;
