@@ -968,7 +968,41 @@ export default function Gallery() {
                                     <span className="font-semibold">{fullscreenItem.prompt_name || fullscreenItem.image.filename}</span>
                                     <span className="text-xs text-slate-300">{new Date(fullscreenItem.created_at).toLocaleString()}</span>
                                 </div>
-                                <div className="text-xs text-slate-200">Scroll to zoom, drag to pan. ← → arrows navigate. ESC closes.</div>
+                                <div className="flex items-center gap-3">
+                                    <div className="flex items-center gap-2">
+                                        <Button
+                                            variant="secondary"
+                                            size="sm"
+                                            onClick={() => handleRegenerate(fullscreenItem)}
+                                            className="gap-1.5"
+                                        >
+                                            <RotateCcw className="w-3.5 h-3.5" />
+                                            Regenerate
+                                        </Button>
+                                        <Button
+                                            variant="secondary"
+                                            size="sm"
+                                            onClick={() => handleDownload(fullscreenItem)}
+                                            className="gap-1.5"
+                                        >
+                                            <Download className="w-3.5 h-3.5" />
+                                            Download
+                                        </Button>
+                                        <Button
+                                            variant="destructive"
+                                            size="sm"
+                                            onClick={() => {
+                                                handleDelete(fullscreenItem.image.id);
+                                                closeFullscreen();
+                                            }}
+                                            className="gap-1.5"
+                                        >
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                            Delete
+                                        </Button>
+                                    </div>
+                                    <div className="text-xs text-slate-200">Scroll to zoom, drag to pan. ← → arrows navigate. ESC closes.</div>
+                                </div>
                             </div>
                         </div>
                     </div>
