@@ -19,6 +19,7 @@ import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/h
 import { ProjectSidebar } from "@/components/ProjectSidebar";
 import { VirtualGrid } from "@/components/VirtualGrid";
 import { MoveImagesDialog } from "@/components/MoveImagesDialog";
+import { useUndoToast } from "@/components/ui/undo-toast";
 import React from "react";
 
 const MISSING_IMAGE_SRC =
@@ -125,6 +126,7 @@ export default function Gallery() {
     const [nextSkip, setNextSkip] = useState(0);
     const [gridResetKey, setGridResetKey] = useState(0);
     const [moveDialogOpen, setMoveDialogOpen] = useState(false);
+    const { showUndoToast } = useUndoToast();
 
     const searchRef = useRef(search);
     const selectedProjectIdRef = useRef(selectedProjectId);
@@ -410,38 +412,35 @@ export default function Gallery() {
 
     const handleBulkDelete = async () => {
         if (selectedIds.size === 0) return;
-        if (!confirm(`Delete ${selectedIds.size} images?`)) return;
 
         const ids = Array.from(selectedIds);
+        const count = ids.length;
+
+        // Optimistically remove from UI
+        const deletedItems = items.filter(i => selectedIds.has(i.image.id));
+        setItems(prev => prev.filter(i => !selectedIds.has(i.image.id)));
+        setSelectedIds(new Set());
 
         try {
-            // Prefer single bulk call to avoid hammering the API and DB
-            const res = await api.bulkDeleteImages(ids);
+            // Delete via API (moves files to .trash)
+            await api.bulkDeleteImages(ids);
 
-            // Update UI for all deleted IDs
-            const deletedSet = new Set(ids);
-            setItems(prev => prev.filter(i => !deletedSet.has(i.image.id)));
-            setSelectedIds(new Set());
-
-            if (res.not_found.length || res.file_errors.length) {
-                alert(`Deleted ${res.deleted} images. Skipped ${res.not_found.length} missing. File errors: ${res.file_errors.length}.`);
-            }
-        } catch (e) {
-            console.error("Bulk delete failed, retrying sequentially", e);
-            // Fallback: delete sequentially to reduce concurrent load
-            let failed = 0;
-            for (const id of ids) {
-                try {
-                    await api.deleteImage(id);
-                } catch {
-                    failed += 1;
+            // Show undo toast
+            showUndoToast(
+                `Deleted ${count} image${count > 1 ? 's' : ''}`,
+                ids,
+                async (imageIds) => {
+                    // Restore from trash
+                    await api.restoreImages(imageIds);
+                    // Re-add items to gallery
+                    setItems(prev => [...deletedItems, ...prev]);
                 }
-            }
-            const deletedSet = new Set(ids);
-            setItems(prev => prev.filter(i => !deletedSet.has(i.image.id)));
-            setSelectedIds(new Set());
-
-            if (failed > 0) alert(`Failed to delete ${failed} images`);
+            );
+        } catch (e) {
+            console.error("Bulk delete failed", e);
+            // Restore items on error
+            setItems(prev => [...deletedItems, ...prev]);
+            alert("Failed to delete images");
         }
     };
 
@@ -514,17 +513,37 @@ export default function Gallery() {
     const projectFolders = selectedProject?.config_json?.folders || [];
 
     const handleDelete = async (id: number) => {
-        if (!confirm("Are you sure you want to delete this image?")) return;
+        // Find the item before removing
+        const deletedItem = items.find((item) => item.image.id === id);
+        if (!deletedItem) return;
+
+        // Optimistically remove from UI
+        setItems((prev) => prev.filter((item) => item.image.id !== id));
+        setSelectedIds((prev) => {
+            if (!prev.has(id)) return prev;
+            const next = new Set(prev);
+            next.delete(id);
+            return next;
+        });
+
         try {
+            // Delete via API (moves file to .trash)
             await api.deleteImage(id);
-            setItems((prev) => prev.filter((item) => item.image.id !== id));
-            setSelectedIds((prev) => {
-                if (!prev.has(id)) return prev;
-                const next = new Set(prev);
-                next.delete(id);
-                return next;
-            });
+
+            // Show undo toast
+            showUndoToast(
+                "Image deleted",
+                [id],
+                async (imageIds) => {
+                    // Restore from trash
+                    await api.restoreImages(imageIds);
+                    // Re-add item to gallery
+                    setItems(prev => [deletedItem, ...prev]);
+                }
+            );
         } catch (err) {
+            // Restore item on error
+            setItems(prev => [deletedItem, ...prev]);
             alert("Failed to delete image");
         }
     };

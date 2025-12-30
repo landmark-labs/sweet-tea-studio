@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Layout from "./components/Layout";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { GenerationProvider } from "./lib/GenerationContext";
+import { UndoToastProvider } from "./components/ui/undo-toast";
 
 const PromptStudio = lazy(() => import("./pages/PromptStudio"));
 const Gallery = lazy(() => import("./pages/Gallery"));
@@ -15,27 +16,29 @@ const Settings = lazy(() => import("./pages/Settings"));
 function App() {
   return (
     <GenerationProvider>
-      <BrowserRouter>
-        <Suspense fallback={<div className="p-4 text-sm text-slate-500">Loading Sweet Tea Studio…</div>}>
-          <Routes>
-            <Route element={
-              <ErrorBoundary>
-                <Layout />
-              </ErrorBoundary>
-            }>
-              <Route path="/" element={<PromptStudio />} />
-              <Route path="/projects" element={<Projects />} />
-              <Route path="/pipes" element={<WorkflowLibrary />} />
-              <Route path="/gallery" element={<Gallery />} />
-              <Route path="/library" element={<PromptLibrary />} />
-              <Route path="/models" element={<Models />} />
-              <Route path="/settings" element={<Settings />} />
-              {/* Legacy route redirect for bookmarks */}
-              <Route path="/workflows" element={<WorkflowLibrary />} />
-            </Route>
-          </Routes>
-        </Suspense>
-      </BrowserRouter>
+      <UndoToastProvider>
+        <BrowserRouter>
+          <Suspense fallback={<div className="p-4 text-sm text-slate-500">Loading Sweet Tea Studio…</div>}>
+            <Routes>
+              <Route element={
+                <ErrorBoundary>
+                  <Layout />
+                </ErrorBoundary>
+              }>
+                <Route path="/" element={<PromptStudio />} />
+                <Route path="/projects" element={<Projects />} />
+                <Route path="/pipes" element={<WorkflowLibrary />} />
+                <Route path="/gallery" element={<Gallery />} />
+                <Route path="/library" element={<PromptLibrary />} />
+                <Route path="/models" element={<Models />} />
+                <Route path="/settings" element={<Settings />} />
+                {/* Legacy route redirect for bookmarks */}
+                <Route path="/workflows" element={<WorkflowLibrary />} />
+              </Route>
+            </Routes>
+          </Suspense>
+        </BrowserRouter>
+      </UndoToastProvider>
     </GenerationProvider>
   );
 }

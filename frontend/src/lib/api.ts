@@ -657,6 +657,7 @@ export const api = {
         // Route through bulk delete for consistent behavior and to avoid DB lock storms
         await api.bulkDeleteImages([imageId]);
     },
+
     bulkDeleteImages: async (imageIds: number[]): Promise<{ deleted: number; not_found: number[]; file_errors: number[] }> => {
         const res = await fetch(`${API_BASE}/gallery/bulk_delete`, {
             method: "POST",
@@ -664,6 +665,16 @@ export const api = {
             body: JSON.stringify({ image_ids: imageIds }),
         });
         if (!res.ok) throw new Error("Failed to delete images");
+        return res.json();
+    },
+
+    restoreImages: async (imageIds: number[]): Promise<{ restored: number; not_found: number[]; file_errors: number[] }> => {
+        const res = await fetch(`${API_BASE}/gallery/restore`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ image_ids: imageIds }),
+        });
+        if (!res.ok) throw new Error("Failed to restore images");
         return res.json();
     },
 
