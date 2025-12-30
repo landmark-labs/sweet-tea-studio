@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useMemo, useCallback, memo, startTransition, type ComponentProps } from "react";
 import { useAtomValue, useSetAtom, useStore } from "jotai";
-import { addProgressEntry, calculateProgressStats, mapStatusToGenerationState, type GenerationState, type ProgressHistoryEntry } from "@/lib/generationState";
+import { addProgressEntry, calculateProgressStats, mapStatusToGenerationState, formatDuration, type GenerationState, type ProgressHistoryEntry } from "@/lib/generationState";
 import { useLocation, useNavigate, useOutletContext } from "react-router-dom";
 import { api, Engine, WorkflowTemplate, GalleryItem, EngineHealth, Project, Image as ApiImage, FolderImage } from "@/lib/api";
 import { extractPrompts, findPromptFieldsInSchema, findImageFieldsInSchema } from "@/lib/promptUtils";
@@ -402,6 +402,16 @@ export default function PromptStudio() {
       })
     );
   }, [selectedWorkflow]);
+  const promptConstructorSchema = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(visibleSchema ?? {}).filter(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ([_, val]: [string, any]) => !val.__hidden
+        )
+      ),
+    [visibleSchema]
+  );
   const selectedProject = selectedProjectId ? projects.find((p) => String(p.id) === selectedProjectId) || null : null;
   const draftsProject = projects.find((p) => p.slug === "drafts");
   const selectedEngineHealth = engineHealth.find((h) => String(h.engine_id) === selectedEngineId);
@@ -2273,13 +2283,7 @@ export default function PromptStudio() {
               {selectedWorkflow ? (
                 <PromptConstructorPanel
                   // Filter out hidden parameters if the new editor logic flagged them
-                  schema={
-                    Object.fromEntries(
-                      Object.entries(visibleSchema ?? {}).filter(
-                        ([_, val]: [string, any]) => !val.__hidden
-                      )
-                    )
-                  }
+                  schema={promptConstructorSchema}
                   onUpdate={handlePromptUpdate}
                   onUpdateMany={handlePromptUpdateMany}
                   targetField={focusedField}
@@ -2386,13 +2390,15 @@ export default function PromptStudio() {
                   </>
                 ) : generationState === "running" ? (
                   (() => {
-                    const elapsed = jobStartTime ? (Date.now() - jobStartTime) / 1000 : 0;
-                    const estimatedTotal = progress > 0 ? elapsed / (progress / 100) : 0;
-                    const remaining = Math.max(0, estimatedTotal - elapsed);
+                    const activeItem = generationFeed.find(item => item.jobId === lastJobId);
+                    const remainingMs = activeItem?.estimatedRemainingMs;
                     return (
                       <>
                         <Loader2 className="w-4 h-4 animate-spin text-white/80" />
-                        <span>{Math.round(progress)}% · ~{Math.round(remaining)}s</span>
+                        <span>
+                          {Math.round(progress)}%
+                          {remainingMs && remainingMs > 0 ? ` · ~${formatDuration(remainingMs)}` : ""}
+                        </span>
                       </>
                     );
                   })()

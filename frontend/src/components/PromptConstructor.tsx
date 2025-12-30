@@ -462,7 +462,13 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
     const targetField = controlledTarget !== undefined ? controlledTarget : internalTarget;
     const setTargetField = onTargetChange || setInternalTarget;
 
-    const [availableFields, setAvailableFields] = useState<string[]>([]);
+    const availableFields = useMemo(() => {
+        if (!schema) return [];
+        return Object.keys(schema).filter(key => {
+            const f = schema[key];
+            return f.widget === "textarea" || f.type === "STRING" || f.type === "string";
+        });
+    }, [schema]);
 
     // 2. State
     const { registerStateChange } = useUndoRedo();
@@ -552,16 +558,6 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
     };
 
     // --- Effects ---
-
-    useEffect(() => {
-        if (schema) {
-            const fields = Object.keys(schema).filter(key => {
-                const f = schema[key];
-                return f.widget === "textarea" || f.type === "STRING" || f.type === "string";
-            });
-            setAvailableFields(fields);
-        }
-    }, [schema]);
 
     // Ref Pattern: Track currentValues without triggering effects in Output channel
     const valuesRef = useRef(currentValues);
