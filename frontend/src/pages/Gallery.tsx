@@ -514,16 +514,45 @@ export default function Gallery() {
 
     const handleDelete = async (id: number) => {
         if (!confirm("Are you sure you want to delete this image?")) return;
+
+        // Find index before async operation/state updates
+        const deletedIndex = items.findIndex(i => i.image.id === id);
+
         try {
             await api.deleteImage(id);
-            setItems((prev) => prev.filter((item) => item.image.id !== id));
+
+            // Calculate new items
+            const newItems = items.filter((item) => item.image.id !== id);
+            setItems(newItems);
+
+            // Update selection
             setSelectedIds((prev) => {
                 if (!prev.has(id)) return prev;
                 const next = new Set(prev);
                 next.delete(id);
                 return next;
             });
+
+            // Update Fullscreen Index logic
+            if (fullscreenIndex !== null && deletedIndex !== -1) {
+                if (deletedIndex < fullscreenIndex) {
+                    // Item before current was deleted, shift left to maintain view
+                    setFullscreenIndex(fullscreenIndex - 1);
+                } else if (deletedIndex === fullscreenIndex) {
+                    // Current item deleted
+                    if (newItems.length === 0) {
+                        setFullscreenIndex(null);
+                    } else if (fullscreenIndex >= newItems.length) {
+                        // Was last item, go to new last item
+                        setFullscreenIndex(newItems.length - 1);
+                    } else {
+                        // Was not last item, index stays same (points to next item)
+                        setFullscreenIndex(fullscreenIndex);
+                    }
+                }
+            }
         } catch (err) {
+            console.error("Delete error:", err);
             alert("Failed to delete image");
         }
     };
@@ -993,7 +1022,7 @@ export default function Gallery() {
                                             size="sm"
                                             onClick={() => {
                                                 handleDelete(fullscreenItem.image.id);
-                                                closeFullscreen();
+                                                // closeFullscreen(); // Don't close, let handleDelete handle navigation
                                             }}
                                             className="gap-1.5"
                                         >
