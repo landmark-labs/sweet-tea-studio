@@ -95,30 +95,27 @@ interface UndoToastItemProps {
 }
 
 function UndoToastItem({ toast, onUndo, onDismiss }: UndoToastItemProps) {
-    const [progress, setProgress] = React.useState(100);
-    const startTimeRef = React.useRef(Date.now());
-    const durationRef = React.useRef(toast.expiresAt - Date.now());
-
-    React.useEffect(() => {
-        const interval = setInterval(() => {
-            const elapsed = Date.now() - startTimeRef.current;
-            const remaining = Math.max(0, 100 - (elapsed / durationRef.current) * 100);
-            setProgress(remaining);
-            if (remaining <= 0) {
-                clearInterval(interval);
-            }
-        }, 50);
-
-        return () => clearInterval(interval);
-    }, []);
+    // Use CSS animation instead of setInterval for progress bar
+    // This eliminates 20 state updates per second, fixing the performance regression
+    const durationMs = React.useMemo(() => Math.max(0, toast.expiresAt - Date.now()), [toast.expiresAt]);
 
     return (
         <div className="pointer-events-auto bg-slate-900 text-white px-4 py-3 rounded-lg shadow-xl flex items-center gap-3 min-w-[280px] max-w-[400px] relative overflow-hidden">
-            {/* Progress bar */}
+            {/* Progress bar - uses CSS animation instead of JS interval */}
             <div
-                className="absolute bottom-0 left-0 h-1 bg-amber-500 transition-all duration-100"
-                style={{ width: `${progress}%` }}
+                className="absolute bottom-0 left-0 h-1 bg-amber-500"
+                style={{
+                    width: '100%',
+                    animation: `undo-toast-shrink ${durationMs}ms linear forwards`,
+                }}
             />
+            {/* CSS keyframes for the animation */}
+            <style>{`
+                @keyframes undo-toast-shrink {
+                    from { width: 100%; }
+                    to { width: 0%; }
+                }
+            `}</style>
 
             <span className="text-sm flex-1">{toast.message}</span>
 

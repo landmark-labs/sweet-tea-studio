@@ -248,10 +248,17 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
         // Initial load
         loadImages(true);
 
-        // Poll every 5 seconds
+        // Poll every 5 seconds - but skip when tab is hidden or panel is collapsed
+        // This is a performance optimization to reduce unnecessary network requests and state updates
         const poll = async () => {
             if (!mounted) return;
-            await loadImages(false); // Background update
+
+            // Skip polling if tab is hidden or panel is collapsed
+            const isHidden = typeof document !== "undefined" && document.visibilityState === "hidden";
+            if (!isHidden && !collapsed) {
+                await loadImages(false); // Background update
+            }
+
             if (mounted) timeoutId = setTimeout(poll, 5000);
         };
 
@@ -261,7 +268,7 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
             mounted = false;
             clearTimeout(timeoutId);
         };
-    }, [selectedProjectId, selectedFolder]);
+    }, [selectedProjectId, selectedFolder, collapsed]);
 
     // Reset folder when project changes
     useEffect(() => {
