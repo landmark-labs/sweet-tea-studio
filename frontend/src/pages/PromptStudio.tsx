@@ -1597,7 +1597,20 @@ export default function PromptStudio() {
       const data = JSON.parse(event.data);
       logWs(`[WS] Message received:`, data.type);
 
+      // Performance optimization: Skip non-critical updates when tab is hidden
+      // This prevents queued state updates from causing "catch up" lag when tab becomes visible
+      const isTabHidden = typeof document !== "undefined" && document.visibilityState === "hidden";
+
+      // Critical events that must always be processed (even when hidden)
+      const isCriticalEvent = ["completed", "error", "execution_complete", "generation_done", "save_failed"].includes(data.type) ||
+        (data.type === "status" && (data.status === "completed" || data.status === "failed" || data.status === "cancelled")) ||
+        (data.type === "executing" && data.data?.node === null); // Final completion signal
+
       if (data.type === "status") {
+        // Skip non-critical status updates when hidden
+        if (isTabHidden && !isCriticalEvent) {
+          return;
+        }
         const nextState = mapStatusToGenerationState(data.status);
         // Only update if we got a recognized status (not defaulting to idle)
         // This prevents unknown statuses from resetting the UI
@@ -1611,6 +1624,10 @@ export default function PromptStudio() {
         }
         updateFeed(lastJobId, statusUpdates);
       } else if (data.type === "progress") {
+        // Skip progress updates entirely when tab is hidden - prevents "catch up" rendering
+        if (isTabHidden) {
+          return;
+        }
         // Time-based throttle: MUST be first to skip ALL work when messages arrive too frequently
         const now = Date.now();
         if (now - lastProgressUpdateRef.current < PROGRESS_THROTTLE_MS) {
@@ -1853,6 +1870,40 @@ export default function PromptStudio() {
         wsRef.current = null;
       }
     };
+  }, [lastJobId]);
+
+  // Sync job status when returning to tab after being hidden
+  // This fetches the current job state to update UI that was skipped while hidden
+  useEffect(() => {
+    if (!lastJobId) return;
+
+    const handleVisibilityChange = async () => {
+      if (document.visibilityState === "visible" && lastJobId) {
+        try {
+          const job = await api.getJob(lastJobId);
+          const nextState = mapStatusToGenerationState(job.status);
+
+          if (job.status === "completed") {
+            setGenerationState("completed");
+            setStatusLabel("");
+            setProgress(100);
+            setGalleryRefresh(prev => prev + 1);
+          } else if (job.status === "failed" || job.status === "cancelled") {
+            setGenerationState(nextState);
+            setStatusLabel(job.status);
+            if (job.error) setError(job.error);
+          } else if (job.status === "processing" || job.status === "running") {
+            setGenerationState("running");
+            setStatusLabel("processing");
+          }
+        } catch (e) {
+          console.warn("Failed to sync job status on visibility change:", e);
+        }
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
   }, [lastJobId]);
 
   // Global Shortcut for Generation
