@@ -393,7 +393,15 @@ export function PromptAutocompleteTextarea({
                     setHighlightIndex((idx) => idx - 1);
                 }
                 return;
-            } else if (e.key === "Tab" || (e.key === "Enter" && !e.ctrlKey && !e.metaKey)) {
+            } else if (e.key === "Enter") {
+                if (e.ctrlKey || e.metaKey) {
+                    setIsOpen(false);
+                } else {
+                    e.preventDefault();
+                    insertSuggestion(rankedSuggestions[highlightIndex]?.name);
+                    return;
+                }
+            } else if (e.key === "Tab") {
                 e.preventDefault();
                 insertSuggestion(rankedSuggestions[highlightIndex]?.name);
                 return;
