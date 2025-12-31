@@ -253,6 +253,7 @@ const SortableLibrarySnippet = React.memo(function SortableLibrarySnippet({ snip
     // Controlled hover state - only show when mouse is stationary and no interactions are happening
     const [hoverOpen, setHoverOpen] = useState(false);
     const hoverTimerRef = useRef<NodeJS.Timeout | null>(null);
+    const closeTimerRef = useRef<NodeJS.Timeout | null>(null);
     const isInteractingRef = useRef(false);
     const isInHoverContentRef = useRef(false);
 
@@ -263,8 +264,16 @@ const SortableLibrarySnippet = React.memo(function SortableLibrarySnippet({ snip
         }
     };
 
+    const clearCloseTimer = () => {
+        if (closeTimerRef.current) {
+            clearTimeout(closeTimerRef.current);
+            closeTimerRef.current = null;
+        }
+    };
+
     const startHoverTimer = () => {
         clearHoverTimer();
+        clearCloseTimer();
         if (isInteractingRef.current || isDragging) return;
         hoverTimerRef.current = setTimeout(() => {
             if (!isInteractingRef.current && !isDragging) {
@@ -281,6 +290,7 @@ const SortableLibrarySnippet = React.memo(function SortableLibrarySnippet({ snip
     };
 
     const handleMouseEnter = () => {
+        clearCloseTimer();
         if (!isInteractingRef.current && !isDragging) {
             startHoverTimer();
         }
@@ -288,10 +298,14 @@ const SortableLibrarySnippet = React.memo(function SortableLibrarySnippet({ snip
 
     const handleMouseLeave = () => {
         clearHoverTimer();
-        // Only close if not hovering over the content
-        if (!isInHoverContentRef.current) {
-            setHoverOpen(false);
-        }
+        // Delay closing to give user time to move mouse to hover content
+        // This prevents the "invisible path" problem with finnicky hover cards
+        clearCloseTimer();
+        closeTimerRef.current = setTimeout(() => {
+            if (!isInHoverContentRef.current) {
+                setHoverOpen(false);
+            }
+        }, 150);
     };
 
     const handlePointerDown = (e: React.PointerEvent) => {
@@ -330,17 +344,25 @@ const SortableLibrarySnippet = React.memo(function SortableLibrarySnippet({ snip
     };
 
     const handleHoverContentEnter = () => {
+        clearCloseTimer();
         isInHoverContentRef.current = true;
     };
 
     const handleHoverContentLeave = () => {
         isInHoverContentRef.current = false;
-        setHoverOpen(false);
+        // Use delayed close for consistency
+        clearCloseTimer();
+        closeTimerRef.current = setTimeout(() => {
+            setHoverOpen(false);
+        }, 100);
     };
 
-    // Cleanup timer on unmount
+    // Cleanup timers on unmount
     useEffect(() => {
-        return () => clearHoverTimer();
+        return () => {
+            clearHoverTimer();
+            clearCloseTimer();
+        };
     }, []);
 
     // Close hover when dragging starts

@@ -69,6 +69,28 @@ function sourceBadgeClass(source: string): string {
     return "bg-indigo-50 text-indigo-700 border-indigo-200";
 }
 
+/**
+ * Strips weight syntax from prompt text.
+ * Handles: (text:1.2) → text, ((text)) → text, [text] → text
+ */
+function stripWeights(text: string): string {
+    let result = text;
+    // Remove explicit weights: (text:1.2) → text
+    result = result.replace(/\(([^()]+):[\d.]+\)/g, "$1");
+    // Remove nested parentheses emphasis: ((text)) → text, (((text))) → text
+    // Apply repeatedly until no more nested parens
+    let prev = "";
+    while (prev !== result) {
+        prev = result;
+        result = result.replace(/\(\(([^()]*)\)\)/g, "$1");
+    }
+    // Remove single emphasis parens if they wrap the entire segment
+    result = result.replace(/^\(([^()]+)\)$/g, "$1");
+    // Remove bracket de-emphasis: [text] → text
+    result = result.replace(/\[([^\[\]]+)\]/g, "$1");
+    return result;
+}
+
 export function PromptAutocompleteTextarea({
     value,
     onValueChange,
@@ -374,6 +396,37 @@ export function PromptAutocompleteTextarea({
     };
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+        // Alt+W: Strip weights from selected text
+        if (e.altKey && e.key.toLowerCase() === "w") {
+            e.preventDefault();
+            const textarea = textareaRef.current;
+            if (!textarea) return;
+
+            const start = textarea.selectionStart;
+            const end = textarea.selectionEnd;
+            if (start === end) return; // No selection
+
+            const selectedText = localValue.slice(start, end);
+            const strippedText = stripWeights(selectedText);
+
+            if (strippedText !== selectedText) {
+                const newValue = localValue.slice(0, start) + strippedText + localValue.slice(end);
+                lastInputAtRef.current = Date.now();
+                pendingExternalValueRef.current = null;
+                setLocalValue(newValue);
+                onValueChange(newValue);
+
+                // Position cursor at end of replaced text
+                const newEnd = start + strippedText.length;
+                intendedCursorRef.current = newEnd;
+                requestAnimationFrame(() => {
+                    textarea.setSelectionRange(start, newEnd);
+                    textarea.focus();
+                });
+            }
+            return;
+        }
+
         if (isOpen && rankedSuggestions.length > 0) {
             if (e.key === "ArrowDown") {
                 e.preventDefault();

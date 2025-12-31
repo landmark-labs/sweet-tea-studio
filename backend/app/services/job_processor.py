@@ -198,6 +198,66 @@ def _build_node_mapping_from_schema(schema: dict) -> dict:
     return mapping
 
 
+def _coerce_numeric_value(value: object, field_type: str) -> object | None:
+    if isinstance(value, bool):
+        return None
+
+    if field_type in ("integer", "int"):
+        if isinstance(value, int):
+            return value
+        if isinstance(value, float):
+            return int(value) if value.is_integer() else None
+        if isinstance(value, str):
+            text = value.strip()
+            if text in ("", "-", ".", "-."):
+                return None
+            try:
+                return int(text)
+            except ValueError:
+                try:
+                    as_float = float(text)
+                except ValueError:
+                    return None
+                return int(as_float) if as_float.is_integer() else None
+        return None
+
+    if field_type in ("number", "float"):
+        if isinstance(value, (int, float)):
+            return value
+        if isinstance(value, str):
+            text = value.strip()
+            if text in ("", "-", ".", "-."):
+                return None
+            try:
+                return float(text)
+            except ValueError:
+                return None
+
+    return None
+
+
+def _coerce_params_with_schema(schema: dict, params: dict) -> dict:
+    if not isinstance(params, dict):
+        return {}
+
+    if not isinstance(schema, dict) or not schema:
+        return dict(params)
+
+    coerced = dict(params)
+    for key, value in params.items():
+        if not isinstance(key, str):
+            continue
+        field = schema.get(key)
+        if not isinstance(field, dict):
+            continue
+        field_type = str(field.get("type", "")).lower()
+        coerced_value = _coerce_numeric_value(value, field_type)
+        if coerced_value is not None:
+            coerced[key] = coerced_value
+
+    return coerced
+
+
 def _create_thumbnail(image_path: str, max_px: int = 256, quality: int = 45) -> tuple[bytes | None, int | None, int | None]:
     """
     Generate a compact JPEG thumbnail suitable for inline DB storage.
@@ -496,6 +556,11 @@ def process_job(job_id: int):
             return
 
         try:
+            schema = workflow.input_schema or {}
+            working_params = _coerce_params_with_schema(schema, job.input_params or {})
+            if working_params != job.input_params:
+                job.input_params = working_params
+
             job.status = "running"
             job.started_at = datetime.utcnow()
             session.add(job)
@@ -506,14 +571,9 @@ def process_job(job_id: int):
             client = ComfyClient(engine)
             final_graph = copy.deepcopy(workflow.graph_json)
             
-            working_params = job.input_params.copy()
-            
             # Handle random seed (-1 or "-1") for ANY parameter named like "seed"
             # This handles "seed", "seed (KSampler)", "noise_seed", etc.
             bypass_nodes = []
-            
-            # Helper to check schema for bypass indication
-            schema = workflow.input_schema or {}
             
             for key in list(working_params.keys()):
                  # Seed Handling
