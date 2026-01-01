@@ -595,6 +595,21 @@ export const api = {
         return res.json();
     },
 
+    copyToInput: async (sourcePath: string, engineId?: number, projectSlug?: string, subfolder?: string): Promise<{ filename: string; path: string; already_exists: boolean }> => {
+        const formData = new FormData();
+        formData.append("source_path", sourcePath);
+        if (engineId) formData.append("engine_id", String(engineId));
+        if (projectSlug) formData.append("project_slug", projectSlug);
+        if (subfolder) formData.append("subfolder", subfolder);
+
+        const res = await fetch(`${API_BASE}/files/copy-to-input`, {
+            method: "POST",
+            body: formData,
+        });
+        if (!res.ok) throw new Error("Failed to copy file to input");
+        return res.json();
+    },
+
     // --- Gallery ---
     getGallery: async (
         searchOrSkip?: GalleryQuery | string | number,

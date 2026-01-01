@@ -311,17 +311,20 @@ export function ImageUpload({
             }
 
             // Image is NOT in input dir (e.g., from /sweet_tea/project/output/)
-            // Need to copy it to input dir for LoadImage access
+            // Use server-side copy to preserve original filename
             setIsUploading(true);
             try {
-                const url = `/api/v1/gallery/image/path?path=${encodeURIComponent(sweetTeaPath)}`;
-                const res = await fetch(url);
-                const blob = await res.blob();
-                const filename = sweetTeaPath.split(/[\\/]/).pop() || "dropped_image.png";
-                const file = new File([blob], filename, { type: blob.type });
-                await processFile(file);
+                const id = engineId ? parseInt(engineId) : undefined;
+                const result = await api.copyToInput(sweetTeaPath, id, projectSlug, destinationFolder);
+                onChange(result.filename);
+                addToRecent(result.filename);
+                setPreviewKind(guessKindFromFilename(result.filename));
+                // Set preview from the original path
+                const previewUrl = `/api/v1/gallery/image/path?path=${encodeURIComponent(sweetTeaPath)}`;
+                setPreview(previewUrl);
             } catch (err) {
-                console.error("Failed to process dropped Sweet Tea image", err);
+                console.error("Failed to copy dropped Sweet Tea image to input", err);
+            } finally {
                 setIsUploading(false);
             }
             return;
@@ -373,18 +376,18 @@ export function ImageUpload({
             return;
         }
 
-        // Image is NOT in input dir - need to copy/upload it
+        // Image is NOT in input dir - use server-side copy to preserve filename
         setIsUploading(true);
         try {
-            const url = `/api/v1/gallery/image/path?path=${encodeURIComponent(path)}`;
-            const res = await fetch(url);
-            const blob = await res.blob();
-            const filename = path.split(/[\\/]/).pop() || "gallery_image.png";
-            const file = new File([blob], filename, { type: blob.type });
-            await processFile(file);
+            const id = engineId ? parseInt(engineId) : undefined;
+            const result = await api.copyToInput(path, id, projectSlug, destinationFolder);
+            onChange(result.filename);
+            addToRecent(result.filename);
+            setPreviewKind(guessKindFromFilename(result.filename));
+            setPreview(`/api/v1/gallery/image/path?path=${encodeURIComponent(path)}`);
             setIsBrowseOpen(false);
         } catch (e) {
-            console.error("Failed to copy gallery image", e);
+            console.error("Failed to copy gallery image to input", e);
         } finally {
             setIsUploading(false);
         }

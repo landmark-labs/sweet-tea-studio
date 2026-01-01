@@ -252,3 +252,111 @@ def get_file_tree(
     # Sort: Directories first, then files
     items.sort(key=lambda x: (x["type"] != "directory", x["name"].lower()))
     return items
+
+
+@router.post("/copy-to-input")
+def copy_to_input(
+    source_path: str = Form(...),
+    project_slug: Optional[str] = Form(None),
+    subfolder: Optional[str] = Form(None),
+    engine_id: Optional[int] = Form(None),
+    session: Session = Depends(get_session)
+):
+    """
+    Copy an existing file on disk to ComfyUI's input directory.
+    
+    This is used when dragging images from output folders to LoadImage nodes,
+    to avoid HTTP re-upload which would add timestamp prefixes.
+    
+    If the file is already in the input directory, returns the existing path.
+    """
+    import shutil
+    from pathlib import Path
+    
+    # Get engine
+    engine = None
+    if engine_id:
+        engine = session.get(Engine, engine_id)
+    
+    if not engine:
+        engine = session.exec(select(Engine).where(Engine.name == "Local ComfyUI")).first()
+    
+    if not engine or not engine.input_dir:
+        raise HTTPException(status_code=400, detail="No valid input directory found for engine")
+    
+    source = Path(source_path)
+    if not source.exists():
+        raise HTTPException(status_code=404, detail="Source file not found")
+    
+    if not source.is_file():
+        raise HTTPException(status_code=400, detail="Source path is not a file")
+    
+    # Check file extension
+    ext = source.suffix.lower()
+    if ext not in ALLOWED_UPLOAD_EXT:
+        raise HTTPException(status_code=400, detail="Unsupported file type")
+    
+    # Check if already in input directory
+    input_dir = Path(engine.input_dir)
+    try:
+        source.relative_to(input_dir)
+        # Already in input dir - return the relative path
+        rel_path = str(source.relative_to(input_dir)).replace("\\", "/")
+        return {"filename": rel_path, "path": str(source), "already_exists": True}
+    except ValueError:
+        pass  # Not in input dir, need to copy
+    
+    # Determine target directory
+    if project_slug:
+        project_input_dir = settings.get_project_input_dir_in_comfy(engine.input_dir, project_slug)
+        if subfolder:
+            target_dir = project_input_dir / subfolder
+        else:
+            target_dir = project_input_dir
+        target_dir.mkdir(parents=True, exist_ok=True)
+    else:
+        target_dir = input_dir
+        target_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Use original filename (no timestamp prefix)
+    filename = source.name
+    target_path = target_dir / filename
+    
+    # Handle filename collision
+    if target_path.exists():
+        # If identical file (same size), reuse it
+        if target_path.stat().st_size == source.stat().st_size:
+            # Files are likely the same, use existing
+            pass
+        else:
+            # Different file with same name - add counter
+            stem = source.stem
+            suffix = source.suffix
+            counter = 1
+            while target_path.exists():
+                filename = f"{stem}_{counter}{suffix}"
+                target_path = target_dir / filename
+                counter += 1
+    
+    # Copy the file (if not already exists at target)
+    if not target_path.exists():
+        try:
+            shutil.copy2(source, target_path)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to copy file: {str(e)}")
+    
+    # Return ComfyUI-compatible filename
+    if project_slug:
+        if subfolder:
+            comfy_filename = f"{project_slug}/{subfolder}/{filename}"
+        else:
+            comfy_filename = f"{project_slug}/{filename}"
+    else:
+        comfy_filename = filename
+    
+    return {
+        "filename": comfy_filename,
+        "path": str(target_path),
+        "already_exists": False
+    }
+
