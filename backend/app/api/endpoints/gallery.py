@@ -287,10 +287,14 @@ def _create_video_poster_bytes(path: str, max_px: int) -> Optional[bytes]:
         return None
 
     scale_expr = f"scale=if(gt(iw,ih),{max_px},-2):if(gt(iw,ih),-2,{max_px})"
+
+    # Order matters: try fast seek first, then a decoding-based thumbnail filter.
+    attempts: list[list[str]] = []
     for ss in ("0.5", "0.0"):
-        cmd = [
+        attempts.append([
             ffmpeg,
             "-hide_banner",
+            "-nostdin",
             "-loglevel",
             "error",
             "-ss",
@@ -307,18 +311,55 @@ def _create_video_poster_bytes(path: str, max_px: int) -> Optional[bytes]:
             "mjpeg",
             "-an",
             "pipe:1",
-        ]
+        ])
+
+    # Fallback: ask ffmpeg to pick a representative frame (can be slower but works for tricky seeks).
+    attempts.append([
+        ffmpeg,
+        "-hide_banner",
+        "-nostdin",
+        "-loglevel",
+        "error",
+        "-i",
+        path,
+        "-frames:v",
+        "1",
+        "-vf",
+        f"thumbnail,{scale_expr}",
+        "-f",
+        "image2pipe",
+        "-vcodec",
+        "mjpeg",
+        "-an",
+        "pipe:1",
+    ])
+
+    last_error: str | None = None
+    last_returncode: int | None = None
+
+    for cmd in attempts:
+        ss = None
+        if "-ss" in cmd:
+            try:
+                ss = cmd[cmd.index("-ss") + 1]
+            except Exception:
+                ss = None
         try:
             result = subprocess.run(
                 cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 check=False,
-                timeout=7,
+                timeout=10,
             )
         except subprocess.TimeoutExpired:
             logger.debug("Video poster generation timed out", extra={"path": path, "ss": ss})
             continue
+
+        last_returncode = result.returncode
+        stderr_text = result.stderr.decode("utf-8", errors="ignore")
+        if stderr_text:
+            last_error = stderr_text[:400]
 
         if result.returncode == 0 and result.stdout:
             return result.stdout
@@ -328,7 +369,18 @@ def _create_video_poster_bytes(path: str, max_px: int) -> Optional[bytes]:
             extra={
                 "path": path,
                 "ss": ss,
-                "stderr": result.stderr.decode("utf-8", errors="ignore")[:200],
+                "stderr": stderr_text[:200],
+            },
+        )
+
+    if last_error or last_returncode is not None:
+        logger.info(
+            "Video poster generation failed; returning placeholder",
+            extra={
+                "path": path,
+                "returncode": last_returncode,
+                "stderr": last_error,
+                "ffmpeg": ffmpeg,
             },
         )
 
@@ -1152,6 +1204,11 @@ def serve_thumbnail_by_path(
     if is_video:
         thumb_bytes = _create_video_poster_bytes(actual_path, max_px)
         if not thumb_bytes:
+            ffmpeg_resolved = shutil.which("ffmpeg") or getattr(settings, "FFMPEG_PATH", None)
+            logger.info(
+                "Thumbnail: video poster unavailable, returning placeholder",
+                extra={"path": actual_path, "ffmpeg": ffmpeg_resolved},
+            )
             placeholder = _build_placeholder_svg("video", max_px)
             return Response(content=placeholder, media_type="image/svg+xml", headers=headers)
     else:
