@@ -233,16 +233,19 @@ def _resolve_media_path(path: str, session: Session) -> Optional[str]:
             seen_ids.add(engine.id)
 
     def candidate_paths_for_base(base: str) -> list[str]:
-        base_path = Path(base)
-        candidates: list[Path] = []
-        stripped: str | None = None
-        if "/" in normalized:
-            stripped = normalized.split("/", 1)[1]
+        base_str = str(base).strip().strip('"').strip("'")
+        if not base_str:
+            return []
 
-        # Direct join: <base>/<path>
-        candidates.append(base_path / normalized)
-        if stripped:
-            candidates.append(base_path / stripped)
+        base_path = Path(base_str)
+        candidates: list[Path] = []
+
+        segments = [segment for segment in normalized.split("/") if segment and segment != "."]
+        suffixes = ["/".join(segments[i:]) for i in range(len(segments))] if segments else [normalized]
+
+        # Direct join: <base>/<path>, progressively dropping leading segments.
+        for suffix in suffixes:
+            candidates.append(base_path / suffix)
 
         # If base points to ComfyUI root (or unknown), try common subdirs.
         # If base points to /.../output, try sibling /.../input.
@@ -250,17 +253,13 @@ def _resolve_media_path(path: str, session: Session) -> Optional[str]:
         base_name = base_path.name.lower()
         if base_name in {"input", "output"}:
             siblings_root = base_path.parent
-            candidates.append(siblings_root / "input" / normalized)
-            candidates.append(siblings_root / "output" / normalized)
-            if stripped:
-                candidates.append(siblings_root / "input" / stripped)
-                candidates.append(siblings_root / "output" / stripped)
+            for suffix in suffixes:
+                candidates.append(siblings_root / "input" / suffix)
+                candidates.append(siblings_root / "output" / suffix)
         else:
-            candidates.append(base_path / "input" / normalized)
-            candidates.append(base_path / "output" / normalized)
-            if stripped:
-                candidates.append(base_path / "input" / stripped)
-                candidates.append(base_path / "output" / stripped)
+            for suffix in suffixes:
+                candidates.append(base_path / "input" / suffix)
+                candidates.append(base_path / "output" / suffix)
 
         # Deduplicate while preserving order
         unique: list[str] = []
@@ -281,7 +280,48 @@ def _resolve_media_path(path: str, session: Session) -> Optional[str]:
                 if os.path.exists(candidate):
                     return candidate
 
+    # Final fallback: allow environment-configured ComfyUI locations even if engine rows
+    # are misconfigured or missing paths.
+    for base in (
+        getattr(settings, "COMFYUI_INPUT_DIR", None),
+        getattr(settings, "COMFYUI_OUTPUT_DIR", None),
+        getattr(settings, "COMFYUI_PATH", None),
+    ):
+        if not base:
+            continue
+        for candidate in candidate_paths_for_base(str(base)):
+            if os.path.exists(candidate):
+                return candidate
+
     return None
+
+
+def _log_resolution_failure(path: str, session: Session) -> None:
+    normalized = (path or "").replace("\\", "/")
+    engines = session.exec(select(Engine)).all()
+    engine_payload = []
+    for engine in engines[:10]:
+        engine_payload.append(
+            {
+                "id": engine.id,
+                "name": engine.name,
+                "is_active": engine.is_active,
+                "input_dir": engine.input_dir,
+                "output_dir": engine.output_dir,
+            }
+        )
+    logger.info(
+        "Unable to resolve media path",
+        extra={
+            "path": path,
+            "normalized": normalized,
+            "settings_comfyui_input_dir": getattr(settings, "COMFYUI_INPUT_DIR", None),
+            "settings_comfyui_output_dir": getattr(settings, "COMFYUI_OUTPUT_DIR", None),
+            "settings_comfyui_path": getattr(settings, "COMFYUI_PATH", None),
+            "engines_total": len(engines),
+            "engines_sample": engine_payload,
+        },
+    )
 
 
 def _thumbnail_cache_dir() -> Path:
@@ -1236,6 +1276,7 @@ def serve_thumbnail_by_path(
 ):
     actual_path = _resolve_media_path(path, session)
     if not actual_path or not os.path.exists(actual_path):
+        _log_resolution_failure(path, session)
         logger.warning("Thumbnail: Missing file", extra={"path": path})
         raise HTTPException(status_code=404, detail=f"File not found: {path}")
 
