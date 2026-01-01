@@ -207,20 +207,79 @@ def _resolve_media_path(path: str, session: Session) -> Optional[str]:
     if os.path.exists(path):
         return path
 
-    engine = session.exec(select(Engine).where(Engine.name == "Local ComfyUI")).first()
-    if not engine:
-        engine = session.exec(select(Engine)).first()
+    normalized = path.replace("\\", "/")
+    while normalized.startswith("./"):
+        normalized = normalized[2:]
 
-    if engine:
-        if engine.input_dir:
-            input_path = os.path.join(engine.input_dir, path)
-            if os.path.exists(input_path):
-                return input_path
+    # Try engines in a stable, useful order: active -> Local ComfyUI -> any.
+    engines: list[Engine] = []
+    seen_ids: set[int] = set()
 
-        if engine.output_dir:
-            output_path = os.path.join(engine.output_dir, path)
-            if os.path.exists(output_path):
-                return output_path
+    active = session.exec(select(Engine).where(Engine.is_active == True)).first()
+    if active and active.id is not None:
+        engines.append(active)
+        seen_ids.add(active.id)
+
+    local = session.exec(select(Engine).where(Engine.name == "Local ComfyUI")).first()
+    if local and local.id is not None and local.id not in seen_ids:
+        engines.append(local)
+        seen_ids.add(local.id)
+
+    for engine in session.exec(select(Engine)).all():
+        if engine.id is not None and engine.id in seen_ids:
+            continue
+        engines.append(engine)
+        if engine.id is not None:
+            seen_ids.add(engine.id)
+
+    def candidate_paths_for_base(base: str) -> list[str]:
+        base_path = Path(base)
+        candidates: list[Path] = []
+        stripped: str | None = None
+        if "/" in normalized:
+            stripped = normalized.split("/", 1)[1]
+
+        # Direct join: <base>/<path>
+        candidates.append(base_path / normalized)
+        if stripped:
+            candidates.append(base_path / stripped)
+
+        # If base points to ComfyUI root (or unknown), try common subdirs.
+        # If base points to /.../output, try sibling /.../input.
+        # If base points to /.../input, try sibling /.../output.
+        base_name = base_path.name.lower()
+        if base_name in {"input", "output"}:
+            siblings_root = base_path.parent
+            candidates.append(siblings_root / "input" / normalized)
+            candidates.append(siblings_root / "output" / normalized)
+            if stripped:
+                candidates.append(siblings_root / "input" / stripped)
+                candidates.append(siblings_root / "output" / stripped)
+        else:
+            candidates.append(base_path / "input" / normalized)
+            candidates.append(base_path / "output" / normalized)
+            if stripped:
+                candidates.append(base_path / "input" / stripped)
+                candidates.append(base_path / "output" / stripped)
+
+        # Deduplicate while preserving order
+        unique: list[str] = []
+        seen: set[str] = set()
+        for cand in candidates:
+            cand_str = str(cand)
+            if cand_str in seen:
+                continue
+            seen.add(cand_str)
+            unique.append(cand_str)
+        return unique
+
+    for engine in engines:
+        for base in (engine.input_dir, engine.output_dir):
+            if not base:
+                continue
+            for candidate in candidate_paths_for_base(base):
+                if os.path.exists(candidate):
+                    return candidate
 
     return None
 
@@ -1227,29 +1286,9 @@ def serve_thumbnail_by_path(
 
 @router.get("/image/path")
 def serve_image_by_path(path: str, session: Session = Depends(get_session)):
-    # 1. Try absolute/direct path
-    if os.path.exists(path):
-        return FileResponse(path, media_type=_guess_media_type(path))
-
-    # 2. Try looking in Engine directories (Input/Output)
-    # We fetch the first active engine or "Local ComfyUI"
-    engine = session.exec(select(Engine).where(Engine.name == "Local ComfyUI")).first()
-    if not engine:
-        # Fallback to any engine
-        engine = session.exec(select(Engine)).first()
-
-    if engine:
-        # Check Input Dir
-        if engine.input_dir:
-            input_path = os.path.join(engine.input_dir, path)
-            if os.path.exists(input_path):
-                return FileResponse(input_path, media_type=_guess_media_type(input_path))
-
-        # Check Output Dir
-        if engine.output_dir:
-            output_path = os.path.join(engine.output_dir, path)
-            if os.path.exists(output_path):
-                return FileResponse(output_path, media_type=_guess_media_type(output_path))
+    actual_path = _resolve_media_path(path, session)
+    if actual_path and os.path.exists(actual_path):
+        return FileResponse(actual_path, media_type=_guess_media_type(actual_path))
 
     logger.warning("Serve Path: Missing file", extra={"path": path})
     raise HTTPException(status_code=404, detail=f"File not found: {path}")
@@ -1269,26 +1308,9 @@ def delete_image_by_path(req: DeleteByPathRequest, session: Session = Depends(ge
     """
     path = req.path
     
-    # Resolve the actual file path (same logic as serve_image_by_path)
-    actual_path = None
-    if os.path.exists(path):
-        actual_path = path
-    else:
-        engine = session.exec(select(Engine).where(Engine.name == "Local ComfyUI")).first()
-        if not engine:
-            engine = session.exec(select(Engine)).first()
-        
-        if engine:
-            if engine.input_dir:
-                input_path = os.path.join(engine.input_dir, path)
-                if os.path.exists(input_path):
-                    actual_path = input_path
-            if not actual_path and engine.output_dir:
-                output_path = os.path.join(engine.output_dir, path)
-                if os.path.exists(output_path):
-                    actual_path = output_path
-    
-    if not actual_path:
+    # Resolve the actual file path (shared logic with serve_image_by_path and thumbnails)
+    actual_path = _resolve_media_path(path, session)
+    if not actual_path or not os.path.exists(actual_path):
         raise HTTPException(status_code=404, detail=f"File not found: {path}")
     
     # Try to find matching image in database and soft-delete it
@@ -1349,27 +1371,8 @@ def get_image_metadata_by_path(path: str, session: Session = Depends(get_session
     Falls back to database extra_metadata if PNG metadata is not available.
     """
     # Resolve the actual file path
-    actual_path = None
-    
-    if os.path.exists(path):
-        actual_path = path
-    else:
-        # Try engine directories
-        engine = session.exec(select(Engine).where(Engine.name == "Local ComfyUI")).first()
-        if not engine:
-            engine = session.exec(select(Engine)).first()
-        
-        if engine:
-            if engine.input_dir:
-                input_path = os.path.join(engine.input_dir, path)
-                if os.path.exists(input_path):
-                    actual_path = input_path
-            if not actual_path and engine.output_dir:
-                output_path = os.path.join(engine.output_dir, path)
-                if os.path.exists(output_path):
-                    actual_path = output_path
-    
-    if not actual_path:
+    actual_path = _resolve_media_path(path, session)
+    if not actual_path or not os.path.exists(actual_path):
         raise HTTPException(status_code=404, detail=f"File not found: {path}")
     
     result = {
