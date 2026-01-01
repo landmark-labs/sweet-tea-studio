@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
-import { api, Project, FolderImage, GalleryItem } from "@/lib/api";
+import { api, Project, FolderImage, GalleryItem, IMAGE_API_BASE } from "@/lib/api";
 import { isVideoFile } from "@/lib/media";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,20 @@ interface ProjectGalleryProps {
     externalSelectionKey?: number;
 }
 
+const THUMBNAIL_MAX_PX = 256;
+
+const buildMediaUrl = (path: string) =>
+    `${IMAGE_API_BASE}/gallery/image/path?path=${encodeURIComponent(path)}`;
+
+const buildThumbnailUrl = (path: string, mtime?: string, maxPx: number = THUMBNAIL_MAX_PX) => {
+    const params = new URLSearchParams({
+        path,
+        max_px: String(maxPx),
+    });
+    if (mtime) params.append("v", mtime);
+    return `${IMAGE_API_BASE}/gallery/image/path/thumbnail?${params.toString()}`;
+};
+
 // Memoized gallery item - only re-renders when its specific props change
 interface GalleryItemCellProps {
     image: FolderImage;
@@ -39,21 +53,20 @@ const GalleryItemCell = React.memo(function GalleryItemCell({
     onClick,
     onContextMenu,
 }: GalleryItemCellProps) {
-    const videoRef = React.useRef<HTMLVideoElement>(null);
+    const [isHovering, setIsHovering] = React.useState(false);
     const isVideo = isVideoFile(image.path, image.filename);
+    const mediaUrl = useMemo(() => buildMediaUrl(image.path), [image.path]);
+    const thumbnailUrl = useMemo(() => buildThumbnailUrl(image.path, image.mtime), [image.path, image.mtime]);
 
     const handleMouseEnter = React.useCallback(() => {
-        if (videoRef.current) {
-            videoRef.current.play().catch(() => { });
-        }
-    }, []);
+        if (isVideo) setIsHovering(true);
+    }, [isVideo]);
 
     const handleMouseLeave = React.useCallback(() => {
-        if (videoRef.current) {
-            videoRef.current.pause();
-            videoRef.current.currentTime = 0;
-        }
-    }, []);
+        if (isVideo) setIsHovering(false);
+    }, [isVideo]);
+
+    const showVideo = isVideo && isHovering;
 
     return (
         <div
@@ -78,21 +91,33 @@ const GalleryItemCell = React.memo(function GalleryItemCell({
                 </div>
             )}
             {isVideo ? (
-                <video
-                    ref={videoRef}
-                    src={`/api/v1/gallery/image/path?path=${encodeURIComponent(image.path)}`}
-                    className="w-full h-full object-cover"
-                    preload="metadata"
-                    muted
-                    playsInline
-                    loop
-                />
+                showVideo ? (
+                    <video
+                        src={mediaUrl}
+                        poster={thumbnailUrl}
+                        className="w-full h-full object-cover"
+                        preload="metadata"
+                        muted
+                        playsInline
+                        loop
+                        autoPlay
+                    />
+                ) : (
+                    <img
+                        src={thumbnailUrl}
+                        alt={image.filename}
+                        className="w-full h-full object-cover"
+                        loading="lazy"
+                        decoding="async"
+                    />
+                )
             ) : (
                 <img
-                    src={`/api/v1/gallery/image/path?path=${encodeURIComponent(image.path)}`}
+                    src={thumbnailUrl}
                     alt={image.filename}
                     className="w-full h-full object-cover"
                     loading="lazy"
+                    decoding="async"
                 />
             )}
             <div className="absolute inset-x-0 bottom-0 bg-black/70 text-white text-[8px] p-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -106,6 +131,7 @@ const GalleryItemCell = React.memo(function GalleryItemCell({
 }, (prevProps, nextProps) => {
     // Custom comparison - only re-render if these specific props change
     return prevProps.image.path === nextProps.image.path &&
+        prevProps.image.mtime === nextProps.image.mtime &&
         prevProps.isSelected === nextProps.isSelected;
 });
 
@@ -321,7 +347,7 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
 
     // Handle drag start - set the image URL as draggable data
     const handleDragStart = useCallback((e: React.DragEvent, image: FolderImage) => {
-        const imageUrl = `/api/v1/gallery/image/path?path=${encodeURIComponent(image.path)}`;
+        const imageUrl = buildMediaUrl(image.path);
         e.dataTransfer.setData("text/plain", imageUrl);
         e.dataTransfer.effectAllowed = "copy";
         // Set the raw filesystem path so ImageUpload can detect it's internal and reuse the path
@@ -412,7 +438,7 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
         if (!contextMenu) return;
         const { image } = contextMenu;
         try {
-            const url = `/api/v1/gallery/image/path?path=${encodeURIComponent(image.path)}`;
+            const url = buildMediaUrl(image.path);
             const res = await fetch(url);
             const blob = await res.blob();
             const a = document.createElement("a");

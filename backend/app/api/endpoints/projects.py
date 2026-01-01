@@ -482,7 +482,7 @@ def list_project_folder_images(
     
     # Supported media extensions
     image_extensions = {".png", ".jpg", ".jpeg", ".webp"}
-    video_extensions = {".mp4", ".webm", ".mov", ".mkv", ".avi"}
+    video_extensions = {".mp4", ".webm", ".mov", ".mkv", ".avi", ".m4v", ".mpg", ".mpeg"}
     
     # Get paths of soft-deleted images to exclude from results
     deleted_paths = set(

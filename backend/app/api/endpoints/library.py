@@ -211,6 +211,13 @@ def read_prompts(
                         ["cliptextencode.text", "clip_text.text", "positive.text"],
                         exclude_patterns=["_2.", "_neg", "negative"]
                     )
+                # Third try: STRING_LITERAL patterns (common in video workflows like Wan2.2)
+                if not active_positive:
+                    active_positive = find_text_value(
+                        raw_params,
+                        ["string_literal", "stringliteral", ".string"],
+                        exclude_patterns=["_2", "_neg", "negative", "lora"]
+                    )
             
             if not active_negative:
                 active_negative = (
@@ -226,6 +233,13 @@ def read_prompts(
                         raw_params,
                         ["cliptextencode_2.text", "cliptextencode_neg", "negative.text", "_2.text"],
                         exclude_patterns=[]
+                    )
+                # Third try: STRING_LITERAL patterns (second one is usually negative for video)
+                if not active_negative:
+                    active_negative = find_text_value(
+                        raw_params,
+                        ["string_literal_2", "stringliteral_2", "_2.string"],
+                        exclude_patterns=["lora"]
                     )
 
             tags = []

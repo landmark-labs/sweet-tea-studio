@@ -1,4 +1,4 @@
-const VIDEO_EXTENSIONS = new Set([".mp4", ".webm", ".mov", ".mkv", ".avi"]);
+const VIDEO_EXTENSIONS = new Set([".mp4", ".webm", ".mov", ".mkv", ".avi", ".m4v", ".mpg", ".mpeg"]);
 
 const getExtension = (value: string) => {
     const dot = value.lastIndexOf(".");

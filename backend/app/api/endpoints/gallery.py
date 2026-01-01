@@ -1,3 +1,4 @@
+import hashlib
 import io
 import json
 import logging
@@ -5,6 +6,7 @@ import mimetypes
 import os
 import re
 import shutil
+import subprocess
 import zipfile
 from datetime import datetime
 from difflib import SequenceMatcher
@@ -12,9 +14,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 
-from PIL import Image as PILImage, ExifTags
+from PIL import Image as PILImage, ExifTags, ImageOps
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import text
@@ -34,7 +36,7 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 _fts_cache: Dict[str, Optional[bool]] = {"available": None}
 
-VIDEO_EXTENSIONS = {".mp4", ".webm", ".mov", ".mkv", ".avi"}
+VIDEO_EXTENSIONS = {".mp4", ".webm", ".mov", ".mkv", ".avi", ".m4v", ".mpg", ".mpeg"}
 
 
 def _fts_available(session: Session) -> bool:
@@ -189,8 +191,117 @@ def _guess_media_type(path: str) -> str:
             return "video/x-matroska"
         if ext == ".avi":
             return "video/x-msvideo"
+        if ext in (".mpg", ".mpeg"):
+            return "video/mpeg"
         return "video/mp4"
     return "application/octet-stream"
+
+
+THUMBNAIL_MIN_PX = 64
+THUMBNAIL_MAX_PX = 1024
+THUMBNAIL_DEFAULT_PX = 256
+
+
+def _resolve_media_path(path: str, session: Session) -> Optional[str]:
+    if os.path.exists(path):
+        return path
+
+    engine = session.exec(select(Engine).where(Engine.name == "Local ComfyUI")).first()
+    if not engine:
+        engine = session.exec(select(Engine)).first()
+
+    if engine:
+        if engine.input_dir:
+            input_path = os.path.join(engine.input_dir, path)
+            if os.path.exists(input_path):
+                return input_path
+
+        if engine.output_dir:
+            output_path = os.path.join(engine.output_dir, path)
+            if os.path.exists(output_path):
+                return output_path
+
+    return None
+
+
+def _thumbnail_cache_dir() -> Path:
+    cache_dir = settings.meta_dir / "thumbnails"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    return cache_dir
+
+
+def _build_placeholder_svg(label: str, size_px: int) -> bytes:
+    size = max(64, min(size_px, 512))
+    safe_label = re.sub(r"[^a-zA-Z0-9 _-]", "", label).strip() or "preview"
+    svg = f"""<svg xmlns="http://www.w3.org/2000/svg" width="{size}" height="{size}" viewBox="0 0 {size} {size}">
+  <rect width="100%" height="100%" fill="#0f172a"/>
+  <rect x="8" y="8" width="{size - 16}" height="{size - 16}" rx="10" ry="10" fill="#1e293b"/>
+  <text x="50%" y="50%" text-anchor="middle" dominant-baseline="middle" fill="#e2e8f0" font-family="Arial, sans-serif" font-size="{max(10, size // 8)}" letter-spacing="2">{safe_label.upper()}</text>
+</svg>"""
+    return svg.encode("utf-8")
+
+
+def _create_image_thumbnail_bytes(path: str, max_px: int, quality: int = 60) -> Optional[bytes]:
+    try:
+        with PILImage.open(path) as img:
+            img = ImageOps.exif_transpose(img)
+            img.thumbnail((max_px, max_px))
+            if img.mode in ("RGBA", "P"):
+                img = img.convert("RGB")
+            buf = io.BytesIO()
+            img.save(buf, format="JPEG", quality=quality, optimize=True)
+            return buf.getvalue()
+    except Exception as exc:
+        logger.debug("Failed to build image thumbnail", extra={"path": path, "error": str(exc)})
+        return None
+
+
+def _create_video_poster_bytes(path: str, max_px: int) -> Optional[bytes]:
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        return None
+
+    scale_expr = f"scale=if(gt(iw,ih),{max_px},-2):if(gt(iw,ih),-2,{max_px})"
+    cmd = [
+        ffmpeg,
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-ss",
+        "0.5",
+        "-i",
+        path,
+        "-frames:v",
+        "1",
+        "-vf",
+        scale_expr,
+        "-f",
+        "image2pipe",
+        "-vcodec",
+        "mjpeg",
+        "-an",
+        "pipe:1",
+    ]
+    try:
+        result = subprocess.run(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+            timeout=5,
+        )
+    except subprocess.TimeoutExpired:
+        logger.debug("Video poster generation timed out", extra={"path": path})
+        return None
+
+    if result.returncode != 0 or not result.stdout:
+        logger.debug(
+            "Video poster generation failed",
+            extra={"path": path, "stderr": result.stderr.decode("utf-8", errors="ignore")[:200]},
+        )
+        return None
+
+    return result.stdout
 
 
 @router.get("/", response_model=List[GalleryItem])
@@ -974,6 +1085,57 @@ def cleanup_images(req: CleanupRequest, session: Session = Depends(get_session))
 
 
 # ----------------------------------------------------------------
+
+@router.get("/image/path/thumbnail")
+def serve_thumbnail_by_path(
+    path: str,
+    max_px: int = Query(THUMBNAIL_DEFAULT_PX, ge=THUMBNAIL_MIN_PX, le=THUMBNAIL_MAX_PX),
+    session: Session = Depends(get_session),
+):
+    actual_path = _resolve_media_path(path, session)
+    if not actual_path or not os.path.exists(actual_path):
+        logger.warning("Thumbnail: Missing file", extra={"path": path})
+        raise HTTPException(status_code=404, detail=f"File not found: {path}")
+
+    ext = os.path.splitext(actual_path)[1].lower()
+    is_video = ext in VIDEO_EXTENSIONS
+
+    try:
+        stat = os.stat(actual_path)
+        cache_key = f"{actual_path}:{stat.st_mtime_ns}:{stat.st_size}:{max_px}:{'video' if is_video else 'image'}"
+    except OSError:
+        cache_key = f"{actual_path}:{max_px}:{'video' if is_video else 'image'}"
+
+    cache_dir = _thumbnail_cache_dir()
+    cache_name = hashlib.sha1(cache_key.encode("utf-8")).hexdigest()
+    cache_path = cache_dir / f"{cache_name}.jpg"
+
+    headers = {"Cache-Control": "public, max-age=86400, immutable"}
+    if cache_path.exists():
+        try:
+            if cache_path.stat().st_size > 0:
+                return FileResponse(str(cache_path), media_type="image/jpeg", headers=headers)
+        except OSError:
+            pass
+
+    if is_video:
+        thumb_bytes = _create_video_poster_bytes(actual_path, max_px)
+        if not thumb_bytes:
+            placeholder = _build_placeholder_svg("video", max_px)
+            return Response(content=placeholder, media_type="image/svg+xml", headers=headers)
+    else:
+        thumb_bytes = _create_image_thumbnail_bytes(actual_path, max_px)
+        if not thumb_bytes:
+            placeholder = _build_placeholder_svg("image", max_px)
+            return Response(content=placeholder, media_type="image/svg+xml", headers=headers)
+
+    try:
+        cache_path.write_bytes(thumb_bytes)
+    except Exception as exc:
+        logger.debug("Failed to write thumbnail cache", extra={"path": str(cache_path), "error": str(exc)})
+
+    return Response(content=thumb_bytes, media_type="image/jpeg", headers=headers)
+
 
 @router.get("/image/path")
 def serve_image_by_path(path: str, session: Session = Depends(get_session)):

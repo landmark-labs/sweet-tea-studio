@@ -171,7 +171,7 @@ def get_status_summary():
     if any_connected:
         engine_state = "ok"
         engine_detail = "connected"
-    elif launcher_status.get("is_running"):
+    elif launcher_status.get("running"):
         engine_state = "warn"
         engine_detail = "starting..."
     else:
@@ -184,8 +184,8 @@ def get_status_summary():
             "state": engine_state,
             "detail": engine_detail,
             "is_connected": any_connected,
-            "is_process_running": launcher_status.get("is_running", False),
-            "can_launch": launcher_status.get("can_launch", False),
+            "is_process_running": launcher_status.get("running", False),
+            "can_launch": launcher_status.get("available", False),
             "comfy_path": launcher_status.get("comfy_path"),
             "launcher_error": launcher_status.get("error"),
             "launcher_cooldown": launcher_status.get("cooldown"),
