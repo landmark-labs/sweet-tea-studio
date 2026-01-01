@@ -24,6 +24,7 @@ interface ProjectGalleryProps {
 }
 
 const THUMBNAIL_MAX_PX = 256;
+const THUMBNAIL_URL_VERSION = 2;
 
 const buildMediaUrl = (path: string) =>
     `${IMAGE_API_BASE}/gallery/image/path?path=${encodeURIComponent(path)}`;
@@ -32,6 +33,7 @@ const buildThumbnailUrl = (path: string, mtime?: string, maxPx: number = THUMBNA
     const params = new URLSearchParams({
         path,
         max_px: String(maxPx),
+        thumb_v: String(THUMBNAIL_URL_VERSION),
     });
     if (mtime) params.append("v", mtime);
     return `${IMAGE_API_BASE}/gallery/image/path/thumbnail?${params.toString()}`;

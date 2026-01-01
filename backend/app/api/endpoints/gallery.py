@@ -385,7 +385,7 @@ def _create_video_poster_bytes(path: str, max_px: int) -> Optional[bytes]:
     if not ffmpeg:
         return None
 
-    scale_expr = f"scale=if(gt(iw,ih),{max_px},-2):if(gt(iw,ih),-2,{max_px})"
+    scale_expr = f"scale={max_px}:{max_px}:force_original_aspect_ratio=decrease"
 
     # Order matters: try fast seek first, then a decoding-based thumbnail filter.
     attempts: list[list[str]] = []
@@ -1294,6 +1294,7 @@ def serve_thumbnail_by_path(
     cache_path = cache_dir / f"{cache_name}.jpg"
 
     headers = {"Cache-Control": "public, max-age=86400, immutable"}
+    fallback_headers = {"Cache-Control": "public, max-age=60"}
     if cache_path.exists():
         try:
             if cache_path.stat().st_size > 0:
@@ -1310,12 +1311,12 @@ def serve_thumbnail_by_path(
                 extra={"path": actual_path, "ffmpeg": ffmpeg_resolved},
             )
             placeholder = _build_placeholder_svg("video", max_px)
-            return Response(content=placeholder, media_type="image/svg+xml", headers=headers)
+            return Response(content=placeholder, media_type="image/svg+xml", headers=fallback_headers)
     else:
         thumb_bytes = _create_image_thumbnail_bytes(actual_path, max_px)
         if not thumb_bytes:
             placeholder = _build_placeholder_svg("image", max_px)
-            return Response(content=placeholder, media_type="image/svg+xml", headers=headers)
+            return Response(content=placeholder, media_type="image/svg+xml", headers=fallback_headers)
 
     try:
         cache_path.write_bytes(thumb_bytes)
