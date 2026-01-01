@@ -191,6 +191,83 @@ def read_prompts(
                             return value
                 return None
 
+            # Helper to classify prompt fields by checking key names for positive/negative hints
+            def classify_prompt_fields(params: dict) -> tuple:
+                """
+                Scan params for STRING_LITERAL or CLIPTextEncode text fields.
+                Classify as positive/negative based on key name patterns.
+                Returns (positive, negative) tuple.
+                """
+                import re
+                positive_hints = ["positive", "_pos", ".pos", "pos_"]
+                negative_hints = ["negative", "_neg", ".neg", "neg_"]
+                
+                candidates = []
+                for key, value in params.items():
+                    if not isinstance(value, str) or len(value.strip()) < 3:
+                        continue
+                    key_lower = key.lower()
+                    # Skip lora-related fields
+                    if "lora" in key_lower:
+                        continue
+                    # Check for prompt-like patterns
+                    is_prompt_field = (
+                        ("cliptextencode" in key_lower and ".text" in key_lower) or
+                        "string_literal" in key_lower or
+                        "stringliteral" in key_lower or
+                        (".string" in key_lower and "lora" not in key_lower)
+                    )
+                    if not is_prompt_field:
+                        continue
+                    
+                    # Classify by key name hints
+                    is_positive = any(h in key_lower for h in positive_hints)
+                    is_negative = any(h in key_lower for h in negative_hints)
+                    
+                    # Extract node ID for ordering fallback
+                    node_id = None
+                    node_match = re.match(r'^(\d+)\.', key)
+                    if node_match:
+                        node_id = int(node_match.group(1))
+                    else:
+                        # Try to extract from patterns like "STRING_LITERAL_2.string"
+                        id_match = re.search(r'_(\d+)[._]', key)
+                        if id_match:
+                            node_id = int(id_match.group(1))
+                    
+                    candidates.append({
+                        "key": key,
+                        "value": value,
+                        "is_positive": is_positive,
+                        "is_negative": is_negative,
+                        "node_id": node_id
+                    })
+                
+                # First pass: use explicit positive/negative hints in key names
+                pos_result = None
+                neg_result = None
+                for c in candidates:
+                    if c["is_positive"] and not c["is_negative"] and not pos_result:
+                        pos_result = c["value"]
+                    if c["is_negative"] and not c["is_positive"] and not neg_result:
+                        neg_result = c["value"]
+                
+                # Second pass: if not found by hints, use node ID ordering (lower ID = positive)
+                if not pos_result or not neg_result:
+                    # Sort by node_id (None values last)
+                    sorted_candidates = sorted(
+                        [c for c in candidates if not c["is_positive"] and not c["is_negative"]],
+                        key=lambda x: (x["node_id"] is None, x["node_id"] or 9999)
+                    )
+                    for c in sorted_candidates:
+                        if not pos_result:
+                            pos_result = c["value"]
+                        elif not neg_result:
+                            neg_result = c["value"]
+                            break
+                
+                return pos_result, neg_result
+
             # Fallbacks for older records - check multiple common field names
             if not active_positive:
                 # First try: direct keys
@@ -211,13 +288,14 @@ def read_prompts(
                         ["cliptextencode.text", "clip_text.text", "positive.text"],
                         exclude_patterns=["_2.", "_neg", "negative"]
                     )
-                # Third try: STRING_LITERAL patterns (common in video workflows like Wan2.2)
+                # Third try: use smart classification for STRING_LITERAL/CLIPTextEncode
                 if not active_positive:
-                    active_positive = find_text_value(
-                        raw_params,
-                        ["string_literal", "stringliteral", ".string"],
-                        exclude_patterns=["_2", "_neg", "negative", "lora"]
-                    )
+                    classified_pos, classified_neg = classify_prompt_fields(raw_params)
+                    if classified_pos:
+                        active_positive = classified_pos
+                    # Also set negative if found and not already set
+                    if classified_neg and not active_negative:
+                        active_negative = classified_neg
             
             if not active_negative:
                 active_negative = (
@@ -234,13 +312,11 @@ def read_prompts(
                         ["cliptextencode_2.text", "cliptextencode_neg", "negative.text", "_2.text"],
                         exclude_patterns=[]
                     )
-                # Third try: STRING_LITERAL patterns (second one is usually negative for video)
+                # Third try: use smart classification (may already be set above)
                 if not active_negative:
-                    active_negative = find_text_value(
-                        raw_params,
-                        ["string_literal_2", "stringliteral_2", "_2.string"],
-                        exclude_patterns=["lora"]
-                    )
+                    _, classified_neg = classify_prompt_fields(raw_params)
+                    if classified_neg:
+                        active_negative = classified_neg
 
             tags = []
             if prompt and prompt.tags:
