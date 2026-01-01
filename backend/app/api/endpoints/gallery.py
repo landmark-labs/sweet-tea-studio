@@ -7,6 +7,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import zipfile
 from datetime import datetime
 from difflib import SequenceMatcher
@@ -257,51 +258,81 @@ def _create_image_thumbnail_bytes(path: str, max_px: int, quality: int = 60) -> 
 
 
 def _create_video_poster_bytes(path: str, max_px: int) -> Optional[bytes]:
-    ffmpeg = shutil.which("ffmpeg")
+    def resolve_ffmpeg() -> Optional[str]:
+        configured = getattr(settings, "FFMPEG_PATH", None)
+        if configured and isinstance(configured, str) and configured.strip():
+            candidate = configured.strip().strip('"')
+            if os.path.exists(candidate):
+                return candidate
+
+        ffmpeg_from_path = shutil.which("ffmpeg")
+        if ffmpeg_from_path:
+            return ffmpeg_from_path
+
+        # Common Conda layout on Windows: %CONDA_PREFIX%/Library/bin/ffmpeg.exe
+        if os.name == "nt":
+            conda_candidate = Path(sys.prefix) / "Library" / "bin" / "ffmpeg.exe"
+            if conda_candidate.exists():
+                return str(conda_candidate)
+
+        # Common venv layout on *nix: <prefix>/bin/ffmpeg
+        unix_candidate = Path(sys.prefix) / "bin" / "ffmpeg"
+        if unix_candidate.exists():
+            return str(unix_candidate)
+
+        return None
+
+    ffmpeg = resolve_ffmpeg()
     if not ffmpeg:
         return None
 
     scale_expr = f"scale=if(gt(iw,ih),{max_px},-2):if(gt(iw,ih),-2,{max_px})"
-    cmd = [
-        ffmpeg,
-        "-hide_banner",
-        "-loglevel",
-        "error",
-        "-ss",
-        "0.5",
-        "-i",
-        path,
-        "-frames:v",
-        "1",
-        "-vf",
-        scale_expr,
-        "-f",
-        "image2pipe",
-        "-vcodec",
-        "mjpeg",
-        "-an",
-        "pipe:1",
-    ]
-    try:
-        result = subprocess.run(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            check=False,
-            timeout=5,
-        )
-    except subprocess.TimeoutExpired:
-        logger.debug("Video poster generation timed out", extra={"path": path})
-        return None
+    for ss in ("0.5", "0.0"):
+        cmd = [
+            ffmpeg,
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-ss",
+            ss,
+            "-i",
+            path,
+            "-frames:v",
+            "1",
+            "-vf",
+            scale_expr,
+            "-f",
+            "image2pipe",
+            "-vcodec",
+            "mjpeg",
+            "-an",
+            "pipe:1",
+        ]
+        try:
+            result = subprocess.run(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+                timeout=7,
+            )
+        except subprocess.TimeoutExpired:
+            logger.debug("Video poster generation timed out", extra={"path": path, "ss": ss})
+            continue
 
-    if result.returncode != 0 or not result.stdout:
+        if result.returncode == 0 and result.stdout:
+            return result.stdout
+
         logger.debug(
             "Video poster generation failed",
-            extra={"path": path, "stderr": result.stderr.decode("utf-8", errors="ignore")[:200]},
+            extra={
+                "path": path,
+                "ss": ss,
+                "stderr": result.stderr.decode("utf-8", errors="ignore")[:200],
+            },
         )
-        return None
 
-    return result.stdout
+    return None
 
 
 @router.get("/", response_model=List[GalleryItem])

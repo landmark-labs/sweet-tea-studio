@@ -25,6 +25,11 @@ class Settings(BaseSettings):
     COMFYUI_OUTPUT_DIR: Optional[str] = None
     COMFYUI_INPUT_DIR: Optional[str] = None
 
+    # Optional ffmpeg/ffprobe overrides (used for video thumbnails/posters and metadata).
+    # If unset, the backend falls back to PATH and common Conda locations.
+    FFMPEG_PATH: Optional[str] = None
+    FFPROBE_PATH: Optional[str] = None
+
     # Rule34 API credentials (required for some DAPI endpoints like tag index)
     # Get these from: https://rule34.xxx/index.php?page=account&s=options
     RULE34_USER_ID: Optional[str] = None
