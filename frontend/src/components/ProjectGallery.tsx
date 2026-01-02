@@ -652,20 +652,20 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
                 <div className="flex-none p-3 border-t bg-slate-50">
                     {selectedPaths.size > 0 ? (
                         <div className="flex flex-col gap-2">
-                            <div className="flex flex-wrap items-center justify-center gap-2">
+                            <div className="flex flex-nowrap items-center justify-between gap-2">
                                 <Button
                                     variant="outline"
                                     size="sm"
-                                    className="h-8 px-2 text-xs"
+                                    className="h-8 px-2 text-[11px] whitespace-nowrap"
                                     onClick={handleAddSelectedToTray}
                                 >
                                     <Plus className="h-4 w-4 mr-1" />
-                                    Add to tray
+                                    Add
                                 </Button>
                                 <Button
                                     variant="outline"
                                     size="sm"
-                                    className="h-8 px-2 text-xs"
+                                    className="h-8 px-2 text-[11px] whitespace-nowrap"
                                     onClick={() => setSelectedPaths(new Set())}
                                 >
                                     Clear
@@ -673,7 +673,7 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
                                 <Button
                                     variant="destructive"
                                     size="sm"
-                                    className="h-8 px-2 text-xs"
+                                    className="h-8 px-2 text-[11px] whitespace-nowrap"
                                     onClick={handleBulkDelete}
                                 >
                                     <Trash2 className="h-4 w-4 mr-1" />
