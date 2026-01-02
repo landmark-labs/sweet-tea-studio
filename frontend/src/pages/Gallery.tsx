@@ -8,6 +8,7 @@ import { Download, Trash2, Calendar, Search, RotateCcw, Copy, Check, X, ChevronL
 import { Input } from "@/components/ui/input";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import { resolvePromptsForGalleryItem } from "@/lib/promptUtils";
 import {
     ContextMenu,
     ContextMenuContent,
@@ -595,44 +596,6 @@ export default function Gallery() {
         navigate("/", { state: { loadParams: item, isRegenerate: true } });
     };
 
-    // Helper to extract relevant prompts
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const getPrompts = (params: any) => {
-        let positive = "";
-        let negative = "";
-
-        const paramsArray = Object.entries(params || {});
-
-        // Pass 1: explicit keys
-        paramsArray.forEach(([key, value]) => {
-            const lowerKey = key.toLowerCase();
-            const valStr = String(value);
-
-            if (lowerKey.includes("positive") || lowerKey === "prompt" || lowerKey === "text_g") {
-                if (valStr.length > positive.length) positive = valStr;
-            } else if (lowerKey.includes("negative")) {
-                if (valStr.length > negative.length) negative = valStr;
-            }
-        });
-
-        // Pass 2: ComfyUI convention (CLIPTextEncode) if we still don't have labeled prompts
-        if (!positive && !negative) {
-            paramsArray.forEach(([key, value]) => {
-                const lowerKey = key.toLowerCase();
-                if (lowerKey.includes("cliptextencode") && lowerKey.includes("text")) {
-                    const valStr = String(value);
-                    if (lowerKey.includes("_2") || lowerKey.includes("negative")) {
-                        negative = valStr;
-                    } else {
-                        positive = valStr;
-                    }
-                }
-            });
-        }
-
-        return { positive, negative };
-    };
-
     const cleanupDeleteCount = Math.max(items.length - selectedIds.size, 0);
 
     // Items are now filtered server-side via folder parameter
@@ -846,7 +809,11 @@ export default function Gallery() {
                                                 )}
 
                                                 {(() => {
-                                                    const { positive, negative } = getPrompts(item.job_params);
+                                                    const { positive, negative } = resolvePromptsForGalleryItem({
+                                                        prompt: item.prompt,
+                                                        negative_prompt: item.negative_prompt,
+                                                        job_params: item.job_params,
+                                                    });
                                                     return (
                                                         <div className="mt-2 space-y-2">
                                                             {positive && (

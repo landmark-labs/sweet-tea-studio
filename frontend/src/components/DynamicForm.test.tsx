@@ -133,7 +133,7 @@ describe("DynamicForm grouping", () => {
             }
         };
 
-        const { getByText } = renderForm(
+        const { getAllByText } = renderForm(
             <DynamicForm
                 schema={bypassSchema}
                 onSubmit={noop}
@@ -142,6 +142,6 @@ describe("DynamicForm grouping", () => {
 
         // The bypass toggle should render and show "Bypassed" state
         // Look for the bypassed indicator in the UI
-        expect(getByText("Bypassed")).toBeTruthy();
+        expect(getAllByText("Bypassed").length).toBeGreaterThan(0);
     });
 });

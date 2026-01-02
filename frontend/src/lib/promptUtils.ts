@@ -131,6 +131,29 @@ export function extractPrompts(params: Record<string, unknown> | null | undefine
     return result;
 }
 
+export interface ResolvedPrompts {
+    positive: string;
+    negative: string;
+}
+
+export function resolvePromptsForGalleryItem(item: {
+    prompt?: string | null;
+    negative_prompt?: string | null;
+    job_params?: Record<string, unknown> | null | undefined;
+}): ResolvedPrompts {
+    const positiveFromItem = typeof item.prompt === "string" ? item.prompt.trim() : "";
+    const negativeFromItem = typeof item.negative_prompt === "string" ? item.negative_prompt.trim() : "";
+
+    const extracted = extractPrompts(item.job_params);
+    const positiveFromParams = extracted.positive?.trim() ?? "";
+    const negativeFromParams = extracted.negative?.trim() ?? "";
+
+    return {
+        positive: positiveFromItem || positiveFromParams,
+        negative: negativeFromItem || negativeFromParams,
+    };
+}
+
 /**
  * Find schema fields that match CLIPTextEncode text inputs.
  * Used to map extracted prompts to the correct form fields in a workflow.
