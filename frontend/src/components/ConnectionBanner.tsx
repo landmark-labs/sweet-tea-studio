@@ -41,6 +41,8 @@ export function ConnectionBanner({ className }: ConnectionBannerProps) {
                     }
                     fetchStatus();
                 }, 2000);
+            } else {
+                setIsLaunching(false);
             }
         } catch {
             setIsLaunching(false);
@@ -48,8 +50,11 @@ export function ConnectionBanner({ className }: ConnectionBannerProps) {
     };
 
     useEffect(() => {
-        if (isConnected && isDismissed) {
-            setIsDismissed(false);
+        if (isConnected) {
+            setIsLaunching(false);
+            if (isDismissed) {
+                setIsDismissed(false);
+            }
         }
     }, [isConnected, isDismissed]);
 
