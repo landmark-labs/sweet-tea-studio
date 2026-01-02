@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, FolderOpen, ImageIcon, Loader2, Download, Trash2, Check, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { VirtualGrid } from "@/components/VirtualGrid";
+import { getScrollPosition, saveScrollPosition } from "@/lib/galleryState";
 
 interface ProjectGalleryProps {
     projects: Project[];
@@ -157,7 +158,6 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
     const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set());
     const lastSelectedPath = useRef<string | null>(null);
     const imagesRef = useRef<FolderImage[]>([]);
-    const [gridResetKey, setGridResetKey] = useState(0);
     // Track previous project to avoid resetting folder on transient empty states
     const prevProjectIdRef = useRef<string>(selectedProjectId);
 
@@ -249,9 +249,6 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
         let mounted = true;
         let timeoutId: NodeJS.Timeout;
 
-        // Reset VirtualGrid scroll position when switching folders
-        setGridResetKey(prev => prev + 1);
-
         const loadImages = async (showLoading = true) => {
             if (!selectedProjectId || !selectedFolder) {
                 if (mounted) setImages([]);
@@ -320,6 +317,20 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
     }, [selectedProjectId, folders, selectedFolder]);
 
     const galleryItems = !isLoading && selectedProjectId && images.length > 0 ? images : [];
+
+    // Generate a unique key for the current view and retrieve initial scroll position
+    const currentViewKey = `${selectedProjectId}:${selectedFolder}`;
+    const initialScrollTop = useMemo(() => getScrollPosition(currentViewKey), [currentViewKey]);
+
+    // Handler to save scroll position
+    const handleScroll = useCallback((scrollTop: number) => {
+        // Only save scroll position if we have images loaded
+        // This prevents overwriting with 0 during loading/initialization
+        if (images.length > 0) {
+            saveScrollPosition(currentViewKey, scrollTop);
+        }
+    }, [currentViewKey, images.length]);
+
     const galleryEmptyState = React.useMemo(() => {
         if (isLoading) {
             return (
@@ -575,6 +586,7 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
 
             {/* Image Grid */}
             <VirtualGrid
+                key={currentViewKey}
                 items={galleryItems}
                 columnCount={2}
                 rowHeight={(columnWidth) => columnWidth}
@@ -582,7 +594,8 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
                 padding={8}
                 overscan={3}
                 className="flex-1"
-                scrollToTopKey={gridResetKey}
+                initialScrollTop={initialScrollTop}
+                onScroll={handleScroll}
                 emptyState={galleryEmptyState}
                 getKey={(image) => image.path}
                 renderItem={(image) => (

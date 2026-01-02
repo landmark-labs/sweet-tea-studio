@@ -15,6 +15,8 @@ interface VirtualGridProps<T> {
     className?: string;
     virtualize?: boolean;
     scrollToTopKey?: number;
+    initialScrollTop?: number;
+    onScroll?: (scrollTop: number) => void;
     renderItem: (item: T, index: number) => React.ReactNode;
     getKey?: (item: T, index: number) => React.Key;
     emptyState?: React.ReactNode;
@@ -39,6 +41,8 @@ export function VirtualGrid<T>({
     className,
     virtualize = true,
     scrollToTopKey,
+    initialScrollTop = 0,
+    onScroll,
     renderItem,
     getKey,
     emptyState,
@@ -46,8 +50,9 @@ export function VirtualGrid<T>({
 }: VirtualGridProps<T>) {
     const containerRef = useRef<HTMLDivElement | null>(null);
     const [viewport, setViewport] = useState({ width: 0, height: 0 });
-    const [scrollTop, setScrollTop] = useState(0);
+    const [scrollTop, setScrollTop] = useState(initialScrollTop);
     const rafRef = useRef<number | null>(null);
+    const hasRestoredRef = useRef(false);
 
     useLayoutEffect(() => {
         const el = containerRef.current;
@@ -81,10 +86,28 @@ export function VirtualGrid<T>({
         if (!el) return;
         el.scrollTop = 0;
         setScrollTop(0);
+        // Reset restoration flag when explicit scroll to top is requested
+        hasRestoredRef.current = false;
     }, [scrollToTopKey]);
+
+    // Apply initial scroll position when items are loaded
+    useLayoutEffect(() => {
+        if (initialScrollTop > 0 && items.length > 0 && !hasRestoredRef.current && containerRef.current) {
+            containerRef.current.scrollTop = initialScrollTop;
+            setScrollTop(initialScrollTop);
+            hasRestoredRef.current = true;
+        } else if (initialScrollTop === 0 && !hasRestoredRef.current) {
+            // If explicit 0 state, consider it restored immediately
+            hasRestoredRef.current = true;
+        }
+    }, [items.length, initialScrollTop]);
 
     const handleScroll = (event: React.UIEvent<HTMLDivElement>) => {
         const next = event.currentTarget.scrollTop;
+
+        // Call external handler if provided
+        onScroll?.(next);
+
         if (rafRef.current !== null) {
             cancelAnimationFrame(rafRef.current);
         }
