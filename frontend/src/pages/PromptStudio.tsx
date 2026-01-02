@@ -25,6 +25,7 @@ import { useGeneration } from "@/lib/GenerationContext";
 import { logClientEventThrottled } from "@/lib/clientDiagnostics";
 import { formDataAtom, setFormDataAtom } from "@/lib/atoms/formAtoms";
 import { useCanvasStore } from "@/lib/stores/canvasStore";
+import { useMediaTrayStore } from "@/lib/stores/mediaTrayStore";
 
 type PromptConstructorPanelProps = Omit<ComponentProps<typeof PromptConstructor>, "currentValues">;
 
@@ -184,6 +185,8 @@ export default function PromptStudio() {
   const saveCanvas = useCanvasStore(useCallback(state => state.saveCanvas, []));
   const pendingCanvas = useCanvasStore(useCallback(state => state.pendingCanvas, []));
   const clearPendingCanvas = useCanvasStore(useCallback(state => state.clearPendingCanvas, []));
+
+  const toggleMediaTray = useMediaTrayStore(useCallback((state) => state.toggleCollapsed, []));
 
   // Prompt Library State - also using selectors
   const setPrompts = usePromptLibraryStore(useCallback(state => state.setPrompts, []));
@@ -1932,6 +1935,20 @@ export default function PromptStudio() {
   // Global Shortcut for Generation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey && e.key.toLowerCase() === "t") {
+        const activeEl = document.activeElement as HTMLElement | null;
+        const tagName = activeEl?.tagName?.toLowerCase();
+        const isEditable =
+          tagName === "input" ||
+          tagName === "textarea" ||
+          Boolean(activeEl?.isContentEditable) ||
+          activeEl?.getAttribute("contenteditable") === "true";
+        if (isEditable) return;
+        e.preventDefault();
+        toggleMediaTray();
+        return;
+      }
+
       if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
         // Skip if focus is inside the snippet editor (Ctrl+Enter saves the snippet there)
         // UNLESS both the title and content inputs are empty - then trigger generation
@@ -1957,7 +1974,7 @@ export default function PromptStudio() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectedWorkflowId, selectedWorkflow, isBusy, engineOffline, store]);
+  }, [selectedWorkflowId, selectedWorkflow, isBusy, engineOffline, store, toggleMediaTray]);
 
   // Use data from GenerationContext if available to avoid duplicate API calls
   const generation = useGeneration();

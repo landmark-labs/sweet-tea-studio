@@ -396,15 +396,16 @@ export function PromptAutocompleteTextarea({
     };
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-        // Alt+W: Strip weights from selected text
-        if (e.altKey && e.key.toLowerCase() === "w") {
-            e.preventDefault();
+        // Shift+W: Strip weights from selected text
+        if (e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey && e.key.toLowerCase() === "w") {
             const textarea = textareaRef.current;
             if (!textarea) return;
 
             const start = textarea.selectionStart;
             const end = textarea.selectionEnd;
             if (start === end) return; // No selection
+
+            e.preventDefault();
 
             const selectedText = localValue.slice(start, end);
             const strippedText = stripWeights(selectedText);
