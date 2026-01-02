@@ -394,12 +394,18 @@ export function ImageUpload({
     };
 
     const handleMaskSave = async (maskFile: File) => {
+        if (!value) {
+            alert("Select an image first");
+            return;
+        }
         try {
             const id = engineId ? parseInt(engineId) : undefined;
-            const result = await api.uploadFile(maskFile, id);
+            const result = await api.saveMask(maskFile, value, id);
 
-            addToRecent(result.filename);
-            alert(`Mask saved: ${result.filename}`);
+            if (result.comfy_filename) {
+                addToRecent(result.comfy_filename);
+            }
+            alert(`Mask saved: ${result.comfy_filename || result.filename}`);
         } catch (e) {
             console.error("Mask upload failed", e);
             alert("Failed to upload mask");

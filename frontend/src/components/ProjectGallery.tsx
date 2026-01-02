@@ -682,6 +682,16 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
                         download
                     </button>
 
+                    {!isVideoFile(contextMenu.image.path, contextMenu.image.filename) && (
+                        <button
+                            className="w-full px-3 py-1.5 text-left text-xs hover:bg-slate-100 flex items-center gap-2"
+                            onClick={() => openMaskEditorForImage(contextMenu.image)}
+                        >
+                            <PenTool className="h-3 w-3" />
+                            draw mask
+                        </button>
+                    )}
+
                     {/* Regenerate with submenu */}
                     {onRegenerate && (
                         <div className="relative group">
@@ -827,6 +837,13 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
                     </button>
                 </div>
             )}
+
+            <InpaintEditor
+                open={maskEditorOpen}
+                onOpenChange={setMaskEditorOpen}
+                imageUrl={maskEditorSourcePath ? buildMediaUrl(maskEditorSourcePath) : ""}
+                onSave={handleMaskSave}
+            />
         </div>
     );
 });

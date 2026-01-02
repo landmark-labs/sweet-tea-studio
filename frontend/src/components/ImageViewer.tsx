@@ -22,6 +22,7 @@ interface ImageViewerProps {
     onDelete?: (imageId: number) => void;
     selectedImagePath?: string;
     onLoadMore?: () => void;  // Callback to load more images when near end
+    resetKey?: number;  // When changed, reset selectedIndex to 0 (for new generations)
 
 }
 
@@ -32,14 +33,12 @@ export const ImageViewer = React.memo(function ImageViewer({
     galleryItems,
     metadata,
     workflows = [],
-
     onUseInPipe,
-
     onRegenerate,
     onDelete,
     selectedImagePath,
     onLoadMore,
-
+    resetKey
 }: ImageViewerProps) {
     const [copyState, setCopyState] = React.useState<{ positive: boolean; negative: boolean }>({ positive: false, negative: false });
     const [selectedIndex, setSelectedIndex] = React.useState<number>(0);
@@ -99,6 +98,13 @@ export const ImageViewer = React.memo(function ImageViewer({
             setNavigationMode(false);
         }
     }, [selectedImagePath]);
+
+    // External reset hook (used after new generations)
+    React.useEffect(() => {
+        if (resetKey === undefined) return;
+        setSelectedIndex(0);
+        setNavigationMode(false);
+    }, [resetKey]);
 
     // Function to enter navigation mode and align index to current image
     const enterNavigationMode = React.useCallback(() => {
@@ -926,14 +932,23 @@ export const ImageViewer = React.memo(function ImageViewer({
                                 </div>
                             )}
 
+                            {canDrawMask && (
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-7 text-xs gap-1 border-orange-200 hover:bg-orange-50 text-orange-700 hover:text-orange-800"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        openMaskEditor();
+                                    }}
+                                >
+                                    <PenTool className="w-3 h-3" /> draw mask
+                                </Button>
+                            )}
+
                         </div>
                         {/* Right: Keep/Download */}
                         <div className="flex items-center gap-2">
-                            {canDrawMask && (
-                                <Button variant="outline" size="sm" onClick={openMaskEditor} className="h-7 text-xs">
-                                    <PenTool className="w-3 h-3 mr-1" />draw mask
-                                </Button>
-                            )}
                             <Button variant="outline" size="sm" onClick={handleDownload} className="h-7 text-xs">
                                 <Download className="w-3 h-3 mr-1" />download
                             </Button>

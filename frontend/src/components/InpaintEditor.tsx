@@ -22,6 +22,7 @@ type Tool = "brush" | "eraser" | "pan";
 export function InpaintEditor({ open, onOpenChange, imageUrl, onSave }: InpaintEditorProps) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
+    const viewportRef = useRef<HTMLDivElement>(null);
     const patternRef = useRef<CanvasPattern | null>(null);
 
     const [tool, setTool] = useState<Tool>("brush");
@@ -42,6 +43,7 @@ export function InpaintEditor({ open, onOpenChange, imageUrl, onSave }: InpaintE
     const [historySize, setHistorySize] = useState(0);
 
     const [isSaving, setIsSaving] = useState(false);
+    const [isReady, setIsReady] = useState(false);
 
     const canUndo = historyIndex > 0;
     const canRedo = historyIndex >= 0 && historyIndex < historySize - 1;
@@ -81,6 +83,8 @@ export function InpaintEditor({ open, onOpenChange, imageUrl, onSave }: InpaintE
         const ctx = canvas.getContext("2d");
         if (!ctx) return;
 
+        setIsReady(false);
+
         const img = new Image();
         img.crossOrigin = "anonymous";
         img.src = imageUrl;
@@ -95,7 +99,7 @@ export function InpaintEditor({ open, onOpenChange, imageUrl, onSave }: InpaintE
             tile.height = 16;
             const tCtx = tile.getContext("2d");
             if (tCtx) {
-                tCtx.fillStyle = "#e5e7eb";
+                tCtx.fillStyle = "#9ca3af";
                 tCtx.fillRect(0, 0, 16, 16);
                 tCtx.fillStyle = "#ffffff";
                 tCtx.fillRect(0, 0, 8, 8);
@@ -121,6 +125,10 @@ export function InpaintEditor({ open, onOpenChange, imageUrl, onSave }: InpaintE
             historyRef.current = { stack: [initial], index: 0 };
             setHistoryIndex(0);
             setHistorySize(1);
+            setIsReady(true);
+        };
+        img.onerror = () => {
+            setIsReady(false);
         };
     }, [open, imageUrl, buildDefaultFilename]);
 
@@ -179,11 +187,28 @@ export function InpaintEditor({ open, onOpenChange, imageUrl, onSave }: InpaintE
         pushHistory(ctx, canvas.width, canvas.height);
     }, [pushHistory]);
 
-    const applyZoomDelta = useCallback((delta: number) => {
-        setZoom((prev) => {
-            const next = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, prev + delta));
-            if (next === 1) setPan({ x: 0, y: 0 });
-            return next;
+    const zoomBy = useCallback((delta: number, anchor?: { x: number; y: number }) => {
+        const viewport = viewportRef.current;
+        const rect = viewport?.getBoundingClientRect();
+        const cx = rect ? rect.width / 2 : 0;
+        const cy = rect ? rect.height / 2 : 0;
+        const ax = anchor?.x ?? cx;
+        const ay = anchor?.y ?? cy;
+
+        setZoom((prevZoom) => {
+            const nextZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, prevZoom + delta));
+            if (nextZoom === prevZoom) return prevZoom;
+            const ratio = nextZoom / prevZoom;
+
+            setPan((prevPan) => {
+                if (nextZoom === 1) return { x: 0, y: 0 };
+                return {
+                    x: prevPan.x + (ax - cx - prevPan.x) * (1 - ratio),
+                    y: prevPan.y + (ay - cy - prevPan.y) * (1 - ratio),
+                };
+            });
+
+            return nextZoom;
         });
     }, []);
 
@@ -195,9 +220,17 @@ export function InpaintEditor({ open, onOpenChange, imageUrl, onSave }: InpaintE
     const handleWheel = useCallback((e: React.WheelEvent) => {
         e.preventDefault();
         e.stopPropagation();
+        const viewport = viewportRef.current;
+        const rect = viewport?.getBoundingClientRect();
+        const x = rect ? e.clientX - rect.left : undefined;
+        const y = rect ? e.clientY - rect.top : undefined;
         const delta = e.deltaY * -0.001;
-        applyZoomDelta(delta);
-    }, [applyZoomDelta]);
+        if (x === undefined || y === undefined) {
+            zoomBy(delta);
+            return;
+        }
+        zoomBy(delta, { x, y });
+    }, [zoomBy]);
 
     // Keyboard shortcuts (scoped to editor open)
     useEffect(() => {
@@ -250,6 +283,7 @@ export function InpaintEditor({ open, onOpenChange, imageUrl, onSave }: InpaintE
     }, [handleRedo, handleUndo, isTypingInTextField, open, resetView]);
 
     const startDrawing = (e: React.PointerEvent<HTMLCanvasElement>) => {
+        if (!isReady || isSaving) return;
         if (e.button !== 0) return;
         const canvas = canvasRef.current;
         const ctx = canvas?.getContext("2d");
@@ -258,7 +292,7 @@ export function InpaintEditor({ open, onOpenChange, imageUrl, onSave }: InpaintE
         e.preventDefault();
         e.stopPropagation();
 
-        const shouldPan = tool === "pan" || spaceDownRef.current;
+        const shouldPan = tool === "pan" || spaceDownRef.current || e.shiftKey;
         if (shouldPan) {
             setIsPanning(true);
             panStartRef.current = { x: e.clientX - pan.x, y: e.clientY - pan.y };
@@ -297,6 +331,7 @@ export function InpaintEditor({ open, onOpenChange, imageUrl, onSave }: InpaintE
     };
 
     const draw = (e: React.PointerEvent<HTMLCanvasElement>) => {
+        if (!isReady || isSaving) return;
         const canvas = canvasRef.current;
         const ctx = canvas?.getContext("2d");
         if (!canvas || !ctx) return;
@@ -329,6 +364,7 @@ export function InpaintEditor({ open, onOpenChange, imageUrl, onSave }: InpaintE
     };
 
     const stopDrawing = (e?: React.PointerEvent<HTMLCanvasElement>) => {
+        if (!isReady || isSaving) return;
         const canvas = canvasRef.current;
         const ctx = canvas?.getContext("2d");
         if (!canvas || !ctx) return;
@@ -362,6 +398,7 @@ export function InpaintEditor({ open, onOpenChange, imageUrl, onSave }: InpaintE
     };
 
     const handleSave = async () => {
+        if (!isReady) return;
         const canvas = canvasRef.current;
         if (!canvas) return;
 
@@ -421,19 +458,20 @@ export function InpaintEditor({ open, onOpenChange, imageUrl, onSave }: InpaintE
     return (
         <Dialog open={open} onOpenChange={(val) => !isSaving && onOpenChange(val)}>
             <DialogContent className="w-screen h-screen max-w-none max-h-none flex flex-col p-0 gap-0">
-                <DialogHeader className="px-4 py-3 border-b bg-white">
-                    <DialogTitle className="flex flex-wrap items-center justify-between gap-3">
-                        <span className="text-sm">Draw Mask</span>
-                        <div className="flex flex-wrap items-center gap-2">
+                <DialogHeader className="px-4 py-3 border-b bg-white pr-14">
+                    <div className="flex items-center gap-3">
+                        <DialogTitle className="text-sm">draw mask</DialogTitle>
+                        <div className="flex-1 flex justify-center">
+                            <div className="flex flex-wrap items-center justify-center gap-2">
                             <div className="flex items-center gap-2">
-                                <span className="text-[10px] text-slate-500 uppercase tracking-wide">paint =</span>
+                                <span className="text-[10px] text-slate-500 tracking-wide">paint =</span>
                                 <span className="text-xs text-slate-600">mask</span>
                                 <Switch checked={invertOutput} onCheckedChange={setInvertOutput} />
                                 <span className="text-xs text-slate-600">keep</span>
                             </div>
 
                             <div className="hidden md:flex items-center gap-2">
-                                <span className="text-[10px] text-slate-500 uppercase tracking-wide">file</span>
+                                <span className="text-[10px] text-slate-500 tracking-wide">file</span>
                                 <Input
                                     value={filename}
                                     onChange={(e) => setFilename(e.target.value)}
@@ -455,8 +493,9 @@ export function InpaintEditor({ open, onOpenChange, imageUrl, onSave }: InpaintE
                                 {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                                 save mask
                             </Button>
+                            </div>
                         </div>
-                    </DialogTitle>
+                    </div>
 
                     <div className="md:hidden pt-2">
                         <Input
@@ -468,15 +507,15 @@ export function InpaintEditor({ open, onOpenChange, imageUrl, onSave }: InpaintE
                     </div>
                 </DialogHeader>
 
-                <div className="flex-1 bg-black overflow-hidden relative flex items-center justify-center" onWheel={handleWheel}>
+                <div ref={viewportRef} className="flex-1 bg-slate-900/30 backdrop-blur-3xl overflow-hidden relative flex items-center justify-center" onWheel={handleWheel}>
                     <div className="absolute top-3 left-3 z-10 flex items-center gap-2 bg-white/10 text-white px-3 py-1 rounded-md backdrop-blur-md text-xs font-mono">
                         {zoomLabel}
                     </div>
                     <div className="absolute top-3 right-3 z-10 flex items-center gap-2">
-                        <Button variant="ghost" size="icon" className="text-white hover:bg-white/10" onClick={() => applyZoomDelta(-0.25)}>
+                        <Button variant="ghost" size="icon" className="text-white hover:bg-white/10" onClick={() => zoomBy(-0.25)}>
                             <ZoomOut className="w-4 h-4" />
                         </Button>
-                        <Button variant="ghost" size="icon" className="text-white hover:bg-white/10" onClick={() => applyZoomDelta(0.25)}>
+                        <Button variant="ghost" size="icon" className="text-white hover:bg-white/10" onClick={() => zoomBy(0.25)}>
                             <ZoomIn className="w-4 h-4" />
                         </Button>
                         <Button variant="ghost" size="icon" className="text-white hover:bg-white/10" onClick={resetView}>
@@ -499,7 +538,7 @@ export function InpaintEditor({ open, onOpenChange, imageUrl, onSave }: InpaintE
                         <canvas
                             ref={canvasRef}
                             className="absolute inset-0 w-full h-full touch-none"
-                            style={{ opacity: 0.7, cursor: tool === "pan" ? "grab" : "crosshair" }}
+                            style={{ opacity: 0.9, cursor: tool === "pan" ? "grab" : "crosshair", pointerEvents: isReady ? "auto" : "none" }}
                             onContextMenu={(e) => e.preventDefault()}
                             onPointerDown={startDrawing}
                             onPointerMove={draw}
@@ -510,8 +549,16 @@ export function InpaintEditor({ open, onOpenChange, imageUrl, onSave }: InpaintE
                     </div>
 
                     <div className="absolute bottom-3 left-1/2 -translate-x-1/2 text-[11px] text-white/70 bg-white/10 px-3 py-1 rounded backdrop-blur-md">
-                        wheel: zoom | space or <Move className="inline w-3 h-3 mx-1" />: pan | ctrl/cmd+z: undo | ctrl/cmd+shift+z: redo
+                        wheel: zoom (at cursor) | space/shift or <Move className="inline w-3 h-3 mx-1" />: pan | ctrl/cmd+z: undo | ctrl/cmd+shift+z: redo
                     </div>
+
+                    {!isReady && (
+                        <div className="absolute inset-0 flex items-center justify-center">
+                            <div className="flex items-center gap-2 bg-white/10 text-white px-4 py-2 rounded-md backdrop-blur-md text-sm">
+                                <Loader2 className="w-4 h-4 animate-spin" /> loading image…
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 <div className="p-4 bg-slate-50 border-t flex flex-wrap items-center justify-center gap-4">
@@ -521,7 +568,7 @@ export function InpaintEditor({ open, onOpenChange, imageUrl, onSave }: InpaintE
                             size="icon"
                             onClick={() => setTool("brush")}
                             className="h-8 w-8"
-                            title="Brush (B)"
+                            title="brush (b)"
                         >
                             <Brush className="w-4 h-4" />
                         </Button>
@@ -530,7 +577,7 @@ export function InpaintEditor({ open, onOpenChange, imageUrl, onSave }: InpaintE
                             size="icon"
                             onClick={() => setTool("eraser")}
                             className="h-8 w-8"
-                            title="Eraser (E)"
+                            title="eraser (e)"
                         >
                             <Eraser className="w-4 h-4" />
                         </Button>
@@ -539,14 +586,14 @@ export function InpaintEditor({ open, onOpenChange, imageUrl, onSave }: InpaintE
                             size="icon"
                             onClick={() => setTool("pan")}
                             className="h-8 w-8"
-                            title="Pan (V)"
+                            title="pan (v)"
                         >
                             <Move className="w-4 h-4" />
                         </Button>
                     </div>
 
                     <div className="flex items-center gap-3 w-[320px] max-w-full">
-                        <span className="text-xs font-semibold text-slate-500">Size</span>
+                        <span className="text-xs font-semibold text-slate-500">size</span>
                         <Slider
                             value={[brushSize]}
                             onValueChange={(val) => setBrushSize(val[0] ?? 30)}
