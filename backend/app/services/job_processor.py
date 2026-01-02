@@ -675,48 +675,17 @@ def process_job(job_id: int):
                     print(f"Failed to dump debug graph: {e}")
 
             # Race Condition Fix: Connect BEFORE queuing to catch fast/cached execution events
+            # Race Condition Fix: Connect BEFORE queuing to catch fast/cached execution events
             client.connect()
-            prompt_id = client.queue_prompt(final_graph)
-            job.comfy_prompt_id = prompt_id
-            session.add(job)
-            session.commit()
             
-            manager.broadcast_sync({"type": "started", "prompt_id": prompt_id}, str(job_id))
-            
-            outputs = client.get_images(prompt_id, progress_callback=on_progress)
-            image_outputs = [item for item in outputs if item.get("kind") != "video"]
-            video_outputs = [item for item in outputs if item.get("kind") == "video"]
-            
-            # Immediately signal that ComfyUI is done - frontend can reset button now
-            # Post-processing (image saving, metadata embedding) happens below in background
-            manager.broadcast_sync({
-                "type": "generation_done",
-                "job_id": job_id,
-                "image_count": len(image_outputs),
-                "video_count": len(video_outputs),
-                "output_count": len(outputs),
-            }, str(job_id))
-            
-            job.status = "completed"
-            job.completed_at = datetime.utcnow()
-            session.add(job)
-
+            # --- START PRE-CALCULATION OF META/DIRS (Moved from post-execution) ---
             # Determine Target Directory for saving images
             target_output_dir = None
-            
-            # If job has a project, route to the appropriate folder based on destination
             if job.project_id:
                 project = session.get(Project, job.project_id)
                 if project:
-                    # User-selected folder, default to "output"
                     folder_name = job.output_dir if job.output_dir else "output"
-                    
-                    # Determine routing:
-                    # - "output" → /ComfyUI/sweet_tea/<project>/output/ (final products)
-                    # - other folders → /ComfyUI/input/<project>/<folder>/ (usable as inputs)
-                    
                     if folder_name == "output":
-                        # Final outputs go to sweet_tea
                         if engine.output_dir:
                             output_path = Path(engine.output_dir)
                             if output_path.name in ("output", "input"):
@@ -727,12 +696,9 @@ def process_job(job_id: int):
                         else:
                             target_output_dir = job.output_dir
                     else:
-                        # Non-output folders go to /ComfyUI/input/<project>/<folder>/
-                        # so they can be used directly by LoadImage nodes
                         if engine.input_dir:
                             target_output_dir = str(Path(engine.input_dir) / project.slug / folder_name)
                         else:
-                            # Fallback to sweet_tea if no input_dir configured
                             if engine.output_dir:
                                 output_path = Path(engine.output_dir)
                                 if output_path.name in ("output", "input"):
@@ -746,107 +712,7 @@ def process_job(job_id: int):
                     target_output_dir = job.output_dir
             else:
                 target_output_dir = job.output_dir
-            
-            saved_media = []
-            
-            # Extract positive/negative prompts ONCE before the loop
-            # Check working_params for common prompt keys, then fall back to CLIPTextEncode/STRING_LITERAL nodes
-            pos_embed = working_params.get("prompt") or working_params.get("positive") or working_params.get("positive_prompt") or ""
-            neg_embed = working_params.get("negative_prompt") or working_params.get("negative") or ""
-            
-            # Also check for STRING_LITERAL patterns in working_params (common in Wan2.2 workflows)
-            if not pos_embed or not neg_embed:
-                string_literal_values = []
-                for key, value in working_params.items():
-                    if isinstance(value, str) and value.strip():
-                        key_lower = key.lower()
-                        if "string_literal" in key_lower or (".string" in key_lower and "lora" not in key_lower):
-                            string_literal_values.append({"key": key, "value": value})
-                
-                # Sort by key to get consistent ordering
-                string_literal_values.sort(key=lambda x: x["key"])
-                
-                if string_literal_values:
-                    if not pos_embed and len(string_literal_values) >= 1:
-                        pos_embed = string_literal_values[0]["value"]
-                    if not neg_embed and len(string_literal_values) >= 2:
-                        neg_embed = string_literal_values[1]["value"]
-            
-            if not pos_embed or not neg_embed:
-                clip_nodes = []
-                for node_id, node_data in final_graph.items():
-                    class_type = node_data.get("class_type", "")
-                    
-                    # Check CLIPTextEncode nodes
-                    if class_type == "CLIPTextEncode":
-                        text = node_data.get("inputs", {}).get("text", "")
-                        if isinstance(text, str) and text.strip():
-                            clip_nodes.append({
-                                "node_id": node_id,
-                                "text": text,
-                                "title": node_data.get("_meta", {}).get("title", "")
-                            })
-                    
-                    # Check STRING_LITERAL nodes (used in Wan2.2 and other video workflows)
-                    if "string" in class_type.lower() and "literal" in class_type.lower():
-                        text = node_data.get("inputs", {}).get("string", "")
-                        if isinstance(text, str) and text.strip():
-                            clip_nodes.append({
-                                "node_id": node_id,
-                                "text": text,
-                                "title": node_data.get("_meta", {}).get("title", "")
-                            })
-                
-                for cn in clip_nodes:
-                    title_lower = cn["title"].lower()
-                    text = cn["text"]
-                    if ("negative" in title_lower or "neg" in title_lower) and not neg_embed:
-                        neg_embed = text
-                    elif not pos_embed:
-                        pos_embed = text
-                
-                # Fallback: first two nodes
-                if not pos_embed and len(clip_nodes) >= 1:
-                    pos_embed = clip_nodes[0]["text"]
-                if not neg_embed and len(clip_nodes) >= 2:
-                    neg_embed = clip_nodes[1]["text"]
-            
-            # Determine the base filename prefix from project slug and folder name
-            folder_name = job.output_dir if job.output_dir else "output"
-            if project:
-                filename_prefix = f"{project.slug}-{folder_name}"
-            else:
-                filename_prefix = f"gen_{job_id}"
 
-            next_seq = _get_next_sequence_start(session, filename_prefix, len(outputs))
-            
-            # Build provenance data once (shared across all outputs)
-            provenance_data = {
-                "positive_prompt": pos_embed,
-                "negative_prompt": neg_embed,
-                "workflow_id": workflow.id,
-                "workflow_name": workflow.name if hasattr(workflow, 'name') else None,
-                "job_id": job_id,
-                "timestamp": datetime.utcnow().isoformat(),
-                "params": {k: v for k, v in working_params.items() if k != "metadata" and not k.startswith("__")}
-            }
-
-            # Precompute serialized metadata once (shared across all images) to avoid
-            # repeating JSON serialization + UTF-16 encoding in every worker thread.
-            provenance_json = json.dumps(provenance_data, ensure_ascii=False)
-            xp_comment_bytes = provenance_json.encode("utf-16le") + b"\x00\x00"
-            video_provenance = dict(provenance_data)
-            video_provenance["media_kind"] = "video"
-            video_provenance_json = json.dumps(video_provenance, ensure_ascii=False)
-
-            xp_title_bytes: bytes | None = None
-            if project and project.name:
-                xp_title_bytes = project.name.encode("utf-16le") + b"\x00\x00"
-
-            xp_subject_bytes: bytes | None = None
-            if folder_name:
-                xp_subject_bytes = str(folder_name).encode("utf-16le") + b"\x00\x00"
-            
             # Determine save_dir once
             if target_output_dir:
                 save_dir = target_output_dir
@@ -854,8 +720,11 @@ def process_job(job_id: int):
                 save_dir = engine.output_dir
             else:
                 raise ComfyResponseError("No output directory configured.")
+            
+            # Ensure safe directory
+            os.makedirs(save_dir, exist_ok=True)
 
-            # Best-effort ComfyUI root dir (so we can read `type=temp` previews from /ComfyUI/temp).
+            # Best-effort ComfyUI root dir
             engine_root_dir: str | None = None
             try:
                 base_path = None
@@ -868,10 +737,202 @@ def process_job(job_id: int):
             except Exception:
                 engine_root_dir = None
             
-            # Prepare tasks for parallel processing
-            image_tasks = []
+            # Setup Provenance Data
+            pos_embed = working_params.get("prompt") or working_params.get("positive") or working_params.get("positive_prompt") or ""
+            neg_embed = working_params.get("negative_prompt") or working_params.get("negative") or ""
+            
+            if not pos_embed or not neg_embed:
+                string_literal_values = []
+                for key, value in working_params.items():
+                    if isinstance(value, str) and value.strip():
+                        key_lower = key.lower()
+                        if "string_literal" in key_lower or (".string" in key_lower and "lora" not in key_lower):
+                            string_literal_values.append({"key": key, "value": value})
+                string_literal_values.sort(key=lambda x: x["key"])
+                if string_literal_values:
+                    if not pos_embed and len(string_literal_values) >= 1:
+                        pos_embed = string_literal_values[0]["value"]
+                    if not neg_embed and len(string_literal_values) >= 2:
+                        neg_embed = string_literal_values[1]["value"]
+
+            if not pos_embed or not neg_embed:
+                clip_nodes = []
+                for node_id, node_data in final_graph.items():
+                    class_type = node_data.get("class_type", "")
+                    if class_type == "CLIPTextEncode":
+                        text = node_data.get("inputs", {}).get("text", "")
+                        if isinstance(text, str) and text.strip():
+                            clip_nodes.append({"node_id": node_id, "text": text, "title": node_data.get("_meta", {}).get("title", "")})
+                    if "string" in class_type.lower() and "literal" in class_type.lower():
+                        text = node_data.get("inputs", {}).get("string", "")
+                        if isinstance(text, str) and text.strip():
+                            clip_nodes.append({"node_id": node_id, "text": text, "title": node_data.get("_meta", {}).get("title", "")})
+                
+                for cn in clip_nodes:
+                    title_lower = cn["title"].lower()
+                    text = cn["text"]
+                    if ("negative" in title_lower or "neg" in title_lower) and not neg_embed:
+                        neg_embed = text
+                    elif not pos_embed:
+                        pos_embed = text
+                if not pos_embed and len(clip_nodes) >= 1:
+                    pos_embed = clip_nodes[0]["text"]
+                if not neg_embed and len(clip_nodes) >= 2:
+                    neg_embed = clip_nodes[1]["text"]
+
+            folder_name = job.output_dir if job.output_dir else "output"
+            # Re-fetch Project if needed (ensure bound to session)
+            project_obj = session.get(Project, job.project_id) if job.project_id else None
+            filename_prefix = f"{project_obj.slug}-{folder_name}" if project_obj else f"gen_{job_id}"
+            
+            provenance_data = {
+                "positive_prompt": pos_embed,
+                "negative_prompt": neg_embed,
+                "workflow_id": workflow.id,
+                "workflow_name": workflow.name if hasattr(workflow, 'name') else None,
+                "job_id": job_id,
+                "timestamp": datetime.utcnow().isoformat(),
+                "params": {k: v for k, v in working_params.items() if k != "metadata" and not k.startswith("__")}
+            }
+            provenance_json = json.dumps(provenance_data, ensure_ascii=False)
+            xp_comment_bytes = provenance_json.encode("utf-16le") + b"\x00\x00"
+            video_provenance = dict(provenance_data)
+            video_provenance["media_kind"] = "video"
+            video_provenance_json = json.dumps(video_provenance, ensure_ascii=False)
+            
+            xp_title_bytes: bytes | None = None
+            if project_obj and project_obj.name:
+                xp_title_bytes = project_obj.name.encode("utf-16le") + b"\x00\x00"
+
+            xp_subject_bytes: bytes | None = None
+            if folder_name:
+                xp_subject_bytes = str(folder_name).encode("utf-16le") + b"\x00\x00"
+
+            # --- END PRE-CALCULATION ---
+
+            # Callback for streaming
+            processed_filenames = set()
+            saved_media = []
+            
+            # Setup image metadata once
+            incoming_metadata = working_params.get("metadata", {})
+            if isinstance(incoming_metadata, str):
+                try:
+                    incoming_metadata = json.loads(incoming_metadata)
+                except Exception:
+                    incoming_metadata = {}
+            raw_history = incoming_metadata.get("prompt_history", [])
+            prompt_history = raw_history if isinstance(raw_history, list) else []
+            latest_prompt = { "stage": 0, "positive_text": pos_embed, "negative_text": neg_embed, "timestamp": datetime.utcnow().isoformat(), "source": "workflow" }
+            stacked_history = [latest_prompt]
+            for hist_idx, entry in enumerate(prompt_history):
+                if isinstance(entry, dict):
+                    stacked = entry.copy()
+                    stacked.setdefault("stage", hist_idx + 1)
+                    stacked_history.append(stacked)
+            image_metadata = incoming_metadata.copy()
+            image_metadata["active_prompt"] = latest_prompt
+            image_metadata["prompt_history"] = stacked_history
+            image_metadata["generation_params"] = {k: v for k, v in working_params.items() if k != "metadata" and not k.startswith("__")}
+            
+            param_width = None
+            param_height = None
+            if isinstance(working_params, dict):
+                param_width = working_params.get("width") or working_params.get("empty_latent_width")
+                param_height = working_params.get("height") or working_params.get("empty_latent_height")
+
+            def on_image_captured(img_data: dict):
+                try:
+                    # Determine filename with sequence
+                    seq_num = _get_next_sequence_start(session, filename_prefix, 1)
+                    original_name = os.path.basename(img_data.get("filename") or "")
+                    
+                    # Store original filename to avoid post-processing duplicates
+                    # ComfyClient sends the 'filename' it captured
+                    processed_filenames.add(original_name)
+                    
+                    original_ext = original_name.rsplit('.', 1)[-1].lower() if '.' in original_name else "png"
+                    final_filename = f"{filename_prefix}-{seq_num:04d}.{original_ext}"
+                    
+                    # Process and Save
+                    result = _process_single_image(
+                        img_data, 0, save_dir, final_filename, provenance_json, xp_comment_bytes, 
+                        engine.output_dir, engine_root_dir, xp_title_bytes, xp_subject_bytes
+                    )
+                    
+                    if result:
+                        full_path, saved_filename, _ = result
+                        
+                        # Create DB Record
+                        file_ext = os.path.splitext(saved_filename)[1].lstrip(".").lower() or "png"
+                        
+                        # Generate thumbnail
+                        thumb_data, thumb_width, thumb_height = _create_thumbnail(full_path)
+                        img_width = thumb_width or param_width
+                        img_height = thumb_height or param_height
+                        
+                        new_image = Image(
+                            job_id=job_id, path=full_path, filename=saved_filename, format=file_ext,
+                            width=img_width, height=img_height, file_exists=True,
+                            thumbnail_data=thumb_data, extra_metadata=image_metadata, is_kept=False
+                        )
+                        session.add(new_image)
+                        session.commit()
+                        session.refresh(new_image)
+                        
+                        saved_media.append(new_image)
+                        
+                        # Update index
+                        fts_updated = False
+                        search_text = build_search_text(pos_embed, neg_embed, None, None, stacked_history)
+                        if search_text and new_image.id:
+                            update_gallery_fts(session, new_image.id, search_text)
+                            session.commit()
+                            
+                        # Stream the result!
+                        manager.broadcast_sync({
+                            "type": "image_completed",
+                            "job_id": job_id,
+                            "image": {
+                                "id": new_image.id, "job_id": new_image.job_id, "path": new_image.path,
+                                "filename": new_image.filename, "created_at": new_image.created_at.isoformat()
+                            }
+                        }, str(job_id))
+                        
+                except Exception as e:
+                    print(f"Failed to process streamed image: {e}")
+
+            prompt_id = client.queue_prompt(final_graph)
+            job.comfy_prompt_id = prompt_id
+            session.add(job)
+            session.commit()
+            
+            manager.broadcast_sync({"type": "started", "prompt_id": prompt_id}, str(job_id))
+            
+            # Pass callback to get_images
+            outputs = client.get_images(prompt_id, progress_callback=on_progress, on_image_callback=on_image_captured)
+            
+            # Filter Logic - only process items NOT already handled
+            final_tasks = []
+            
+            # Re-read sequence for batch processing
+            pending_outputs = []
+            for item in outputs:
+                fname = os.path.basename(item.get("filename") or "")
+                # If we processed it in on_image_captured, processed_filenames has it
+                # Note: previews might not trigger on_image_captured (type 1), only type 2 (SaveImageWebsocket)
+                # But get_images returns type 2 images too.
+                # History images (not websocket captured) wouldn't be in processed_filenames.
+                if fname not in processed_filenames:
+                    pending_outputs.append(item)
+            
+            # Reuse seq start logic for the remainder
+            next_seq = _get_next_sequence_start(session, filename_prefix, len(pending_outputs))
+            
             video_tasks = []
-            for idx, output in enumerate(outputs):
+            image_tasks = []
+            
+            for idx, output in enumerate(pending_outputs):
                 seq_num = next_seq + idx
                 original_name = os.path.basename(output.get("filename") or "")
                 original_ext = original_name.rsplit('.', 1)[-1].lower() if '.' in original_name else ""
@@ -879,35 +940,18 @@ def process_job(job_id: int):
                     original_ext = "mp4" if output.get("kind") == "video" else "jpg"
 
                 if output.get("kind") == "video":
+                     # Original video logic
                     preferred_name = original_name or f"{filename_prefix}-{seq_num:04d}.{original_ext}"
                     if os.path.exists(os.path.join(save_dir, preferred_name)):
                         preferred_name = f"{filename_prefix}-{seq_num:04d}.{original_ext}"
                     video_tasks.append(
-                        (
-                            output,
-                            idx,
-                            save_dir,
-                            preferred_name,
-                            video_provenance_json,
-                            engine.output_dir,
-                            engine_root_dir,
-                        )
+                        (output, idx, save_dir, preferred_name, video_provenance_json, engine.output_dir, engine_root_dir)
                     )
                 else:
                     filename = f"{filename_prefix}-{seq_num:04d}.{original_ext}"
                     image_tasks.append(
-                        (
-                            output,
-                            idx,
-                            save_dir,
-                            filename,
-                            provenance_json,
-                            xp_comment_bytes,
-                            engine.output_dir,
-                            engine_root_dir,
-                            xp_title_bytes,
-                            xp_subject_bytes,
-                        )
+                        (output, idx, save_dir, filename, provenance_json, xp_comment_bytes, 
+                         engine.output_dir, engine_root_dir, xp_title_bytes, xp_subject_bytes)
                     )
              
             # Process images in parallel using ThreadPoolExecutor

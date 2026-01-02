@@ -7,6 +7,7 @@ from app.core.config import settings
 import mimetypes
 import os
 from typing import Optional
+from pathlib import Path
 
 router = APIRouter()
 
@@ -63,6 +64,61 @@ def _validate_upload(filename: str, mime_type: str) -> None:
     allowed_by_mime = mime_type in ALLOWED_UPLOAD_MIME
     if not allowed_by_ext and not allowed_by_mime:
         raise HTTPException(status_code=400, detail="Unsupported file type.")
+
+
+def _infer_project_slug_from_path(path: Path, engine: Optional[Engine]) -> Optional[str]:
+    """
+    Attempt to infer a Sweet Tea project slug from an absolute file path.
+
+    Supports both:
+    - /ComfyUI/input/<project>/...
+    - /ComfyUI/sweet_tea/<project>/...
+
+    Falls back to local Sweet Tea storage: <ROOT_DIR>/projects/<project>/...
+    """
+    if engine and engine.input_dir:
+        try:
+            rel = path.relative_to(Path(engine.input_dir))
+            if len(rel.parts) >= 2:
+                return rel.parts[0]
+        except ValueError:
+            pass
+
+    if engine and engine.output_dir:
+        try:
+            sweet_tea_dir = settings.get_sweet_tea_dir_from_engine_path(engine.output_dir)
+            rel = path.relative_to(sweet_tea_dir)
+            if len(rel.parts) >= 2:
+                return rel.parts[0]
+        except ValueError:
+            pass
+
+    try:
+        rel = path.relative_to(settings.projects_dir)
+        if len(rel.parts) >= 2:
+            return rel.parts[0]
+    except ValueError:
+        pass
+
+    return None
+
+
+def _ensure_unique_path(target_dir: Path, filename: str) -> Path:
+    safe_name = os.path.basename(filename).strip() or "mask.png"
+    stem, suffix = os.path.splitext(safe_name)
+    suffix = suffix or ".png"
+
+    candidate = target_dir / f"{stem}{suffix}"
+    if not candidate.exists():
+        return candidate
+
+    counter = 1
+    while True:
+        candidate = target_dir / f"{stem}_{counter}{suffix}"
+        if not candidate.exists():
+            return candidate
+        counter += 1
+
 
 @router.post("/upload")
 def upload_file(
@@ -161,6 +217,132 @@ def upload_file(
         "path": file_path,
         "mime_type": mime_type,
         "size_bytes": bytes_written,
+    }
+
+
+@router.post("/save-mask")
+def save_mask(
+    file: UploadFile = File(...),
+    source_path: str = Form(...),
+    engine_id: Optional[int] = Form(None),
+    session: Session = Depends(get_session),
+):
+    """
+    Save a mask PNG derived from an existing image.
+
+    Default behavior matches ComfyUI-style workflows:
+    - If the source image belongs to a non-drafts project, save into that project's "masks" folder.
+    - If the source image is in drafts (or project cannot be inferred), save alongside the source image.
+
+    Returns absolute path plus (when applicable) a ComfyUI input-relative filename.
+    """
+    # Get engine (for resolving comfy paths / computing relative input filename)
+    engine = None
+    if engine_id:
+        engine = session.get(Engine, engine_id)
+
+    if not engine:
+        engine = session.exec(select(Engine).where(Engine.name == "Local ComfyUI")).first()
+
+    if not engine:
+        engine = session.exec(select(Engine).where(Engine.is_active == True)).first()
+
+    # Resolve source image path (accepts absolute or input-relative strings)
+    resolved_source: Optional[str] = None
+    try:
+        from app.api.endpoints.gallery import _resolve_media_path  # Local import to avoid heavy module init
+
+        resolved_source = _resolve_media_path(source_path, session)
+    except Exception:
+        resolved_source = None
+
+    source_candidate = (resolved_source or source_path).strip().strip('"').strip("'")
+    source_file = Path(source_candidate)
+    if not source_file.exists():
+        raise HTTPException(status_code=404, detail=f"Source image not found: {source_path}")
+    if not source_file.is_file():
+        raise HTTPException(status_code=400, detail="Source path is not a file")
+
+    # Decide where to save
+    project_slug = _infer_project_slug_from_path(source_file, engine)
+    saved_to = "same_folder"
+    target_dir = source_file.parent
+
+    if project_slug and project_slug != "drafts":
+        saved_to = "project_masks"
+        if engine and engine.input_dir:
+            target_dir = settings.get_project_input_dir_in_comfy(engine.input_dir, project_slug) / "masks"
+        elif engine and engine.output_dir:
+            target_dir = settings.get_project_dir_in_comfy(engine.output_dir, project_slug) / "masks"
+        else:
+            target_dir = settings.get_project_dir(project_slug) / "masks"
+
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    # Validate + normalize filename
+    safe_name = os.path.basename(file.filename) if file.filename else "mask.png"
+    safe_name = safe_name.strip().strip('"').strip("'") or "mask.png"
+    if not safe_name.lower().endswith(".png"):
+        safe_name = f"{os.path.splitext(safe_name)[0]}.png"
+
+    mime_type = _resolve_mime_type(file, safe_name)
+    _validate_upload(safe_name, mime_type)
+
+    target_path = _ensure_unique_path(target_dir, safe_name)
+
+    try:
+        bytes_written = 0
+        with open(target_path, "wb") as buffer:
+            while True:
+                chunk = file.file.read(1024 * 1024)
+                if not chunk:
+                    break
+                bytes_written += len(chunk)
+                if bytes_written > MAX_UPLOAD_BYTES:
+                    raise HTTPException(status_code=413, detail="File exceeds the maximum upload size.")
+                buffer.write(chunk)
+    except HTTPException:
+        if target_path.exists():
+            try:
+                target_path.unlink()
+            except Exception:
+                pass
+        raise
+    except Exception as e:
+        if target_path.exists():
+            try:
+                target_path.unlink()
+            except Exception:
+                pass
+        raise HTTPException(status_code=500, detail=f"Failed to save mask: {str(e)}")
+    finally:
+        try:
+            file.file.close()
+        except Exception:
+            pass
+
+    # Compute ComfyUI input-relative path if saved under input dir
+    comfy_filename: Optional[str] = None
+    if engine and engine.input_dir:
+        try:
+            rel = target_path.relative_to(Path(engine.input_dir))
+            comfy_filename = str(rel).replace("\\", "/")
+        except ValueError:
+            comfy_filename = None
+
+    project_id: Optional[int] = None
+    if project_slug:
+        project = session.exec(select(Project).where(Project.slug == project_slug)).first()
+        if project and project.id is not None:
+            project_id = project.id
+
+    return {
+        "filename": target_path.name,
+        "path": str(target_path),
+        "comfy_filename": comfy_filename,
+        "saved_to": saved_to,
+        "project_slug": project_slug,
+        "project_id": project_id,
     }
 
 @router.get("/tree")

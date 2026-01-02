@@ -1,8 +1,10 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
-import { Brush, Eraser, Undo, Save, Loader2, Trash2 } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
+import { Brush, Eraser, Loader2, Move, Redo, RotateCcw, Save, Trash2, Undo, ZoomIn, ZoomOut } from 'lucide-react';
 
 interface InpaintEditorProps {
     open: boolean;
@@ -11,147 +13,351 @@ interface InpaintEditorProps {
     onSave: (maskFile: File) => Promise<void>;
 }
 
+const HISTORY_LIMIT = 30;
+const MIN_ZOOM = 1;
+const MAX_ZOOM = 12;
+
+type Tool = "brush" | "eraser" | "pan";
+
 export function InpaintEditor({ open, onOpenChange, imageUrl, onSave }: InpaintEditorProps) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
+    const patternRef = useRef<CanvasPattern | null>(null);
+
+    const [tool, setTool] = useState<Tool>("brush");
+    const [brushSize, setBrushSize] = useState(30);
+    const [invertOutput, setInvertOutput] = useState(false);
+    const [filename, setFilename] = useState("mask.png");
+
     const [isDrawing, setIsDrawing] = useState(false);
-    const [brushSize, setBrushSize] = useState([30]);
-    const [mode, setMode] = useState<'brush' | 'eraser'>('brush');
-    const [history, setHistory] = useState<ImageData[]>([]);
-    const [historyStep, setHistoryStep] = useState(-1);
+    const [isPanning, setIsPanning] = useState(false);
+    const panStartRef = useRef<{ x: number; y: number } | null>(null);
+    const spaceDownRef = useRef(false);
+
+    const [zoom, setZoom] = useState(1);
+    const [pan, setPan] = useState({ x: 0, y: 0 });
+
+    const historyRef = useRef<{ stack: ImageData[]; index: number }>({ stack: [], index: -1 });
+    const [historyIndex, setHistoryIndex] = useState(-1);
+    const [historySize, setHistorySize] = useState(0);
+
     const [isSaving, setIsSaving] = useState(false);
 
-    // Initialize canvas
+    const canUndo = historyIndex > 0;
+    const canRedo = historyIndex >= 0 && historyIndex < historySize - 1;
+    const zoomLabel = useMemo(() => `${Math.round(zoom * 100)}%`, [zoom]);
+
+    const buildDefaultFilename = useCallback(() => {
+        let base = "image";
+        try {
+            if (imageUrl.includes("?path=")) {
+                const url = new URL(imageUrl, window.location.origin);
+                base = url.searchParams.get("path")?.split(/[\\/]/).pop() || base;
+            } else {
+                base = imageUrl.split(/[\\/]/).pop() || base;
+            }
+        } catch {
+            base = "image";
+        }
+
+        base = base.replace(/\.(png|jpg|jpeg|webp|gif|bmp|tif|tiff)$/i, "");
+        if (!base) base = "image";
+        return `${base}_mask.png`;
+    }, [imageUrl]);
+
+    const isTypingInTextField = useCallback(() => {
+        const active = document.activeElement;
+        if (!active) return false;
+        const tag = active.tagName.toLowerCase();
+        if (tag === "input" || tag === "textarea") return true;
+        return Boolean((active as HTMLElement).isContentEditable);
+    }, []);
+
+    // Initialize canvas + editor state each time the dialog opens.
     useEffect(() => {
         if (!open || !imageUrl || !canvasRef.current || !containerRef.current) return;
-        // Reset history on open (if completely fresh)
-        // Note: we might want to keep history if re-opening?
-        // For now, assume fresh start or handle it carefully.
-        // Actually, if we re-open, we should rely on state. But hooks reset on unmount?
-        // Dialog unmounts content?
-        // If the component remains mounted but hidden? Radix Dialog can unmount.
-        // Let's assume restart.
 
         const canvas = canvasRef.current;
-        const ctx = canvas.getContext('2d');
+        const ctx = canvas.getContext("2d");
         if (!ctx) return;
 
         const img = new Image();
         img.crossOrigin = "anonymous";
         img.src = imageUrl;
         img.onload = () => {
-            const container = containerRef.current;
-            if (!container) return;
-
-            const width = img.naturalWidth;
-            const height = img.naturalHeight;
-
-            canvas.width = width;
-            canvas.height = height;
-            ctx.clearRect(0, 0, width, height);
-            ctx.lineCap = 'round';
-            ctx.lineJoin = 'round';
-
-            // Initial save (Empty)
-            // We need to reset history state here because new image = new dimension = new history invalid
-            setHistory([]);
-            setHistoryStep(-1);
-
-            // We need to wait for state update? No, just call a specialized init.
-            const data = ctx.getImageData(0, 0, width, height);
-            setHistory([data]);
-            setHistoryStep(0);
-        };
-    }, [open, imageUrl]);
-
-    const saveHistory = (ctx: CanvasRenderingContext2D, w: number, h: number) => {
-        const data = ctx.getImageData(0, 0, w, h);
-        setHistory(prev => {
-            const newHistory = prev.slice(0, historyStep + 1);
-            return [...newHistory, data];
-        });
-        setHistoryStep(prev => prev + 1);
-    };
-
-    const handleUndo = () => {
-        if (historyStep > 0) {
-            const canvas = canvasRef.current;
-            const ctx = canvas?.getContext('2d');
-            if (canvas && ctx) {
-                const prevData = history[historyStep - 1];
-                ctx.putImageData(prevData, 0, 0);
-                setHistoryStep(prev => prev - 1);
-            }
-        }
-    };
-
-    const handleClear = () => {
-        const canvas = canvasRef.current;
-        const ctx = canvas?.getContext('2d');
-        if (canvas && ctx) {
+            canvas.width = img.naturalWidth;
+            canvas.height = img.naturalHeight;
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            saveHistory(ctx, canvas.width, canvas.height);
-        }
-    };
 
-    const startDrawing = (e: React.MouseEvent | React.TouchEvent) => {
+            // Build checkered mask pattern (white/gray) for the overlay strokes.
+            const tile = document.createElement("canvas");
+            tile.width = 16;
+            tile.height = 16;
+            const tCtx = tile.getContext("2d");
+            if (tCtx) {
+                tCtx.fillStyle = "#e5e7eb";
+                tCtx.fillRect(0, 0, 16, 16);
+                tCtx.fillStyle = "#ffffff";
+                tCtx.fillRect(0, 0, 8, 8);
+                tCtx.fillRect(8, 8, 8, 8);
+                patternRef.current = ctx.createPattern(tile, "repeat");
+            } else {
+                patternRef.current = null;
+            }
+
+            setTool("brush");
+            setBrushSize(30);
+            setInvertOutput(false);
+            setFilename(buildDefaultFilename());
+            setZoom(1);
+            setPan({ x: 0, y: 0 });
+
+            setIsDrawing(false);
+            setIsPanning(false);
+            panStartRef.current = null;
+            spaceDownRef.current = false;
+
+            const initial = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            historyRef.current = { stack: [initial], index: 0 };
+            setHistoryIndex(0);
+            setHistorySize(1);
+        };
+    }, [open, imageUrl, buildDefaultFilename]);
+
+    const pushHistory = useCallback((ctx: CanvasRenderingContext2D, w: number, h: number) => {
+        const snapshot = ctx.getImageData(0, 0, w, h);
+        const ref = historyRef.current;
+        const nextStack = ref.stack.slice(0, ref.index + 1);
+        nextStack.push(snapshot);
+
+        const overflow = Math.max(0, nextStack.length - HISTORY_LIMIT);
+        const trimmed = overflow > 0 ? nextStack.slice(overflow) : nextStack;
+        const nextIndex = trimmed.length - 1;
+
+        historyRef.current = { stack: trimmed, index: nextIndex };
+        setHistoryIndex(nextIndex);
+        setHistorySize(trimmed.length);
+    }, []);
+
+    const handleUndo = useCallback(() => {
         const canvas = canvasRef.current;
-        if (!canvas) return;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
+        const ctx = canvas?.getContext("2d");
+        if (!canvas || !ctx) return;
+
+        const ref = historyRef.current;
+        if (ref.index <= 0) return;
+
+        const nextIndex = ref.index - 1;
+        const next = ref.stack[nextIndex];
+        if (!next) return;
+        ctx.putImageData(next, 0, 0);
+        historyRef.current.index = nextIndex;
+        setHistoryIndex(nextIndex);
+    }, []);
+
+    const handleRedo = useCallback(() => {
+        const canvas = canvasRef.current;
+        const ctx = canvas?.getContext("2d");
+        if (!canvas || !ctx) return;
+
+        const ref = historyRef.current;
+        if (ref.index >= ref.stack.length - 1) return;
+
+        const nextIndex = ref.index + 1;
+        const next = ref.stack[nextIndex];
+        if (!next) return;
+        ctx.putImageData(next, 0, 0);
+        historyRef.current.index = nextIndex;
+        setHistoryIndex(nextIndex);
+    }, []);
+
+    const handleClear = useCallback(() => {
+        const canvas = canvasRef.current;
+        const ctx = canvas?.getContext("2d");
+        if (!canvas || !ctx) return;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        pushHistory(ctx, canvas.width, canvas.height);
+    }, [pushHistory]);
+
+    const applyZoomDelta = useCallback((delta: number) => {
+        setZoom((prev) => {
+            const next = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, prev + delta));
+            if (next === 1) setPan({ x: 0, y: 0 });
+            return next;
+        });
+    }, []);
+
+    const resetView = useCallback(() => {
+        setZoom(1);
+        setPan({ x: 0, y: 0 });
+    }, []);
+
+    const handleWheel = useCallback((e: React.WheelEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const delta = e.deltaY * -0.001;
+        applyZoomDelta(delta);
+    }, [applyZoomDelta]);
+
+    // Keyboard shortcuts (scoped to editor open)
+    useEffect(() => {
+        if (!open) return;
+
+        const onKeyDown = (e: KeyboardEvent) => {
+            if (isTypingInTextField()) return;
+
+            const key = e.key;
+            const lower = key.toLowerCase();
+            const meta = e.metaKey || e.ctrlKey;
+
+            if (key === " ") {
+                e.preventDefault();
+                spaceDownRef.current = true;
+            }
+
+            if (meta && lower === "z") {
+                e.preventDefault();
+                if (e.shiftKey) {
+                    handleRedo();
+                } else {
+                    handleUndo();
+                }
+                return;
+            }
+
+            if (!meta && lower === "b") setTool("brush");
+            if (!meta && lower === "e") setTool("eraser");
+            if (!meta && lower === "v") setTool("pan");
+            if (!meta && lower === "x") setInvertOutput((prev) => !prev);
+
+            if (!meta && key === "[") setBrushSize((prev) => Math.max(1, prev - 2));
+            if (!meta && key === "]") setBrushSize((prev) => Math.min(300, prev + 2));
+            if (!meta && lower === "0") resetView();
+        };
+
+        const onKeyUp = (e: KeyboardEvent) => {
+            if (e.key === " ") {
+                spaceDownRef.current = false;
+            }
+        };
+
+        window.addEventListener("keydown", onKeyDown);
+        window.addEventListener("keyup", onKeyUp);
+        return () => {
+            window.removeEventListener("keydown", onKeyDown);
+            window.removeEventListener("keyup", onKeyUp);
+        };
+    }, [handleRedo, handleUndo, isTypingInTextField, open, resetView]);
+
+    const startDrawing = (e: React.PointerEvent<HTMLCanvasElement>) => {
+        if (e.button !== 0) return;
+        const canvas = canvasRef.current;
+        const ctx = canvas?.getContext("2d");
+        if (!canvas || !ctx) return;
+
+        e.preventDefault();
+        e.stopPropagation();
+
+        const shouldPan = tool === "pan" || spaceDownRef.current;
+        if (shouldPan) {
+            setIsPanning(true);
+            panStartRef.current = { x: e.clientX - pan.x, y: e.clientY - pan.y };
+            e.currentTarget.setPointerCapture(e.pointerId);
+            return;
+        }
 
         setIsDrawing(true);
+
         const { x, y } = getCoordinates(e, canvas);
+
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        ctx.lineWidth = brushSize;
+
+        if (tool === "eraser") {
+            ctx.globalCompositeOperation = "destination-out";
+            ctx.strokeStyle = "rgba(0,0,0,1)";
+            ctx.fillStyle = "rgba(0,0,0,1)";
+        } else {
+            ctx.globalCompositeOperation = "source-over";
+            const pattern = patternRef.current;
+            ctx.strokeStyle = pattern ?? "rgba(255,255,255,1)";
+            ctx.fillStyle = pattern ?? "rgba(255,255,255,1)";
+        }
+
+        // Dot brush: render immediately on pointer down.
+        const radius = Math.max(0.5, brushSize / 2);
+        ctx.beginPath();
+        ctx.arc(x, y, radius, 0, Math.PI * 2);
+        ctx.fill();
 
         ctx.beginPath();
         ctx.moveTo(x, y);
-        ctx.lineWidth = brushSize[0];
+        e.currentTarget.setPointerCapture(e.pointerId);
     };
 
-    const draw = (e: React.MouseEvent | React.TouchEvent) => {
-        if (!isDrawing) return;
+    const draw = (e: React.PointerEvent<HTMLCanvasElement>) => {
         const canvas = canvasRef.current;
-        if (!canvas) return;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
+        const ctx = canvas?.getContext("2d");
+        if (!canvas || !ctx) return;
+
+        if (isPanning) {
+            e.preventDefault();
+            e.stopPropagation();
+            const start = panStartRef.current;
+            if (!start) return;
+            setPan({ x: e.clientX - start.x, y: e.clientY - start.y });
+            return;
+        }
+
+        if (!isDrawing) return;
+
+        e.preventDefault();
+        e.stopPropagation();
 
         const { x, y } = getCoordinates(e, canvas);
 
-        // Drawing Logic
-        if (mode === 'brush') {
-            ctx.globalCompositeOperation = 'source-over';
-            ctx.strokeStyle = 'rgba(255, 255, 255, 1.0)'; // White mask
+        ctx.lineWidth = brushSize;
+        if (tool === "eraser") {
+            ctx.globalCompositeOperation = "destination-out";
         } else {
-            ctx.globalCompositeOperation = 'destination-out'; // Erase
-            ctx.strokeStyle = 'rgba(0,0,0,1)';
+            ctx.globalCompositeOperation = "source-over";
         }
 
         ctx.lineTo(x, y);
         ctx.stroke();
     };
 
-    const stopDrawing = () => {
-        if (!isDrawing) return;
-        setIsDrawing(false);
+    const stopDrawing = (e?: React.PointerEvent<HTMLCanvasElement>) => {
         const canvas = canvasRef.current;
-        const ctx = canvas?.getContext('2d');
-        if (canvas && ctx) {
-            ctx.closePath();
-            saveHistory(ctx, canvas.width, canvas.height);
+        const ctx = canvas?.getContext("2d");
+        if (!canvas || !ctx) return;
+
+        if (isPanning) {
+            setIsPanning(false);
+            panStartRef.current = null;
+            return;
         }
+
+        if (!isDrawing) return;
+        if (e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        setIsDrawing(false);
+        ctx.closePath();
+        pushHistory(ctx, canvas.width, canvas.height);
     };
 
-    const getCoordinates = (e: React.MouseEvent | React.TouchEvent, canvas: HTMLCanvasElement) => {
+    const getCoordinates = (e: React.PointerEvent, canvas: HTMLCanvasElement) => {
         const rect = canvas.getBoundingClientRect();
-        const clientX = 'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
-        const clientY = 'touches' in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
-
         const scaleX = canvas.width / rect.width;
         const scaleY = canvas.height / rect.height;
 
         return {
-            x: (clientX - rect.left) * scaleX,
-            y: (clientY - rect.top) * scaleY
+            x: (e.clientX - rect.left) * scaleX,
+            y: (e.clientY - rect.top) * scaleY
         };
     };
 
@@ -159,49 +365,51 @@ export function InpaintEditor({ open, onOpenChange, imageUrl, onSave }: InpaintE
         const canvas = canvasRef.current;
         if (!canvas) return;
 
-        // Prompt for filename
-        // Default name suggestion
-        let defaultName = "mask";
-        try {
-            // Try to extract from URL if possible, otherwise generic
-            const urlParts = imageUrl.split(/[\\/]/);
-            const lastPart = urlParts.pop();
-            if (lastPart) {
-                defaultName = lastPart.split('.')[0] + "_mask";
-            }
-        } catch (e) { }
-
-        const name = prompt("Enter filename for mask:", defaultName);
-        if (!name) return; // Cancelled
-
-        // Append .png if missing
-        const finalName = name.toLowerCase().endsWith('.png') ? name : `${name}.png`;
+        const safeName = (filename || "mask.png").trim() || "mask.png";
+        const finalName = safeName.toLowerCase().endsWith(".png") ? safeName : `${safeName}.png`;
 
         setIsSaving(true);
-
         try {
-            const tempCanvas = document.createElement('canvas');
-            tempCanvas.width = canvas.width;
-            tempCanvas.height = canvas.height;
-            const tCtx = tempCanvas.getContext('2d');
-            if (!tCtx) throw new Error("Context lost");
+            const ctx = canvas.getContext("2d");
+            if (!ctx) throw new Error("Canvas context unavailable");
 
-            // Fill Black
-            tCtx.fillStyle = "black";
-            tCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+            const w = canvas.width;
+            const h = canvas.height;
+            const maskData = ctx.getImageData(0, 0, w, h);
 
-            // Draw Mask (White)
-            tCtx.drawImage(canvas, 0, 0);
+            const outCanvas = document.createElement("canvas");
+            outCanvas.width = w;
+            outCanvas.height = h;
+            const outCtx = outCanvas.getContext("2d");
+            if (!outCtx) throw new Error("Output context unavailable");
 
-            // Export
-            tempCanvas.toBlob(async (blob) => {
-                if (blob) {
-                    const file = new File([blob], finalName, { type: "image/png" });
-                    await onSave(file);
-                    onOpenChange(false);
-                }
-            }, 'image/png');
+            const out = outCtx.createImageData(w, h);
+            const src = maskData.data;
+            const dst = out.data;
+            for (let i = 0; i < src.length; i += 4) {
+                const a = src[i + 3];
+                const v = invertOutput ? 255 - a : a;
+                dst[i] = v;
+                dst[i + 1] = v;
+                dst[i + 2] = v;
+                dst[i + 3] = 255;
+            }
+            outCtx.putImageData(out, 0, 0);
 
+            await new Promise<void>((resolve, reject) => {
+                outCanvas.toBlob(async (blob) => {
+                    try {
+                        if (!blob) throw new Error("Failed to encode PNG");
+                        const file = new File([blob], finalName, { type: "image/png" });
+                        await onSave(file);
+                        resolve();
+                    } catch (err) {
+                        reject(err);
+                    }
+                }, "image/png");
+            });
+
+            onOpenChange(false);
         } catch (e) {
             console.error(e);
             alert("Failed to save mask");
@@ -212,80 +420,150 @@ export function InpaintEditor({ open, onOpenChange, imageUrl, onSave }: InpaintE
 
     return (
         <Dialog open={open} onOpenChange={(val) => !isSaving && onOpenChange(val)}>
-            <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col p-1 gap-0">
-                <DialogHeader className="p-4 border-b">
-                    <DialogTitle className="flex items-center justify-between">
-                        <span>Edit Mask</span>
-                        <div className="flex items-center gap-2">
-                            <Button variant="ghost" size="sm" onClick={handleClear} className="text-red-500 hover:text-red-700 hover:bg-red-50">
-                                <Trash2 className="w-4 h-4 mr-1" /> Clear
+            <DialogContent className="w-screen h-screen max-w-none max-h-none flex flex-col p-0 gap-0">
+                <DialogHeader className="px-4 py-3 border-b bg-white">
+                    <DialogTitle className="flex flex-wrap items-center justify-between gap-3">
+                        <span className="text-sm">Draw Mask</span>
+                        <div className="flex flex-wrap items-center gap-2">
+                            <div className="flex items-center gap-2">
+                                <span className="text-[10px] text-slate-500 uppercase tracking-wide">paint =</span>
+                                <span className="text-xs text-slate-600">mask</span>
+                                <Switch checked={invertOutput} onCheckedChange={setInvertOutput} />
+                                <span className="text-xs text-slate-600">keep</span>
+                            </div>
+
+                            <div className="hidden md:flex items-center gap-2">
+                                <span className="text-[10px] text-slate-500 uppercase tracking-wide">file</span>
+                                <Input
+                                    value={filename}
+                                    onChange={(e) => setFilename(e.target.value)}
+                                    className="h-8 w-[260px] text-xs"
+                                    placeholder="mask.png"
+                                />
+                            </div>
+
+                            <Button variant="ghost" size="sm" onClick={handleClear} className="text-red-600 hover:text-red-700 hover:bg-red-50">
+                                <Trash2 className="w-4 h-4 mr-1" /> clear
                             </Button>
-                            <Button variant="ghost" size="sm" onClick={handleUndo} disabled={historyStep <= 0}>
-                                <Undo className="w-4 h-4 mr-1" /> Undo
+                            <Button variant="ghost" size="sm" onClick={handleUndo} disabled={!canUndo}>
+                                <Undo className="w-4 h-4 mr-1" /> undo
+                            </Button>
+                            <Button variant="ghost" size="sm" onClick={handleRedo} disabled={!canRedo}>
+                                <Redo className="w-4 h-4 mr-1" /> redo
                             </Button>
                             <Button size="sm" onClick={handleSave} disabled={isSaving} className="gap-2">
                                 {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                                Save Mask
+                                save mask
                             </Button>
                         </div>
                     </DialogTitle>
+
+                    <div className="md:hidden pt-2">
+                        <Input
+                            value={filename}
+                            onChange={(e) => setFilename(e.target.value)}
+                            className="h-9 text-xs"
+                            placeholder="mask.png"
+                        />
+                    </div>
                 </DialogHeader>
 
-                <div className="flex-1 bg-slate-900 overflow-hidden relative flex items-center justify-center p-4">
-                    <div ref={containerRef} className="relative shadow-2xl border border-slate-700 max-w-full max-h-[60vh]">
-                        {/* Background Image */}
+                <div className="flex-1 bg-black overflow-hidden relative flex items-center justify-center" onWheel={handleWheel}>
+                    <div className="absolute top-3 left-3 z-10 flex items-center gap-2 bg-white/10 text-white px-3 py-1 rounded-md backdrop-blur-md text-xs font-mono">
+                        {zoomLabel}
+                    </div>
+                    <div className="absolute top-3 right-3 z-10 flex items-center gap-2">
+                        <Button variant="ghost" size="icon" className="text-white hover:bg-white/10" onClick={() => applyZoomDelta(-0.25)}>
+                            <ZoomOut className="w-4 h-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="text-white hover:bg-white/10" onClick={() => applyZoomDelta(0.25)}>
+                            <ZoomIn className="w-4 h-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="text-white hover:bg-white/10" onClick={resetView}>
+                            <RotateCcw className="w-4 h-4" />
+                        </Button>
+                    </div>
+
+                    <div
+                        ref={containerRef}
+                        className="relative select-none"
+                        style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: "center center" }}
+                    >
                         <img
                             src={imageUrl}
                             alt="Background"
-                            className="max-w-full max-h-[60vh] object-contain block select-none pointer-events-none"
-                            style={{ opacity: 0.5 }} // Dim background to make white mask visible
+                            className="max-w-[95vw] max-h-[80vh] object-contain block pointer-events-none"
+                            draggable={false}
                         />
 
-                        {/* Drawing Canvas */}
                         <canvas
                             ref={canvasRef}
-                            className="absolute inset-0 w-full h-full touch-none cursor-crosshair"
-                            onMouseDown={startDrawing}
-                            onMouseMove={draw}
-                            onMouseUp={stopDrawing}
-                            onMouseLeave={stopDrawing}
-                            onTouchStart={startDrawing}
-                            onTouchMove={draw}
-                            onTouchEnd={stopDrawing}
+                            className="absolute inset-0 w-full h-full touch-none"
+                            style={{ opacity: 0.7, cursor: tool === "pan" ? "grab" : "crosshair" }}
+                            onContextMenu={(e) => e.preventDefault()}
+                            onPointerDown={startDrawing}
+                            onPointerMove={draw}
+                            onPointerUp={stopDrawing}
+                            onPointerLeave={stopDrawing}
+                            onPointerCancel={stopDrawing}
                         />
+                    </div>
+
+                    <div className="absolute bottom-3 left-1/2 -translate-x-1/2 text-[11px] text-white/70 bg-white/10 px-3 py-1 rounded backdrop-blur-md">
+                        wheel: zoom | space or <Move className="inline w-3 h-3 mx-1" />: pan | ctrl/cmd+z: undo | ctrl/cmd+shift+z: redo
                     </div>
                 </div>
 
-                <div className="p-4 bg-slate-100 border-t flex items-center justify-center gap-6">
+                <div className="p-4 bg-slate-50 border-t flex flex-wrap items-center justify-center gap-4">
                     <div className="flex items-center gap-2 bg-white p-1 rounded-md border shadow-sm">
                         <Button
-                            variant={mode === 'brush' ? "default" : "ghost"}
+                            variant={tool === "brush" ? "default" : "ghost"}
                             size="icon"
-                            onClick={() => setMode('brush')}
+                            onClick={() => setTool("brush")}
                             className="h-8 w-8"
+                            title="Brush (B)"
                         >
                             <Brush className="w-4 h-4" />
                         </Button>
                         <Button
-                            variant={mode === 'eraser' ? "default" : "ghost"}
+                            variant={tool === "eraser" ? "default" : "ghost"}
                             size="icon"
-                            onClick={() => setMode('eraser')}
+                            onClick={() => setTool("eraser")}
                             className="h-8 w-8"
+                            title="Eraser (E)"
                         >
                             <Eraser className="w-4 h-4" />
                         </Button>
+                        <Button
+                            variant={tool === "pan" ? "default" : "ghost"}
+                            size="icon"
+                            onClick={() => setTool("pan")}
+                            className="h-8 w-8"
+                            title="Pan (V)"
+                        >
+                            <Move className="w-4 h-4" />
+                        </Button>
                     </div>
 
-                    <div className="flex items-center gap-3 w-48">
+                    <div className="flex items-center gap-3 w-[320px] max-w-full">
                         <span className="text-xs font-semibold text-slate-500">Size</span>
                         <Slider
-                            value={brushSize}
-                            onValueChange={(val) => setBrushSize(val)}
+                            value={[brushSize]}
+                            onValueChange={(val) => setBrushSize(val[0] ?? 30)}
                             min={1}
-                            max={100}
+                            max={300}
                             step={1}
                         />
-                        <span className="text-xs w-6 text-right font-mono">{brushSize[0]}</span>
+                        <Input
+                            type="number"
+                            value={brushSize}
+                            onChange={(e) => {
+                                const n = Number(e.target.value);
+                                if (!Number.isFinite(n)) return;
+                                setBrushSize(Math.min(300, Math.max(1, Math.floor(n))));
+                            }}
+                            className="h-8 w-20 text-xs font-mono text-right"
+                        />
                     </div>
                 </div>
             </DialogContent>

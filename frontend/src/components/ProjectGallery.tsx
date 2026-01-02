@@ -3,10 +3,11 @@ import { api, Project, FolderImage, GalleryItem, IMAGE_API_BASE } from "@/lib/ap
 import { isVideoFile } from "@/lib/media";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight, FolderOpen, ImageIcon, Loader2, Download, Trash2, Check, RotateCcw } from "lucide-react";
+import { ChevronLeft, ChevronRight, FolderOpen, ImageIcon, Loader2, Download, Trash2, Check, RotateCcw, PenTool } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { VirtualGrid } from "@/components/VirtualGrid";
 import { getScrollPosition, saveScrollPosition } from "@/lib/galleryState";
+import { InpaintEditor } from "@/components/InpaintEditor";
 
 interface ProjectGalleryProps {
     projects: Project[];
@@ -155,6 +156,8 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
     const [images, setImages] = useState<FolderImage[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; image: FolderImage } | null>(null);
+    const [maskEditorOpen, setMaskEditorOpen] = useState(false);
+    const [maskEditorSourcePath, setMaskEditorSourcePath] = useState<string>("");
     const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set());
     const lastSelectedPath = useRef<string | null>(null);
     const imagesRef = useRef<FolderImage[]>([]);
@@ -464,6 +467,29 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
         }
         setContextMenu(null);
     };
+
+    const openMaskEditorForImage = useCallback((image: FolderImage) => {
+        if (isVideoFile(image.path, image.filename)) return;
+        setMaskEditorSourcePath(image.path);
+        setMaskEditorOpen(true);
+        setContextMenu(null);
+    }, []);
+
+    const handleMaskSave = useCallback(async (maskFile: File) => {
+        if (!maskEditorSourcePath) {
+            alert("Missing source image path");
+            return;
+        }
+
+        try {
+            const result = await api.saveMask(maskFile, maskEditorSourcePath);
+            const location = result.saved_to === "project_masks" ? "project masks folder" : "same folder";
+            alert(`Mask saved: ${result.filename} (${location})`);
+        } catch (e) {
+            console.error("Failed to save mask", e);
+            alert("Failed to save mask");
+        }
+    }, [maskEditorSourcePath]);
 
     const handleDelete = async () => {
         if (!contextMenu || !selectedProjectId || !selectedFolder) return;

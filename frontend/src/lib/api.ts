@@ -606,6 +606,31 @@ export const api = {
         return res.json();
     },
 
+    saveMask: async (
+        maskFile: File,
+        sourcePath: string,
+        engineId?: number,
+    ): Promise<{
+        filename: string;
+        path: string;
+        comfy_filename?: string | null;
+        saved_to: "project_masks" | "same_folder";
+        project_slug?: string | null;
+        project_id?: number | null;
+    }> => {
+        const formData = new FormData();
+        formData.append("file", maskFile);
+        formData.append("source_path", sourcePath);
+        if (engineId) formData.append("engine_id", String(engineId));
+
+        const res = await fetch(`${API_BASE}/files/save-mask`, {
+            method: "POST",
+            body: formData,
+        });
+        if (!res.ok) throw new Error("Failed to save mask");
+        return res.json();
+    },
+
     copyToInput: async (sourcePath: string, engineId?: number, projectSlug?: string, subfolder?: string): Promise<{ filename: string; path: string; already_exists: boolean }> => {
         const formData = new FormData();
         formData.append("source_path", sourcePath);
@@ -733,8 +758,8 @@ export const api = {
         if (!res.ok) throw new Error("Failed to update image");
     },
 
-    getImageMetadata: async (path: string): Promise<ImageMetadata> => {
-        const res = await fetch(`${API_BASE}/gallery/image/path/metadata?path=${encodeURIComponent(path)}`);
+    getImageMetadata: async (path: string, init?: RequestInit): Promise<ImageMetadata> => {
+        const res = await fetch(`${API_BASE}/gallery/image/path/metadata?path=${encodeURIComponent(path)}`, init);
         if (!res.ok) throw new Error("Failed to fetch image metadata");
         return res.json();
     },

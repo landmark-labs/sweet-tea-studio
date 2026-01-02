@@ -185,10 +185,11 @@ class ComfyClient:
 
 
 
-    def get_images(self, prompt_id: str, progress_callback=None) -> List[Dict[str, Any]]:
+    def get_images(self, prompt_id: str, progress_callback=None, on_image_callback=None) -> List[Dict[str, Any]]:
         """
         Wait for job completion and retrieve output images.
         Optional progress_callback(data: dict) called on updates.
+        Optional on_image_callback(data: dict) called when an image is received.
         Also captures images sent via SaveImageWebsocket node.
         """
         if not self.ws:
@@ -356,7 +357,7 @@ class ComfyClient:
                         ext = "jpg" if image_format == 1 else "png"
                         filename = f"ws_image_{prompt_id[:8]}_{image_counter:03d}.{ext}"
                         
-                        captured_images.append({
+                        image_info = {
                             "filename": filename,
                             "subfolder": "",
                             "type": "output",
@@ -364,8 +365,15 @@ class ComfyClient:
                             "format": ext,
                             "source": "websocket",
                             "kind": "image",
-                        })
+                        }
+                        captured_images.append(image_info)
                         
+                        if on_image_callback:
+                            try:
+                                on_image_callback(image_info)
+                            except Exception as e:
+                                print(f"Error in on_image_callback: {e}")
+
                         _debug(f"Captured image from WebSocket: {filename} ({len(image_data)} bytes)")
                         
                         if preview_stream_enabled and progress_callback:

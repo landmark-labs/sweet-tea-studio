@@ -1,9 +1,11 @@
 import React from "react";
-import { Download, ExternalLink, X, Check, ArrowLeft, ArrowRight, RotateCcw, Copy, Trash2 } from "lucide-react";
+import { Download, ExternalLink, X, Check, ArrowLeft, ArrowRight, RotateCcw, Copy, Trash2, PenTool } from "lucide-react";
 import { Button } from "./ui/button";
 import { api, Image as ApiImage, GalleryItem } from "@/lib/api";
 import { isVideoFile } from "@/lib/media";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
+import { InpaintEditor } from "@/components/InpaintEditor";
+
 
 
 interface ImageViewerProps {
@@ -20,7 +22,7 @@ interface ImageViewerProps {
     onDelete?: (imageId: number) => void;
     selectedImagePath?: string;
     onLoadMore?: () => void;  // Callback to load more images when near end
-    resetKey?: number;  // When changed, reset selectedIndex to 0 (for new generations)
+
 }
 
 const METADATA_CACHE_LIMIT = 200;
@@ -30,19 +32,21 @@ export const ImageViewer = React.memo(function ImageViewer({
     galleryItems,
     metadata,
     workflows = [],
-    onSelectWorkflow,
+
     onUseInPipe,
-    onImageUpdate,
+
     onRegenerate,
     onDelete,
     selectedImagePath,
     onLoadMore,
-    resetKey
+
 }: ImageViewerProps) {
     const [copyState, setCopyState] = React.useState<{ positive: boolean; negative: boolean }>({ positive: false, negative: false });
     const [selectedIndex, setSelectedIndex] = React.useState<number>(0);
     const [contextMenu, setContextMenu] = React.useState<{ x: number, y: number } | null>(null);
     const containerRef = React.useRef<HTMLDivElement>(null);
+    const [maskEditorOpen, setMaskEditorOpen] = React.useState(false);
+    const [maskEditorSourcePath, setMaskEditorSourcePath] = React.useState<string>("");
 
     // Mode-based navigation:
     // - Locked Mode (false): Show selectedImagePath directly, ignore array index
@@ -133,6 +137,7 @@ export const ImageViewer = React.memo(function ImageViewer({
         : (lockedImage || displayImages[0]);
     const imagePath = currentImage?.path;
     const isVideo = isVideoFile(imagePath, currentImage?.filename);
+    const canDrawMask = Boolean(imagePath) && !isVideo;
 
     // State for PNG-sourced metadata (fetched from the image file itself)
     const [pngMetadata, setPngMetadata] = React.useState<{
@@ -455,6 +460,32 @@ export const ImageViewer = React.memo(function ImageViewer({
         }
     };
 
+    const openMaskEditor = React.useCallback(() => {
+        if (!canDrawMask) return;
+        const raw = extractRawPath(imagePath);
+        if (!raw) return;
+        setMaskEditorSourcePath(raw);
+        setMaskEditorOpen(true);
+        setContextMenu(null);
+    }, [canDrawMask, extractRawPath, imagePath]);
+
+    const handleMaskSave = React.useCallback(async (maskFile: File) => {
+        const sourcePath = maskEditorSourcePath || extractRawPath(imagePath);
+        if (!sourcePath) {
+            alert("Missing source image path");
+            return;
+        }
+
+        try {
+            const result = await api.saveMask(maskFile, sourcePath);
+            const location = result.saved_to === "project_masks" ? "project masks folder" : "same folder";
+            alert(`Mask saved: ${result.filename} (${location})`);
+        } catch (e) {
+            console.error("Failed to save mask", e);
+            alert("Failed to save mask");
+        }
+    }, [extractRawPath, imagePath, maskEditorSourcePath]);
+
     const copyToClipboard = async (text: string) => {
         if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
             return navigator.clipboard.writeText(text);
@@ -570,7 +601,7 @@ export const ImageViewer = React.memo(function ImageViewer({
                             <Button
                                 variant="ghost"
                                 size="icon"
-                                className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/50 hover:bg-white/80 rounded-full"
+                                className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/50 hover:bg-white/80 rounded-full z-10"
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     enterNavigationMode();
@@ -583,7 +614,7 @@ export const ImageViewer = React.memo(function ImageViewer({
                             <Button
                                 variant="ghost"
                                 size="icon"
-                                className="absolute right-4 top-1/2 -translate-y-1/2 bg-white/50 hover:bg-white/80 rounded-full"
+                                className="absolute right-4 top-1/2 -translate-y-1/2 bg-white/50 hover:bg-white/80 rounded-full z-10"
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     enterNavigationMode();
@@ -631,7 +662,7 @@ export const ImageViewer = React.memo(function ImageViewer({
                             className="px-3 py-2 hover:bg-slate-100 cursor-pointer flex items-center gap-2"
                             onClick={toggleFullScreen}
                         >
-                            {lightboxOpen ? <React.Fragment><ExternalLink size={14} className="rotate-180" /> Exit Full Screen</React.Fragment> : <React.Fragment><ExternalLink size={14} /> Full Screen</React.Fragment>}
+                            {lightboxOpen ? <React.Fragment><ExternalLink size={14} className="rotate-180" /> exit full screen</React.Fragment> : <React.Fragment><ExternalLink size={14} /> full screen</React.Fragment>}
                         </div>
                         <div
                             className="px-3 py-2 hover:bg-slate-100 cursor-pointer flex items-center gap-2"
@@ -639,6 +670,14 @@ export const ImageViewer = React.memo(function ImageViewer({
                         >
                             <Download size={14} /> download
                         </div>
+                        {canDrawMask && (
+                            <div
+                                className="px-3 py-2 hover:bg-slate-100 cursor-pointer flex items-center gap-2"
+                                onClick={openMaskEditor}
+                            >
+                                <PenTool size={14} /> draw mask
+                            </div>
+                        )}
                         <div className="h-px bg-slate-100 my-1" />
 
                         {onRegenerate && (
@@ -890,6 +929,11 @@ export const ImageViewer = React.memo(function ImageViewer({
                         </div>
                         {/* Right: Keep/Download */}
                         <div className="flex items-center gap-2">
+                            {canDrawMask && (
+                                <Button variant="outline" size="sm" onClick={openMaskEditor} className="h-7 text-xs">
+                                    <PenTool className="w-3 h-3 mr-1" />draw mask
+                                </Button>
+                            )}
                             <Button variant="outline" size="sm" onClick={handleDownload} className="h-7 text-xs">
                                 <Download className="w-3 h-3 mr-1" />download
                             </Button>
@@ -954,7 +998,7 @@ export const ImageViewer = React.memo(function ImageViewer({
                             <TooltipProvider>
                                 <div className="space-y-3">
                                     {/* Positive Prompt - Full width, auto-height */}
-                                    {currentMetadata.prompt && (
+                                    {!!currentMetadata.prompt && (
                                         <div className="w-full relative">
                                             <span className="font-medium text-slate-500 text-[10px] uppercase block mb-1">Positive Prompt</span>
                                             <Tooltip>
@@ -978,7 +1022,7 @@ export const ImageViewer = React.memo(function ImageViewer({
                                     )}
 
                                     {/* Negative Prompt - Full width, auto-height */}
-                                    {currentMetadata.negative_prompt && (
+                                    {!!currentMetadata.negative_prompt && (
                                         <div className="w-full relative">
                                             <span className="font-medium text-slate-500 text-[10px] uppercase block mb-1">Negative Prompt</span>
                                             <Tooltip>
@@ -1002,7 +1046,7 @@ export const ImageViewer = React.memo(function ImageViewer({
                                     )}
 
                                     {/* Parameters Grid */}
-                                    {currentMetadata.job_params && typeof currentMetadata.job_params === 'object' && Object.keys(currentMetadata.job_params).length > 0 && (
+                                    {!!currentMetadata.job_params && typeof currentMetadata.job_params === 'object' && Object.keys(currentMetadata.job_params).length > 0 && (
                                         <div className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-x-4 gap-y-2 pt-2 border-t border-slate-100">
                                             {Object.entries(currentMetadata.job_params as Record<string, unknown>)
                                                 .filter(([k, v]) => {
@@ -1074,6 +1118,13 @@ export const ImageViewer = React.memo(function ImageViewer({
                         </div>
                     </div>
                 )}
+
+                <InpaintEditor
+                    open={maskEditorOpen}
+                    onOpenChange={setMaskEditorOpen}
+                    imageUrl={imageUrl}
+                    onSave={handleMaskSave}
+                />
             </div>
         </>
     );
