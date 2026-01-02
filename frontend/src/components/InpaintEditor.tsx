@@ -24,6 +24,8 @@ export function InpaintEditor({ open, onOpenChange, imageUrl, onSave }: InpaintE
     const containerRef = useRef<HTMLDivElement>(null);
     const viewportRef = useRef<HTMLDivElement>(null);
     const patternRef = useRef<CanvasPattern | null>(null);
+    const imageRef = useRef<HTMLImageElement>(null);
+    const didInitRef = useRef(false);
 
     const [tool, setTool] = useState<Tool>("brush");
     const [brushSize, setBrushSize] = useState(30);
@@ -44,6 +46,7 @@ export function InpaintEditor({ open, onOpenChange, imageUrl, onSave }: InpaintE
 
     const [isSaving, setIsSaving] = useState(false);
     const [isReady, setIsReady] = useState(false);
+    const [loadError, setLoadError] = useState<string | null>(null);
 
     const canUndo = historyIndex > 0;
     const canRedo = historyIndex >= 0 && historyIndex < historySize - 1;
@@ -75,62 +78,87 @@ export function InpaintEditor({ open, onOpenChange, imageUrl, onSave }: InpaintE
         return Boolean((active as HTMLElement).isContentEditable);
     }, []);
 
-    // Initialize canvas + editor state each time the dialog opens.
-    useEffect(() => {
-        if (!open || !imageUrl || !canvasRef.current || !containerRef.current) return;
+    const tryInit = useCallback(() => {
+        if (!open) return false;
+        if (didInitRef.current) return true;
 
         const canvas = canvasRef.current;
+        const img = imageRef.current;
+        if (!canvas || !img) return false;
+        if (!img.complete) return false;
+        if (!img.naturalWidth || !img.naturalHeight) return false;
+
         const ctx = canvas.getContext("2d");
-        if (!ctx) return;
+        if (!ctx) return false;
 
+        didInitRef.current = true;
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Build checkered mask pattern (white/gray) for the overlay strokes.
+        const tile = document.createElement("canvas");
+        tile.width = 16;
+        tile.height = 16;
+        const tCtx = tile.getContext("2d");
+        if (tCtx) {
+            tCtx.fillStyle = "#9ca3af";
+            tCtx.fillRect(0, 0, 16, 16);
+            tCtx.fillStyle = "#ffffff";
+            tCtx.fillRect(0, 0, 8, 8);
+            tCtx.fillRect(8, 8, 8, 8);
+            patternRef.current = ctx.createPattern(tile, "repeat");
+        } else {
+            patternRef.current = null;
+        }
+
+        setTool("brush");
+        setBrushSize(30);
+        setInvertOutput(false);
+        setFilename(buildDefaultFilename());
+        setZoom(1);
+        setPan({ x: 0, y: 0 });
+
+        setIsDrawing(false);
+        setIsPanning(false);
+        panStartRef.current = null;
+        spaceDownRef.current = false;
+
+        const initial = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        historyRef.current = { stack: [initial], index: 0 };
+        setHistoryIndex(0);
+        setHistorySize(1);
+        setIsReady(true);
+        return true;
+    }, [buildDefaultFilename, open]);
+
+    const handleImageLoad = useCallback(() => {
+        setLoadError(null);
+        tryInit();
+    }, [tryInit]);
+
+    const handleImageError = useCallback(() => {
+        didInitRef.current = false;
         setIsReady(false);
+        setLoadError("failed to load image");
+    }, []);
 
-        const img = new Image();
-        img.crossOrigin = "anonymous";
-        img.src = imageUrl;
-        img.onload = () => {
-            canvas.width = img.naturalWidth;
-            canvas.height = img.naturalHeight;
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // Initialize canvas + editor state each time the dialog opens.
+    useEffect(() => {
+        if (!open) return;
 
-            // Build checkered mask pattern (white/gray) for the overlay strokes.
-            const tile = document.createElement("canvas");
-            tile.width = 16;
-            tile.height = 16;
-            const tCtx = tile.getContext("2d");
-            if (tCtx) {
-                tCtx.fillStyle = "#9ca3af";
-                tCtx.fillRect(0, 0, 16, 16);
-                tCtx.fillStyle = "#ffffff";
-                tCtx.fillRect(0, 0, 8, 8);
-                tCtx.fillRect(8, 8, 8, 8);
-                patternRef.current = ctx.createPattern(tile, "repeat");
-            } else {
-                patternRef.current = null;
-            }
+        didInitRef.current = false;
+        setIsReady(false);
+        setLoadError(null);
 
-            setTool("brush");
-            setBrushSize(30);
-            setInvertOutput(false);
-            setFilename(buildDefaultFilename());
-            setZoom(1);
-            setPan({ x: 0, y: 0 });
+        const raf = requestAnimationFrame(() => {
+            tryInit();
+        });
 
-            setIsDrawing(false);
-            setIsPanning(false);
-            panStartRef.current = null;
-            spaceDownRef.current = false;
-
-            const initial = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            historyRef.current = { stack: [initial], index: 0 };
-            setHistoryIndex(0);
-            setHistorySize(1);
-            setIsReady(true);
+        return () => {
+            cancelAnimationFrame(raf);
         };
-        img.onerror = () => {
-            setIsReady(false);
-        };
-    }, [open, imageUrl, buildDefaultFilename]);
+    }, [open, imageUrl, tryInit]);
 
     const pushHistory = useCallback((ctx: CanvasRenderingContext2D, w: number, h: number) => {
         const snapshot = ctx.getImageData(0, 0, w, h);
@@ -449,7 +477,7 @@ export function InpaintEditor({ open, onOpenChange, imageUrl, onSave }: InpaintE
             onOpenChange(false);
         } catch (e) {
             console.error(e);
-            alert("Failed to save mask");
+            alert("failed to save mask");
         } finally {
             setIsSaving(false);
         }
@@ -457,30 +485,30 @@ export function InpaintEditor({ open, onOpenChange, imageUrl, onSave }: InpaintE
 
     return (
         <Dialog open={open} onOpenChange={(val) => !isSaving && onOpenChange(val)}>
-            <DialogContent className="w-screen h-screen max-w-none max-h-none flex flex-col p-0 gap-0">
-                <DialogHeader className="px-4 py-3 border-b bg-white pr-14">
+            <DialogContent className="w-screen h-screen max-w-none max-h-none flex flex-col p-0 gap-0 bg-black/50 border-0 shadow-none sm:rounded-none text-white">
+                <DialogHeader className="px-4 py-3 border-b border-white/10 bg-black/30 backdrop-blur-sm pr-14">
                     <div className="flex items-center gap-3">
-                        <DialogTitle className="text-sm">draw mask</DialogTitle>
+                        <DialogTitle className="text-sm text-white">draw mask</DialogTitle>
                         <div className="flex-1 flex justify-center">
                             <div className="flex flex-wrap items-center justify-center gap-2">
                             <div className="flex items-center gap-2">
-                                <span className="text-[10px] text-slate-500 tracking-wide">paint =</span>
-                                <span className="text-xs text-slate-600">mask</span>
+                                <span className="text-[10px] text-white/60 tracking-wide">paint =</span>
+                                <span className="text-xs text-white/80">mask</span>
                                 <Switch checked={invertOutput} onCheckedChange={setInvertOutput} />
-                                <span className="text-xs text-slate-600">keep</span>
+                                <span className="text-xs text-white/80">keep</span>
                             </div>
 
                             <div className="hidden md:flex items-center gap-2">
-                                <span className="text-[10px] text-slate-500 tracking-wide">file</span>
+                                <span className="text-[10px] text-white/60 tracking-wide">file</span>
                                 <Input
                                     value={filename}
                                     onChange={(e) => setFilename(e.target.value)}
-                                    className="h-8 w-[260px] text-xs"
+                                    className="h-8 w-[260px] text-xs bg-white/10 border-white/20 text-white placeholder:text-white/40"
                                     placeholder="mask.png"
                                 />
                             </div>
 
-                            <Button variant="ghost" size="sm" onClick={handleClear} className="text-red-600 hover:text-red-700 hover:bg-red-50">
+                            <Button variant="ghost" size="sm" onClick={handleClear} className="text-red-300 hover:text-red-200 hover:bg-red-500/20">
                                 <Trash2 className="w-4 h-4 mr-1" /> clear
                             </Button>
                             <Button variant="ghost" size="sm" onClick={handleUndo} disabled={!canUndo}>
@@ -501,13 +529,13 @@ export function InpaintEditor({ open, onOpenChange, imageUrl, onSave }: InpaintE
                         <Input
                             value={filename}
                             onChange={(e) => setFilename(e.target.value)}
-                            className="h-9 text-xs"
+                            className="h-9 text-xs bg-white/10 border-white/20 text-white placeholder:text-white/40"
                             placeholder="mask.png"
                         />
                     </div>
                 </DialogHeader>
 
-                <div ref={viewportRef} className="flex-1 bg-slate-900/30 backdrop-blur-3xl overflow-hidden relative flex items-center justify-center" onWheel={handleWheel}>
+                <div ref={viewportRef} className="flex-1 bg-transparent overflow-hidden relative flex items-center justify-center" onWheel={handleWheel}>
                     <div className="absolute top-3 left-3 z-10 flex items-center gap-2 bg-white/10 text-white px-3 py-1 rounded-md backdrop-blur-md text-xs font-mono">
                         {zoomLabel}
                     </div>
@@ -529,10 +557,13 @@ export function InpaintEditor({ open, onOpenChange, imageUrl, onSave }: InpaintE
                         style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: "center center" }}
                     >
                         <img
+                            ref={imageRef}
                             src={imageUrl}
                             alt="Background"
                             className="max-w-[95vw] max-h-[80vh] object-contain block pointer-events-none"
                             draggable={false}
+                            onLoad={handleImageLoad}
+                            onError={handleImageError}
                         />
 
                         <canvas
@@ -555,19 +586,25 @@ export function InpaintEditor({ open, onOpenChange, imageUrl, onSave }: InpaintE
                     {!isReady && (
                         <div className="absolute inset-0 flex items-center justify-center">
                             <div className="flex items-center gap-2 bg-white/10 text-white px-4 py-2 rounded-md backdrop-blur-md text-sm">
-                                <Loader2 className="w-4 h-4 animate-spin" /> loading image…
+                                {loadError ? (
+                                    <span>{loadError}</span>
+                                ) : (
+                                    <>
+                                        <Loader2 className="w-4 h-4 animate-spin" /> loading image...
+                                    </>
+                                )}
                             </div>
                         </div>
                     )}
                 </div>
 
-                <div className="p-4 bg-slate-50 border-t flex flex-wrap items-center justify-center gap-4">
-                    <div className="flex items-center gap-2 bg-white p-1 rounded-md border shadow-sm">
+                <div className="p-4 bg-black/30 border-t border-white/10 backdrop-blur-sm flex flex-wrap items-center justify-center gap-4">
+                    <div className="flex items-center gap-2 bg-white/10 p-1 rounded-md border border-white/20 shadow-none">
                         <Button
                             variant={tool === "brush" ? "default" : "ghost"}
                             size="icon"
                             onClick={() => setTool("brush")}
-                            className="h-8 w-8"
+                            className={tool === "brush" ? "h-8 w-8" : "h-8 w-8 text-white/80 hover:bg-white/10 hover:text-white"}
                             title="brush (b)"
                         >
                             <Brush className="w-4 h-4" />
@@ -576,7 +613,7 @@ export function InpaintEditor({ open, onOpenChange, imageUrl, onSave }: InpaintE
                             variant={tool === "eraser" ? "default" : "ghost"}
                             size="icon"
                             onClick={() => setTool("eraser")}
-                            className="h-8 w-8"
+                            className={tool === "eraser" ? "h-8 w-8" : "h-8 w-8 text-white/80 hover:bg-white/10 hover:text-white"}
                             title="eraser (e)"
                         >
                             <Eraser className="w-4 h-4" />
@@ -585,7 +622,7 @@ export function InpaintEditor({ open, onOpenChange, imageUrl, onSave }: InpaintE
                             variant={tool === "pan" ? "default" : "ghost"}
                             size="icon"
                             onClick={() => setTool("pan")}
-                            className="h-8 w-8"
+                            className={tool === "pan" ? "h-8 w-8" : "h-8 w-8 text-white/80 hover:bg-white/10 hover:text-white"}
                             title="pan (v)"
                         >
                             <Move className="w-4 h-4" />
@@ -593,7 +630,7 @@ export function InpaintEditor({ open, onOpenChange, imageUrl, onSave }: InpaintE
                     </div>
 
                     <div className="flex items-center gap-3 w-[320px] max-w-full">
-                        <span className="text-xs font-semibold text-slate-500">size</span>
+                        <span className="text-xs font-semibold text-white/70">size</span>
                         <Slider
                             value={[brushSize]}
                             onValueChange={(val) => setBrushSize(val[0] ?? 30)}
@@ -609,7 +646,7 @@ export function InpaintEditor({ open, onOpenChange, imageUrl, onSave }: InpaintE
                                 if (!Number.isFinite(n)) return;
                                 setBrushSize(Math.min(300, Math.max(1, Math.floor(n))));
                             }}
-                            className="h-8 w-20 text-xs font-mono text-right"
+                            className="h-8 w-20 text-xs font-mono text-right bg-white/10 border-white/20 text-white"
                         />
                     </div>
                 </div>

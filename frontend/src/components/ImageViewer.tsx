@@ -478,17 +478,17 @@ export const ImageViewer = React.memo(function ImageViewer({
     const handleMaskSave = React.useCallback(async (maskFile: File) => {
         const sourcePath = maskEditorSourcePath || extractRawPath(imagePath);
         if (!sourcePath) {
-            alert("Missing source image path");
+            alert("missing source image path");
             return;
         }
 
         try {
             const result = await api.saveMask(maskFile, sourcePath);
             const location = result.saved_to === "project_masks" ? "project masks folder" : "same folder";
-            alert(`Mask saved: ${result.filename} (${location})`);
+            alert(`mask saved: ${result.filename} (${location})`);
         } catch (e) {
             console.error("Failed to save mask", e);
-            alert("Failed to save mask");
+            alert("failed to save mask");
         }
     }, [extractRawPath, imagePath, maskEditorSourcePath]);
 
@@ -809,7 +809,7 @@ export const ImageViewer = React.memo(function ImageViewer({
                                                 onDelete(-1);
                                             } catch (e) {
                                                 console.error("Failed to delete image by path", e);
-                                                alert("Failed to delete image");
+                                                alert("failed to delete image");
                                             }
                                         }
                                         setContextMenu(null);
@@ -990,7 +990,7 @@ export const ImageViewer = React.memo(function ImageViewer({
                                                 onDelete(-1);
                                             } catch (e) {
                                                 console.error("Failed to delete image by path", e);
-                                                alert("Failed to delete image");
+                                                alert("failed to delete image");
                                             }
                                         }
                                     }}

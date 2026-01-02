@@ -395,7 +395,7 @@ export function ImageUpload({
 
     const handleMaskSave = async (maskFile: File) => {
         if (!value) {
-            alert("Select an image first");
+            alert("select an image first");
             return;
         }
         try {
@@ -405,10 +405,10 @@ export function ImageUpload({
             if (result.comfy_filename) {
                 addToRecent(result.comfy_filename);
             }
-            alert(`Mask saved: ${result.comfy_filename || result.filename}`);
+            alert(`mask saved: ${result.comfy_filename || result.filename}`);
         } catch (e) {
             console.error("Mask upload failed", e);
-            alert("Failed to upload mask");
+            alert("failed to upload mask");
         }
     };
 

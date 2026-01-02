@@ -422,7 +422,7 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
             setImages(prev => prev.filter(img => !pathsToDelete.has(img.path)));
         } catch (e) {
             console.error("Bulk delete failed", e);
-            alert("Failed to delete some images");
+            alert("failed to delete some images");
             // Restore selection if delete failed
             setSelectedPaths(pathsToDelete);
         }
@@ -477,17 +477,17 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
 
     const handleMaskSave = useCallback(async (maskFile: File) => {
         if (!maskEditorSourcePath) {
-            alert("Missing source image path");
+            alert("missing source image path");
             return;
         }
 
         try {
             const result = await api.saveMask(maskFile, maskEditorSourcePath);
             const location = result.saved_to === "project_masks" ? "project masks folder" : "same folder";
-            alert(`Mask saved: ${result.filename} (${location})`);
+            alert(`mask saved: ${result.filename} (${location})`);
         } catch (e) {
             console.error("Failed to save mask", e);
-            alert("Failed to save mask");
+            alert("failed to save mask");
         }
     }, [maskEditorSourcePath]);
 
@@ -522,7 +522,7 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
             }
         } catch (e) {
             console.error("Delete failed", e);
-            alert("Failed to delete image");
+            alert("failed to delete image");
         }
         setContextMenu(null);
     };
