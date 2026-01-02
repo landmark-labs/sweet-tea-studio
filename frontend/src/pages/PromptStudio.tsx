@@ -456,6 +456,15 @@ export default function PromptStudio() {
     // This allows the persisted value to apply, or preserves selection when switching projects
     // if the folder exists in both.
     if (selectedProject) {
+      // For drafts project, always reset to empty string (destination selector is hidden)
+      // This prevents stale folder values from previous projects being used
+      if (selectedProject.slug === "drafts") {
+        if (generationTarget !== "") {
+          setGenerationTarget("");
+        }
+        return;
+      }
+
       const validFolders = (selectedProject.config_json as { folders?: string[] })?.folders || ["inputs", "output", "masks"];
 
       // If current target is empty or not in the new project's folder list (and isn't engine default "")
