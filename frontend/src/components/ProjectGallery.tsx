@@ -651,13 +651,12 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
             {images.length > 0 && (
                 <div className="flex-none p-3 border-t bg-slate-50">
                     {selectedPaths.size > 0 ? (
-                        <div className="flex items-center justify-between gap-3">
-                            <span className="text-sm font-semibold text-blue-600">{selectedPaths.size} selected</span>
-                            <div className="flex items-center gap-2">
+                        <div className="flex flex-col gap-2">
+                            <div className="flex flex-wrap items-center justify-center gap-2">
                                 <Button
                                     variant="outline"
                                     size="sm"
-                                    className="h-8 px-3 text-xs"
+                                    className="h-8 px-2 text-xs"
                                     onClick={handleAddSelectedToTray}
                                 >
                                     <Plus className="h-4 w-4 mr-1" />
@@ -666,7 +665,7 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
                                 <Button
                                     variant="outline"
                                     size="sm"
-                                    className="h-8 px-3 text-xs"
+                                    className="h-8 px-2 text-xs"
                                     onClick={() => setSelectedPaths(new Set())}
                                 >
                                     Clear
@@ -674,12 +673,15 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
                                 <Button
                                     variant="destructive"
                                     size="sm"
-                                    className="h-8 px-3 text-xs"
+                                    className="h-8 px-2 text-xs"
                                     onClick={handleBulkDelete}
                                 >
                                     <Trash2 className="h-4 w-4 mr-1" />
                                     Delete
                                 </Button>
+                            </div>
+                            <div className="text-[11px] text-slate-500 text-center">
+                                {selectedPaths.size} selected
                             </div>
                         </div>
                     ) : (
