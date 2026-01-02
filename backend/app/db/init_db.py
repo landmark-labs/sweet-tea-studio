@@ -29,6 +29,10 @@ def init_db():
     from app.db.migrations.add_soft_delete_to_images import migrate as migrate_soft_delete
     migrate_soft_delete()
     
+    # Add display_order column to workflow templates (must run before backfill_node_order)
+    from app.db.migrations.add_display_order_to_workflows import migrate as migrate_display_order
+    migrate_display_order()
+    
     # Backfill __node_order for existing workflows
     from app.db.migrations.backfill_node_order import migrate as migrate_node_order
     migrate_node_order()

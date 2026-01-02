@@ -76,6 +76,7 @@ export interface WorkflowTemplate {
     input_schema: any;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     node_mapping?: any;
+    display_order?: number;
 }
 
 export interface WorkflowExportBundle {
@@ -505,6 +506,16 @@ export const api = {
             throw new Error(errorData.detail || "Failed to import workflow");
         }
 
+        return res.json();
+    },
+
+    reorderWorkflows: async (order: { id: number; display_order: number }[]): Promise<{ ok: boolean; updated: number }> => {
+        const res = await fetch(`${API_BASE}/workflows/reorder`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(order),
+        });
+        if (!res.ok) throw new Error("Failed to reorder workflows");
         return res.json();
     },
 
@@ -1012,6 +1023,22 @@ export const api = {
     restartBackend: async (): Promise<{ message: string; status: string }> => {
         const res = await fetch(`${API_BASE}/status/restart`, { method: "POST" });
         if (!res.ok) throw new Error("Failed to restart backend");
+        return res.json();
+    },
+
+    freeMemory: async (options: { unloadModels?: boolean; freeMemory?: boolean }): Promise<{ success: boolean }> => {
+        const res = await fetch(`${API_BASE}/monitoring/free-memory`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                unload_models: options.unloadModels ?? false,
+                free_memory: options.freeMemory ?? false,
+            }),
+        });
+        if (!res.ok) {
+            const errorData = await res.json().catch(() => ({}));
+            throw new Error(errorData.detail || "Failed to free memory");
+        }
         return res.json();
     },
 

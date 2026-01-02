@@ -150,6 +150,40 @@ class ComfyClient:
         except urllib.error.URLError as e:
             raise ComfyConnectionError(f"Could not retrieve system stats from {self.engine.base_url}") from e
 
+    def free_memory(self, unload_models: bool = False, free_memory: bool = False) -> bool:
+        """
+        Request ComfyUI to free memory/unload models.
+        
+        Args:
+            unload_models: If True, unload models from VRAM
+            free_memory: If True, free all memory (VRAM + RAM)
+            
+        Returns:
+            True if successful
+        """
+        payload = {}
+        if unload_models:
+            payload["unload_models"] = True
+        if free_memory:
+            payload["free_memory"] = True
+            
+        if not payload:
+            return True  # Nothing to do
+            
+        data = json.dumps(payload).encode('utf-8')
+        try:
+            req = urllib.request.Request(
+                self._get_url("/free"),
+                data=data,
+                method="POST"
+            )
+            req.add_header("Content-Type", "application/json")
+            with urllib.request.urlopen(req, timeout=10) as response:
+                return response.status == 200
+        except urllib.error.URLError as e:
+            raise ComfyConnectionError(f"Could not free memory on {self.engine.base_url}. Is it running?") from e
+
+
 
     def get_images(self, prompt_id: str, progress_callback=None) -> List[Dict[str, Any]]:
         """

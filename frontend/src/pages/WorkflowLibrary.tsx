@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
-import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy, rectSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -305,6 +305,110 @@ const getNodeDisplayOrder = (graph: any, schema: any) => {
     const validStored = storedOrder.filter((id: string) => ids.includes(id));
     const remaining = ids.filter((id: string) => !validStored.includes(id)).sort((a, b) => parseInt(a) - parseInt(b));
     return [...validStored, ...remaining];
+};
+
+// --- Sortable Workflow Card Component ---
+interface SortableWorkflowCardProps {
+    workflow: WorkflowTemplate;
+    missing: string[];
+    onViewGraph: (w: WorkflowTemplate) => void;
+    onExport: (w: WorkflowTemplate) => void;
+    onEdit: (w: WorkflowTemplate) => void;
+    onDelete: (id: number) => void;
+    onStartInstall: (nodes: string[]) => void;
+}
+
+const SortableWorkflowCard = ({
+    workflow: w,
+    missing,
+    onViewGraph,
+    onExport,
+    onEdit,
+    onDelete,
+    onStartInstall
+}: SortableWorkflowCardProps) => {
+    const {
+        attributes,
+        listeners,
+        setNodeRef,
+        transform,
+        transition,
+        isDragging
+    } = useSortable({ id: w.id });
+
+    const style = {
+        transform: CSS.Transform.toString(transform),
+        transition,
+        zIndex: isDragging ? 50 : "auto",
+        opacity: isDragging ? 0.8 : 1,
+    };
+
+    return (
+        <Card
+            ref={setNodeRef}
+            style={style}
+            className={cn(
+                "relative group hover:shadow-lg transition-shadow",
+                isDragging && "ring-2 ring-blue-300 shadow-xl"
+            )}
+            title={w.description || undefined}
+        >
+            {/* Drag Handle */}
+            <div
+                {...attributes}
+                {...listeners}
+                className="absolute top-2 left-2 p-1.5 rounded bg-slate-100 hover:bg-slate-200 cursor-grab active:cursor-grabbing text-slate-400 hover:text-slate-600 transition-colors z-10"
+                title="Drag to reorder"
+            >
+                <GripVertical className="w-4 h-4" />
+            </div>
+
+            <CardHeader className="pl-10">
+                <div className="flex justify-between items-start">
+                    <CardTitle className="truncate pr-4" title={w.name}>{w.name}</CardTitle>
+                    <FileJson className="w-5 h-5 text-slate-400" />
+                </div>
+                <CardDescription className="line-clamp-2 h-10" title={w.description || undefined}>
+                    {w.description?.split("[Missing")[0] || "No description"}
+                </CardDescription>
+            </CardHeader>
+            <CardContent>
+                {missing.length > 0 && (
+                    <div className="bg-amber-50 rounded-md p-3 border border-amber-200 text-xs">
+                        <div className="flex items-center justify-between text-amber-600 font-semibold mb-1">
+                            <div className="flex items-center">
+                                <AlertTriangle className="w-3 h-3 mr-1" /> missing nodes
+                            </div>
+                            <Button variant="ghost" size="sm" className="text-amber-700 hover:bg-amber-100" onClick={() => onStartInstall(missing)}>
+                                install all
+                            </Button>
+                        </div>
+                        <ul className="list-disc list-inside text-amber-800 space-y-0.5">
+                            {missing.map((node, i) => <li key={i}>{node}</li>)}
+                        </ul>
+                    </div>
+                )}
+                <div className="mt-4 flex gap-2 text-xs text-slate-500">
+                    <span className="bg-slate-100 px-2 py-1 rounded">{Object.keys(w.graph_json).length} nodes</span>
+                    <span className="bg-slate-100 px-2 py-1 rounded">{Object.keys(stripSchemaMeta(w.input_schema)).length} params</span>
+                </div>
+            </CardContent>
+            <CardFooter className="flex justify-end gap-2 text-slate-400">
+                <Button variant="ghost" size="sm" onClick={() => onViewGraph(w)}>
+                    <GitBranch className="w-4 h-4 mr-1" /> view graph
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => onExport(w)}>
+                    <Save className="w-4 h-4 mr-1" /> export
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => onEdit(w)}>
+                    <Edit2 className="w-4 h-4 mr-1" /> edit
+                </Button>
+                <Button variant="ghost" size="sm" className="hover:text-red-500" onClick={() => onDelete(w.id)}>
+                    <Trash2 className="w-4 h-4" />
+                </Button>
+            </CardFooter>
+        </Card>
+    );
 };
 
 
@@ -876,6 +980,37 @@ export default function WorkflowLibrary() {
         setViewGraphOpen(true);
     };
 
+    // --- Workflow Card Drag-to-Reorder ---
+    const handleWorkflowDragEnd = async (event: any) => {
+        const { active, over } = event;
+        if (!over || active.id === over.id) return;
+
+        const oldIndex = workflows.findIndex(w => w.id === active.id);
+        const newIndex = workflows.findIndex(w => w.id === over.id);
+        if (oldIndex === -1 || newIndex === -1) return;
+
+        const reordered = arrayMove(workflows, oldIndex, newIndex);
+
+        // Optimistically update UI
+        setWorkflows(reordered);
+
+        // Calculate new display_order values (index-based)
+        const orderUpdate = reordered.map((w, idx) => ({
+            id: w.id,
+            display_order: idx
+        }));
+
+        try {
+            await api.reorderWorkflows(orderUpdate);
+            // Refresh context so dropdown gets updated order
+            await generation?.refreshWorkflows();
+        } catch (err) {
+            console.error("Failed to persist workflow order:", err);
+            // Revert on error
+            loadWorkflows();
+        }
+    };
+
 
 
     return (
@@ -1013,59 +1148,27 @@ export default function WorkflowLibrary() {
                 </Alert>
             )}
 
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                {workflows.map((w) => {
-                    const missing = getMissingNodes(w);
-                    return (
-                        <Card key={w.id} className="relative group hover:shadow-lg transition-shadow" title={w.description || undefined}>
-                            <CardHeader>
-                                <div className="flex justify-between items-start">
-                                    <CardTitle className="truncate pr-4" title={w.name}>{w.name}</CardTitle>
-                                    <FileJson className="w-5 h-5 text-slate-400" />
-                                </div>
-                                <CardDescription className="line-clamp-2 h-10" title={w.description || undefined}>
-                                    {w.description?.split("[Missing")[0] || "No description"}
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                {missing.length > 0 && (
-                                    <div className="bg-amber-50 rounded-md p-3 border border-amber-200 text-xs">
-                                        <div className="flex items-center justify-between text-amber-600 font-semibold mb-1">
-                                            <div className="flex items-center">
-                                                <AlertTriangle className="w-3 h-3 mr-1" /> missing nodes
-                                            </div>
-                                            <Button variant="ghost" size="sm" className="text-amber-700 hover:bg-amber-100" onClick={() => startInstall(missing)}>
-                                                install all
-                                            </Button>
-                                        </div>
-                                        <ul className="list-disc list-inside text-amber-800 space-y-0.5">
-                                            {missing.map((node, i) => <li key={i}>{node}</li>)}
-                                        </ul>
-                                    </div>
-                                )}
-                                <div className="mt-4 flex gap-2 text-xs text-slate-500">
-                                    <span className="bg-slate-100 px-2 py-1 rounded">{Object.keys(w.graph_json).length} nodes</span>
-                                    <span className="bg-slate-100 px-2 py-1 rounded">{Object.keys(stripSchemaMeta(w.input_schema)).length} params</span>
-                                </div>
-                            </CardContent>
-                            <CardFooter className="flex justify-end gap-2 text-slate-400">
-                                <Button variant="ghost" size="sm" onClick={() => handleViewGraph(w)}>
-                                    <GitBranch className="w-4 h-4 mr-1" /> view graph
-                                </Button>
-                                <Button variant="ghost" size="sm" onClick={() => handleExport(w)}>
-                                    <Save className="w-4 h-4 mr-1" /> export
-                                </Button>
-                                <Button variant="ghost" size="sm" onClick={() => handleEdit(w)}>
-                                    <Edit2 className="w-4 h-4 mr-1" /> edit
-                                </Button>
-                                <Button variant="ghost" size="sm" className="hover:text-red-500" onClick={() => handleDelete(w.id)}>
-                                    <Trash2 className="w-4 h-4" />
-                                </Button>
-                            </CardFooter>
-                        </Card>
-                    );
-                })}
-            </div>
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleWorkflowDragEnd}>
+                <SortableContext items={workflows.map(w => w.id)} strategy={rectSortingStrategy}>
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                        {workflows.map((w) => {
+                            const missing = getMissingNodes(w);
+                            return (
+                                <SortableWorkflowCard
+                                    key={w.id}
+                                    workflow={w}
+                                    missing={missing}
+                                    onViewGraph={handleViewGraph}
+                                    onExport={handleExport}
+                                    onEdit={handleEdit}
+                                    onDelete={handleDelete}
+                                    onStartInstall={startInstall}
+                                />
+                            );
+                        })}
+                    </div>
+                </SortableContext>
+            </DndContext>
 
             {/* Graph Viewer Dialog */}
             <Dialog open={viewGraphOpen} onOpenChange={setViewGraphOpen}>

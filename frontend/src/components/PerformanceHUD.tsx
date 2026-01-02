@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Activity, Gauge, HardDrive, ThermometerSun, Zap, X } from "lucide-react";
+import { Activity, Gauge, HardDrive, ThermometerSun, Zap, X, Trash2 } from "lucide-react";
 
 import { api, SystemMetrics } from "@/lib/api";
 import { Card } from "@/components/ui/card";
@@ -18,6 +18,7 @@ export function PerformanceHUD({ className, refreshMs = 3000, visible = true, on
   const [metrics, setMetrics] = useState<SystemMetrics | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [unloading, setUnloading] = useState<"vram" | "all" | null>(null);
 
   const fetchMetrics = async () => {
     setLoading(true);
@@ -29,6 +30,22 @@ export function PerformanceHUD({ className, refreshMs = 3000, visible = true, on
       setError(err instanceof Error ? err.message : "Unable to load metrics");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleFreeMemory = async (mode: "vram" | "all") => {
+    setUnloading(mode);
+    try {
+      await api.freeMemory({
+        unloadModels: true,
+        freeMemory: mode === "all",
+      });
+      // Refresh metrics after freeing memory
+      setTimeout(fetchMetrics, 500);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to free memory");
+    } finally {
+      setUnloading(null);
     }
   };
 
@@ -133,6 +150,38 @@ export function PerformanceHUD({ className, refreshMs = 3000, visible = true, on
                 </div>
               </div>
             ))}
+          </div>
+
+          {/* Memory Unload Buttons */}
+          <div className="flex gap-1.5 pt-1 border-t border-slate-100">
+            <button
+              onClick={() => handleFreeMemory("vram")}
+              disabled={unloading !== null}
+              className={cn(
+                "flex-1 flex items-center justify-center gap-1 px-2 py-1 rounded text-[9px] font-medium transition-colors",
+                "bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100",
+                unloading === "vram" && "opacity-70 cursor-wait",
+                unloading !== null && unloading !== "vram" && "opacity-50 cursor-not-allowed"
+              )}
+              title="Unload models from VRAM"
+            >
+              <Trash2 className={cn("w-2.5 h-2.5", unloading === "vram" && "animate-pulse")} />
+              {unloading === "vram" ? "Unloading..." : "Unload VRAM"}
+            </button>
+            <button
+              onClick={() => handleFreeMemory("all")}
+              disabled={unloading !== null}
+              className={cn(
+                "flex-1 flex items-center justify-center gap-1 px-2 py-1 rounded text-[9px] font-medium transition-colors",
+                "bg-red-50 text-red-700 border border-red-200 hover:bg-red-100",
+                unloading === "all" && "opacity-70 cursor-wait",
+                unloading !== null && unloading !== "all" && "opacity-50 cursor-not-allowed"
+              )}
+              title="Unload models from VRAM and RAM"
+            >
+              <Trash2 className={cn("w-2.5 h-2.5", unloading === "all" && "animate-pulse")} />
+              {unloading === "all" ? "Freeing..." : "Free All"}
+            </button>
           </div>
 
           <div className="flex items-center justify-between">

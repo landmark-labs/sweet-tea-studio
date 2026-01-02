@@ -299,3 +299,41 @@ def get_comfyui_logs(lines: int = 200):
     from app.services.comfy_launcher import comfy_launcher
     return {"logs": comfy_launcher.get_logs(lines)}
 
+
+class FreeMemoryRequest(BaseModel):
+    unload_models: bool = False
+    free_memory: bool = False
+
+
+@router.post("/free-memory")
+def free_memory(request: FreeMemoryRequest):
+    """
+    Free GPU VRAM by unloading models.
+    
+    - unload_models: Unload models from VRAM
+    - free_memory: Free all cached memory (VRAM + RAM)
+    """
+    from sqlmodel import Session, select
+    from app.db.engine import engine
+    from app.models.engine import Engine as EngineModel
+    from app.core.comfy_client import ComfyClient, ComfyConnectionError
+    
+    # Get the first active engine
+    with Session(engine) as session:
+        active_engine = session.exec(
+            select(EngineModel).where(EngineModel.is_active == True)
+        ).first()
+    
+    if not active_engine:
+        raise HTTPException(status_code=503, detail="No active ComfyUI engine configured")
+    
+    try:
+        client = ComfyClient(active_engine)
+        success = client.free_memory(
+            unload_models=request.unload_models,
+            free_memory=request.free_memory
+        )
+        return {"success": success}
+    except ComfyConnectionError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+

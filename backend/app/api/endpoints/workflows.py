@@ -1,5 +1,6 @@
 import hashlib
 import json
+import logging
 import os
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -15,6 +16,7 @@ from app.core.comfy_client import ComfyClient
 from app.core.workflow_merger import WorkflowMerger
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def _clean_description(description: Optional[str]) -> Optional[str]:
@@ -464,7 +466,12 @@ def create_workflow(workflow_in: WorkflowTemplateCreate):
 @router.get("/", response_model=List[WorkflowTemplateRead])
 def read_workflows(skip: int = 0, limit: int = 100):
     with Session(db_engine) as session:
-        workflows = session.exec(select(WorkflowTemplate).offset(skip).limit(limit)).all()
+        workflows = session.exec(
+            select(WorkflowTemplate)
+            .order_by(WorkflowTemplate.display_order, WorkflowTemplate.id)
+            .offset(skip)
+            .limit(limit)
+        ).all()
         
         # Batch Self-Healing
         # Check if any workflow needs healing
@@ -585,6 +592,24 @@ def delete_workflow(workflow_id: int):
         session.commit()
         return {"ok": True}
 
+class WorkflowReorderItem(BaseModel):
+    id: int
+    display_order: int
+
+
+@router.patch("/reorder")
+def reorder_workflows(items: List[WorkflowReorderItem]):
+    """Bulk update display_order for multiple workflows."""
+    with Session(db_engine) as session:
+        for item in items:
+            workflow = session.get(WorkflowTemplate, item.id)
+            if workflow:
+                workflow.display_order = item.display_order
+                session.add(workflow)
+        session.commit()
+        return {"ok": True, "updated": len(items)}
+
+
 class WorkflowComposeRequest(BaseModel):
     source_id: int
     target_id: int
@@ -602,9 +627,14 @@ def compose_workflows(req: WorkflowComposeRequest):
              
         # Merge
         try:
-             merged_graph = WorkflowMerger.merge(w_source.graph_json, w_target.graph_json)
+             merge_result = WorkflowMerger.merge(w_source.graph_json, w_target.graph_json)
         except Exception as e:
              raise HTTPException(status_code=500, detail=f"Merge failed: {str(e)}")
+        
+        # Check merge result and log warnings
+        if not merge_result.success and merge_result.warnings:
+            warning_text = " | ".join(merge_result.warnings)
+            logger.warning(f"Compose merge incomplete: {warning_text}")
         
         # Verify engine for schema gen
         engine = session.exec(select(Engine)).first()
@@ -612,14 +642,20 @@ def compose_workflows(req: WorkflowComposeRequest):
         object_info = client.get_object_info() if client else {}
         
         # Schema
-        schema = generate_schema_from_graph(merged_graph, object_info)
+        schema = generate_schema_from_graph(merge_result.graph, object_info)
+        
+        # Build description with merge status
+        base_description = _clean_description(req.description) or f"Composed from '{w_source.name}' + '{w_target.name}'"
+        
+        if not merge_result.success and merge_result.warnings:
+            warning_summary = "; ".join(merge_result.warnings[:2])
+            base_description = f"{base_description} [Merge Warning: {warning_summary}]"
         
         # Create Record
         new_workflow = WorkflowTemplate(
             name=req.name,
-            description=_clean_description(req.description)
-            or f"Composed from '{w_source.name}' + '{w_target.name}'",
-            graph_json=merged_graph,
+            description=base_description,
+            graph_json=merge_result.graph,
             input_schema=schema
         )
         
