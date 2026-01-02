@@ -1071,13 +1071,20 @@ def move_images(req: MoveImagesRequest, session: Session = Depends(get_session))
     if not engine or not engine.output_dir:
         raise HTTPException(status_code=500, detail="No engine configured with output directory")
     
-    # Determine destination directory
+    # Determine destination directory based on folder type
     subfolder = req.subfolder or "output"
-    dest_dir = settings.get_project_output_dir_in_comfy(engine.output_dir, project.slug)
     
-    # If subfolder is not "output", create it within the project's sweet_tea folder
-    if subfolder != "output":
-        dest_dir = settings.get_project_dir_in_comfy(engine.output_dir, project.slug) / subfolder
+    if subfolder == "output":
+        # Output folder: ComfyUI/sweet_tea/{project}/output
+        dest_dir = settings.get_project_output_dir_in_comfy(engine.output_dir, project.slug)
+    else:
+        # Non-output folders (input, masks, custom): ComfyUI/input/{project}/{subfolder}
+        # This matches the directory structure used by ProjectGallery
+        if engine.input_dir:
+            dest_dir = settings.get_project_input_dir_in_comfy(engine.input_dir, project.slug) / subfolder
+        else:
+            # Fallback to legacy sweet_tea structure if input_dir not configured
+            dest_dir = settings.get_project_dir_in_comfy(engine.output_dir, project.slug) / subfolder
     
     dest_dir.mkdir(parents=True, exist_ok=True)
     
