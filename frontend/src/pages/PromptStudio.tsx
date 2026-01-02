@@ -2376,7 +2376,7 @@ export default function PromptStudio() {
               >
                 <SelectTrigger className="h-7 text-xs">
                   <SelectValue placeholder="select project">
-                    {selectedProject?.name || draftsProject?.name || "drafts"}
+                    {selectedProject?.slug === "drafts" ? "drafts" : (selectedProject?.name || "drafts")}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>

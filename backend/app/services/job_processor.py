@@ -813,7 +813,7 @@ def process_job(job_id: int):
             
             # Determine the base filename prefix from project slug and folder name
             folder_name = job.output_dir if job.output_dir else "output"
-            if 'project' in dir() and project:
+            if project:
                 filename_prefix = f"{project.slug}-{folder_name}"
             else:
                 filename_prefix = f"gen_{job_id}"
@@ -840,7 +840,7 @@ def process_job(job_id: int):
             video_provenance_json = json.dumps(video_provenance, ensure_ascii=False)
 
             xp_title_bytes: bytes | None = None
-            if 'project' in locals() and project and project.name:
+            if project and project.name:
                 xp_title_bytes = project.name.encode("utf-16le") + b"\x00\x00"
 
             xp_subject_bytes: bytes | None = None
