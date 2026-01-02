@@ -52,6 +52,7 @@ interface FieldRendererProps {
     externalValueSyncKey?: number;
     mediaVariant?: "default" | "compact";
     hideLabel?: boolean;
+    onMenuOpen?: (isOpen: boolean) => void;
 }
 
 const BYPASS_PLACEHOLDER_KEY = "__sts_bypass_placeholder__";
@@ -122,6 +123,7 @@ const FieldRenderer = React.memo(function FieldRenderer({
     externalValueSyncKey,
     mediaVariant = "default",
     hideLabel = false,
+    onMenuOpen,
 }: FieldRendererProps) {
     const value = useAtomValue(formFieldAtom(fieldKey));
     const isMediaUpload = isMediaUploadField(fieldKey, field);
@@ -224,6 +226,7 @@ const FieldRenderer = React.memo(function FieldRenderer({
                             onValueChange={(val) => {
                                 onValueChange(fieldKey, val);
                             }}
+                            onOpenChange={onMenuOpen}
                         >
                             <SelectTrigger id={fieldKey} className={cn("h-7 text-xs flex-1 min-w-0 overflow-hidden", isActive && "ring-1 ring-blue-400 border-blue-400")}>
                                 <span className="truncate block w-full text-left">
@@ -1226,6 +1229,7 @@ export const DynamicForm = React.memo(function DynamicForm({
     } | null>(null);
     const formRef = useRef<HTMLFormElement | null>(null);
 
+
     const clearHoverTimers = useCallback(() => {
         if (hoverOpenTimerRef.current) {
             clearTimeout(hoverOpenTimerRef.current);
@@ -1236,6 +1240,15 @@ export const DynamicForm = React.memo(function DynamicForm({
             hoverCloseTimerRef.current = null;
         }
     }, []);
+
+    const isMenuOpenRef = useRef(false);
+
+    const handleMenuOpen = useCallback((isOpen: boolean) => {
+        isMenuOpenRef.current = isOpen;
+        if (isOpen) {
+            clearHoverTimers();
+        }
+    }, [clearHoverTimers]);
 
     const requestOpenNode = useCallback((id: string, immediate = false) => {
         if (pinnedStackId && pinnedStackId !== id) return;
@@ -1251,6 +1264,7 @@ export const DynamicForm = React.memo(function DynamicForm({
 
     const requestCloseNode = useCallback((id: string) => {
         if (pinnedStackId) return;
+        if (isMenuOpenRef.current) return;
         clearHoverTimers();
         hoverCloseTimerRef.current = setTimeout(() => {
             setActiveStackId((current) => (current === id ? null : current));
@@ -1347,6 +1361,7 @@ export const DynamicForm = React.memo(function DynamicForm({
                 projectSlug={projectSlug}
                 destinationFolder={destinationFolder}
                 externalValueSyncKey={externalValueSyncKey}
+                onMenuOpen={handleMenuOpen}
             />
         );
     }, [
@@ -1362,7 +1377,8 @@ export const DynamicForm = React.memo(function DynamicForm({
         onFieldFocus,
         projectSlug,
         schema,
-        snippets
+        snippets,
+        handleMenuOpen
     ]);
 
     const renderMediaField = useCallback((key: string, mediaVariant: "default" | "compact", hideLabel: boolean) => {
@@ -1389,6 +1405,7 @@ export const DynamicForm = React.memo(function DynamicForm({
                 externalValueSyncKey={externalValueSyncKey}
                 mediaVariant={mediaVariant}
                 hideLabel={hideLabel}
+                onMenuOpen={handleMenuOpen}
             />
         );
     }, [
@@ -1404,7 +1421,8 @@ export const DynamicForm = React.memo(function DynamicForm({
         onFieldFocus,
         projectSlug,
         schema,
-        snippets
+        snippets,
+        handleMenuOpen
     ]);
 
     const coreGroups = useMemo(() => {
