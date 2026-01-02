@@ -1,10 +1,11 @@
 import React from "react";
-import { Download, ExternalLink, X, Check, ArrowLeft, ArrowRight, RotateCcw, Copy, Trash2, PenTool } from "lucide-react";
+import { Download, ExternalLink, X, Check, ArrowLeft, ArrowRight, RotateCcw, Copy, Trash2, PenTool, Plus } from "lucide-react";
 import { Button } from "./ui/button";
 import { api, Image as ApiImage, GalleryItem } from "@/lib/api";
 import { isVideoFile } from "@/lib/media";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 import { InpaintEditor } from "@/components/InpaintEditor";
+import { useMediaTrayStore } from "@/lib/stores/mediaTrayStore";
 
 
 
@@ -46,6 +47,8 @@ export const ImageViewer = React.memo(function ImageViewer({
     const containerRef = React.useRef<HTMLDivElement>(null);
     const [maskEditorOpen, setMaskEditorOpen] = React.useState(false);
     const [maskEditorSourcePath, setMaskEditorSourcePath] = React.useState<string>("");
+
+    const addToMediaTray = useMediaTrayStore(React.useCallback((state) => state.addItems, []));
 
     // Mode-based navigation:
     // - Locked Mode (false): Show selectedImagePath directly, ignore array index
@@ -675,6 +678,18 @@ export const ImageViewer = React.memo(function ImageViewer({
                             onClick={handleDownload}
                         >
                             <Download size={14} /> download
+                        </div>
+                        <div
+                            className="px-3 py-2 hover:bg-slate-100 cursor-pointer flex items-center gap-2"
+                            onClick={() => {
+                                const rawPath = resolveRawPath(imagePath);
+                                if (rawPath) {
+                                    addToMediaTray({ path: rawPath, filename: currentImage?.filename });
+                                }
+                                setContextMenu(null);
+                            }}
+                        >
+                            <Plus size={14} /> add to media tray
                         </div>
                         {canDrawMask && (
                             <div

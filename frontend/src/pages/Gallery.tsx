@@ -4,7 +4,7 @@ import { isVideoFile } from "@/lib/media";
 import { Card, CardContent } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Download, Trash2, Calendar, Search, RotateCcw, Copy, Check, X, ChevronLeft, ChevronRight, FolderInput } from "lucide-react";
+import { Download, Trash2, Calendar, Search, RotateCcw, Copy, Check, X, ChevronLeft, ChevronRight, FolderInput, Plus } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
@@ -21,6 +21,7 @@ import { ProjectSidebar } from "@/components/ProjectSidebar";
 import { VirtualGrid } from "@/components/VirtualGrid";
 import { MoveImagesDialog } from "@/components/MoveImagesDialog";
 import React from "react";
+import { useMediaTrayStore } from "@/lib/stores/mediaTrayStore";
 
 const MISSING_IMAGE_SRC =
     "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MDAiIGhlaWdodD0iNDAwIiB2aWV3Qm94PSIwIDAgNDAwIDQwMCI+PHJlY3Qgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsbD0iI2UyZThmMCIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjOTRhM2I4IiBmb250LWZhbWlseT0iQXJpYWwsIHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMjQiPk1pc3NpbmcgRmlsZTwvdGV4dD48L3N2Zz4=";
@@ -139,6 +140,7 @@ export default function Gallery() {
     const clickTimeout = useRef<NodeJS.Timeout | null>(null);
 
     const navigate = useNavigate();
+    const addToMediaTray = useMediaTrayStore(useCallback((state) => state.addItems, []));
 
     // Keep fullscreen index valid when items update
     useEffect(() => {
@@ -592,6 +594,15 @@ export default function Gallery() {
         }
     };
 
+    const handleAddSelectedToTray = useCallback(() => {
+        if (selectedIds.size === 0) return;
+        const toAdd = items
+            .filter((item) => selectedIds.has(item.image.id))
+            .map((item) => ({ path: item.image.path, filename: item.image.filename }));
+        if (toAdd.length === 0) return;
+        addToMediaTray(toAdd);
+    }, [addToMediaTray, items, selectedIds]);
+
     const handleRegenerate = (item: GalleryItem) => {
         navigate("/", { state: { loadParams: item, isRegenerate: true } });
     };
@@ -640,6 +651,11 @@ export default function Gallery() {
                                         <button onClick={() => setMoveDialogOpen(true)} className="hover:underline text-blue-600 flex items-center gap-1">
                                             <FolderInput className="w-3 h-3" />
                                             move
+                                        </button>
+                                        <div className="h-4 w-px bg-blue-200 flex-shrink-0" />
+                                        <button onClick={handleAddSelectedToTray} className="hover:underline text-blue-600 flex items-center gap-1">
+                                            <Plus className="w-3 h-3" />
+                                            add to tray
                                         </button>
                                         <div className="h-4 w-px bg-blue-200 flex-shrink-0" />
                                         <button onClick={handleBulkDelete} className="hover:underline text-red-600">delete</button>
@@ -865,6 +881,7 @@ export default function Gallery() {
                                     <ContextMenuContent>
                                         <ContextMenuItem onSelect={() => handleDownload(item)}>download</ContextMenuItem>
                                         <ContextMenuItem onSelect={() => handleRegenerate(item)}>regenerate</ContextMenuItem>
+                                        <ContextMenuItem onSelect={() => addToMediaTray({ path: item.image.path, filename: item.image.filename })}>add to media tray</ContextMenuItem>
                                         <ContextMenuSeparator />
                                         <ContextMenuItem className="text-red-600" onSelect={() => handleDelete(item.image.id)}>delete</ContextMenuItem>
                                     </ContextMenuContent>

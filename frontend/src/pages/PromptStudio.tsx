@@ -3,7 +3,7 @@ import { useAtomValue, useSetAtom, useStore } from "jotai";
 import { addProgressEntry, calculateProgressStats, mapStatusToGenerationState, formatDuration, type GenerationState, type ProgressHistoryEntry } from "@/lib/generationState";
 import { useLocation, useNavigate, useOutletContext } from "react-router-dom";
 import { api, Engine, WorkflowTemplate, GalleryItem, EngineHealth, Project, Image as ApiImage, FolderImage } from "@/lib/api";
-import { extractPrompts, findPromptFieldsInSchema, findImageFieldsInSchema } from "@/lib/promptUtils";
+import { extractPrompts, findPromptFieldsInSchema, findImageFieldsInSchema, findMediaFieldsInSchema } from "@/lib/promptUtils";
 import { DynamicForm } from "@/components/DynamicForm";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -19,6 +19,7 @@ import { CanvasPayload, PromptItem } from "@/lib/types";
 
 import { useUndoRedo } from "@/lib/undoRedo";
 import { ProjectGallery } from "@/components/ProjectGallery";
+import { MediaTray } from "@/components/MediaTray";
 import { useGenerationFeedStore, usePromptLibraryStore } from "@/lib/stores/promptDataStore";
 import { useGeneration } from "@/lib/GenerationContext";
 import { logClientEventThrottled } from "@/lib/clientDiagnostics";
@@ -1331,18 +1332,33 @@ export default function PromptStudio() {
 
       // STEP 5: Handle image injection - do it directly here instead of delegating to Effect 3
       // Regenerate prefers original input image; use-in-pipe prefers the selected output image.
-      const imageFields = findImageFieldsInSchema(schema);
-      console.log("[LoadParams] Found image fields:", imageFields);
 
-      if (imageFields.length > 0) {
-        const imageField = imageFields[0];
+      // Check if selected file is a video
+      const isVideoPath = (path: string) => {
+        const lower = path.toLowerCase();
+        return lower.endsWith('.mp4') || lower.endsWith('.webm') || lower.endsWith('.mov') || lower.endsWith('.mkv') || lower.endsWith('.avi');
+      };
+
+      const hasVideoField = findMediaFieldsInSchema(schema, "video").length > 0;
+      const isVideo = loadParams.image?.path ? isVideoPath(loadParams.image.path) : false;
+
+      // Determine what kind of media slot we want to target
+      // If it's a video file AND the workflow has video slots, look for video slots
+      // Otherwise default to image slots (unless it's a video file and we want to prevent mismatch?)
+      const mediaType = (isVideo && hasVideoField) ? "video" : "image";
+
+      const mediaFields = findMediaFieldsInSchema(schema, mediaType);
+      console.log(`[LoadParams] Detected media type: ${mediaType}, fields:`, mediaFields);
+
+      if (mediaFields.length > 0) {
+        const mediaField = mediaFields[0];
         const preferJobImage = Boolean(loadParams.__isRegenerate);
 
         // PRIORITY 1: Use original input image from job params if this is a regenerate flow.
-        const jobImage = preferJobImage && typeof jobParams[imageField] === "string" ? jobParams[imageField] as string : null;
+        const jobImage = preferJobImage && typeof jobParams[mediaField] === "string" ? jobParams[mediaField] as string : null;
         if (jobImage && jobImage.trim()) {
-          console.log("[LoadParams] Using image from job params:", jobImage);
-          baseParams[imageField] = jobImage;
+          console.log("[LoadParams] Using input from job params:", jobImage);
+          baseParams[mediaField] = jobImage;
         } else if (loadParams.image?.path) {
           // FALLBACK: Use the output image path (for non-i2i workflows or if original not found)
           const imagePath = loadParams.image.path;
@@ -1353,32 +1369,30 @@ export default function PromptStudio() {
             // Image already in input dir - use relative path directly
             const relativePath = inputMatch[1].replace(/\\/g, "/");
             console.log("[LoadParams] Reusing existing input path:", relativePath);
-            baseParams[imageField] = relativePath;
+            baseParams[mediaField] = relativePath;
           } else {
-            // Image is in output/other directory - need to upload it
-            console.log("[LoadParams] Uploading image to input dir:", imagePath);
+            // Image/Video is in output/other directory - need to upload it
+            console.log("[LoadParams] Uploading media to input dir:", imagePath);
             try {
               const url = `/api/v1/gallery/image/path?path=${encodeURIComponent(imagePath)}`;
               const res = await fetch(url);
               if (res.ok) {
                 const blob = await res.blob();
-                const filename = imagePath.split(/[\\/]/).pop() || "injected_image.png";
+                const filename = imagePath.split(/[\\/]/).pop() || (mediaType === "video" ? "injected_video.mp4" : "injected_image.png");
                 const file = new File([blob], filename, { type: blob.type });
 
                 const engineId = selectedEngineId ? parseInt(selectedEngineId) : undefined;
                 const result = await api.uploadFile(file, engineId, selectedProject?.slug, undefined);
 
-                console.log("[LoadParams] Image upload complete:", result.filename);
-                baseParams[imageField] = result.filename;
+                console.log("[LoadParams] Upload complete:", result.filename);
+                baseParams[mediaField] = result.filename;
               } else {
-                console.warn("[LoadParams] Failed to fetch image for upload, clearing field");
-                // Clear the image field so ComfyUI doesn't use a default/old value
-                baseParams[imageField] = "";
+                console.warn("[LoadParams] Failed to fetch media for upload, clearing field");
+                baseParams[mediaField] = "";
               }
             } catch (err) {
-              console.warn("[LoadParams] Image upload failed:", err);
-              // Clear the image field so ComfyUI doesn't use a default/old value
-              baseParams[imageField] = "";
+              console.warn("[LoadParams] Media upload failed:", err);
+              baseParams[mediaField] = "";
             }
           }
         }
@@ -2628,6 +2642,20 @@ export default function PromptStudio() {
           setPreviewPath(`/api/v1/gallery/image/path?path=${encodeURIComponent(imagePath)}`);
           setProjectGalleryImages(pgImages);
           setPreviewMetadata(null); // Clear old metadata, will be fetched by ImageViewer
+        }}
+      />
+
+      <MediaTray
+        onShowInViewer={(path, trayItems) => {
+          setPreviewPath(`/api/v1/gallery/image/path?path=${encodeURIComponent(path)}`);
+          setProjectGalleryImages(
+            trayItems.map((item) => ({
+              path: item.path,
+              filename: item.filename,
+              mtime: new Date(item.addedAt).toISOString(),
+            }))
+          );
+          setPreviewMetadata(null);
         }}
       />
 

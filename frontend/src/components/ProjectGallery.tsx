@@ -3,11 +3,12 @@ import { api, Project, FolderImage, GalleryItem, IMAGE_API_BASE } from "@/lib/ap
 import { isVideoFile } from "@/lib/media";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight, FolderOpen, ImageIcon, Loader2, Download, Trash2, Check, RotateCcw, PenTool } from "lucide-react";
+import { ChevronLeft, ChevronRight, FolderOpen, ImageIcon, Loader2, Download, Trash2, Check, RotateCcw, PenTool, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { VirtualGrid } from "@/components/VirtualGrid";
 import { getScrollPosition, saveScrollPosition } from "@/lib/galleryState";
 import { InpaintEditor } from "@/components/InpaintEditor";
+import { useMediaTrayStore } from "@/lib/stores/mediaTrayStore";
 
 interface ProjectGalleryProps {
     projects: Project[];
@@ -166,6 +167,8 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
 
     // Keep imagesRef in sync with images state for stable callbacks
     imagesRef.current = images;
+
+    const addToMediaTray = useMediaTrayStore(useCallback((state) => state.addItems, []));
 
     // Pre-process projects: Sort "drafts" to top, rename to "drafts", ensure it has "output" folder
     const sortedProjects = useMemo(() => {
@@ -428,6 +431,15 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
         }
     };
 
+    const handleAddSelectedToTray = useCallback(() => {
+        if (selectedPaths.size === 0) return;
+        const toAdd = imagesRef.current
+            .filter((img) => selectedPaths.has(img.path))
+            .map((img) => ({ path: img.path, filename: img.filename }));
+        if (toAdd.length === 0) return;
+        addToMediaTray(toAdd);
+    }, [addToMediaTray, selectedPaths]);
+
     // Context menu handlers
     const handleContextMenu = useCallback((e: React.MouseEvent, image: FolderImage) => {
         e.preventDefault();
@@ -646,6 +658,15 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
                                     variant="outline"
                                     size="sm"
                                     className="h-8 px-3 text-xs"
+                                    onClick={handleAddSelectedToTray}
+                                >
+                                    <Plus className="h-4 w-4 mr-1" />
+                                    Add to tray
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-8 px-3 text-xs"
                                     onClick={() => setSelectedPaths(new Set())}
                                 >
                                     Clear
@@ -680,6 +701,17 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
                     >
                         <Download className="h-3 w-3" />
                         download
+                    </button>
+
+                    <button
+                        className="w-full px-3 py-1.5 text-left text-xs hover:bg-slate-100 flex items-center gap-2"
+                        onClick={() => {
+                            addToMediaTray({ path: contextMenu.image.path, filename: contextMenu.image.filename });
+                            setContextMenu(null);
+                        }}
+                    >
+                        <Plus className="h-3 w-3" />
+                        add to tray
                     </button>
 
                     {!isVideoFile(contextMenu.image.path, contextMenu.image.filename) && (
