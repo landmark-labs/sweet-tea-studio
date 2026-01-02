@@ -5,6 +5,36 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { formatDuration, formatSpeed, type GenerationState } from "@/lib/generationState";
 
+type PreviewOrientation = "portrait" | "landscape" | "square";
+
+const FEED_PREVIEW_RULER = "18rem"; // Tailwind h-72
+const FEED_LONG_SIDE = 1280;
+const FEED_SHORT_SIDE = 720;
+const FEED_SQUARE_SIDE = 1024;
+
+const previewBoxSizeByOrientation: Record<PreviewOrientation, React.CSSProperties> = {
+  portrait: {
+    width: `calc(${FEED_PREVIEW_RULER} * ${FEED_SHORT_SIDE} / ${FEED_LONG_SIDE})`,
+    height: FEED_PREVIEW_RULER,
+  },
+  landscape: {
+    width: FEED_PREVIEW_RULER,
+    height: `calc(${FEED_PREVIEW_RULER} * ${FEED_SHORT_SIDE} / ${FEED_LONG_SIDE})`,
+  },
+  square: {
+    width: `calc(${FEED_PREVIEW_RULER} * ${FEED_SQUARE_SIDE} / ${FEED_LONG_SIDE})`,
+    height: `calc(${FEED_PREVIEW_RULER} * ${FEED_SQUARE_SIDE} / ${FEED_LONG_SIDE})`,
+  },
+};
+
+const classifyPreviewOrientation = (naturalWidth: number, naturalHeight: number): PreviewOrientation => {
+  if (naturalWidth <= 0 || naturalHeight <= 0) return "portrait";
+
+  const aspect = naturalWidth / naturalHeight;
+  if (Math.abs(aspect - 1) <= 0.06) return "square";
+  return aspect > 1 ? "landscape" : "portrait";
+};
+
 export interface GenerationFeedItem {
   jobId: number;
   status: GenerationState | string;
@@ -29,6 +59,39 @@ interface GenerationFeedProps {
 
 export const GenerationFeed = React.memo(function GenerationFeed({ items, onSelectPreview, onGenerate }: GenerationFeedProps) {
   const activeItem = items[0];
+  const [previewOrientation, setPreviewOrientation] = React.useState<PreviewOrientation>("portrait");
+  const previewOrientationByJobId = React.useRef<Record<number, PreviewOrientation>>({});
+
+  React.useEffect(() => {
+    if (!activeItem?.previewBlob) return;
+
+    const cachedOrientation = previewOrientationByJobId.current[activeItem.jobId];
+    if (cachedOrientation) {
+      setPreviewOrientation(cachedOrientation);
+      return;
+    }
+
+    let cancelled = false;
+    const img = new Image();
+    img.onload = () => {
+      if (cancelled) return;
+      const naturalWidth = img.naturalWidth || img.width;
+      const naturalHeight = img.naturalHeight || img.height;
+      const nextOrientation = classifyPreviewOrientation(naturalWidth, naturalHeight);
+      previewOrientationByJobId.current[activeItem.jobId] = nextOrientation;
+      setPreviewOrientation(nextOrientation);
+    };
+    img.src = activeItem.previewBlob;
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeItem?.jobId, activeItem?.previewBlob]);
+
+  const previewBoxStyle = React.useMemo(() => {
+    if (!activeItem?.previewBlob) return undefined;
+    return previewBoxSizeByOrientation[previewOrientation];
+  }, [activeItem?.previewBlob, previewOrientation]);
 
   // Format stats for display
   const isRunning = activeItem?.status === 'running' || activeItem?.status === 'processing';
@@ -53,7 +116,10 @@ export const GenerationFeed = React.memo(function GenerationFeed({ items, onSele
           <div className="p-3 space-y-2">
             {/* Preview Image */}
             {activeItem.previewBlob ? (
-              <div className="relative w-full h-72 rounded overflow-hidden bg-black/5 border border-slate-200">
+              <div
+                className="relative rounded overflow-hidden bg-black/5 border border-slate-200 mx-auto"
+                style={previewBoxStyle}
+              >
                 <img src={activeItem.previewBlob} alt="Live Preview" className="w-full h-full object-contain" />
                 {isRunning && (
                   <div className="absolute top-2 right-2 px-1.5 py-0.5 bg-black/50 text-white text-[10px] rounded backdrop-blur font-medium">
