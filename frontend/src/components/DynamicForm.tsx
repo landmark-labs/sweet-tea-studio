@@ -1091,15 +1091,30 @@ export const DynamicForm = React.memo(function DynamicForm({
     }, [schema, groups.prompts]);
 
     // Group core keys by node ID for proper visual organization
+    // If ANY key from a node has x_core: true, include ALL keys from that node in core
     const strictCoreGroups = useMemo(() => {
         if (!schema) return [] as { id: string; title: string; keys: string[]; order: number }[];
 
-        const groupMap: Record<string, { title: string; keys: string[]; order: number }> = {};
-
+        // First pass: identify which node IDs have ANY core keys
+        const coreNodeIds = new Set<string>();
         Array.from(strictCoreKeys).forEach((key) => {
             const field = schema[key];
             const placement = groups.placements[key];
             const nodeId = String(field?.x_node_id || placement?.groupId || "general");
+            coreNodeIds.add(nodeId);
+        });
+
+        const groupMap: Record<string, { title: string; keys: string[]; order: number }> = {};
+
+        // Second pass: add ALL keys for nodes that have any core keys
+        Object.keys(schema).forEach((key) => {
+            const field = schema[key];
+            const placement = groups.placements[key];
+            const nodeId = String(field?.x_node_id || placement?.groupId || "general");
+
+            // Only include if this node has any core keys
+            if (!coreNodeIds.has(nodeId)) return;
+
             const nodeTitle = placement?.groupTitle || field?.x_title || "General";
 
             // SIMPLE: Use direct position in nodeOrder array, fallback to 999 if not found
@@ -1142,15 +1157,27 @@ export const DynamicForm = React.memo(function DynamicForm({
     const stackGroups = useMemo(() => {
         if (!schema) return [] as { id: string; title: string; keys: string[]; order: number }[];
 
+        // First, identify which node IDs have ANY core keys - these entire nodes should only appear in core
+        const coreNodeIds = new Set<string>();
+        Array.from(strictCoreKeys).forEach((key) => {
+            const field = schema[key];
+            const placement = groups.placements[key];
+            const nodeId = String(field?.x_node_id || placement?.groupId || "general");
+            coreNodeIds.add(nodeId);
+        });
+
         const groupMap: Record<string, { id: string; title: string; keys: string[]; order: number }> = {};
 
         Object.keys(schema).forEach((key) => {
-            if (strictCoreKeys.has(key)) return;
             const placement = groups.placements[key];
             if (!placement) return;
             if (placement.section === "inputs" && placement.source === "annotation") return;
 
             const groupId = String(placement.groupId || "default");
+
+            // Skip entire node groups that have ANY core keys
+            if (coreNodeIds.has(groupId)) return;
+
             const groupTitle = placement.groupTitle || "Configuration";
             const order = Number.isFinite(placement.order) ? placement.order : 999;
 
@@ -1535,6 +1562,10 @@ export const DynamicForm = React.memo(function DynamicForm({
                         {coreGroups.map((group) => {
                             const stackId = `core:${group.id}`;
                             const contentKeys = group.keys.filter((key) => key !== group.bypassKey);
+
+                            // Skip groups that only have a bypass toggle and no actual parameters
+                            if (contentKeys.length === 0) return null;
+
                             const mediaKeys = contentKeys.filter((key) => isMediaUploadField(key, schema[key]));
                             const nonMediaKeys = contentKeys.filter((key) => !isMediaUploadField(key, schema[key]));
                             const promptKeys = contentKeys.filter((key) => promptKeySet.has(key));
@@ -1615,6 +1646,10 @@ export const DynamicForm = React.memo(function DynamicForm({
                         {stackGroupsWithMeta.map((group) => {
                             const stackId = `expanded:${group.id}`;
                             const contentKeys = group.keys.filter((key) => key !== group.bypassKey);
+
+                            // Skip groups that only have a bypass toggle and no actual parameters
+                            if (contentKeys.length === 0) return null;
+
                             const mediaKeys = contentKeys.filter((key) => isMediaUploadField(key, schema[key]));
                             const nonMediaKeys = contentKeys.filter((key) => !isMediaUploadField(key, schema[key]));
                             const promptKeys = contentKeys.filter((key) => promptKeySet.has(key));
