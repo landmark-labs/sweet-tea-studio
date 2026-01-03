@@ -5,7 +5,8 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { UndoRedoBar } from "@/components/UndoRedoBar";
 import { ConnectionIndicator } from "@/components/ConnectionIndicator";
-import { LemonBadge } from "@/components/icons/LemonBadge";
+import brandingLogo from "@/../assets/sweet_tea_studio_branding.png";
+import lemonBadgeLogo from "@/../assets/sweet_tea_studio_lemon_badge.png";
 import { labels } from "@/ui/labels";
 import { api } from "@/lib/api";
 
@@ -88,21 +89,20 @@ export default function Layout() {
       >
         <div className={cn("p-4 border-b border-border/70 flex items-center relative", collapsed ? "justify-center" : "justify-between")}>
           {!collapsed ? (
-            <div>
-              <h1 className="flex items-baseline gap-1 text-xl font-semibold leading-none whitespace-nowrap">
-                <span className="bg-gradient-to-r from-primary via-secondary to-accent bg-clip-text text-transparent">
-                  sweet tea
-                </span>
-                <span className="relative inline-flex items-center justify-center text-foreground ml-0 -mt-[15px]">
-                  <LemonBadge className="absolute h-[64px] w-[102px] left-1/2 top-1/2 -translate-y-1/2 -translate-x-[calc(50%+8px)]" />
-                  <span className="relative z-10 text-sm font-semibold px-2">studio</span>
-                </span>
-              </h1>
-              <p className="text-[10px] text-muted-foreground whitespace-nowrap">a creative workspace</p>
+            <div className="w-full">
+              <img
+                src={brandingLogo}
+                alt="Sweet Tea Studio"
+                className="h-14 w-auto max-w-full object-contain"
+              />
             </div>
           ) : (
-            <div className="absolute left-[calc(50%-5px)] top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center">
-              <LemonBadge className="h-[36px] w-[58px]" />
+            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 -ml-[3px] -mt-[3px] flex items-center justify-center">
+              <img
+                src={lemonBadgeLogo}
+                alt="Sweet Tea Studio"
+                className="h-10 w-auto object-contain"
+              />
             </div>
           )}
           <Button
