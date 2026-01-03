@@ -649,7 +649,7 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
 
             {/* Footer with selection or hint */}
             {images.length > 0 && (
-                <div className="flex-none p-3 border-t border-slate-700 bg-slate-800">
+                <div className="flex-none p-3 border-t border-border/50 bg-background">
                     {selectedPaths.size > 0 ? (
                         <div className="flex flex-col gap-2">
                             <div className="flex flex-nowrap items-center justify-between gap-2">
