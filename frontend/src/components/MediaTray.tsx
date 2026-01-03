@@ -372,7 +372,7 @@ export function MediaTray({ className, onShowInViewer }: MediaTrayProps) {
         </SortableContext>
       </DndContext>
 
-      <div className="flex-none p-3 border-t bg-slate-50">
+      <div className="flex-none p-3 border-t border-slate-700 bg-slate-800">
         <Button
           variant="outline"
           size="sm"

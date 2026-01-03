@@ -18,7 +18,7 @@ import {
     CardHeader,
     CardTitle,
 } from "@/components/ui/card";
-import { Plus, FolderOpen, Archive, Calendar, Hash, Image as ImageIcon, Settings, FolderPlus } from "lucide-react";
+import { Plus, FolderOpen, Archive, Calendar, Hash, Image as ImageIcon, Settings, FolderPlus, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -38,6 +38,9 @@ export default function Projects() {
     const [managingProject, setManagingProject] = useState<Project | null>(null);
     const [newFolderName, setNewFolderName] = useState("");
     const [isAddingFolder, setIsAddingFolder] = useState(false);
+    const [isDeletingFolder, setIsDeletingFolder] = useState<string | null>(null);
+
+    const reservedFolders = new Set(["input", "output", "masks"]);
 
     const fetchProjects = async () => {
         try {
@@ -213,10 +216,41 @@ export default function Projects() {
                             <div className="text-sm font-medium">current folders</div>
                             <ScrollArea className="h-[300px] w-full rounded-md border p-2">
                                 <div className="space-y-1">
-                                    {(managingProject?.config_json?.folders || ["inputs", "output", "masks"]).map((folder) => (
-                                        <div key={folder} className="flex items-center gap-2 text-sm text-muted-foreground px-2 py-1 bg-muted/50 rounded">
-                                            <FolderOpen size={14} />
-                                            <span>{folder}</span>
+                                    {(managingProject?.config_json?.folders || ["input", "output", "masks"]).map((folder) => (
+                                        <div key={folder} className="flex items-center justify-between text-sm text-muted-foreground px-2 py-1 bg-muted/50 rounded">
+                                            <div className="flex items-center gap-2">
+                                                <FolderOpen size={14} />
+                                                <span>{folder}</span>
+                                            </div>
+                                            {!reservedFolders.has(folder) && (
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-6 w-6 text-slate-400 hover:text-red-500"
+                                                    onClick={async () => {
+                                                        if (!managingProject) return;
+                                                        if (!confirm(`Delete folder "${folder}"? This only works if the folder is empty.`)) return;
+                                                        setIsDeletingFolder(folder);
+                                                        try {
+                                                            const updated = await api.deleteProjectFolder(managingProject.id, folder);
+                                                            setProjects(prev => prev.map(p => p.id === updated.id ? updated : p));
+                                                            setManagingProject(updated);
+                                                            if (generation?.refreshProjects) {
+                                                                generation.refreshProjects();
+                                                            }
+                                                        } catch (e) {
+                                                            console.error("Failed to delete folder:", e);
+                                                            alert((e as any).message || "Failed to delete folder");
+                                                        } finally {
+                                                            setIsDeletingFolder(null);
+                                                        }
+                                                    }}
+                                                    disabled={isDeletingFolder === folder}
+                                                    title="Delete empty folder"
+                                                >
+                                                    <Trash2 size={12} />
+                                                </Button>
+                                            )}
                                         </div>
                                     ))}
                                 </div>

@@ -879,6 +879,17 @@ export const api = {
         return res.json();
     },
 
+    deleteProjectFolder: async (projectId: number, folderName: string): Promise<Project> => {
+        const res = await fetch(`${API_BASE}/projects/${projectId}/folders/${encodeURIComponent(folderName)}`, {
+            method: "DELETE",
+        });
+        if (!res.ok) {
+            const errorData = await res.json().catch(() => ({}));
+            throw new Error(errorData.detail || "Failed to delete folder");
+        }
+        return res.json();
+    },
+
     archiveProject: async (projectId: number): Promise<Project> => {
         const res = await fetch(`${API_BASE}/projects/${projectId}/archive`, {
             method: "POST",

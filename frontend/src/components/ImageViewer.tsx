@@ -595,11 +595,11 @@ export const ImageViewer = React.memo(function ImageViewer({
 
     return (
         <>
-            <div ref={containerRef} className="h-full flex flex-col bg-white relative">
+            <div ref={containerRef} className="h-full flex flex-col bg-slate-900 relative">
 
                 {/* Image Area */}
                 <div
-                    className="flex-1 flex items-center justify-center p-8 overflow-hidden bg-slate-900/5 backdrop-blur-3xl cursor-default relative"
+                    className="flex-1 flex items-center justify-center p-2 overflow-hidden bg-black/50 cursor-default relative"
                     onDoubleClick={toggleFullScreen}
                     onContextMenu={handleContextMenu}
                 >
@@ -645,8 +645,7 @@ export const ImageViewer = React.memo(function ImageViewer({
                             controls
                             preload="metadata"
                             playsInline
-                            draggable
-                            onDragStart={handleMediaDragStart}
+                            draggable={false}
                         />
                     ) : (
                         <img

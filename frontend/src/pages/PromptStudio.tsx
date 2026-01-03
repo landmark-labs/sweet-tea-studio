@@ -2344,7 +2344,7 @@ export default function PromptStudio() {
 
       {/* 1. Left Column - Prompt Constructor (Collapsible) */}
       <div
-        className={`flex-none bg-white border-r hidden xl:flex flex-col overflow-hidden transition-all duration-200 ${promptConstructorCollapsed ? 'w-8 cursor-pointer hover:bg-slate-50' : 'w-[380px]'
+        className={`flex-none bg-amber-50/80 border-r hidden xl:flex flex-col overflow-hidden transition-all duration-200 ${promptConstructorCollapsed ? 'w-8 cursor-pointer hover:bg-amber-100/50' : 'w-[380px]'
           }`}
         onClick={promptConstructorCollapsed ? () => setPromptConstructorCollapsed(false) : undefined}
       >
@@ -2360,8 +2360,8 @@ export default function PromptStudio() {
           // Expanded state - full prompt constructor
           <>
             {/* Collapse toggle header */}
-            <div className="flex-none flex items-center justify-between px-3 py-2 border-b bg-slate-50/50">
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">prompt constructor</span>
+            <div className="flex-none flex items-center justify-between px-3 py-2 border-b bg-amber-100/50">
+              <span className="text-xs font-bold text-slate-800 tracking-wider font-['Space_Grotesk']">PROMPT CONSTRUCTOR</span>
               <button
                 onClick={() => setPromptConstructorCollapsed(true)}
                 className="p-1 rounded hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors"
@@ -2397,12 +2397,12 @@ export default function PromptStudio() {
 
         {/* Sticky Header Section */}
         <div className="flex-none p-3 space-y-2 border-b bg-slate-50/50 backdrop-blur z-10">
-          <div className="text-xs font-bold text-slate-800 tracking-wider">configurator</div>
+          <div className="text-xs font-bold text-slate-800 tracking-wider font-['Space_Grotesk']">CONFIGURATOR</div>
 
           {/* Project + Destination Row */}
           <div className="flex gap-2 items-end">
             <div className="flex-1">
-              <label className="text-[9px] font-bold text-slate-400 lowercase tracking-wider">project</label>
+              <label className="text-xs font-medium text-slate-600">project</label>
               <Select
                 value={selectedProjectId || "none"}
                 onValueChange={(value) => {
@@ -2439,12 +2439,12 @@ export default function PromptStudio() {
             {/* Destination Selector (Compact) - hidden for drafts project which has no subfolders */}
             {selectedProjectId && selectedProject?.slug !== "drafts" && (
               <div className="flex-1">
-                <label className="text-[9px] font-bold text-slate-400 lowercase tracking-wider">destination</label>
+                <label className="text-xs font-medium text-slate-600">destination</label>
                 <Select
                   value={generationTarget || "engine-default"}
                   onValueChange={(value) => setGenerationTarget(value === "engine-default" ? "" : value)}
                 >
-                  <SelectTrigger className="h-7 text-[10px]">
+                  <SelectTrigger className="h-7 text-xs">
                     <SelectValue placeholder="output" />
                   </SelectTrigger>
                   <SelectContent>
@@ -2621,7 +2621,7 @@ export default function PromptStudio() {
       </div>
 
       {/* 3. Center Preview with Navigation and Auto-Discard */}
-      <div className="flex-1 overflow-hidden relative bg-slate-50 flex flex-col">
+      <div className="flex-1 overflow-hidden relative bg-slate-900/90 flex flex-col">
         <ErrorBoundary>
           <ImageViewer
             images={projectGalleryImages.length > 0

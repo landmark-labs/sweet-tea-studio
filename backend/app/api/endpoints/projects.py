@@ -266,6 +266,82 @@ def add_project_folder(
     )
 
 
+@router.delete("/{project_id}/folders/{folder_name}", response_model=ProjectRead)
+def delete_project_folder(
+    project_id: int,
+    folder_name: str,
+    session: Session = Depends(get_session)
+):
+    """
+    Delete an empty subfolder from a project.
+    
+    Only allows deletion if folder is empty and not reserved (input, output, masks).
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    project = session.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    reserved_folders = {"input", "output", "masks"}
+    if folder_name in reserved_folders:
+        raise HTTPException(status_code=400, detail=f"Cannot delete reserved folder '{folder_name}'")
+    
+    config = project.config_json or {"folders": ["input", "output", "masks"]}
+    folders = list(config.get("folders", []))
+    
+    if folder_name not in folders:
+        raise HTTPException(status_code=404, detail=f"Folder '{folder_name}' not found in project")
+    
+    active_engine = session.exec(select(Engine).where(Engine.is_active == True)).first()
+    folder_path = None
+    
+    if active_engine and active_engine.input_dir and folder_name != "output":
+        folder_path = settings.get_project_input_dir_in_comfy(active_engine.input_dir, project.slug) / folder_name
+    
+    if not folder_path or not folder_path.exists():
+        if active_engine and active_engine.output_dir:
+            legacy_path = settings.get_project_dir_in_comfy(active_engine.output_dir, project.slug) / folder_name
+            if legacy_path.exists():
+                folder_path = legacy_path
+    
+    if not folder_path or not folder_path.exists():
+        local_path = settings.get_project_dir(project.slug) / folder_name
+        if local_path.exists():
+            folder_path = local_path
+    
+    if folder_path and folder_path.exists():
+        try:
+            contents = list(folder_path.iterdir())
+            if contents:
+                raise HTTPException(status_code=400, detail=f"Cannot delete non-empty folder '{folder_name}'. It contains {len(contents)} item(s).")
+            folder_path.rmdir()
+            logger.info(f"[Projects] Deleted empty folder: {folder_path}")
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"[Projects] Failed to delete folder {folder_path}: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to delete folder: {str(e)}")
+    
+    folders.remove(folder_name)
+    project.config_json = {**config, "folders": folders}
+    project.updated_at = datetime.utcnow()
+    
+    session.add(project)
+    session.commit()
+    session.refresh(project)
+    
+    count = session.exec(
+        select(func.count(Image.id))
+        .join(Job, Image.job_id == Job.id)
+        .where(Job.project_id == project_id)
+        .where(Image.is_deleted == False)
+    ).one()
+    
+    return ProjectRead(**project.dict(), image_count=count or 0, last_activity=project.updated_at)
+
+
 @router.patch("/{project_id}", response_model=ProjectRead)
 def update_project(
     project_id: int,

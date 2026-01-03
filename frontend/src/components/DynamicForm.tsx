@@ -624,6 +624,7 @@ const NodeStackRow = React.memo(function NodeStackRow({
                     aria-expanded={isOpen}
                     onPointerEnter={onHoverOpen}
                     onPointerLeave={onHoverClose}
+                    onClick={onFocusOpen}
                     onFocus={onFocusOpen}
                     onBlur={(e) => {
                         if (isPinned) return;
@@ -1249,6 +1250,12 @@ export const DynamicForm = React.memo(function DynamicForm({
     const hoverCloseTimerRef = useRef<NodeJS.Timeout | null>(null);
     const [mediaExpanded, setMediaExpanded] = useState<Record<string, boolean>>({});
     const [promptExpanded, setPromptExpanded] = useState<Record<string, boolean>>({});
+    const [expandedControlsCollapsed, setExpandedControlsCollapsed] = useState(() => {
+        if (typeof window !== "undefined") {
+            return localStorage.getItem("ds_expanded_controls_collapsed") === "true";
+        }
+        return false;
+    });
     const [pinnedPosition, setPinnedPosition] = useState<{
         top: number;
         left: number;
@@ -1540,7 +1547,7 @@ export const DynamicForm = React.memo(function DynamicForm({
 
             <div className="space-y-4 p-4 bg-white rounded-lg border border-slate-200">
                 <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider">core pipe controls</h3>
+                    <h3 className="text-xs font-bold text-slate-800 tracking-wider font-['Space_Grotesk']">CORE PIPE CONTROLS</h3>
                     {onReset && (
                         <Button
                             type="button"
@@ -1633,11 +1640,21 @@ export const DynamicForm = React.memo(function DynamicForm({
             </div>
 
             <div className="space-y-3 p-4 bg-white rounded-lg border border-slate-200">
-                <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider">EXPANDED CONTROLS</h3>
-                    <span className="text-[10px] text-slate-400 uppercase tracking-wider">hover a node to edit</span>
+                <div
+                    className="flex items-center justify-between cursor-pointer select-none"
+                    onClick={() => {
+                        const next = !expandedControlsCollapsed;
+                        setExpandedControlsCollapsed(next);
+                        localStorage.setItem("ds_expanded_controls_collapsed", String(next));
+                    }}
+                >
+                    <h3 className="text-xs font-bold text-slate-800 tracking-wider font-['Space_Grotesk']">EXPANDED CONTROLS</h3>
+                    <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-slate-400">hover a node to edit</span>
+                        {expandedControlsCollapsed ? <ChevronDown className="w-4 h-4 text-slate-400" /> : <ChevronUp className="w-4 h-4 text-slate-400" />}
+                    </div>
                 </div>
-                {stackGroupsWithMeta.length === 0 ? (
+                {!expandedControlsCollapsed && (stackGroupsWithMeta.length === 0 ? (
                     <div className="text-xs text-slate-400 italic py-1">
                         No expanded controls configured.
                     </div>
@@ -1713,7 +1730,7 @@ export const DynamicForm = React.memo(function DynamicForm({
                             );
                         })}
                     </div>
-                )}
+                ))}
             </div>
         </form>
     );

@@ -560,7 +560,7 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
                     <ChevronLeft className="h-4 w-4" />
                 </Button>
                 <div className="mt-4 [writing-mode:vertical-rl] [text-orientation:mixed] text-xs text-slate-400 font-medium tracking-wider whitespace-nowrap">
-                    project gallery
+                    PROJECT GALLERY
                 </div>
             </div>
         );
@@ -649,7 +649,7 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
 
             {/* Footer with selection or hint */}
             {images.length > 0 && (
-                <div className="flex-none p-3 border-t bg-slate-50">
+                <div className="flex-none p-3 border-t border-slate-700 bg-slate-800">
                     {selectedPaths.size > 0 ? (
                         <div className="flex flex-col gap-2">
                             <div className="flex flex-nowrap items-center justify-between gap-2">

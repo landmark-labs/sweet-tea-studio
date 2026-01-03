@@ -1308,10 +1308,10 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
 
 
     return (
-        <div className="prompt-constructor h-full flex flex-col bg-slate-50 border-t border-slate-200">
+        <div className="prompt-constructor h-full flex flex-col border-t border-amber-200">
 
             {/* 2. Snippet Creator (Standing) */}
-            <div data-snippet-editor="true" className={cn("p-3 border-b border-dashed border-slate-200 shrink-0 transition-colors", isEditing ? "bg-amber-50" : "bg-slate-50")}>
+            <div data-snippet-editor="true" className={cn("p-3 border-b border-dashed border-amber-200 shrink-0 transition-colors bg-amber-50/60", isEditing && "bg-amber-100/60")}>
                 <div className="flex gap-2">
                     <div className="flex-1 space-y-2">
                         <div className="flex justify-between items-center">
@@ -1361,7 +1361,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
 
             {/* 3. Library (Horizontal Scroll)
                 Grid layout keeps snippet chips aligned for tessellation and consistent sizing. */}
-            <div className="bg-white px-3 py-2 border-b shadow-sm shrink-0">
+            <div className="px-3 py-2 border-b border-amber-200 shadow-sm shrink-0 bg-white/60">
                 <div className="mb-2">
                     <span className="text-[10px] font-bold text-slate-400 uppercase block">Snippets (Double-click to Add, Drag to Reorder, Long-press to Edit)</span>
                 </div>
@@ -1402,7 +1402,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
             </div>
 
             {/* 4. Canvas (Vertical / Flex Wrap) */}
-            <div className="flex-1 overflow-y-auto p-4 bg-slate-100/50 relative">
+            <div className="flex-1 overflow-y-auto p-4 relative bg-amber-50/60">
                 {!isTargetValid ? (
                     <div className="h-full flex flex-col items-center justify-center text-slate-400 text-sm select-none gap-2 opacity-60">
                         <CornerDownLeft size={32} />
@@ -1444,7 +1444,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
                             strategy={rectSortingStrategy}
                         >
                             {/* Canvas grid uses 2-column layout to match snippet bank. */}
-                            <div className="grid grid-cols-2 auto-rows-[minmax(32px,auto)] items-start gap-2 min-h-[100px] p-2 rounded-xl border-2 border-dashed border-slate-300 bg-white/80 transition-colors hover:bg-white/100 relative group/canvas">
+                            <div className="grid grid-cols-2 auto-rows-[minmax(32px,auto)] items-start gap-2 min-h-[100px] p-2 rounded-xl border-2 border-dashed border-amber-300 bg-amber-100/40 transition-colors hover:bg-amber-100/60 relative group/canvas">
 
                                 {items.length === 0 && (
                                     <div className="w-full text-center py-10 text-slate-400 text-sm select-none italic flex flex-col items-center gap-2">
