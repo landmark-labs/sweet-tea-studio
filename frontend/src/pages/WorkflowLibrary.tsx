@@ -124,6 +124,11 @@ const NodeCard = ({ node, schemaEdits, setSchemaEdits }: NodeCardProps) => {
                     {!isExpanded && (
                         <span className="text-[10px] text-slate-400 ml-1">({paramCount} params)</span>
                     )}
+                    {node.hiddenInControls && (
+                        <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium uppercase text-amber-700">
+                            Hidden
+                        </span>
+                    )}
                 </div>
                 <div className="flex items-center gap-3">
                     <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
@@ -834,6 +839,7 @@ export default function WorkflowLibrary() {
                                         .map(([id, node]: [string, any]) => {
                                             const bypassKey = `__bypass_${id}`;
                                             const hasBypass = !!schemaEdits[bypassKey];
+                                            const isBypassedByDefault = hasBypass && schemaEdits[bypassKey]?.default === true;
 
                                             return (
                                                 <div key={id} className={cn("flex justify-between items-center p-2 border rounded hover:bg-slate-50 transition-colors", hasBypass && "bg-blue-50 border-blue-200")}>
@@ -841,30 +847,52 @@ export default function WorkflowLibrary() {
                                                         <div className="font-bold text-sm flex items-center gap-2">
                                                             {node._meta?.title || node.title || `Node ${id}`}
                                                             {hasBypass && <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-mono">BYPASSABLE</span>}
+                                                            {isBypassedByDefault && <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-mono">DEFAULT OFF</span>}
                                                         </div>
                                                         <div className="text-xs text-slate-500">{node.class_type}</div>
                                                     </div>
-                                                    <Button
-                                                        size="sm"
-                                                        variant={hasBypass ? "destructive" : "outline"}
-                                                        onClick={() => {
-                                                            const s = { ...schemaEdits };
-                                                            if (hasBypass) {
-                                                                delete s[bypassKey];
-                                                            } else {
-                                                                s[bypassKey] = {
-                                                                    title: `Bypass ${node._meta?.title || node.title || id}`,
-                                                                    widget: "toggle",
-                                                                    x_node_id: id,
-                                                                    type: "boolean",
-                                                                    default: false
-                                                                };
-                                                            }
-                                                            setSchemaEdits(s);
-                                                        }}
-                                                    >
-                                                        {hasBypass ? "Remove" : "Enable"}
-                                                    </Button>
+                                                    <div className="flex items-center gap-2">
+                                                        {hasBypass && (
+                                                            <div className="flex items-center gap-2 mr-2">
+                                                                <span className="text-[10px] text-slate-500">
+                                                                    {isBypassedByDefault ? "off by default" : "on by default"}
+                                                                </span>
+                                                                <Switch
+                                                                    checked={isBypassedByDefault}
+                                                                    onCheckedChange={(checked) => {
+                                                                        const s = { ...schemaEdits };
+                                                                        s[bypassKey] = {
+                                                                            ...s[bypassKey],
+                                                                            default: checked
+                                                                        };
+                                                                        setSchemaEdits(s);
+                                                                    }}
+                                                                    className={cn("h-4 w-7", isBypassedByDefault ? "bg-amber-500" : "bg-slate-200")}
+                                                                />
+                                                            </div>
+                                                        )}
+                                                        <Button
+                                                            size="sm"
+                                                            variant={hasBypass ? "destructive" : "outline"}
+                                                            onClick={() => {
+                                                                const s = { ...schemaEdits };
+                                                                if (hasBypass) {
+                                                                    delete s[bypassKey];
+                                                                } else {
+                                                                    s[bypassKey] = {
+                                                                        title: `Bypass ${node._meta?.title || node.title || id}`,
+                                                                        widget: "toggle",
+                                                                        x_node_id: id,
+                                                                        type: "boolean",
+                                                                        default: false
+                                                                    };
+                                                                }
+                                                                setSchemaEdits(s);
+                                                            }}
+                                                        >
+                                                            {hasBypass ? "Remove" : "Enable"}
+                                                        </Button>
+                                                    </div>
                                                 </div>
                                             );
                                         })
