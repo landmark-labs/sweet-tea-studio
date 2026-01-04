@@ -125,6 +125,57 @@ def migrate():
         cursor.execute("CREATE INDEX IF NOT EXISTS ix_job_project_id ON job (project_id)")
         conn.commit()
 
+        # Create run_execution_stats table for execution telemetry
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='run_execution_stats'")
+        if not cursor.fetchone():
+            print("Creating run_execution_stats table...")
+            cursor.execute('''
+                CREATE TABLE run_execution_stats (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    job_id INTEGER NOT NULL,
+                    total_duration_ms INTEGER,
+                    queue_wait_ms INTEGER,
+                    peak_vram_mb REAL,
+                    peak_ram_mb REAL,
+                    vram_before_mb REAL,
+                    vram_after_mb REAL,
+                    ram_before_mb REAL,
+                    ram_after_mb REAL,
+                    gpu_name VARCHAR,
+                    cuda_version VARCHAR,
+                    torch_version VARCHAR,
+                    device_count INTEGER,
+                    offload_detected BOOLEAN,
+                    raw_system_stats TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (job_id) REFERENCES job(id)
+                )
+            ''')
+            cursor.execute("CREATE INDEX ix_run_execution_stats_job_id ON run_execution_stats (job_id)")
+            conn.commit()
+            print("Migration successful: Created run_execution_stats table.")
+
+        # Create run_node_timings table for per-node execution timing
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='run_node_timings'")
+        if not cursor.fetchone():
+            print("Creating run_node_timings table...")
+            cursor.execute('''
+                CREATE TABLE run_node_timings (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    job_id INTEGER NOT NULL,
+                    node_id VARCHAR NOT NULL,
+                    node_type VARCHAR,
+                    start_offset_ms INTEGER,
+                    duration_ms INTEGER,
+                    execution_order INTEGER,
+                    from_cache BOOLEAN DEFAULT 0,
+                    FOREIGN KEY (job_id) REFERENCES job(id)
+                )
+            ''')
+            cursor.execute("CREATE INDEX ix_run_node_timings_job_id ON run_node_timings (job_id)")
+            conn.commit()
+            print("Migration successful: Created run_node_timings table.")
+
         # Create FTS table for gallery search.
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='gallery_fts'")
         if not cursor.fetchone():
