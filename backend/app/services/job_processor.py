@@ -516,7 +516,8 @@ def _dump_failed_prompt_graph(
     bypass_nodes: list[str],
     params: dict,
     error: str,
-) -> None:
+) -> list[str]:
+    written: list[str] = []
     try:
         from app.core.config import settings
 
@@ -531,10 +532,28 @@ def _dump_failed_prompt_graph(
         # Overwrite last error dump to avoid clutter.
         dump_path = settings.meta_dir / "debug_last_graph_error.json"
         with open(dump_path, "w", encoding="utf-8") as f:
-            json.dump(payload, f, indent=2)
+            json.dump(payload, f, indent=2, default=str)
+        written.append(str(dump_path))
         print(f"[JobProcessor] Wrote ComfyUI error graph dump: {dump_path}")
     except Exception as dump_err:
         print(f"[JobProcessor] Failed to dump ComfyUI error graph: {dump_err}")
+        return written
+
+    # Also write to backend/logs for easier discovery when SWEET_TEA_ROOT_DIR differs.
+    try:
+        from pathlib import Path
+
+        backend_dir = Path(__file__).resolve().parents[2]
+        logs_dir = backend_dir / "logs"
+        logs_dir.mkdir(parents=True, exist_ok=True)
+        logs_dump_path = logs_dir / "debug_last_graph_error.json"
+        with open(logs_dump_path, "w", encoding="utf-8") as f:
+            json.dump(payload, f, indent=2, default=str)
+        written.append(str(logs_dump_path))
+        print(f"[JobProcessor] Wrote ComfyUI error graph dump: {logs_dump_path}")
+    except Exception as dump_err:
+        print(f"[JobProcessor] Failed to dump ComfyUI error graph to backend/logs: {dump_err}")
+    return written
 
 
 def _build_node_mapping_from_schema(schema: dict) -> dict:
@@ -1239,7 +1258,10 @@ def process_job(job_id: int):
             try:
                 prompt_id = client.queue_prompt(final_graph)
             except ComfyResponseError as e:
-                _dump_failed_prompt_graph(job_id, final_graph, bypass_nodes, working_params, str(e))
+                dump_paths = _dump_failed_prompt_graph(job_id, final_graph, bypass_nodes, working_params, str(e))
+                if dump_paths:
+                    joined = "; ".join(dump_paths)
+                    raise ComfyResponseError(f"{e} (debug graph: {joined})") from e
                 raise
             job.comfy_prompt_id = prompt_id
             session.add(job)

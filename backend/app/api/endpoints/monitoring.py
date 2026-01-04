@@ -12,6 +12,7 @@ from app.services.monitoring import monitor
 from app.services.comfy_watchdog import watchdog
 from app.core.websockets import manager
 from app.services.job_processor import get_sequence_cache_stats
+from app.core.config import settings
 
 
 router = APIRouter()
@@ -67,6 +68,41 @@ def _rotate_client_log_if_needed() -> None:
         return
 
 
+def _get_git_sha() -> str | None:
+    env_sha = os.getenv("SWEET_TEA_GIT_SHA")
+    if env_sha:
+        return env_sha.strip()[:12]
+
+    try:
+        repo_root = Path(__file__).resolve().parents[4]
+        git_dir = repo_root / ".git"
+        head_path = git_dir / "HEAD"
+        if not head_path.exists():
+            return None
+
+        head = head_path.read_text(encoding="utf-8").strip()
+        if head.startswith("ref:"):
+            ref = head.split(" ", 1)[1].strip()
+            ref_path = git_dir / ref
+            if ref_path.exists():
+                return ref_path.read_text(encoding="utf-8").strip()[:12]
+
+            packed = git_dir / "packed-refs"
+            if packed.exists():
+                for line in packed.read_text(encoding="utf-8").splitlines():
+                    text = line.strip()
+                    if not text or text.startswith("#") or text.startswith("^"):
+                        continue
+                    sha, ref_name = text.split(" ", 1)
+                    if ref_name.strip() == ref:
+                        return sha.strip()[:12]
+            return None
+
+        return head[:12] if head else None
+    except Exception:
+        return None
+
+
 @router.get("/metrics")
 def read_metrics():
     return monitor.get_metrics()
@@ -103,6 +139,13 @@ def get_engine_health() -> List[dict]:
 @router.get("/diagnostics")
 def get_diagnostics():
     return {
+        "app": {
+            "version": settings.APP_VERSION,
+            "git_sha": _get_git_sha(),
+            "root_dir": str(settings.ROOT_DIR),
+            "meta_dir": str(settings.meta_dir),
+            "database_path": str(settings.database_path),
+        },
         "process": _process_diagnostics(),
         "websockets": manager.get_stats(),
         "sequence_cache": get_sequence_cache_stats(),
