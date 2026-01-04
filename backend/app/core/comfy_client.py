@@ -105,9 +105,25 @@ class ComfyClient:
         p = {"prompt": prompt, "client_id": self.client_id}
         data = json.dumps(p).encode('utf-8')
         try:
-            req = urllib.request.Request(self._get_url("/prompt"), data=data)
+            req = urllib.request.Request(
+                self._get_url("/prompt"),
+                data=data,
+                headers={"Content-Type": "application/json"},
+            )
             with urllib.request.urlopen(req, timeout=10) as response:
-                return json.loads(response.read())['prompt_id']
+                payload = json.loads(response.read())
+                node_errors = payload.get("node_errors")
+                if isinstance(node_errors, dict) and node_errors:
+                    raise ComfyResponseError(
+                        f"ComfyUI prompt validation failed: {json.dumps(node_errors, ensure_ascii=False)}"
+                    )
+
+                prompt_id = payload.get("prompt_id")
+                if not isinstance(prompt_id, str) or not prompt_id:
+                    raise ComfyResponseError(
+                        f"ComfyUI response missing prompt_id: {json.dumps(payload, ensure_ascii=False)}"
+                    )
+                return prompt_id
         except urllib.error.HTTPError as e:
             error_body = e.read().decode('utf-8')
             raise ComfyResponseError(f"ComfyUI Error {e.code}: {error_body}") from e

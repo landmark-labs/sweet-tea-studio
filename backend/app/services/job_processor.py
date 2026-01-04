@@ -933,6 +933,10 @@ def process_job(job_id: int):
             manager.close_job_sync(str(job_id))
             return
 
+        final_graph: dict | None = None
+        bypass_nodes: list[str] = []
+        working_params: dict = {}
+
         try:
             schema = workflow.input_schema or {}
             working_params = _coerce_params_with_schema(schema, job.input_params or {})
@@ -945,14 +949,19 @@ def process_job(job_id: int):
             session.commit()
             
             manager.broadcast_sync({"type": "status", "status": "running", "job_id": job_id}, str(job_id))
-            
+             
             client = ComfyClient(engine)
             final_graph = copy.deepcopy(workflow.graph_json)
-            
+             
             # Handle random seed (-1 or "-1") for ANY parameter named like "seed"
             # This handles "seed", "seed (KSampler)", "noise_seed", etc.
             bypass_nodes = []
-            
+
+            # Also respect ComfyUI graph-level bypass markers (mode: 4) for imported workflows.
+            for node_id, node in list(final_graph.items()):
+                if isinstance(node, dict) and node.get("mode") == 4:
+                    bypass_nodes.append(str(node_id))
+             
             for key in list(working_params.keys()):
                  # Seed Handling
                  if "seed" in key.lower() and str(working_params[key]) == "-1":
@@ -1525,6 +1534,8 @@ def process_job(job_id: int):
                     session.commit()
             
         except ComfyConnectionError as e:
+            if isinstance(final_graph, dict):
+                _dump_failed_prompt_graph(job_id, final_graph, bypass_nodes, working_params, str(e))
             job.status = "failed"
             job.error = str(e)
             session.add(job)
@@ -1533,6 +1544,8 @@ def process_job(job_id: int):
             manager.close_job_sync(str(job_id))
 
         except Exception as e:
+            if isinstance(final_graph, dict):
+                _dump_failed_prompt_graph(job_id, final_graph, bypass_nodes, working_params, str(e))
             job.status = "failed"
             job.error = str(e)
             session.add(job)

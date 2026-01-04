@@ -138,6 +138,24 @@ def get_engine_health() -> List[dict]:
 
 @router.get("/diagnostics")
 def get_diagnostics():
+    meta_error_dump = settings.meta_dir / "debug_last_graph_error.json"
+
+    backend_dir = Path(__file__).resolve().parents[3]
+    backend_error_dump = backend_dir / "logs" / "debug_last_graph_error.json"
+
+    def describe_path(path: Path) -> dict:
+        try:
+            exists = path.exists()
+        except OSError:
+            exists = False
+        size_bytes = None
+        if exists:
+            try:
+                size_bytes = path.stat().st_size
+            except OSError:
+                size_bytes = None
+        return {"path": str(path), "exists": exists, "size_bytes": size_bytes}
+
     return {
         "app": {
             "version": settings.APP_VERSION,
@@ -145,6 +163,12 @@ def get_diagnostics():
             "root_dir": str(settings.ROOT_DIR),
             "meta_dir": str(settings.meta_dir),
             "database_path": str(settings.database_path),
+            "debug": {
+                "last_graph_error": {
+                    "meta_dir": describe_path(meta_error_dump),
+                    "backend_logs": describe_path(backend_error_dump),
+                },
+            },
         },
         "process": _process_diagnostics(),
         "websockets": manager.get_stats(),
