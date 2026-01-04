@@ -188,10 +188,9 @@ def _normalize_comfy_type(type_name: object) -> str | None:
 def _comfy_types_match(input_type: str | None, output_type: str | None) -> bool:
     if not input_type or not output_type:
         return False
-    if input_type in ("*", "ANY"):
-        return True
-    if output_type in ("*", "ANY"):
-        return True
+    # For bypass pass-through mapping we only consider exact type matches safe.
+    # Wildcard inputs (ANY/*) are intentionally NOT treated as compatible here
+    # because the bypassed node may be performing a type conversion.
     return input_type == output_type
 
 

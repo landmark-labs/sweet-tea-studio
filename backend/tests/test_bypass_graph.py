@@ -94,3 +94,31 @@ def test_bypass_disconnects_when_node_type_missing_from_object_info():
 
     assert "11" not in graph
     assert "image" not in graph["12"]["inputs"]
+
+
+def test_bypass_does_not_passthrough_any_typed_inputs():
+    graph = {
+        "1": {
+            "class_type": "IntConstant",
+            "inputs": {"value": 7},
+        },
+        "2": {
+            "class_type": "CustomToImage",
+            "inputs": {"value": ["1", 0]},
+        },
+        "3": {
+            "class_type": "SomeConsumer",
+            "inputs": {"image": ["2", 0]},
+        },
+    }
+
+    object_info = {
+        "IntConstant": {"output": ["INT"], "input": {"required": {"value": ["INT", {"default": 0}]}}},
+        "CustomToImage": {"output": ["IMAGE"], "input": {"required": {"value": ["ANY", {}]}}},
+        "SomeConsumer": {"input": {"required": {"image": ["IMAGE", {}]}}, "output": ["IMAGE"]},
+    }
+
+    apply_bypass_to_graph(graph, ["2"], object_info=object_info)
+
+    assert "2" not in graph
+    assert "image" not in graph["3"]["inputs"]
