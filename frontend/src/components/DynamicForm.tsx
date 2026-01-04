@@ -14,6 +14,7 @@ import { PromptAutocompleteTextarea } from "@/components/PromptAutocompleteTexta
 import { api } from "@/lib/api";
 import { PromptItem } from "@/lib/types";
 import { formDataAtom, formFieldAtom, setFormDataAtom } from "@/lib/atoms/formAtoms";
+import { formatFloatDisplay } from "@/lib/formatters";
 import { ChevronDown, ChevronUp, Pin } from "lucide-react";
 
 type FormSection = "inputs" | "prompts" | "loras" | "nodes";
@@ -208,7 +209,8 @@ const FieldRenderer = React.memo(function FieldRenderer({
 
     // Inline layout for non-prompt fields (label on left)
     const isNumberType = field.type === "integer" || field.type === "number" || field.type === "float";
-    const currentVal = String(value ?? "");
+    const rawVal = String(value ?? "");
+    const currentVal = isNumberType ? formatFloatDisplay(rawVal) : rawVal;
 
     return (
         <div className="flex items-center gap-2 py-0.5">
