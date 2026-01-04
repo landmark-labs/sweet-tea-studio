@@ -146,7 +146,7 @@ export const ImageViewer = React.memo(function ImageViewer({
         : (lockedImage || displayImages[0]);
 
     // Calculate the effective index for UI state (buttons)
-    // This allows arrows to disable correctly even when not in explicit navigation mode
+    // This allows arrows to disable correctly even when not in explicit navigation mode.
     const effectiveIndex = React.useMemo(() => {
         if (navigationMode) return selectedIndex;
         if (!currentImage) return -1;
