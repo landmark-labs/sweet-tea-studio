@@ -9,12 +9,36 @@ import websocket
 import time
 import socket
 import os
+from dataclasses import dataclass, field
 from typing import Dict, Any, List, Optional
 from app.models.engine import Engine
+
+
+@dataclass
+class NodeTimingInfo:
+    """Timing info for a single node execution."""
+    node_id: str
+    node_type: Optional[str] = None
+    start_time_ms: Optional[float] = None
+    end_time_ms: Optional[float] = None
+    duration_ms: Optional[int] = None
+    execution_order: int = 0
+    from_cache: bool = False
+    vram_mb: Optional[float] = None  # VRAM usage at node start (if sampled)
+
+
+@dataclass
+class ExecutionMetrics:
+    """Execution metrics collected during a run."""
+    total_duration_ms: int = 0
+    node_timings: List[NodeTimingInfo] = field(default_factory=list)
+    cached_nodes: List[str] = field(default_factory=list)
+
 
 class ComfyConnectionError(Exception):
     """Raised when unable to connect to ComfyUI instance."""
     pass
+
 
 class ComfyResponseError(Exception):
     """Raised when ComfyUI returns an error response."""
@@ -201,12 +225,25 @@ class ComfyClient:
 
 
 
-    def get_images(self, prompt_id: str, progress_callback=None, on_image_callback=None) -> List[Dict[str, Any]]:
+    def get_images(
+        self,
+        prompt_id: str,
+        progress_callback=None,
+        on_image_callback=None,
+        track_timing: bool = False,
+        workflow_graph: Optional[Dict[str, Any]] = None,
+    ) -> tuple[List[Dict[str, Any]], Optional[ExecutionMetrics]]:
         """
         Wait for job completion and retrieve output images.
         Optional progress_callback(data: dict) called on updates.
         Optional on_image_callback(data: dict) called when an image is received.
         Also captures images sent via SaveImageWebsocket node.
+        
+        If track_timing=True, returns ExecutionMetrics with node timing data.
+        workflow_graph is used to look up node class types for timing info.
+        
+        Returns:
+            Tuple of (output_images_list, execution_metrics_or_none)
         """
         if not self.ws:
             self.connect()
@@ -246,6 +283,13 @@ class ComfyClient:
         except ValueError:
             preview_max_fps = 2.0
         preview_min_interval = (1 / preview_max_fps) if preview_max_fps > 0 else None
+        
+        # Timing tracking (when enabled)
+        execution_start_time_ms: Optional[float] = None
+        node_timing_map: Dict[str, NodeTimingInfo] = {}  # node_id -> timing info
+        current_node_id: Optional[str] = None
+        node_execution_order: int = 0
+        cached_nodes: List[str] = []
 
         try:
             while True:
@@ -296,6 +340,35 @@ class ComfyClient:
 
                     if message['type'] == 'executing':
                         data = message['data']
+                        current_time_ms = time.time() * 1000
+                        
+                        # Track timing if enabled
+                        if track_timing:
+                            if execution_start_time_ms is None:
+                                execution_start_time_ms = current_time_ms
+                            
+                            # Close out previous node timing
+                            if current_node_id and current_node_id in node_timing_map:
+                                prev_timing = node_timing_map[current_node_id]
+                                prev_timing.end_time_ms = current_time_ms
+                                if prev_timing.start_time_ms:
+                                    prev_timing.duration_ms = int(current_time_ms - prev_timing.start_time_ms)
+                            
+                            # Start timing for new node
+                            new_node_id = data.get('node')
+                            if new_node_id and new_node_id not in node_timing_map:
+                                node_execution_order += 1
+                                node_type = None
+                                if workflow_graph and new_node_id in workflow_graph:
+                                    node_type = workflow_graph[new_node_id].get('class_type')
+                                node_timing_map[new_node_id] = NodeTimingInfo(
+                                    node_id=new_node_id,
+                                    node_type=node_type,
+                                    start_time_ms=current_time_ms,
+                                    execution_order=node_execution_order,
+                                )
+                            current_node_id = new_node_id
+                        
                         if data['node'] is None and data['prompt_id'] == prompt_id:
                             # Execution complete - signal frontend immediately!
                             execution_complete = True
@@ -413,11 +486,24 @@ class ComfyClient:
             _close_ws()
             raise
 
+        # Helper to build ExecutionMetrics from collected timing data
+        def _build_metrics() -> Optional[ExecutionMetrics]:
+            if not track_timing:
+                return None
+            end_time_ms = time.time() * 1000
+            total_duration = int(end_time_ms - execution_start_time_ms) if execution_start_time_ms else 0
+            node_list = sorted(node_timing_map.values(), key=lambda n: n.execution_order)
+            return ExecutionMetrics(
+                total_duration_ms=total_duration,
+                node_timings=node_list,
+                cached_nodes=cached_nodes,
+            )
+
         # If we captured images via WebSocket, use those (no HTTP download needed)
         if captured_images:
             print(f"Using {len(captured_images)} images captured from WebSocket stream")
             _close_ws()
-            return captured_images
+            return captured_images, _build_metrics()
 
         def _history_output_images() -> List[Dict[str, Any]]:
             try:
@@ -501,7 +587,7 @@ class ComfyClient:
             output_items = _history_output_images()
             if output_items:
                 _close_ws()
-                return output_items
+                return output_items, _build_metrics()
             time.sleep(0.2)
 
         # Fallback: Use the last preview image(s) as output when no history images exist.
@@ -521,7 +607,7 @@ class ComfyClient:
                 }
             ]
             _close_ws()
-            return result
+            return result, _build_metrics()
 
         _close_ws()
-        return []
+        return [], _build_metrics()

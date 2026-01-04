@@ -202,3 +202,82 @@ class OutputRead(OutputBase):
     id: int
     meta_json: Optional[str]
     # Note: thumb_jpeg excluded from read to keep responses small
+
+
+# --- Execution Statistics tables ---
+# Detailed performance telemetry for runs
+class RunExecutionStatsBase(SQLModel):
+    """Base for execution statistics."""
+    job_id: int = Field(foreign_key="job.id", index=True)
+    
+    # Timing
+    total_duration_ms: Optional[int] = None  # Total execution time
+    queue_wait_ms: Optional[int] = None  # Time spent waiting in queue
+    
+    # VRAM/RAM snapshots
+    peak_vram_mb: Optional[float] = None
+    peak_ram_mb: Optional[float] = None
+    vram_before_mb: Optional[float] = None
+    vram_after_mb: Optional[float] = None
+    ram_before_mb: Optional[float] = None
+    ram_after_mb: Optional[float] = None
+    
+    # GPU/System info
+    gpu_name: Optional[str] = None
+    cuda_version: Optional[str] = None
+    torch_version: Optional[str] = None
+    device_count: Optional[int] = None
+    offload_detected: Optional[bool] = None
+    
+    # Raw system stats JSON for future extensibility
+    raw_system_stats: Optional[str] = None
+
+
+class RunExecutionStats(RunExecutionStatsBase, table=True):
+    """
+    Stores aggregate execution statistics and telemetry for a run.
+    One row per run, linked via run_id.
+    """
+    __tablename__ = "run_execution_stats"
+    
+    id: Optional[int] = Field(default=None, primary_key=True)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class RunExecutionStatsCreate(RunExecutionStatsBase):
+    pass
+
+
+class RunExecutionStatsRead(RunExecutionStatsBase):
+    id: int
+    created_at: datetime
+
+
+# --- Per-node timing table ---
+class RunNodeTimingBase(SQLModel):
+    """Base for per-node execution timing."""
+    job_id: int = Field(foreign_key="job.id", index=True)
+    node_id: str  # ComfyUI node ID
+    node_type: Optional[str] = None  # e.g., "KSampler", "VAEDecode"
+    start_offset_ms: Optional[int] = None  # Offset from run start
+    duration_ms: Optional[int] = None  # Execution time for this node
+    execution_order: Optional[int] = None  # Order node was executed (1-based)
+    from_cache: bool = False  # True if node result was cached
+
+
+class RunNodeTiming(RunNodeTimingBase, table=True):
+    """
+    Stores per-node execution timing for a run.
+    Multiple rows per run (one per executed node).
+    """
+    __tablename__ = "run_node_timings"
+    
+    id: Optional[int] = Field(default=None, primary_key=True)
+
+
+class RunNodeTimingCreate(RunNodeTimingBase):
+    pass
+
+
+class RunNodeTimingRead(RunNodeTimingBase):
+    id: int

@@ -249,7 +249,8 @@ class DiagnosticComfyClient(ComfyClient):
         
         try:
             _log(f"🎧 Starting to listen for prompt_id: {prompt_id}", "INFO")
-            images = super().get_images(prompt_id, progress_callback=logging_callback)
+            # Parent returns tuple (images, metrics) - we only care about images for diagnostics
+            images, _metrics = super().get_images(prompt_id, progress_callback=logging_callback)
             
             elapsed = time.time() - (self._start_time or time.time())
             _log(f"✅ Generation complete! {len(images)} images received in {elapsed:.1f}s", "INFO")
@@ -264,7 +265,8 @@ class DiagnosticComfyClient(ComfyClient):
                 json.dump(self._ws_messages, f, indent=2, default=str)
             _log(f"📄 WS history saved to: {ws_file}", "INFO")
             
-            return images
+            # Return tuple to match parent signature
+            return images, _metrics
             
         except ComfyResponseError as e:
             _log(f"❌ Execution error: {e}", "ERROR")

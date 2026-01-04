@@ -34,6 +34,7 @@ from app.models.workflow import WorkflowTemplate
 from app.models.engine import Engine
 from app.models.image import Image
 from app.models.prompt import Prompt
+from app.models.portfolio import RunExecutionStats, RunNodeTiming
 from app.db.engine import engine as db_engine
 from app.core.websockets import manager
 from app.services.comfy_watchdog import watchdog
@@ -46,9 +47,9 @@ DUMP_GRAPH = os.getenv("SWEET_TEA_DUMP_GRAPH", "").lower() in ("1", "true", "yes
 
 if DIAGNOSTIC_MODE:
     from app.core.comfy_diagnostics import DiagnosticComfyClient as ComfyClient
-    from app.core.comfy_client import ComfyConnectionError, ComfyResponseError
+    from app.core.comfy_client import ComfyConnectionError, ComfyResponseError, ExecutionMetrics
 else:
-    from app.core.comfy_client import ComfyClient, ComfyConnectionError, ComfyResponseError
+    from app.core.comfy_client import ComfyClient, ComfyConnectionError, ComfyResponseError, ExecutionMetrics
 # ===================================
 
 _sequence_cache: dict[str, dict[str, float | int]] = {}
@@ -911,6 +912,98 @@ def _process_single_video(
 
     return (full_path, filename, idx)
 
+
+def _store_execution_stats(
+    session: Session,
+    job_id: int,
+    execution_metrics: ExecutionMetrics | None,
+    system_stats_before: dict | None = None,
+    system_stats_after: dict | None = None,
+    queue_wait_ms: int | None = None,
+) -> None:
+    """
+    Store execution statistics for a job.
+    
+    Args:
+        session: Database session
+        job_id: The job ID to associate stats with
+        execution_metrics: ExecutionMetrics from ComfyClient (optional)
+        system_stats_before: System stats captured before execution (optional)
+        system_stats_after: System stats captured after execution (optional) 
+        queue_wait_ms: Time spent waiting in queue (optional)
+    """
+    if not execution_metrics:
+        return
+    
+    try:
+        # Extract GPU/VRAM info from system stats
+        gpu_name = None
+        cuda_version = None
+        torch_version = None
+        device_count = None
+        vram_before_mb = None
+        vram_after_mb = None
+        ram_before_mb = None
+        ram_after_mb = None
+        
+        if system_stats_before:
+            system_info = system_stats_before.get("system", {})
+            devices = system_stats_before.get("devices", [])
+            torch_version = system_info.get("torch_version")
+            if devices:
+                gpu_name = devices[0].get("name")
+                cuda_version = devices[0].get("cuda")
+                device_count = len(devices)
+                vram_before_mb = devices[0].get("vram_total", 0) - devices[0].get("vram_free", 0)
+                vram_before_mb = vram_before_mb / (1024 * 1024) if vram_before_mb else None
+            ram_before_mb = system_info.get("ram_used", 0) / (1024 * 1024) if system_info.get("ram_used") else None
+        
+        if system_stats_after:
+            devices = system_stats_after.get("devices", [])
+            system_info = system_stats_after.get("system", {})
+            if devices:
+                vram_after_mb = devices[0].get("vram_total", 0) - devices[0].get("vram_free", 0)
+                vram_after_mb = vram_after_mb / (1024 * 1024) if vram_after_mb else None
+            ram_after_mb = system_info.get("ram_used", 0) / (1024 * 1024) if system_info.get("ram_used") else None
+        
+        # Create execution stats record
+        stats = RunExecutionStats(
+            job_id=job_id,
+            total_duration_ms=execution_metrics.total_duration_ms,
+            queue_wait_ms=queue_wait_ms,
+            gpu_name=gpu_name,
+            cuda_version=cuda_version,
+            torch_version=torch_version,
+            device_count=device_count,
+            vram_before_mb=vram_before_mb,
+            vram_after_mb=vram_after_mb,
+            ram_before_mb=ram_before_mb,
+            ram_after_mb=ram_after_mb,
+            raw_system_stats=json.dumps(system_stats_after) if system_stats_after else None,
+        )
+        session.add(stats)
+        
+        # Create node timing records
+        for timing in execution_metrics.node_timings:
+            node_record = RunNodeTiming(
+                job_id=job_id,
+                node_id=timing.node_id,
+                node_type=timing.node_type,
+                start_offset_ms=int(timing.start_time_ms - (execution_metrics.node_timings[0].start_time_ms or 0)) if timing.start_time_ms else None,
+                duration_ms=timing.duration_ms,
+                execution_order=timing.execution_order,
+                from_cache=timing.from_cache,
+            )
+            session.add(node_record)
+        
+        session.commit()
+        print(f"[Stats] Stored execution stats for job {job_id}: {execution_metrics.total_duration_ms}ms, {len(execution_metrics.node_timings)} nodes")
+    except Exception as e:
+        print(f"[Stats] Failed to store execution stats for job {job_id}: {e}")
+        # Don't fail the job if stats storage fails
+        session.rollback()
+
+
 def process_job(job_id: int):
     with Session(db_engine) as session:
         # Re-fetch objects within session
@@ -1278,8 +1371,14 @@ def process_job(job_id: int):
             
             manager.broadcast_sync({"type": "started", "prompt_id": prompt_id}, str(job_id))
             
-            # Pass callback to get_images
-            outputs = client.get_images(prompt_id, progress_callback=on_progress, on_image_callback=on_image_captured)
+            # Pass callback to get_images - enable timing tracking for execution stats
+            outputs, execution_metrics = client.get_images(
+                prompt_id,
+                progress_callback=on_progress,
+                on_image_callback=on_image_captured,
+                track_timing=True,
+                workflow_graph=final_graph,
+            )
             
             # Filter Logic - only process items NOT already handled
             final_tasks = []
@@ -1478,6 +1577,13 @@ def process_job(job_id: int):
                 } 
                 for img in saved_media
             ]
+            
+            # Store execution statistics
+            _store_execution_stats(
+                session,
+                job_id,
+                execution_metrics,
+            )
             
             manager.broadcast_sync({
                 "type": "completed", 
