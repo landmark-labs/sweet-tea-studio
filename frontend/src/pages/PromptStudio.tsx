@@ -2353,7 +2353,17 @@ export default function PromptStudio() {
   const handleCancel = async () => {
     // Cancel any running batch and clear pending queue
     batchCancelledRef.current = true;
+
+    // Capture pending jobs before clearing - these are already on the backend
+    const pendingJobs = [...pendingJobIdsRef.current];
     pendingJobIdsRef.current = [];
+
+    // Cancel all pending backend jobs in parallel (fire-and-forget)
+    for (const jobId of pendingJobs) {
+      api.cancelJob(jobId).catch(err =>
+        console.error(`Failed to cancel pending job ${jobId}:`, err)
+      );
+    }
 
     if (!lastJobId) return;
     try {
