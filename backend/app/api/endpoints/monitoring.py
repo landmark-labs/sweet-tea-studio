@@ -7,12 +7,15 @@ import os
 import psutil
 import threading
 import time
+import sys
+import platform
 
 from app.services.monitoring import monitor
 from app.services.comfy_watchdog import watchdog
 from app.core.websockets import manager
 from app.services.job_processor import get_sequence_cache_stats
 from app.core.config import settings
+from app.core.version import get_git_sha_short
 
 
 router = APIRouter()
@@ -68,41 +71,6 @@ def _rotate_client_log_if_needed() -> None:
         return
 
 
-def _get_git_sha() -> str | None:
-    env_sha = os.getenv("SWEET_TEA_GIT_SHA")
-    if env_sha:
-        return env_sha.strip()[:12]
-
-    try:
-        repo_root = Path(__file__).resolve().parents[4]
-        git_dir = repo_root / ".git"
-        head_path = git_dir / "HEAD"
-        if not head_path.exists():
-            return None
-
-        head = head_path.read_text(encoding="utf-8").strip()
-        if head.startswith("ref:"):
-            ref = head.split(" ", 1)[1].strip()
-            ref_path = git_dir / ref
-            if ref_path.exists():
-                return ref_path.read_text(encoding="utf-8").strip()[:12]
-
-            packed = git_dir / "packed-refs"
-            if packed.exists():
-                for line in packed.read_text(encoding="utf-8").splitlines():
-                    text = line.strip()
-                    if not text or text.startswith("#") or text.startswith("^"):
-                        continue
-                    sha, ref_name = text.split(" ", 1)
-                    if ref_name.strip() == ref:
-                        return sha.strip()[:12]
-            return None
-
-        return head[:12] if head else None
-    except Exception:
-        return None
-
-
 @router.get("/metrics")
 def read_metrics():
     return monitor.get_metrics()
@@ -156,13 +124,37 @@ def get_diagnostics():
                 size_bytes = None
         return {"path": str(path), "exists": exists, "size_bytes": size_bytes}
 
+    def describe_module(mod: object) -> dict:
+        path = None
+        try:
+            path = Path(getattr(mod, "__file__")).resolve()
+        except Exception:
+            path = None
+        return {"path": str(path) if path else None}
+
+    # These help prove which code is actually running in remote/container environments.
+    app_main = sys.modules.get("app.main")
+    job_processor_module = sys.modules.get("app.services.job_processor")
+    comfy_client_module = sys.modules.get("app.core.comfy_client")
+
     return {
         "app": {
             "version": settings.APP_VERSION,
-            "git_sha": _get_git_sha(),
+            "git_sha": get_git_sha_short(),
             "root_dir": str(settings.ROOT_DIR),
             "meta_dir": str(settings.meta_dir),
             "database_path": str(settings.database_path),
+            "runtime": {
+                "python": sys.version.split()[0] if sys.version else None,
+                "executable": sys.executable,
+                "platform": platform.platform(),
+            },
+            "modules": {
+                "app_main": describe_module(app_main) if app_main else {"path": None},
+                "monitoring": {"path": str(Path(__file__).resolve())},
+                "job_processor": describe_module(job_processor_module) if job_processor_module else {"path": None},
+                "comfy_client": describe_module(comfy_client_module) if comfy_client_module else {"path": None},
+            },
             "debug": {
                 "last_graph_error": {
                     "meta_dir": describe_path(meta_error_dump),

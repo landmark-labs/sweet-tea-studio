@@ -8,6 +8,7 @@ from app.api.endpoints.library_tags import start_tag_cache_refresh_background
 from app.core.config import settings
 from app.core.error_handlers import register_gallery_error_handlers
 from app.core.websockets import manager
+from app.core.version import get_git_sha_short
 from app.services.comfy_watchdog import watchdog
 from app.db.init_db import init_db
 
@@ -25,6 +26,16 @@ async def on_startup():
 @app.on_event("shutdown")
 async def on_shutdown():
     await watchdog.stop()
+
+# Helps confirm which backend build is running (especially in container deployments).
+@app.middleware("http")
+async def _add_build_headers(request, call_next):
+    response = await call_next(request)
+    response.headers["X-Sweet-Tea-Version"] = settings.APP_VERSION
+    sha = get_git_sha_short()
+    if sha:
+        response.headers["X-Sweet-Tea-Git-Sha"] = sha
+    return response
 
 # CORS
 # Set all CORS enabled origins
@@ -54,8 +65,8 @@ app.include_router(models.router, prefix="/api/v1/models", tags=["models"])
 app.include_router(portfolio.router, prefix="/api/v1/portfolio", tags=["portfolio"])
 app.include_router(snippets.router, prefix="/api/v1/snippets", tags=["snippets"])
 app.include_router(status.router, prefix="/api/v1", tags=["status"])
-from app.api.endpoints import settings
-app.include_router(settings.router, prefix="/api/v1", tags=["settings"])
+from app.api.endpoints import settings as settings_endpoints
+app.include_router(settings_endpoints.router, prefix="/api/v1", tags=["settings"])
 
 @app.get("/")
 def root():
