@@ -209,8 +209,16 @@ def _build_bypass_output_map(
     if not isinstance(node_inputs, dict):
         node_inputs = {}
 
+    if not isinstance(object_info, dict) or not object_info:
+        return {}
+
     class_type = node.get("class_type")
-    node_def = object_info.get(class_type, {}) if isinstance(object_info, dict) and class_type else {}
+    if not isinstance(class_type, str) or not class_type or class_type not in object_info:
+        return {}
+
+    node_def = object_info.get(class_type, {})
+    if not isinstance(node_def, dict):
+        return {}
 
     # Type-aware mapping (best-effort)
     raw_outputs = node_def.get("output")
@@ -221,15 +229,24 @@ def _build_bypass_output_map(
             if norm:
                 output_types.append(norm)
 
-    input_conf = node_def.get("input", {}) if isinstance(node_def, dict) else {}
-    required = input_conf.get("required", {}) if isinstance(input_conf, dict) else {}
-    optional = input_conf.get("optional", {}) if isinstance(input_conf, dict) else {}
+    if not output_types:
+        return {}
+
+    input_conf = node_def.get("input", {})
+    if not isinstance(input_conf, dict):
+        return {}
+
+    required = input_conf.get("required", {})
+    optional = input_conf.get("optional", {})
 
     input_defs: dict[str, Any] = {}
     if isinstance(required, dict):
         input_defs.update(required)
     if isinstance(optional, dict):
         input_defs.update(optional)
+
+    if not input_defs:
+        return {}
 
     input_types: dict[str, str] = {}
     for input_name, input_config in input_defs.items():
@@ -245,24 +262,16 @@ def _build_bypass_output_map(
         if isinstance(input_val, list) and len(input_val) == 2:
             connected_inputs_in_order.append((input_name, input_val))
 
-    if output_types and connected_inputs_in_order and input_types:
-        mapping: dict[int, list] = {}
-        for out_slot, out_type in enumerate(output_types):
-            for input_name, input_val in connected_inputs_in_order:
-                in_type = input_types.get(input_name)
-                if _comfy_types_match(in_type, out_type):
-                    mapping[out_slot] = input_val
-                    break
-        return mapping
+    if not connected_inputs_in_order or not input_types:
+        return {}
 
-    # Fallback: index-based pass-through (matches prior behavior, but with correct slot indexing)
-    # Assumes output slot i can pass through input slot i when that input is linked.
     mapping: dict[int, list] = {}
-    slot_index = 0
-    for _, input_val in node_inputs.items():
-        if isinstance(input_val, list) and len(input_val) == 2:
-            mapping[slot_index] = input_val
-        slot_index += 1
+    for out_slot, out_type in enumerate(output_types):
+        for input_name, input_val in connected_inputs_in_order:
+            in_type = input_types.get(input_name)
+            if _comfy_types_match(in_type, out_type):
+                mapping[out_slot] = input_val
+                break
     return mapping
 
 
