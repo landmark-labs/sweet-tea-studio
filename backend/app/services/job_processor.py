@@ -1064,7 +1064,8 @@ def process_job(job_id: int):
                  if key.startswith("__bypass_") and working_params[key] is True:
                      node_id = key.replace("__bypass_", "")
                      bypass_nodes.append(node_id)
-                     del working_params[key]
+                     # Keep __bypass_ keys for metadata/regeneration
+                     # del working_params[key]
                      continue
 
                  # Schema-based Bypass Detection (matches Frontend DynamicForm logic)
@@ -1247,7 +1248,7 @@ def process_job(job_id: int):
                 "workflow_name": workflow.name if hasattr(workflow, 'name') else None,
                 "job_id": job_id,
                 "timestamp": datetime.utcnow().isoformat(),
-                "params": {k: v for k, v in working_params.items() if k != "metadata" and not k.startswith("__")}
+                "params": {k: v for k, v in working_params.items() if k != "metadata" and (not k.startswith("__") or k.startswith("__bypass_"))}
             }
             provenance_json = json.dumps(provenance_data, ensure_ascii=False)
             xp_comment_bytes = provenance_json.encode("utf-16le") + b"\x00\x00"
@@ -1288,7 +1289,7 @@ def process_job(job_id: int):
             image_metadata = incoming_metadata.copy()
             image_metadata["active_prompt"] = latest_prompt
             image_metadata["prompt_history"] = stacked_history
-            image_metadata["generation_params"] = {k: v for k, v in working_params.items() if k != "metadata" and not k.startswith("__")}
+            image_metadata["generation_params"] = {k: v for k, v in working_params.items() if k != "metadata" and (not k.startswith("__") or k.startswith("__bypass_"))}
             
             param_width = None
             param_height = None
@@ -1508,7 +1509,7 @@ def process_job(job_id: int):
             image_metadata["prompt_history"] = stacked_history
             image_metadata["generation_params"] = {
                 k: v for k, v in working_params.items() 
-                if k != "metadata" and not k.startswith("__")
+                if k != "metadata" and (not k.startswith("__") or k.startswith("__bypass_"))
             }
 
             param_width = None
