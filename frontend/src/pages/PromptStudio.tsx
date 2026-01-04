@@ -1624,10 +1624,28 @@ export default function PromptStudio() {
           updateFeed(lastJobId, { status: "failed", previewBlob: null });
         } else if (job.status === "completed") {
           logWs(`[WS] Job already completed before connection`);
+          updateFeed(lastJobId, { status: "completed", progress: 100, previewBlob: null });
+          setGalleryRefresh(prev => prev + 1);
+
+          if (pendingJobIdsRef.current.length > 0) {
+            const nextJobId = pendingJobIdsRef.current.shift()!;
+            logWs(`[WS] Job already completed; chaining to next batch job: ${nextJobId}, remaining: [${pendingJobIdsRef.current.join(', ')}]`);
+
+            setProgress(0);
+            progressHistoryRef.current = [];
+            setJobStartTime(Date.now());
+            setGenerationState("queued");
+            setStatusLabel("queued");
+            completionProcessedRef.current = false; // Reset for next job
+
+            setLastJobId(nextJobId);
+            trackFeedStart(nextJobId);
+            return;
+          }
+
           setGenerationState("completed");
           setStatusLabel("");
           setProgress(100);
-          setGalleryRefresh(prev => prev + 1);
         }
       } catch (err) {
         console.error("Failed to check initial job status:", err);
@@ -1717,30 +1735,20 @@ export default function PromptStudio() {
         completionProcessedRef.current = true;
         logWs(`[WS] Received ${data.type}`);
 
-        // Check if there are more jobs in the batch queue
+        // In batch mode, do not advance to the next job yet.
+        // Wait for the backend `completed` event so we don't miss saved media payloads.
         if (pendingJobIdsRef.current.length > 0) {
-          const nextJobId = pendingJobIdsRef.current.shift()!;
-          logWs(`[WS] Chaining to next batch job: ${nextJobId}, remaining: [${pendingJobIdsRef.current.join(', ')}]`);
-
-          // Reset progress for next job but keep showing busy state
-          setProgress(0);
-          progressHistoryRef.current = [];
-          setJobStartTime(Date.now());
-          setGenerationState("queued");
-          setStatusLabel("queued");
-          completionProcessedRef.current = false; // Reset for next job
-
-          // Update current feed and start tracking next job
-          updateFeed(lastJobId, { status: "completed", progress: 100, previewBlob: null });
-          setLastJobId(nextJobId);
-          trackFeedStart(nextJobId);
-        } else {
-          // No more jobs - reset button
-          setGenerationState("completed");
-          setStatusLabel("");
-          setProgress(0);
-          updateFeed(lastJobId, { status: "completed", progress: 100, previewBlob: null });
+          setProgress(100);
+          setStatusLabel("saving");
+          updateFeed(lastJobId, { status: "saving", progress: 100 });
+          return;
         }
+
+        // No more jobs - reset button
+        setGenerationState("completed");
+        setStatusLabel("");
+        setProgress(0);
+        updateFeed(lastJobId, { status: "completed", progress: 100, previewBlob: null });
       } else if (data.type === "executing") {
         // Check if this is the final "executing" message with node=null (ComfyUI finished)
         if (data.data?.node === null) {
@@ -1754,25 +1762,16 @@ export default function PromptStudio() {
           logWs(`[WS] Received executing with node=null - ComfyUI done`);
 
           if (pendingJobIdsRef.current.length > 0) {
-            const nextJobId = pendingJobIdsRef.current.shift()!;
-            logWs(`[WS] Chaining to next batch job: ${nextJobId}`);
-
-            setProgress(0);
-            progressHistoryRef.current = [];
-            setJobStartTime(Date.now());
-            setGenerationState("queued");
-            setStatusLabel("queued");
-            completionProcessedRef.current = false; // Reset for next job
-
-            updateFeed(lastJobId, { status: "completed", progress: 100 });
-            setLastJobId(nextJobId);
-            trackFeedStart(nextJobId);
-          } else {
-            setGenerationState("completed");
-            setStatusLabel("");
-            setProgress(0);
-            updateFeed(lastJobId, { status: "completed", progress: 100 });
+            setProgress(100);
+            setStatusLabel("saving");
+            updateFeed(lastJobId, { status: "saving", progress: 100 });
+            return;
           }
+
+          setGenerationState("completed");
+          setStatusLabel("");
+          setProgress(0);
+          updateFeed(lastJobId, { status: "completed", progress: 100 });
         } else {
           // Still processing a node - show running state (not queued)
           setGenerationState("running");
@@ -1780,9 +1779,12 @@ export default function PromptStudio() {
           updateFeed(lastJobId, { status: "processing" });
         }
       } else if (data.type === "completed") {
-        setGenerationState("completed");
-        setStatusLabel("");
-        setProgress(100);
+        const hasMoreBatchJobs = pendingJobIdsRef.current.length > 0;
+        if (!hasMoreBatchJobs) {
+          setGenerationState("completed");
+          setStatusLabel("");
+          setProgress(100);
+        }
 
         if (data.images && data.images.length > 0) {
           const imagePath = data.images[0].path;
@@ -1848,8 +1850,24 @@ export default function PromptStudio() {
           updateFeed(lastJobId, { status: "completed", progress: 100, previewBlob: null });
         }
         setGalleryRefresh(prev => prev + 1);
-        // Cleanup - button was already reset by generation_done
-        setLastJobId(null);
+
+        if (hasMoreBatchJobs) {
+          const nextJobId = pendingJobIdsRef.current.shift()!;
+          logWs(`[WS] Chaining to next batch job after completed: ${nextJobId}, remaining: [${pendingJobIdsRef.current.join(', ')}]`);
+
+          setProgress(0);
+          progressHistoryRef.current = [];
+          setJobStartTime(Date.now());
+          setGenerationState("queued");
+          setStatusLabel("queued");
+          completionProcessedRef.current = false; // Reset for next job
+
+          setLastJobId(nextJobId);
+          trackFeedStart(nextJobId);
+        } else {
+          // Cleanup - no more jobs in the batch
+          setLastJobId(null);
+        }
       } else if (data.type === "preview") {
         // Live Preview from KSampler - THROTTLED to prevent main thread blocking
         // Large base64 blobs cause React state updates that freeze the UI (Chrome "message handler took Xms" warnings)
