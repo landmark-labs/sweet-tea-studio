@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import ReactFlow, {
     Background,
     Controls,
@@ -12,20 +12,35 @@ import ReactFlow, {
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { Card } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 
 interface WorkflowGraphViewerProps {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     graph: any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    inputSchema?: any;
 }
 
 // Custom Node for ComfyUI Generic Nodes
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const ComfyNode = ({ data }: { data: any }) => {
     return (
-        <div className="px-4 py-2 shadow-md rounded-md bg-white border-2 border-slate-200 min-w-[150px]">
+        <div
+            className={cn(
+                "px-4 py-2 shadow-md rounded-md bg-white border-2 min-w-[150px] transition-all",
+                data.isSelected
+                    ? "border-blue-400 ring-2 ring-blue-200"
+                    : data.isConnected
+                        ? "border-blue-200"
+                        : "border-slate-200"
+            )}
+        >
             <div className="flex flex-col">
-                <div className="font-bold text-xs text-slate-700 mb-1 border-b pb-1">
-                    {data.label}
+                <div className="mb-1 border-b pb-1 flex items-center gap-2">
+                    <span className="text-[10px] font-mono text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                        #{data.nodeId}
+                    </span>
+                    <span className="font-bold text-xs text-slate-700">{data.label}</span>
                 </div>
                 <div className="flex justify-between gap-4">
                     {/* Inputs - Left Side handles */}
@@ -72,12 +87,49 @@ const nodeTypes = {
     comfyNode: ComfyNode,
 };
 
-export function WorkflowGraphViewer({ graph }: WorkflowGraphViewerProps) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const buildNodeAliasMap = (schema: any): Record<string, string> => {
+    if (!schema || typeof schema !== "object") return {};
+
+    const aliasMap: Record<string, string> = {};
+    for (const [key, field] of Object.entries(schema)) {
+        if (key.startsWith("__")) continue;
+        if (!field || typeof field !== "object") continue;
+
+        const nodeId = (field as any).x_node_id;
+        if (nodeId === undefined || nodeId === null) continue;
+
+        const alias = typeof (field as any).x_node_alias === "string" ? (field as any).x_node_alias.trim() : "";
+        if (!alias) continue;
+
+        const id = String(nodeId);
+        if (!aliasMap[id]) aliasMap[id] = alias;
+    }
+
+    return aliasMap;
+};
+
+const compareNodeIds = (a: string, b: string) => {
+    const aNum = Number(a);
+    const bNum = Number(b);
+    const aIsNum = Number.isFinite(aNum);
+    const bIsNum = Number.isFinite(bNum);
+
+    if (aIsNum && bIsNum) return aNum - bNum;
+    if (aIsNum && !bIsNum) return -1;
+    if (!aIsNum && bIsNum) return 1;
+    return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
+};
+
+export function WorkflowGraphViewer({ graph, inputSchema }: WorkflowGraphViewerProps) {
     const [nodes, setNodes, onNodesChange] = useNodesState([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+    const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
     useEffect(() => {
         if (!graph) return;
+
+        const aliasMap = buildNodeAliasMap(inputSchema);
 
         let newNodes: Node[] = [];
         const newEdges: Edge[] = [];
@@ -86,12 +138,14 @@ export function WorkflowGraphViewer({ graph }: WorkflowGraphViewerProps) {
         if (Array.isArray(graph.nodes) && Array.isArray(graph.links)) {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             graph.nodes.forEach((node: any) => {
+                const nodeId = String(node.id);
                 newNodes.push({
-                    id: String(node.id),
+                    id: nodeId,
                     type: 'comfyNode',
                     position: { x: node.pos?.[0] || 0, y: node.pos?.[1] || 0 },
                     data: {
-                        label: node.title || node.type,
+                        nodeId,
+                        label: aliasMap[nodeId] || node.title || node.type,
                         type: node.type,
                         inputs: node.inputs || [],
                         outputs: node.outputs || [],
@@ -151,7 +205,8 @@ export function WorkflowGraphViewer({ graph }: WorkflowGraphViewerProps) {
                     type: 'comfyNode',
                     position: { x: 0, y: 0 }, // Placeholder, will layout below
                     data: {
-                        label: node._meta?.title || node.class_type,
+                        nodeId: id,
+                        label: aliasMap[id] || node._meta?.title || node.title || node.class_type,
                         type: node.class_type,
                         inputs: inputs,
                         outputs: [{ name: "output", type: "wildcard" }], // API format doesn't list outputs, assume generically
@@ -216,24 +271,214 @@ export function WorkflowGraphViewer({ graph }: WorkflowGraphViewerProps) {
 
         setNodes(newNodes);
         setEdges(newEdges);
-    }, [graph, setNodes, setEdges]);
+        setSelectedNodeId(null);
+    }, [graph, inputSchema, setNodes, setEdges]);
 
+    const nodeById = useMemo(() => {
+        return new Map(nodes.map((node) => [node.id, node]));
+    }, [nodes]);
+
+    const connected = useMemo(() => {
+        if (!selectedNodeId) {
+            return {
+                connectedNodeIds: new Set<string>(),
+                connectedEdgeIds: new Set<string>(),
+                incomingNodeIds: [] as string[],
+                outgoingNodeIds: [] as string[],
+            };
+        }
+
+        const connectedNodeIds = new Set<string>([selectedNodeId]);
+        const connectedEdgeIds = new Set<string>();
+        const incomingNodeIds = new Set<string>();
+        const outgoingNodeIds = new Set<string>();
+
+        edges.forEach((edge) => {
+            const isIncoming = edge.target === selectedNodeId;
+            const isOutgoing = edge.source === selectedNodeId;
+            if (!isIncoming && !isOutgoing) return;
+
+            connectedEdgeIds.add(edge.id);
+
+            if (isIncoming) {
+                connectedNodeIds.add(edge.source);
+                incomingNodeIds.add(edge.source);
+            }
+
+            if (isOutgoing) {
+                connectedNodeIds.add(edge.target);
+                outgoingNodeIds.add(edge.target);
+            }
+        });
+
+        return {
+            connectedNodeIds,
+            connectedEdgeIds,
+            incomingNodeIds: Array.from(incomingNodeIds).sort(compareNodeIds),
+            outgoingNodeIds: Array.from(outgoingNodeIds).sort(compareNodeIds),
+        };
+    }, [edges, selectedNodeId]);
+
+    const selectedNode = useMemo(() => {
+        if (!selectedNodeId) return null;
+        return nodeById.get(selectedNodeId) || null;
+    }, [nodeById, selectedNodeId]);
+
+    const renderedNodes = useMemo(() => {
+        if (!selectedNodeId) {
+            return nodes.map((node) => ({
+                ...node,
+                data: {
+                    ...node.data,
+                    isSelected: false,
+                    isConnected: false,
+                },
+                style: { ...node.style, opacity: 1 },
+            }));
+        }
+
+        return nodes.map((node) => {
+            const isSelected = node.id === selectedNodeId;
+            const isConnected = connected.connectedNodeIds.has(node.id) && !isSelected;
+            const isDimmed = !connected.connectedNodeIds.has(node.id);
+            return {
+                ...node,
+                data: {
+                    ...node.data,
+                    isSelected,
+                    isConnected,
+                },
+                style: { ...node.style, opacity: isDimmed ? 0.2 : 1 },
+            };
+        });
+    }, [connected.connectedNodeIds, nodes, selectedNodeId]);
+
+    const renderedEdges = useMemo(() => {
+        if (!selectedNodeId) return edges;
+
+        return edges.map((edge) => {
+            const isConnected = connected.connectedEdgeIds.has(edge.id);
+            const baseStyle = (edge.style || {}) as Record<string, unknown>;
+            return {
+                ...edge,
+                animated: isConnected,
+                markerEnd: { type: MarkerType.ArrowClosed, color: isConnected ? "#3b82f6" : "#94a3b8" },
+                style: {
+                    ...baseStyle,
+                    stroke: isConnected ? "#3b82f6" : "#94a3b8",
+                    strokeWidth: isConnected ? 2 : 1,
+                    opacity: isConnected ? 1 : 0.15,
+                },
+            };
+        });
+    }, [connected.connectedEdgeIds, edges, selectedNodeId]);
 
     return (
         <Card className="w-full h-[600px] bg-slate-50 border-slate-200 overflow-hidden">
-            <ReactFlow
-                nodes={nodes}
-                edges={edges}
-                onNodesChange={onNodesChange}
-                onEdgesChange={onEdgesChange}
-                nodeTypes={nodeTypes}
-                fitView
-                className="bg-slate-50"
-                minZoom={0.1}
-            >
-                <Background color="#ccc" gap={20} />
-                <Controls />
-            </ReactFlow>
+            <div className="relative w-full h-full">
+                <div className="absolute top-3 right-3 z-10 w-[280px] rounded-md border border-slate-200 bg-white/95 backdrop-blur p-3 shadow-sm">
+                    {!selectedNode ? (
+                        <div className="text-xs text-slate-500">
+                            Click a node to see its connections.
+                        </div>
+                    ) : (
+                        <div className="space-y-3">
+                            <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                        <span className="text-[10px] font-mono text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                                            #{selectedNode.id}
+                                        </span>
+                                        <span className="text-xs font-semibold text-slate-800 truncate">
+                                            {String((selectedNode.data as any)?.label || selectedNode.id)}
+                                        </span>
+                                    </div>
+                                    <div className="text-[10px] text-slate-500 mt-0.5 truncate">
+                                        {String((selectedNode.data as any)?.type || "")}
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    className="text-[10px] text-slate-400 hover:text-slate-600"
+                                    onClick={() => setSelectedNodeId(null)}
+                                >
+                                    Clear
+                                </button>
+                            </div>
+
+                            <div>
+                                <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
+                                    Incoming ({connected.incomingNodeIds.length})
+                                </div>
+                                <div className="max-h-[140px] overflow-auto space-y-1">
+                                    {connected.incomingNodeIds.length === 0 ? (
+                                        <div className="text-xs text-slate-400">None</div>
+                                    ) : (
+                                        connected.incomingNodeIds.map((id) => {
+                                            const node = nodeById.get(id);
+                                            const label = node ? String((node.data as any)?.label || id) : id;
+                                            return (
+                                                <button
+                                                    key={`in-${id}`}
+                                                    type="button"
+                                                    className="w-full text-left rounded px-2 py-1 hover:bg-slate-50"
+                                                    onClick={() => setSelectedNodeId(id)}
+                                                >
+                                                    <span className="text-[10px] font-mono text-slate-500">#{id}</span>
+                                                    <span className="ml-2 text-xs text-slate-700">{label}</span>
+                                                </button>
+                                            );
+                                        })
+                                    )}
+                                </div>
+                            </div>
+
+                            <div>
+                                <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
+                                    Outgoing ({connected.outgoingNodeIds.length})
+                                </div>
+                                <div className="max-h-[140px] overflow-auto space-y-1">
+                                    {connected.outgoingNodeIds.length === 0 ? (
+                                        <div className="text-xs text-slate-400">None</div>
+                                    ) : (
+                                        connected.outgoingNodeIds.map((id) => {
+                                            const node = nodeById.get(id);
+                                            const label = node ? String((node.data as any)?.label || id) : id;
+                                            return (
+                                                <button
+                                                    key={`out-${id}`}
+                                                    type="button"
+                                                    className="w-full text-left rounded px-2 py-1 hover:bg-slate-50"
+                                                    onClick={() => setSelectedNodeId(id)}
+                                                >
+                                                    <span className="text-[10px] font-mono text-slate-500">#{id}</span>
+                                                    <span className="ml-2 text-xs text-slate-700">{label}</span>
+                                                </button>
+                                            );
+                                        })
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                <ReactFlow
+                    nodes={renderedNodes}
+                    edges={renderedEdges}
+                    onNodesChange={onNodesChange}
+                    onEdgesChange={onEdgesChange}
+                    nodeTypes={nodeTypes}
+                    fitView
+                    className="bg-slate-50"
+                    minZoom={0.1}
+                    onNodeClick={(_, node) => setSelectedNodeId((prev) => (prev === node.id ? null : node.id))}
+                    onPaneClick={() => setSelectedNodeId(null)}
+                >
+                    <Background color="#ccc" gap={20} />
+                    <Controls />
+                </ReactFlow>
+            </div>
         </Card>
     );
 }

@@ -1209,7 +1209,10 @@ export default function WorkflowLibrary() {
                     </DialogHeader>
                     <div className="flex-1 min-h-0 bg-slate-50 border rounded-md">
                         {selectedWorkflowForGraph && (
-                            <WorkflowGraphViewer graph={selectedWorkflowForGraph.graph_json} />
+                            <WorkflowGraphViewer
+                                graph={selectedWorkflowForGraph.graph_json}
+                                inputSchema={selectedWorkflowForGraph.input_schema}
+                            />
                         )}
                     </div>
                 </DialogContent>
