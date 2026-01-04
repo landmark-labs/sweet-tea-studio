@@ -638,15 +638,15 @@ const NodeStackRow = React.memo(function NodeStackRow({
                                 {paramCount} params
                             </span>
                         )}
-                        {isBypassed && (
-                            <span className="text-[9px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5">
-                                Bypassed
-                            </span>
-                        )}
                     </div>
                     <div className="flex items-center gap-2">
                         {group.hasBypass && group.bypassKey && (
                             <div className="flex items-center gap-2">
+                                {isBypassed && (
+                                    <span className="text-[9px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5">
+                                        Bypassed
+                                    </span>
+                                )}
                                 <Switch
                                     checked={Boolean(bypassValue)}
                                     onCheckedChange={(c) => onToggleChange(group.bypassKey!, Boolean(c))}

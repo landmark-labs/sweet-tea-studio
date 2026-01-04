@@ -24,7 +24,7 @@ import threading
 import time
 from pathlib import Path
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, List, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from sqlmodel import Session, select
@@ -176,6 +176,153 @@ def apply_params_to_graph(graph: dict, mapping: dict, params: dict):
                 for part in field_path[:-1]:
                     current = current.get(part, {})
                 current[field_path[-1]] = value
+
+
+def _normalize_comfy_type(type_name: object) -> str | None:
+    if not isinstance(type_name, str):
+        return None
+    text = type_name.strip()
+    return text.upper() if text else None
+
+
+def _comfy_types_match(input_type: str | None, output_type: str | None) -> bool:
+    if not input_type or not output_type:
+        return False
+    if input_type in ("*", "ANY"):
+        return True
+    if output_type in ("*", "ANY"):
+        return True
+    return input_type == output_type
+
+
+def _build_bypass_output_map(
+    node: dict,
+    object_info: dict[str, Any] | None = None,
+) -> dict[int, list]:
+    """
+    Build a mapping of bypassed node output slot -> upstream source [node_id, slot].
+
+    Prefer ComfyUI object_info (type-aware) to avoid grafting invalid links for
+    nodes whose outputs cannot be passed through from any input.
+    """
+    node_inputs = node.get("inputs", {})
+    if not isinstance(node_inputs, dict):
+        node_inputs = {}
+
+    class_type = node.get("class_type")
+    node_def = object_info.get(class_type, {}) if isinstance(object_info, dict) and class_type else {}
+
+    # Type-aware mapping (best-effort)
+    raw_outputs = node_def.get("output")
+    output_types: list[str] = []
+    if isinstance(raw_outputs, list):
+        for t in raw_outputs:
+            norm = _normalize_comfy_type(t)
+            if norm:
+                output_types.append(norm)
+
+    input_conf = node_def.get("input", {}) if isinstance(node_def, dict) else {}
+    required = input_conf.get("required", {}) if isinstance(input_conf, dict) else {}
+    optional = input_conf.get("optional", {}) if isinstance(input_conf, dict) else {}
+
+    input_defs: dict[str, Any] = {}
+    if isinstance(required, dict):
+        input_defs.update(required)
+    if isinstance(optional, dict):
+        input_defs.update(optional)
+
+    input_types: dict[str, str] = {}
+    for input_name, input_config in input_defs.items():
+        if not isinstance(input_name, str) or not isinstance(input_config, list) or not input_config:
+            continue
+        norm = _normalize_comfy_type(input_config[0])
+        if norm:
+            input_types[input_name] = norm
+
+    connected_inputs_in_order: list[tuple[str, list]] = []
+    for input_name in input_defs.keys():
+        input_val = node_inputs.get(input_name)
+        if isinstance(input_val, list) and len(input_val) == 2:
+            connected_inputs_in_order.append((input_name, input_val))
+
+    if output_types and connected_inputs_in_order and input_types:
+        mapping: dict[int, list] = {}
+        for out_slot, out_type in enumerate(output_types):
+            for input_name, input_val in connected_inputs_in_order:
+                in_type = input_types.get(input_name)
+                if _comfy_types_match(in_type, out_type):
+                    mapping[out_slot] = input_val
+                    break
+        return mapping
+
+    # Fallback: index-based pass-through (matches prior behavior, but with correct slot indexing)
+    # Assumes output slot i can pass through input slot i when that input is linked.
+    mapping: dict[int, list] = {}
+    slot_index = 0
+    for _, input_val in node_inputs.items():
+        if isinstance(input_val, list) and len(input_val) == 2:
+            mapping[slot_index] = input_val
+        slot_index += 1
+    return mapping
+
+
+def apply_bypass_to_graph(
+    graph: dict,
+    bypass_nodes: list[str],
+    object_info: dict[str, Any] | None = None,
+) -> None:
+    """
+    Mutates `graph` in place by removing bypassed nodes and rewiring downstream
+    connections. Downstream links are grafted to an upstream source when a safe
+    pass-through mapping exists; otherwise the input is disconnected (deleted).
+    """
+    if not isinstance(graph, dict) or not bypass_nodes:
+        return
+
+    # Preserve order but remove duplicates
+    seen: set[str] = set()
+    ordered_bypass = []
+    for node_id in bypass_nodes:
+        node_id_str = str(node_id)
+        if node_id_str in seen:
+            continue
+        seen.add(node_id_str)
+        ordered_bypass.append(node_id_str)
+
+    for node_id in ordered_bypass:
+        if node_id not in graph:
+            continue
+
+        bypassed_node = graph[node_id]
+        output_map = _build_bypass_output_map(bypassed_node, object_info=object_info)
+
+        for other_node_id, other_node in list(graph.items()):
+            if other_node_id == node_id:
+                continue
+            inputs = other_node.get("inputs")
+            if not isinstance(inputs, dict):
+                continue
+
+            for inp_name, inp_val in list(inputs.items()):
+                if not (isinstance(inp_val, list) and len(inp_val) == 2):
+                    continue
+                if str(inp_val[0]) != str(node_id):
+                    continue
+
+                try:
+                    output_slot = int(inp_val[1])
+                except Exception:
+                    # Unknown slot format; disconnect to be safe.
+                    inputs.pop(inp_name, None)
+                    continue
+
+                upstream = output_map.get(output_slot)
+                if upstream is not None:
+                    inputs[inp_name] = upstream
+                else:
+                    inputs.pop(inp_name, None)
+
+        graph.pop(node_id, None)
 
 
 def _build_node_mapping_from_schema(schema: dict) -> dict:
