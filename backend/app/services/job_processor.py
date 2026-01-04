@@ -274,6 +274,59 @@ def _build_bypass_output_map(
     return mapping
 
 
+def _topological_sort_bypass_nodes(
+    graph: dict,
+    bypass_nodes: list[str],
+) -> list[str]:
+    """
+    Sort bypass nodes in topological order (upstream first).
+    
+    This ensures that when building the resolution map, upstream bypassed
+    nodes are processed before their downstream dependents, so the resolution
+    for an upstream node is available when a downstream node references it.
+    """
+    bypass_set = set(bypass_nodes)
+    
+    # Build dependency graph: for each bypass node, find which other bypass nodes it depends on
+    # A node depends on another if its inputs reference that node
+    dependencies: dict[str, set[str]] = {node_id: set() for node_id in bypass_nodes}
+    
+    for node_id in bypass_nodes:
+        if node_id not in graph:
+            continue
+        node = graph[node_id]
+        inputs = node.get("inputs", {})
+        if not isinstance(inputs, dict):
+            continue
+        for inp_val in inputs.values():
+            if isinstance(inp_val, list) and len(inp_val) == 2:
+                upstream_id = str(inp_val[0])
+                if upstream_id in bypass_set:
+                    dependencies[node_id].add(upstream_id)
+    
+    # Kahn's algorithm for topological sort
+    in_degree = {node_id: len(deps) for node_id, deps in dependencies.items()}
+    queue = [node_id for node_id, degree in in_degree.items() if degree == 0]
+    sorted_nodes: list[str] = []
+    
+    while queue:
+        node_id = queue.pop(0)
+        sorted_nodes.append(node_id)
+        for other_id, deps in dependencies.items():
+            if node_id in deps:
+                in_degree[other_id] -= 1
+                if in_degree[other_id] == 0:
+                    queue.append(other_id)
+    
+    # Handle any remaining nodes (cycles or disconnected)
+    for node_id in bypass_nodes:
+        if node_id not in sorted_nodes:
+            sorted_nodes.append(node_id)
+    
+    # Return in topological order (upstream first)
+    return sorted_nodes
+
+
 def apply_bypass_to_graph(
     graph: dict,
     bypass_nodes: list[str],
@@ -283,53 +336,92 @@ def apply_bypass_to_graph(
     Mutates `graph` in place by removing bypassed nodes and rewiring downstream
     connections. Downstream links are grafted to an upstream source when a safe
     pass-through mapping exists; otherwise the input is disconnected (deleted).
+    
+    Uses a two-pass algorithm with reverse topological ordering to correctly
+    handle cascading bypasses where multiple connected nodes are bypassed together.
     """
     if not isinstance(graph, dict) or not bypass_nodes:
         return
 
-    # Preserve order but remove duplicates
+    # Deduplicate while preserving order
     seen: set[str] = set()
-    ordered_bypass = []
+    unique_bypass: list[str] = []
     for node_id in bypass_nodes:
         node_id_str = str(node_id)
         if node_id_str in seen:
             continue
         seen.add(node_id_str)
-        ordered_bypass.append(node_id_str)
-
-    for node_id in ordered_bypass:
-        if node_id not in graph:
+        if node_id_str in graph:
+            unique_bypass.append(node_id_str)
+    
+    if not unique_bypass:
+        return
+    
+    bypass_set = set(unique_bypass)
+    
+    # Sort in topological order (upstream first) so resolutions cascade correctly
+    sorted_bypass = _topological_sort_bypass_nodes(graph, unique_bypass)
+    
+    # === PASS 1: Build complete resolution map without modifying graph ===
+    # Maps (bypassed_node_id, output_slot) -> [resolved_source_id, slot] or None
+    resolution_map: dict[tuple[str, int], list | None] = {}
+    
+    for node_id in sorted_bypass:
+        node = graph.get(node_id)
+        if not node:
             continue
-
-        bypassed_node = graph[node_id]
-        output_map = _build_bypass_output_map(bypassed_node, object_info=object_info)
-
-        for other_node_id, other_node in list(graph.items()):
-            if other_node_id == node_id:
+        
+        output_map = _build_bypass_output_map(node, object_info=object_info)
+        
+        # For each output slot, determine the final resolved upstream source
+        # Check all possible output slots (0-9 should cover most nodes)
+        for slot in range(10):
+            upstream = output_map.get(slot)
+            if upstream is None:
+                resolution_map[(node_id, slot)] = None
                 continue
-            inputs = other_node.get("inputs")
-            if not isinstance(inputs, dict):
+            
+            upstream_id = str(upstream[0])
+            upstream_slot = upstream[1]
+            
+            # If upstream is also being bypassed, resolve through it
+            if upstream_id in bypass_set:
+                resolved = resolution_map.get((upstream_id, upstream_slot))
+                resolution_map[(node_id, slot)] = resolved
+            else:
+                resolution_map[(node_id, slot)] = list(upstream)
+    
+    # === PASS 2: Rewire all non-bypassed nodes using the resolution map ===
+    for other_node_id, other_node in list(graph.items()):
+        if other_node_id in bypass_set:
+            continue
+        
+        inputs = other_node.get("inputs")
+        if not isinstance(inputs, dict):
+            continue
+        
+        for inp_name, inp_val in list(inputs.items()):
+            if not (isinstance(inp_val, list) and len(inp_val) == 2):
                 continue
-
-            for inp_name, inp_val in list(inputs.items()):
-                if not (isinstance(inp_val, list) and len(inp_val) == 2):
-                    continue
-                if str(inp_val[0]) != str(node_id):
-                    continue
-
-                try:
-                    output_slot = int(inp_val[1])
-                except Exception:
-                    # Unknown slot format; disconnect to be safe.
-                    inputs.pop(inp_name, None)
-                    continue
-
-                upstream = output_map.get(output_slot)
-                if upstream is not None:
-                    inputs[inp_name] = upstream
-                else:
-                    inputs.pop(inp_name, None)
-
+            
+            source_id = str(inp_val[0])
+            if source_id not in bypass_set:
+                continue
+            
+            try:
+                source_slot = int(inp_val[1])
+            except Exception:
+                inputs.pop(inp_name, None)
+                continue
+            
+            resolved = resolution_map.get((source_id, source_slot))
+            if resolved is not None:
+                inputs[inp_name] = resolved
+            else:
+                inputs.pop(inp_name, None)
+    
+    # === PASS 3: Remove all bypassed nodes at once ===
+    for node_id in bypass_set:
         graph.pop(node_id, None)
 
 
