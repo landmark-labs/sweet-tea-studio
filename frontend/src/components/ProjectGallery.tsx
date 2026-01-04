@@ -18,6 +18,7 @@ interface ProjectGalleryProps {
     workflows?: any[];
     onRegenerate?: (item: any, seedOption: 'same' | 'random') => void;
     onUseInPipe?: (payload: { workflowId: string; imagePath: string; galleryItem: GalleryItem }) => void;
+    onBulkDelete?: (deletedPaths: string[], remainingImages: FolderImage[]) => void;
     externalSelection?: {
         projectId?: string | null;
         folder?: string | null;
@@ -140,7 +141,7 @@ const GalleryItemCell = React.memo(function GalleryItemCell({
         prevProps.isSelected === nextProps.isSelected;
 });
 
-export const ProjectGallery = React.memo(function ProjectGallery({ projects, className, onSelectImage, workflows = [], onRegenerate, onUseInPipe, externalSelection, externalSelectionKey }: ProjectGalleryProps) {
+export const ProjectGallery = React.memo(function ProjectGallery({ projects, className, onSelectImage, workflows = [], onRegenerate, onUseInPipe, onBulkDelete, externalSelection, externalSelectionKey }: ProjectGalleryProps) {
     // Panel state - persisted
     const [collapsed, setCollapsed] = useState(() => {
         const saved = localStorage.getItem("ds_project_gallery_collapsed");
@@ -422,7 +423,10 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
         try {
             await api.deleteFolderImages(parseInt(selectedProjectId), selectedFolder, Array.from(pathsToDelete));
             // Use the captured Set for filtering to ensure we remove exactly the deleted paths
-            setImages(prev => prev.filter(img => !pathsToDelete.has(img.path)));
+            const remainingImages = imagesRef.current.filter(img => !pathsToDelete.has(img.path));
+            setImages(remainingImages);
+            // Notify parent so ImageViewer can update if showing a deleted image
+            onBulkDelete?.(Array.from(pathsToDelete), remainingImages);
         } catch (e) {
             console.error("Bulk delete failed", e);
             alert("failed to delete some images");

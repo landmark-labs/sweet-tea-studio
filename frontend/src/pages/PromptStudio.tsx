@@ -379,6 +379,34 @@ export default function PromptStudio() {
     }
   }, [loadGallery]);
 
+  // Handle bulk delete from ProjectGallery - update viewer if showing a deleted image
+  const handleProjectGalleryBulkDelete = useCallback((deletedPaths: string[], remainingImages: FolderImage[]) => {
+    // Update the projectGalleryImages used for navigation
+    setProjectGalleryImages(remainingImages);
+
+    // Check if the currently previewed image was deleted
+    if (previewPath) {
+      // Extract the raw path from the preview URL
+      const rawPath = previewPath.includes('?path=')
+        ? decodeURIComponent(previewPath.split('?path=')[1])
+        : previewPath;
+
+      const wasDeleted = deletedPaths.some(p => p === rawPath);
+      if (wasDeleted) {
+        // Navigate to the next available image or clear preview
+        if (remainingImages.length > 0) {
+          // Find the best next image - preferably the one after the deleted item
+          const nextImage = remainingImages[0];
+          setPreviewPath(`/api/v1/gallery/image/path?path=${encodeURIComponent(nextImage.path)}`);
+          setPreviewMetadata(null);
+        } else {
+          // No images left - clear the preview
+          setPreviewPath(null);
+          setPreviewMetadata(null);
+        }
+      }
+    }
+  }, [previewPath]);
 
   // useOutletContext to get panel states from Layout
   const { feedOpen, libraryOpen } = useOutletContext<{ feedOpen: boolean, libraryOpen: boolean }>();
@@ -2727,6 +2755,7 @@ export default function PromptStudio() {
           setProjectGalleryImages(pgImages);
           setPreviewMetadata(null); // Clear old metadata, will be fetched by ImageViewer
         }}
+        onBulkDelete={handleProjectGalleryBulkDelete}
       />
 
       <MediaTray
