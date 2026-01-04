@@ -643,7 +643,7 @@ const NodeStackRow = React.memo(function NodeStackRow({
                     <div className="flex items-center gap-2 min-w-0">
                         <span className="text-xs font-semibold text-slate-700 truncate">{group.title}</span>
                         {paramCount > 0 && (
-                            <span className="text-[10px] text-slate-400">
+                            <span className="text-[9px] text-slate-400 whitespace-nowrap flex-shrink-0">
                                 {paramCount} params
                             </span>
                         )}
