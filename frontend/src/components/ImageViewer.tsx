@@ -20,7 +20,7 @@ interface ImageViewerProps {
     onImageUpdate?: (image: ApiImage) => void;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     onRegenerate?: (item: any, seedOption: 'same' | 'random') => void;
-    onDelete?: (imageId: number) => void;
+    onDelete?: (imageId: number, path?: string) => void;
     selectedImagePath?: string;
     onLoadMore?: () => void;  // Callback to load more images when near end
     resetKey?: number;  // When changed, reset selectedIndex to 0 (for new generations)
@@ -837,7 +837,7 @@ export const ImageViewer = React.memo(function ImageViewer({
                                             try {
                                                 await api.deleteImageByPath(rawPath);
                                                 // Trigger parent refresh by calling onDelete with -1 to signal path-based delete completed
-                                                onDelete(-1);
+                                                onDelete(-1, rawPath);
                                             } catch (e) {
                                                 console.error("Failed to delete image by path", e);
                                                 alert("failed to delete image");
@@ -1018,7 +1018,7 @@ export const ImageViewer = React.memo(function ImageViewer({
                                             try {
                                                 await api.deleteImageByPath(rawPath);
                                                 // Trigger parent refresh by calling onDelete with -1 to signal path-based delete completed
-                                                onDelete(-1);
+                                                onDelete(-1, rawPath);
                                             } catch (e) {
                                                 console.error("Failed to delete image by path", e);
                                                 alert("failed to delete image");

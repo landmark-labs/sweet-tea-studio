@@ -327,7 +327,7 @@ export default function PromptStudio() {
   }, [galleryRefresh, loadGallery]);
 
   // Handle Deletion from Gallery or Auto-Discard
-  const handleGalleryDelete = useCallback(async (ids: Set<number> | number) => {
+  const handleGalleryDelete = useCallback(async (ids: Set<number> | number, path?: string) => {
     const idsToDelete = typeof ids === 'number' ? new Set([ids]) : ids;
     if (idsToDelete.size === 0) return;
 
@@ -335,6 +335,13 @@ export default function PromptStudio() {
     // We just need to refresh the gallery in this case
     const validIds = Array.from(idsToDelete).filter(id => id > 0);
     const hadPathBasedDelete = Array.from(idsToDelete).some(id => id <= 0);
+
+    // If we have a specific path (from ImageViewer), remove it from ProjectGalleryImages immediately
+    if (path) {
+      setProjectGalleryImages(prev => prev.filter(img => img.path !== path));
+      // Also remove from main gallery list if present (optimistic)
+      setGalleryImages(prev => prev.filter(item => item.image.path !== path));
+    }
 
     try {
       // Optimistic update for valid IDs
@@ -362,6 +369,7 @@ export default function PromptStudio() {
       }
 
       // If there was a path-based delete, refresh the gallery to remove the deleted item
+      // But only if we didn't already handle it via 'path' arg (though refreshing is safer to sync)
       if (hadPathBasedDelete) {
         loadGallery();
       }
@@ -2680,7 +2688,7 @@ export default function PromptStudio() {
                 item.image.id === updatedCalc.id ? { ...item, image: updatedCalc } : item
               ));
             }}
-            onDelete={(id) => handleGalleryDelete(id)}
+            onDelete={(id, path) => handleGalleryDelete(id, path)}
             onRegenerate={handleRegenerate}
             resetKey={galleryRefresh}
           />
