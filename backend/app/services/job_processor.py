@@ -753,42 +753,15 @@ def process_job(job_id: int):
                              bypass_nodes.append(node_id)
                              del working_params[key]
 
-            # Apply Bypass by GRAFTING connections and REMOVING nodes from graph
-            # ComfyUI validates all nodes regardless of mode, so we must remove bypassed nodes entirely
-            # Before removing, we rewire connections so data flows through (A → Bypassed → C becomes A → C)
-            for node_id in bypass_nodes:
-                if node_id in final_graph:
-                    bypassed_node = final_graph[node_id]
-                    
-                    # Step 1: Build pass-through map from bypassed node's inputs
-                    # Maps output_slot -> upstream source [source_node_id, source_slot]
-                    # Assumes 1:1 mapping: input 0 passes through to output 0, etc.
-                    pass_through_map = {}
-                    if "inputs" in bypassed_node:
-                        slot_index = 0
-                        for input_name, input_val in bypassed_node["inputs"].items():
-                            if isinstance(input_val, list) and len(input_val) == 2:
-                                pass_through_map[slot_index] = input_val
-                                slot_index += 1
-                    
-                    # Step 2: Rewire downstream nodes that reference the bypassed node
-                    for other_node_id, other_node in list(final_graph.items()):
-                        if other_node_id == node_id:
-                            continue
-                        if "inputs" in other_node:
-                            for inp_name, inp_val in list(other_node["inputs"].items()):
-                                if isinstance(inp_val, list) and len(inp_val) == 2:
-                                    if str(inp_val[0]) == str(node_id):
-                                        output_slot = inp_val[1]
-                                        if output_slot in pass_through_map:
-                                            # Graft: connect downstream to bypassed node's upstream source
-                                            other_node["inputs"][inp_name] = pass_through_map[output_slot]
-                                        else:
-                                            # No upstream source for this slot, remove the input
-                                            del other_node["inputs"][inp_name]
-                    
-                    # Step 3: Remove the bypassed node from the graph
-                    del final_graph[node_id]
+            # Apply bypass by rewiring and removing nodes from the prompt graph.
+            # Prefer ComfyUI object_info for type-aware pass-through when available.
+            object_info = None
+            if bypass_nodes:
+                try:
+                    object_info = client.get_object_info()
+                except Exception:
+                    object_info = None
+            apply_bypass_to_graph(final_graph, bypass_nodes, object_info=object_info)
 
             node_mapping = workflow.node_mapping if isinstance(workflow.node_mapping, dict) else {}
             node_mapping = dict(node_mapping) if node_mapping else {}
