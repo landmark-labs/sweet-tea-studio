@@ -140,11 +140,18 @@ export default function PromptStudio() {
   const isRunning = generationState === "running";
   const isBusy = isQueuing || isRunning;
 
-  // Batch Queue State
   const [batchSize, setBatchSize] = useState<number>(() => {
     const saved = localStorage.getItem("ds_batch_size");
     return saved ? Math.max(1, Math.min(100, parseInt(saved) || 1)) : 1;
   });
+  // Local state for input field to allow intermediate typing (empty string, etc.)
+  const [batchInputValue, setBatchInputValue] = useState<string>(String(batchSize));
+
+  // Sync input value when batchSize changes externally
+  useEffect(() => {
+    setBatchInputValue(String(batchSize));
+  }, [batchSize]);
+
   const batchCancelledRef = useRef(false);
   const pendingJobIdsRef = useRef<number[]>([]); // Queue of job IDs waiting to run
 
@@ -2528,11 +2535,26 @@ export default function PromptStudio() {
                 type="number"
                 min={1}
                 max={100}
-                value={batchSize}
+                value={batchInputValue}
                 onChange={(e) => {
-                  const num = parseInt(e.target.value);
+                  const val = e.target.value;
+                  setBatchInputValue(val);
+
+                  // Only update actual batch size if valid
+                  const num = parseInt(val);
                   if (!isNaN(num) && num >= 1 && num <= 100) {
                     setBatchSize(num);
+                  }
+                }}
+                onBlur={() => {
+                  const num = parseInt(batchInputValue);
+                  if (isNaN(num) || num < 1 || num > 100) {
+                    // Reset to last valid
+                    setBatchInputValue(String(batchSize));
+                  } else {
+                    // Normalize (e.g. 05 -> 5)
+                    setBatchInputValue(String(num));
+                    if (num !== batchSize) setBatchSize(num);
                   }
                 }}
                 disabled={isBusy}
