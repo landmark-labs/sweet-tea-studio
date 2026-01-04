@@ -40,6 +40,14 @@ const detectFileKind = (file: File) => {
     return guessKindFromFilename(file.name);
 };
 
+const BROWSE_THUMB_MAX_PX = 256;
+
+const galleryMediaUrl = (path: string) =>
+    `/api/v1/gallery/image/path?path=${encodeURIComponent(path)}`;
+
+const galleryThumbnailUrl = (path: string, maxPx = BROWSE_THUMB_MAX_PX) =>
+    `/api/v1/gallery/image/path/thumbnail?path=${encodeURIComponent(path)}&max_px=${maxPx}`;
+
 export function ImageUpload({
     value,
     onChange,
@@ -305,7 +313,7 @@ export function ImageUpload({
                 setPreviewKind(guessKindFromFilename(relativePath));
 
                 // Set preview from the original path
-                const previewUrl = `/api/v1/gallery/image/path?path=${encodeURIComponent(sweetTeaPath)}`;
+                const previewUrl = galleryMediaUrl(sweetTeaPath);
                 setPreview(previewUrl);
                 return;
             }
@@ -320,7 +328,7 @@ export function ImageUpload({
                 addToRecent(result.filename);
                 setPreviewKind(guessKindFromFilename(result.filename));
                 // Set preview from the original path
-                const previewUrl = `/api/v1/gallery/image/path?path=${encodeURIComponent(sweetTeaPath)}`;
+                const previewUrl = galleryMediaUrl(sweetTeaPath);
                 setPreview(previewUrl);
             } catch (err) {
                 console.error("Failed to copy dropped Sweet Tea image to input", err);
@@ -371,7 +379,7 @@ export function ImageUpload({
             onChange(relativePath);
             addToRecent(relativePath);
             setPreviewKind(guessKindFromFilename(relativePath));
-            setPreview(`/api/v1/gallery/image/path?path=${encodeURIComponent(path)}`);
+            setPreview(galleryMediaUrl(path));
             setIsBrowseOpen(false);
             return;
         }
@@ -384,7 +392,7 @@ export function ImageUpload({
             onChange(result.filename);
             addToRecent(result.filename);
             setPreviewKind(guessKindFromFilename(result.filename));
-            setPreview(`/api/v1/gallery/image/path?path=${encodeURIComponent(path)}`);
+            setPreview(galleryMediaUrl(path));
             setIsBrowseOpen(false);
         } catch (e) {
             console.error("Failed to copy gallery image to input", e);
@@ -462,7 +470,7 @@ export function ImageUpload({
     }, []);
 
     // Calculate current media URL for editor
-    const currentMediaUrl = preview || (value ? `/api/v1/gallery/image/path?path=${encodeURIComponent(value)}` : "");
+    const currentMediaUrl = preview || (value ? galleryMediaUrl(value) : "");
     const currentImageUrl = isVideoPreview ? "" : currentMediaUrl;
 
     const renderExpanded = (layoutCompact: boolean) => (
@@ -651,21 +659,17 @@ export function ImageUpload({
                                             onClick={() => selectGalleryImage(img.path)}
                                             className="aspect-square relative group bg-white border rounded-md overflow-hidden hover:ring-2 hover:ring-blue-500 focus:outline-none"
                                         >
-                                            {guessKindFromFilename(img.path) === "video" ? (
-                                                <video
-                                                    src={`/api/v1/gallery/image/path?path=${encodeURIComponent(img.path)}`}
-                                                    className="w-full h-full object-cover"
-                                                    preload="metadata"
-                                                    muted
-                                                    playsInline
-                                                />
-                                            ) : (
-                                                <img
-                                                    loading="lazy"
-                                                    src={`/api/v1/gallery/image/path?path=${encodeURIComponent(img.path)}`}
-                                                    alt={img.filename}
-                                                    className="w-full h-full object-cover"
-                                                />
+                                            <img
+                                                loading="lazy"
+                                                decoding="async"
+                                                src={galleryThumbnailUrl(img.path)}
+                                                alt={img.filename}
+                                                className="w-full h-full object-cover"
+                                            />
+                                            {guessKindFromFilename(img.path) === "video" && (
+                                                <div className="absolute left-1 top-1 rounded bg-black/60 p-1 text-white">
+                                                    <VideoIcon className="h-3 w-3" />
+                                                </div>
                                             )}
                                             <div className="absolute inset-x-0 bottom-0 bg-black/70 text-white text-[10px] p-1 truncate opacity-0 group-hover:opacity-100 transition-opacity">
                                                 {img.filename}
@@ -685,21 +689,17 @@ export function ImageUpload({
                                             onClick={() => selectGalleryImage(path)}
                                             className="aspect-square relative group bg-white border rounded-md overflow-hidden hover:ring-2 hover:ring-blue-500 focus:outline-none"
                                         >
-                                            {guessKindFromFilename(path) === "video" ? (
-                                                <video
-                                                    src={`/api/v1/gallery/image/path?path=${encodeURIComponent(path)}`}
-                                                    className="w-full h-full object-cover"
-                                                    preload="metadata"
-                                                    muted
-                                                    playsInline
-                                                />
-                                            ) : (
-                                                <img
-                                                    loading="lazy"
-                                                    src={`/api/v1/gallery/image/path?path=${encodeURIComponent(path)}`}
-                                                    alt="Project Gallery"
-                                                    className="w-full h-full object-cover"
-                                                />
+                                            <img
+                                                loading="lazy"
+                                                decoding="async"
+                                                src={galleryThumbnailUrl(path)}
+                                                alt="Project Gallery"
+                                                className="w-full h-full object-cover"
+                                            />
+                                            {guessKindFromFilename(path) === "video" && (
+                                                <div className="absolute left-1 top-1 rounded bg-black/60 p-1 text-white">
+                                                    <VideoIcon className="h-3 w-3" />
+                                                </div>
                                             )}
                                             <div className="absolute inset-x-0 bottom-0 bg-black/70 text-white text-[10px] p-1 truncate opacity-0 group-hover:opacity-100 transition-opacity">
                                                 {path.split(/[\\/]/).pop()}
@@ -743,21 +743,17 @@ export function ImageUpload({
                                                     onClick={() => selectGalleryImage(path)}
                                                     className="aspect-square relative group bg-white border rounded-md overflow-hidden hover:ring-2 hover:ring-green-500 focus:outline-none"
                                                 >
-                                                    {guessKindFromFilename(path) === "video" ? (
-                                                        <video
-                                                            src={`/api/v1/gallery/image/path?path=${encodeURIComponent(path)}`}
-                                                            className="w-full h-full object-cover"
-                                                            preload="metadata"
-                                                            muted
-                                                            playsInline
-                                                        />
-                                                    ) : (
-                                                        <img
-                                                            loading="lazy"
-                                                            src={`/api/v1/gallery/image/path?path=${encodeURIComponent(path)}`}
-                                                            alt="Gallery"
-                                                            className="w-full h-full object-cover"
-                                                        />
+                                                    <img
+                                                        loading="lazy"
+                                                        decoding="async"
+                                                        src={galleryThumbnailUrl(path)}
+                                                        alt="Gallery"
+                                                        className="w-full h-full object-cover"
+                                                    />
+                                                    {guessKindFromFilename(path) === "video" && (
+                                                        <div className="absolute left-1 top-1 rounded bg-black/60 p-1 text-white">
+                                                            <VideoIcon className="h-3 w-3" />
+                                                        </div>
                                                     )}
                                                     <div className="absolute inset-x-0 bottom-0 bg-black/70 text-white text-[10px] p-1 truncate opacity-0 group-hover:opacity-100 transition-opacity">
                                                         {path.split(/[\\/]/).pop()}
