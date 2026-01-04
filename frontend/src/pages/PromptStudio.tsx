@@ -1795,8 +1795,27 @@ export default function PromptStudio() {
           });
           // Clear previewPath so ImageViewer doesn't try to align to it
           setPreviewPath(null);
-          // Clear ProjectGallery images so navigation uses the updated galleryImages
-          setProjectGalleryImages([]);
+
+          // CRITICAL FIX: Sync with Project Gallery context if active
+          // This ensures the viewer playlist respects the user's current folder instead of falling back to "recent all"
+          const activeProjectId = localStorage.getItem("ds_project_gallery_project");
+          const activeFolder = localStorage.getItem("ds_project_gallery_folder");
+
+          if (activeProjectId && activeFolder) {
+            // Fetch latest images for this folder to keep viewer context valid
+            api.getProjectFolderImages(parseInt(activeProjectId), activeFolder)
+              .then(folderImages => {
+                // Update the viewer's navigation list with the folder contents
+                setProjectGalleryImages(folderImages);
+              })
+              .catch(err => {
+                console.warn("Failed to sync project gallery context:", err);
+                setProjectGalleryImages([]); // Fallback to safe empty state (will use galleryImages)
+              });
+          } else {
+            // No active folder context, clear to allow fallback to global galleryImages
+            setProjectGalleryImages([]);
+          }
 
           // Optimistically add new image to galleryImages immediately
           // This ensures index 0 has the new image when resetKey effect runs
