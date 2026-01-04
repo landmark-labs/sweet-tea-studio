@@ -138,7 +138,8 @@ export default function PromptStudio() {
   const progressHistoryRef = useRef<ProgressHistoryEntry[]>([]);
   const isQueuing = generationState === "queued";
   const isRunning = generationState === "running";
-  const isBusy = isQueuing || isRunning;
+  // Include lastJobId in busy check - if we have an active job, we're busy even if state updates lagged
+  const isBusy = isQueuing || isRunning || lastJobId !== null;
 
   const [batchSize, setBatchSize] = useState<number>(() => {
     const saved = localStorage.getItem("ds_batch_size");
