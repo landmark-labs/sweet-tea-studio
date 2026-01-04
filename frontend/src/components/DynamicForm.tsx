@@ -341,9 +341,6 @@ const NodePromptGroup = React.memo(function NodePromptGroup({
                 <div className="flex items-center gap-2">
                     {group.hasBypass && group.bypassKey && (
                         <div className="flex items-center gap-2">
-                            <span className="text-[9px] text-slate-300 uppercase tracking-wider">
-                                {isBypassed ? "bypassed" : "active"}
-                            </span>
                             <Switch
                                 checked={Boolean(bypassValue)}
                                 onCheckedChange={(c) => onToggleChange(group.bypassKey!, Boolean(c))}
@@ -435,9 +432,6 @@ const NodeMediaGroup = React.memo(function NodeMediaGroup({
                 <div className="flex items-center gap-2">
                     {group.hasBypass && group.bypassKey && (
                         <div className="flex items-center gap-2">
-                            <span className="text-[9px] text-slate-300 uppercase tracking-wider">
-                                {isBypassed ? "bypassed" : "active"}
-                            </span>
                             <Switch
                                 checked={Boolean(bypassValue)}
                                 onCheckedChange={(c) => onToggleChange(group.bypassKey!, Boolean(c))}
@@ -514,9 +508,6 @@ const PinnedInspectorPanel = React.memo(function PinnedInspectorPanel({
                 <div className="flex items-center gap-2">
                     {group.hasBypass && group.bypassKey && (
                         <div className="flex items-center gap-2">
-                            <span className="text-[9px] text-slate-300 uppercase tracking-wider">
-                                {isBypassed ? "bypassed" : "active"}
-                            </span>
                             <Switch
                                 checked={Boolean(bypassValue)}
                                 onCheckedChange={(c) => onToggleChange(group.bypassKey!, Boolean(c))}
@@ -656,9 +647,6 @@ const NodeStackRow = React.memo(function NodeStackRow({
                     <div className="flex items-center gap-2">
                         {group.hasBypass && group.bypassKey && (
                             <div className="flex items-center gap-2">
-                                <span className="text-[9px] text-slate-300 uppercase tracking-wider">
-                                    {isBypassed ? "bypassed" : "active"}
-                                </span>
                                 <Switch
                                     checked={Boolean(bypassValue)}
                                     onCheckedChange={(c) => onToggleChange(group.bypassKey!, Boolean(c))}
@@ -711,9 +699,6 @@ const NodeStackRow = React.memo(function NodeStackRow({
                     <div className="flex items-center gap-2">
                         {group.hasBypass && group.bypassKey && (
                             <div className="flex items-center gap-2">
-                                <span className="text-[9px] text-slate-300 uppercase tracking-wider">
-                                    {isBypassed ? "bypassed" : "active"}
-                                </span>
                                 <Switch
                                     checked={Boolean(bypassValue)}
                                     onCheckedChange={(c) => onToggleChange(group.bypassKey!, Boolean(c))}
