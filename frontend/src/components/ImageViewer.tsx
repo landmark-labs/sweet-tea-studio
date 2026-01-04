@@ -830,7 +830,7 @@ export const ImageViewer = React.memo(function ImageViewer({
 
                                         if (imageId > 0) {
                                             // Standard deletion by ID
-                                            onDelete(imageId);
+                                            onDelete(imageId, extractRawPath(currentImage.path));
                                         } else {
                                             // Path-based deletion for images without valid DB ID (e.g., from ProjectGallery)
                                             const rawPath = extractRawPath(currentImage.path);
@@ -1011,7 +1011,7 @@ export const ImageViewer = React.memo(function ImageViewer({
                                         }
 
                                         if (imageId > 0) {
-                                            onDelete(imageId);
+                                            onDelete(imageId, extractRawPath(currentImage.path));
                                         } else {
                                             // Path-based deletion for images without valid DB ID (e.g., from ProjectGallery)
                                             const rawPath = extractRawPath(currentImage.path);
