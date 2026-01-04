@@ -425,6 +425,118 @@ def apply_bypass_to_graph(
         graph.pop(node_id, None)
 
 
+def _get_node_output_type(
+    graph: dict,
+    node_id: str,
+    output_slot: int,
+    object_info: dict[str, Any],
+) -> str | None:
+    node = graph.get(node_id)
+    if not isinstance(node, dict):
+        return None
+    class_type = node.get("class_type")
+    if not isinstance(class_type, str) or not class_type:
+        return None
+    node_def = object_info.get(class_type)
+    if not isinstance(node_def, dict):
+        return None
+    outputs = node_def.get("output")
+    if not isinstance(outputs, list) or output_slot < 0 or output_slot >= len(outputs):
+        return None
+    return _normalize_comfy_type(outputs[output_slot])
+
+
+def _prune_type_mismatched_optional_links(graph: dict, object_info: dict[str, Any] | None) -> None:
+    """
+    Best-effort safety net: remove optional linked inputs whose upstream output
+    type does not match the downstream expected type.
+
+    This is primarily meant to prevent ComfyUI prompt validation failures after
+    bypass rewiring when an upstream pass-through would produce an incompatible
+    type (e.g. INT -> IMAGE).
+    """
+    if not isinstance(graph, dict) or not isinstance(object_info, dict) or not object_info:
+        return
+
+    for _node_id, node in list(graph.items()):
+        if not isinstance(node, dict):
+            continue
+        inputs = node.get("inputs")
+        if not isinstance(inputs, dict) or not inputs:
+            continue
+
+        class_type = node.get("class_type")
+        if not isinstance(class_type, str) or not class_type:
+            continue
+
+        node_def = object_info.get(class_type)
+        if not isinstance(node_def, dict):
+            continue
+
+        input_conf = node_def.get("input", {})
+        if not isinstance(input_conf, dict):
+            continue
+
+        optional = input_conf.get("optional", {})
+        if not isinstance(optional, dict) or not optional:
+            continue
+
+        for input_name, input_val in list(inputs.items()):
+            if input_name not in optional:
+                continue
+            if not (isinstance(input_val, list) and len(input_val) == 2):
+                continue
+
+            try:
+                source_id = str(input_val[0])
+                source_slot = int(input_val[1])
+            except Exception:
+                inputs.pop(input_name, None)
+                continue
+
+            input_config = optional.get(input_name)
+            if not isinstance(input_config, list) or not input_config:
+                continue
+
+            expected_type = _normalize_comfy_type(input_config[0])
+            if not expected_type or expected_type in ("ANY", "*"):
+                continue
+
+            actual_type = _get_node_output_type(graph, source_id, source_slot, object_info)
+            if not actual_type:
+                continue
+
+            if expected_type != actual_type:
+                inputs.pop(input_name, None)
+
+
+def _dump_failed_prompt_graph(
+    job_id: int,
+    graph: dict,
+    bypass_nodes: list[str],
+    params: dict,
+    error: str,
+) -> None:
+    try:
+        from app.core.config import settings
+
+        payload = {
+            "job_id": job_id,
+            "error": error,
+            "bypass_nodes": [str(n) for n in (bypass_nodes or [])],
+            "params": params,
+            "graph": graph,
+        }
+
+        # Overwrite last error dump to avoid clutter.
+        dump_path = settings.meta_dir / "debug_last_graph_error.json"
+        with open(dump_path, "w", encoding="utf-8") as f:
+            json.dump(payload, f, indent=2)
+        print(f"[JobProcessor] Wrote ComfyUI error graph dump: {dump_path}")
+    except Exception as dump_err:
+        print(f"[JobProcessor] Failed to dump ComfyUI error graph: {dump_err}")
+
+
 def _build_node_mapping_from_schema(schema: dict) -> dict:
     mapping: dict[str, dict[str, str]] = {}
     for key, field_def in schema.items():
@@ -862,6 +974,8 @@ def process_job(job_id: int):
                 except Exception:
                     object_info = None
             apply_bypass_to_graph(final_graph, bypass_nodes, object_info=object_info)
+            if bypass_nodes:
+                _prune_type_mismatched_optional_links(final_graph, object_info)
 
             node_mapping = workflow.node_mapping if isinstance(workflow.node_mapping, dict) else {}
             node_mapping = dict(node_mapping) if node_mapping else {}
@@ -1122,7 +1236,11 @@ def process_job(job_id: int):
                 except Exception as e:
                     print(f"Failed to process streamed image: {e}")
 
-            prompt_id = client.queue_prompt(final_graph)
+            try:
+                prompt_id = client.queue_prompt(final_graph)
+            except ComfyResponseError as e:
+                _dump_failed_prompt_graph(job_id, final_graph, bypass_nodes, working_params, str(e))
+                raise
             job.comfy_prompt_id = prompt_id
             session.add(job)
             session.commit()

@@ -190,3 +190,94 @@ def test_bypass_does_not_passthrough_any_typed_inputs():
 
     assert "2" not in graph
     assert "image" not in graph["3"]["inputs"]
+
+
+def test_bypass_wan_optional_end_inputs_disconnected():
+    """
+    Regression for Wan workflows where the end-image branch is bypassed.
+
+    In this graph, the bypassed nodes have inputs ordered such that the first
+    linked input is *not* the one matching the output type (e.g. width/height
+    before images). Bypass should still disconnect Wan optional end inputs
+    instead of rewiring them to INT/CLIP_VISION links.
+    """
+    graph = {
+        "376": {"class_type": "easy int", "inputs": {"value": 1280}},
+        "377": {"class_type": "easy int", "inputs": {"value": 720}},
+        "480": {"class_type": "LoadImage", "inputs": {"image": "null_frame2.png"}},
+        "264": {"class_type": "CLIPVisionLoader", "inputs": {"clip_name": "clip.safetensors"}},
+        # Deliberately order inputs: width/height first, images last.
+        "167": {
+            "class_type": "easy imageScaleDown",
+            "inputs": {
+                "width": ["376", 0],
+                "height": ["377", 0],
+                "crop": "center",
+                "images": ["480", 0],
+            },
+        },
+        # Deliberately order inputs: crop first, then clip_vision, then image.
+        "265": {
+            "class_type": "CLIPVisionEncode",
+            "inputs": {
+                "crop": "center",
+                "clip_vision": ["264", 0],
+                "image": ["167", 0],
+            },
+        },
+        "297": {
+            "class_type": "WanFirstLastFrameToVideo",
+            "inputs": {
+                "end_image": ["167", 0],
+                "clip_vision_end_image": ["265", 0],
+            },
+        },
+    }
+
+    object_info = {
+        "LoadImage": {
+            "input": {"required": {"image": [["example.png"], {}]}},
+            "output": ["IMAGE", "MASK"],
+        },
+        "easy imageScaleDown": {
+            "input": {
+                "required": {
+                    "images": ["IMAGE", {}],
+                    "width": ["INT", {}],
+                    "height": ["INT", {}],
+                    "crop": [["disabled", "center"], {}],
+                }
+            },
+            "output": ["IMAGE"],
+        },
+        "CLIPVisionEncode": {
+            "input": {
+                "required": {
+                    "clip_vision": ["CLIP_VISION", {}],
+                    "image": ["IMAGE", {}],
+                    "crop": [["center", "none"], {}],
+                }
+            },
+            "output": ["CLIP_VISION_OUTPUT"],
+        },
+        "CLIPVisionLoader": {
+            "input": {"required": {"clip_name": [["clip.safetensors"], {}]}},
+            "output": ["CLIP_VISION"],
+        },
+        "easy int": {"input": {"required": {"value": ["INT", {}]}}, "output": ["INT"]},
+        "WanFirstLastFrameToVideo": {
+            "input": {
+                "required": {"width": ["INT", {}], "height": ["INT", {}]},
+                "optional": {"end_image": ["IMAGE", {}], "clip_vision_end_image": ["CLIP_VISION_OUTPUT", {}]},
+            },
+            "output": ["LATENT"],
+        },
+    }
+
+    apply_bypass_to_graph(graph, ["480", "167", "265"], object_info=object_info)
+
+    assert "480" not in graph
+    assert "167" not in graph
+    assert "265" not in graph
+    assert "end_image" not in graph["297"]["inputs"]
+    assert "clip_vision_end_image" not in graph["297"]["inputs"]
