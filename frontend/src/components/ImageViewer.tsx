@@ -144,6 +144,21 @@ export const ImageViewer = React.memo(function ImageViewer({
     const currentImage = navigationMode
         ? displayImages[selectedIndex]
         : (lockedImage || displayImages[0]);
+
+    // Calculate the effective index for UI state (buttons)
+    // This allows arrows to disable correctly even when not in explicit navigation mode
+    const effectiveIndex = React.useMemo(() => {
+        if (navigationMode) return selectedIndex;
+        if (!currentImage) return -1;
+
+        const rawPath = extractRawPath(currentImage.path);
+        const idx = displayImages.findIndex((img) => {
+            const imgRawPath = extractRawPath(img.path);
+            return imgRawPath === rawPath || img.path === currentImage.path;
+        });
+        return idx !== -1 ? idx : 0;
+    }, [navigationMode, selectedIndex, currentImage, displayImages, extractRawPath]);
+
     const imagePath = currentImage?.path;
     const isVideo = isVideoFile(imagePath, currentImage?.filename);
     const canDrawMask = Boolean(imagePath) && !isVideo;
@@ -613,10 +628,11 @@ export const ImageViewer = React.memo(function ImageViewer({
                                 className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/50 hover:bg-white/80 rounded-full z-10"
                                 onClick={(e) => {
                                     e.stopPropagation();
+                                    e.stopPropagation();
                                     enterNavigationMode();
-                                    setSelectedIndex(p => Math.max(0, p - 1));
+                                    setSelectedIndex(Math.max(0, effectiveIndex - 1));
                                 }}
-                                disabled={navigationMode && selectedIndex === 0}
+                                disabled={effectiveIndex <= 0}
                             >
                                 <ArrowLeft className="w-5 h-5 text-slate-800" />
                             </Button>
@@ -626,10 +642,11 @@ export const ImageViewer = React.memo(function ImageViewer({
                                 className="absolute right-4 top-1/2 -translate-y-1/2 bg-white/50 hover:bg-white/80 rounded-full z-10"
                                 onClick={(e) => {
                                     e.stopPropagation();
+                                    e.stopPropagation();
                                     enterNavigationMode();
-                                    setSelectedIndex(p => Math.min(displayImages.length - 1, p + 1));
+                                    setSelectedIndex(Math.min(displayImages.length - 1, effectiveIndex + 1));
                                 }}
-                                disabled={navigationMode && selectedIndex === displayImages.length - 1}
+                                disabled={effectiveIndex >= displayImages.length - 1}
                             >
                                 <ArrowRight className="w-5 h-5 text-slate-800" />
                             </Button>
