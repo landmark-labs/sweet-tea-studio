@@ -167,7 +167,9 @@ export const useGenerationFeedStore = create<GenerationFeedState>()(
         return feed.some(item =>
           item.status === 'queued' ||
           item.status === 'processing' ||
-          item.status === 'running'
+          item.status === 'running' ||
+          item.status === 'saving' ||
+          item.status === 'initiating'
         );
       },
     }),
