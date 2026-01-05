@@ -23,6 +23,7 @@ interface GenerationFeedState {
   updateProgress: (jobId: number, progress: number, status?: string) => void;
   clearPreviewBlobs: () => void;
   clearFeed: () => void;
+  hasActiveJobs: () => boolean;
 }
 
 interface PromptLibraryState {
@@ -161,6 +162,14 @@ export const useGenerationFeedStore = create<GenerationFeedState>()(
           generationFeed: state.generationFeed.map(({ previewBlob, ...rest }) => rest),
         })),
       clearFeed: () => set({ generationFeed: [] }),
+      hasActiveJobs: () => {
+        const feed = get().generationFeed;
+        return feed.some(item =>
+          item.status === 'queued' ||
+          item.status === 'processing' ||
+          item.status === 'running'
+        );
+      },
     }),
     {
       name: "ds_generation_feed",

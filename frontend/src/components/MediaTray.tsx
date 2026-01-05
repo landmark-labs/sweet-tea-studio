@@ -86,7 +86,9 @@ function SortableTrayCell({
           style={style}
           className={cn(
             "relative aspect-square rounded overflow-hidden border transition-all select-none group",
-            reorderMode ? "cursor-grab border-slate-300 bg-slate-50" : "cursor-pointer border-slate-200 hover:border-blue-400 hover:shadow-sm bg-white",
+            reorderMode
+              ? "cursor-grab border-border/60 bg-muted/20"
+              : "cursor-pointer border-border/60 hover:border-blue-400 dark:hover:border-primary/60 hover:shadow-sm bg-card",
             isDragging ? "ring-2 ring-blue-500" : ""
           )}
           draggable={!reorderMode}
@@ -114,7 +116,7 @@ function SortableTrayCell({
           )}
 
           {reorderMode && (
-            <div className="absolute bottom-1 right-1 bg-white/80 text-slate-700 rounded p-0.5">
+            <div className="absolute bottom-1 right-1 bg-white/80 text-slate-700 dark:bg-black/40 dark:text-white rounded p-0.5">
               <GripVertical className="w-3 h-3" />
             </div>
           )}
@@ -131,11 +133,11 @@ function SortableTrayCell({
             show in viewer
           </span>
         </ContextMenuItem>
-        <ContextMenuSeparator />
-        <ContextMenuItem className="text-red-600" onSelect={() => onRemove?.(item.path)}>
-          <span className="flex items-center gap-2">
-            <Trash2 className="w-4 h-4" />
-            remove from tray
+      <ContextMenuSeparator />
+      <ContextMenuItem className="text-destructive" onSelect={() => onRemove?.(item.path)}>
+        <span className="flex items-center gap-2">
+          <Trash2 className="w-4 h-4" />
+          remove from tray
           </span>
         </ContextMenuItem>
       </ContextMenuContent>
@@ -159,16 +161,16 @@ function MediaTrayPreview({
       onMouseDown={onClose}
     >
       <div
-        className="relative bg-white rounded-lg shadow-xl border border-slate-200 overflow-hidden w-[420px] max-w-[92vw]"
+        className="relative bg-card rounded-lg shadow-xl border border-border/60 overflow-hidden w-[420px] max-w-[92vw]"
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-3 py-2 border-b bg-slate-50">
-          <div className="text-xs font-semibold text-slate-700 truncate pr-2">{item.filename}</div>
+        <div className="flex items-center justify-between px-3 py-2 border-b border-border/60 bg-muted/20">
+          <div className="text-xs font-semibold text-foreground/80 truncate pr-2">{item.filename}</div>
           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onClose} title="Close preview">
             <X className="h-4 w-4" />
           </Button>
         </div>
-        <div className="bg-slate-100 flex items-center justify-center">
+        <div className="bg-muted/20 flex items-center justify-center">
           {isVideo ? (
             <video src={url} className="w-full max-h-[420px] object-contain" controls preload="metadata" playsInline />
           ) : (
@@ -299,7 +301,7 @@ export function MediaTray({ className, onShowInViewer }: MediaTrayProps) {
 
   if (collapsed) {
     return (
-      <div className={cn("flex-none w-10 bg-white border-l flex flex-col items-center py-3 h-full", className)}>
+      <div className={cn("flex-none w-10 bg-card border-l border-border/70 flex flex-col items-center py-3 h-full", className)}>
         <Button
           variant="ghost"
           size="icon"
@@ -309,7 +311,7 @@ export function MediaTray({ className, onShowInViewer }: MediaTrayProps) {
         >
           <ChevronLeft className="h-4 w-4" />
         </Button>
-        <div className="mt-4 [writing-mode:vertical-rl] [text-orientation:mixed] text-xs text-slate-400 font-medium tracking-wider whitespace-nowrap">
+        <div className="mt-4 [writing-mode:vertical-rl] [text-orientation:mixed] text-xs text-muted-foreground font-medium tracking-wider whitespace-nowrap">
           media tray
         </div>
       </div>
@@ -317,29 +319,29 @@ export function MediaTray({ className, onShowInViewer }: MediaTrayProps) {
   }
 
   return (
-    <div ref={trayRef} className={cn("flex-none w-40 bg-white border-l flex flex-col h-full overflow-hidden", className)}>
-      <div className="flex-none p-3 border-b bg-slate-50/50">
+    <div ref={trayRef} className={cn("flex-none w-40 bg-card border-l border-border/70 flex flex-col h-full overflow-hidden", className)}>
+      <div className="flex-none p-3 border-b border-border/60 bg-muted/20">
         <div className="flex items-center">
-          <div className="text-xs font-bold text-slate-800 tracking-wider">MEDIA TRAY</div>
+          <div className="text-xs font-bold text-foreground tracking-wider">MEDIA TRAY</div>
           <button
             type="button"
-            className="ml-2 flex-1 h-7 rounded hover:bg-slate-100 transition flex items-center justify-end pr-1"
+            className="ml-2 flex-1 h-7 rounded hover:bg-muted/50 transition flex items-center justify-end pr-1"
             onClick={toggleCollapsed}
             title="Collapse Media Tray"
             aria-label="Collapse Media Tray"
           >
-            <ChevronRight className="h-4 w-4 text-slate-600" />
+            <ChevronRight className="h-4 w-4 text-muted-foreground" />
           </button>
         </div>
 
-        <div className="flex items-center justify-between text-[11px] text-slate-500">
+        <div className="flex items-center justify-between text-[11px] text-muted-foreground">
           <div>
             {items.length} item{items.length === 1 ? "" : "s"}
           </div>
           {reorderMode ? (
             <div className="text-blue-600 font-semibold">reorder mode</div>
           ) : (
-            <div className="text-slate-400">hold to reorder</div>
+            <div className="text-muted-foreground">hold to reorder</div>
           )}
         </div>
       </div>
@@ -348,7 +350,7 @@ export function MediaTray({ className, onShowInViewer }: MediaTrayProps) {
         <SortableContext items={items.map((i) => i.path)} strategy={rectSortingStrategy}>
           <div className="flex-1 overflow-auto p-1">
             {items.length === 0 ? (
-              <div className="h-full flex items-center justify-center text-xs text-slate-400 text-center px-4">
+              <div className="h-full flex items-center justify-center text-xs text-muted-foreground text-center px-4">
                 Right-click an image and choose “add to media tray”
               </div>
             ) : (

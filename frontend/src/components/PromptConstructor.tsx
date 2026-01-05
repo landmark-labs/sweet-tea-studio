@@ -37,28 +37,28 @@ interface PromptConstructorProps {
 // --- Constants ---
 
 export const COLORS = [
-    "bg-stone-100 border-stone-300 text-stone-900",
-    "bg-indigo-100 border-indigo-300 text-indigo-900",
-    "bg-emerald-100 border-emerald-300 text-emerald-900",
-    "bg-red-100 border-red-300 text-red-900",
-    "bg-cyan-100 border-cyan-300 text-cyan-900",
-    "bg-amber-200 border-amber-400 text-amber-900", // Darkened for contrast vs bg-amber-50
-    "bg-fuchsia-100 border-fuchsia-300 text-fuchsia-900",
-    "bg-lime-100 border-lime-300 text-lime-900",
-    "bg-violet-100 border-violet-300 text-violet-900",
-    "bg-orange-100 border-orange-300 text-orange-900",
-    "bg-teal-100 border-teal-300 text-teal-900",
-    "bg-rose-100 border-rose-300 text-rose-900",
-    "bg-blue-100 border-blue-300 text-blue-900",
-    "bg-yellow-200 border-yellow-400 text-yellow-900", // Darkened for contrast vs bg-amber-50
-    "bg-purple-100 border-purple-300 text-purple-900",
-    "bg-green-100 border-green-300 text-green-900",
-    "bg-sky-100 border-sky-300 text-sky-900",
-    "bg-pink-100 border-pink-300 text-pink-900",
-    "bg-slate-100 border-slate-300 text-slate-900",
-    "bg-zinc-100 border-zinc-300 text-zinc-900",
-    "bg-gray-100 border-gray-300 text-gray-900",
-    "bg-neutral-100 border-neutral-300 text-neutral-900",
+    "bg-stone-100 border-stone-300 text-stone-900 dark:bg-stone-900/30 dark:border-stone-700 dark:text-stone-100",
+    "bg-indigo-100 border-indigo-300 text-indigo-900 dark:bg-indigo-950/25 dark:border-indigo-700 dark:text-indigo-100",
+    "bg-emerald-100 border-emerald-300 text-emerald-900 dark:bg-emerald-950/20 dark:border-emerald-700 dark:text-emerald-100",
+    "bg-red-100 border-red-300 text-red-900 dark:bg-red-950/20 dark:border-red-700 dark:text-red-100",
+    "bg-cyan-100 border-cyan-300 text-cyan-900 dark:bg-cyan-950/20 dark:border-cyan-700 dark:text-cyan-100",
+    "bg-amber-200 border-amber-400 text-amber-900 dark:bg-amber-950/20 dark:border-amber-700 dark:text-amber-100", // Darkened for contrast vs bg-amber-50
+    "bg-fuchsia-100 border-fuchsia-300 text-fuchsia-900 dark:bg-fuchsia-950/20 dark:border-fuchsia-700 dark:text-fuchsia-100",
+    "bg-lime-100 border-lime-300 text-lime-900 dark:bg-lime-950/20 dark:border-lime-700 dark:text-lime-100",
+    "bg-violet-100 border-violet-300 text-violet-900 dark:bg-violet-950/20 dark:border-violet-700 dark:text-violet-100",
+    "bg-orange-100 border-orange-300 text-orange-900 dark:bg-orange-950/20 dark:border-orange-700 dark:text-orange-100",
+    "bg-teal-100 border-teal-300 text-teal-900 dark:bg-teal-950/20 dark:border-teal-700 dark:text-teal-100",
+    "bg-rose-100 border-rose-300 text-rose-900 dark:bg-rose-950/20 dark:border-rose-700 dark:text-rose-100",
+    "bg-blue-100 border-blue-300 text-blue-900 dark:bg-blue-950/20 dark:border-blue-700 dark:text-blue-100",
+    "bg-yellow-200 border-yellow-400 text-yellow-900 dark:bg-yellow-950/20 dark:border-yellow-700 dark:text-yellow-100", // Darkened for contrast vs bg-amber-50
+    "bg-purple-100 border-purple-300 text-purple-900 dark:bg-purple-950/20 dark:border-purple-700 dark:text-purple-100",
+    "bg-green-100 border-green-300 text-green-900 dark:bg-green-950/20 dark:border-green-700 dark:text-green-100",
+    "bg-sky-100 border-sky-300 text-sky-900 dark:bg-sky-950/20 dark:border-sky-700 dark:text-sky-100",
+    "bg-pink-100 border-pink-300 text-pink-900 dark:bg-pink-950/20 dark:border-pink-700 dark:text-pink-100",
+    "bg-slate-100 border-slate-300 text-slate-900 dark:bg-slate-900/30 dark:border-slate-700 dark:text-slate-100",
+    "bg-zinc-100 border-zinc-300 text-zinc-900 dark:bg-zinc-950/20 dark:border-zinc-700 dark:text-zinc-100",
+    "bg-gray-100 border-gray-300 text-gray-900 dark:bg-gray-900/30 dark:border-gray-700 dark:text-gray-100",
+    "bg-neutral-100 border-neutral-300 text-neutral-900 dark:bg-neutral-900/30 dark:border-neutral-700 dark:text-neutral-100",
 ];
 
 // --- Sub-Components ---
@@ -102,7 +102,7 @@ const SortableItem = React.memo(function SortableItem({ item, index, textIndex, 
                         onChange={(e) => onUpdateContent(item.id, e.target.value)}
                         onBlur={handleBlur}
                         onKeyDown={handleKeyDown}
-                        className="min-h-[32px] h-auto w-full text-[11px] font-mono border-dashed bg-white shadow-lg ring-2 ring-blue-500 transition-colors resize-y py-1 px-2 rounded-md"
+                        className="min-h-[32px] h-auto w-full text-[11px] font-mono border-dashed bg-white dark:bg-surface-raised shadow-lg ring-2 ring-blue-500 transition-colors resize-y py-1 px-2 rounded-md"
                         placeholder="text..."
                     />
                 </div>
@@ -117,7 +117,7 @@ const SortableItem = React.memo(function SortableItem({ item, index, textIndex, 
                         style={style}
                         className={cn(
                             "flex items-center gap-1 px-2 py-1 rounded-md border shadow-sm cursor-grab active:cursor-grabbing select-none group relative text-[11px] font-medium w-full min-w-0 min-h-[32px] transition-all hover:-translate-y-0.5 hover:shadow-md",
-                            "bg-slate-50 border-slate-300 text-slate-700 hover:border-slate-400",
+                            "bg-slate-50 border-slate-300 text-slate-700 hover:border-slate-400 dark:bg-muted/20 dark:border-border/60 dark:text-foreground/80 dark:hover:border-border",
                             isDragging && "ring-2 ring-blue-200 shadow-lg"
                         )}
                         {...attributes}
@@ -144,7 +144,7 @@ const SortableItem = React.memo(function SortableItem({ item, index, textIndex, 
                         <Button
                             variant="ghost"
                             size="icon"
-                            className="h-4 w-4 ml-1 -mr-1 rounded-full text-slate-500 hover:text-red-600 hover:bg-red-50"
+                            className="h-4 w-4 ml-1 -mr-1 rounded-full text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                             onPointerDown={(e) => e.stopPropagation()}
                             onClick={(e) => onRemove(item.id, e)}
                         >
@@ -152,14 +152,14 @@ const SortableItem = React.memo(function SortableItem({ item, index, textIndex, 
                         </Button>
                     </div>
                 </HoverCardTrigger>
-                <HoverCardContent className="w-80 shadow-xl border-slate-200" side="left" align="start">
+                <HoverCardContent className="w-80 shadow-xl border-border/60" side="left" align="start">
                     <div className="space-y-2">
                         <div className="flex items-center justify-between">
-                            <p className="text-xs font-semibold text-slate-700">Text Segment {textIndex}</p>
-                            <span className="text-[10px] font-mono text-slate-400">{item.content.length} chars</span>
+                            <p className="text-xs font-semibold text-foreground/80">Text Segment {textIndex}</p>
+                            <span className="text-[10px] font-mono text-muted-foreground">{item.content.length} chars</span>
                         </div>
-                        <ScrollArea className="h-32 rounded-lg border border-slate-100 bg-slate-50">
-                            <p className="p-3 text-[11px] leading-relaxed font-mono whitespace-pre-wrap text-slate-700">
+                        <ScrollArea className="h-32 rounded-lg border border-border/60 bg-muted/20">
+                            <p className="p-3 text-[11px] leading-relaxed font-mono whitespace-pre-wrap text-foreground/80">
                                 {item.content}
                             </p>
                         </ScrollArea>
@@ -178,7 +178,7 @@ const SortableItem = React.memo(function SortableItem({ item, index, textIndex, 
                     style={style}
                     className={cn(
                         "flex items-center gap-1 px-2 py-1 rounded-md border shadow-sm cursor-grab active:cursor-grabbing select-none group relative text-[11px] font-medium w-full min-w-0 min-h-[32px] transition-all hover:-translate-y-0.5 hover:shadow-md",
-                        item.color || "bg-slate-100 border-slate-200",
+                        item.color || "bg-muted/20 border-border/60",
                         isDragging && "ring-2 ring-blue-200 shadow-lg"
                     )}
                     {...attributes}
@@ -189,7 +189,7 @@ const SortableItem = React.memo(function SortableItem({ item, index, textIndex, 
                     <Button
                         variant="ghost"
                         size="icon"
-                        className="h-4 w-4 ml-1 -mr-1 rounded-full text-slate-500 hover:text-red-600 hover:bg-red-50"
+                        className="h-4 w-4 ml-1 -mr-1 rounded-full text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                         onPointerDown={(e) => e.stopPropagation()}
                         onClick={(e) => onRemove(item.id, e)}
                     >
@@ -197,14 +197,14 @@ const SortableItem = React.memo(function SortableItem({ item, index, textIndex, 
                     </Button>
                 </div>
             </HoverCardTrigger>
-            <HoverCardContent className="w-80 shadow-xl border-slate-200" side="left" align="start">
+            <HoverCardContent className="w-80 shadow-xl border-border/60" side="left" align="start">
                 <div className="space-y-2">
                     <div className="flex items-center justify-between">
-                        <p className="text-xs font-semibold text-slate-700">{item.label || "Snippet"}</p>
-                        <span className="text-[10px] font-mono text-slate-400">{item.content.length} chars</span>
+                        <p className="text-xs font-semibold text-foreground/80">{item.label || "Snippet"}</p>
+                        <span className="text-[10px] font-mono text-muted-foreground">{item.content.length} chars</span>
                     </div>
-                    <ScrollArea className="h-32 rounded-lg border border-slate-100 bg-slate-50">
-                        <p className="p-3 text-[11px] leading-relaxed font-mono whitespace-pre-wrap text-slate-700">
+                    <ScrollArea className="h-32 rounded-lg border border-border/60 bg-muted/20">
+                        <p className="p-3 text-[11px] leading-relaxed font-mono whitespace-pre-wrap text-foreground/80">
                             {item.content}
                         </p>
                     </ScrollArea>
@@ -411,47 +411,47 @@ const SortableLibrarySnippet = React.memo(function SortableLibrarySnippet({ snip
                             {...listeners}
                         >
                             <span className="truncate w-full pr-1">{snippet.label}</span>
-                            <div className="absolute right-0 top-0 bottom-0 flex items-center pr-1 opacity-0 group-hover:opacity-100 transition-opacity bg-gradient-to-l from-white/90 via-white/80 to-transparent pl-4">
+                            <div className="absolute right-0 top-0 bottom-0 flex items-center pr-1 opacity-0 group-hover:opacity-100 transition-opacity bg-gradient-to-l from-white/90 via-white/80 to-transparent dark:from-background/80 dark:via-background/60 pl-4">
                                 {/* Pencil edit button */}
                                 <Button
                                     variant="ghost"
                                     size="icon"
-                                    className="h-4 w-4 rounded-full bg-white/50 hover:bg-amber-100/80"
+                                    className="h-4 w-4 rounded-full bg-white/50 hover:bg-amber-100/80 dark:bg-surface/60 dark:hover:bg-muted/60"
                                     onPointerDown={(e) => e.stopPropagation()}
                                     onClick={onEdit}
                                     title="Edit Snippet"
                                 >
-                                    <Pencil size={9} className="text-slate-700" />
+                                    <Pencil size={9} className="text-foreground/80" />
                                 </Button>
 
                                 {/* Delete button */}
                                 <Button
                                     variant="ghost"
                                     size="icon"
-                                    className="h-4 w-4 ml-0.5 rounded-full bg-white/50 hover:bg-red-100/80"
+                                    className="h-4 w-4 ml-0.5 rounded-full bg-white/50 hover:bg-red-100/80 dark:bg-surface/60 dark:hover:bg-destructive/20"
                                     onPointerDown={(e) => e.stopPropagation()}
                                     onClick={onDelete}
                                     title="Delete Snippet"
                                 >
-                                    <Trash2 size={9} className="text-slate-700 hover:text-red-600" />
+                                    <Trash2 size={9} className="text-foreground/80 hover:text-destructive" />
                                 </Button>
                             </div>
                         </div>
                     </HoverCardTrigger>
                 </ContextMenuTrigger>
                 <HoverCardContent
-                    className="w-80 shadow-xl border-slate-200"
+                    className="w-80 shadow-xl border-border/60"
                     sideOffset={2}
                     onMouseEnter={handleHoverContentEnter}
                     onMouseLeave={handleHoverContentLeave}
                 >
                     <div className="space-y-2">
                         <div className="flex items-center justify-between">
-                            <p className="text-xs font-semibold text-slate-700">{snippet.label}</p>
-                            <span className="text-[10px] font-mono text-slate-400">{snippet.content.length} chars</span>
+                            <p className="text-xs font-semibold text-foreground/80">{snippet.label}</p>
+                            <span className="text-[10px] font-mono text-muted-foreground">{snippet.content.length} chars</span>
                         </div>
-                        <ScrollArea className="h-32 rounded-lg border border-slate-100 bg-slate-50">
-                            <p className="p-3 text-[11px] leading-relaxed font-mono whitespace-pre-wrap text-slate-700">
+                        <ScrollArea className="h-32 rounded-lg border border-border/60 bg-muted/20">
+                            <p className="p-3 text-[11px] leading-relaxed font-mono whitespace-pre-wrap text-foreground/80">
                                 {snippet.content}
                             </p>
                         </ScrollArea>
@@ -461,7 +461,7 @@ const SortableLibrarySnippet = React.memo(function SortableLibrarySnippet({ snip
             <ContextMenuContent>
                 <ContextMenuItem onSelect={onAddToCanvas}>Add to canvas</ContextMenuItem>
                 <ContextMenuItem onSelect={(e) => onEdit(e as unknown as React.MouseEvent)}>Edit snippet</ContextMenuItem>
-                <ContextMenuItem onSelect={(e) => onDelete(e as unknown as React.MouseEvent)} className="text-red-600 focus:text-red-700">
+                <ContextMenuItem onSelect={(e) => onDelete(e as unknown as React.MouseEvent)} className="text-destructive focus:text-destructive">
                     Delete snippet
                 </ContextMenuItem>
             </ContextMenuContent>
@@ -1308,16 +1308,16 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
 
 
     return (
-        <div className="prompt-constructor h-full flex flex-col border-t border-amber-200">
+        <div className="prompt-constructor h-full flex flex-col border-t border-amber-200 dark:border-border/60">
 
             {/* 2. Snippet Creator (Standing) */}
-            <div data-snippet-editor="true" className={cn("p-3 border-b border-dashed border-amber-200 shrink-0 transition-colors bg-amber-50/60", isEditing && "bg-amber-100/60")}>
+            <div data-snippet-editor="true" className={cn("p-3 border-b border-dashed border-amber-200 dark:border-border/60 shrink-0 transition-colors bg-amber-50/60 dark:bg-surface-raised/60", isEditing && "bg-amber-100/60 dark:bg-surface-overlay/60")}>
                 <div className="flex gap-2">
                     <div className="flex-1 space-y-2">
                         <div className="flex justify-between items-center">
                             <Input
                                 placeholder="snippet name"
-                                className="h-7 text-xs font-semibold bg-white w-full disabled:opacity-80"
+                                className="h-7 text-xs font-semibold bg-white dark:bg-surface-raised w-full disabled:opacity-80"
                                 value={snippetTitle}
                                 onChange={e => setSnippetTitle(e.target.value)}
                                 onKeyDown={handleTitleKeyDown}
@@ -1327,7 +1327,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
                         </div>
                         <PromptAutocompleteTextarea
                             placeholder="Prompt text... (Ctrl+Enter to save)"
-                            className="h-[100px] text-xs font-mono bg-white resize-none"
+                            className="h-[100px] text-xs font-mono bg-white dark:bg-surface-raised resize-none"
                             value={snippetContent}
                             onValueChange={setSnippetContent}
                             onKeyDown={handleKeyDown}
@@ -1347,7 +1347,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
                         {isEditing && (
                             <Button
                                 variant="ghost"
-                                className="h-auto flex-1 w-10 p-0 flex flex-col gap-1 items-center justify-center text-slate-500 hover:text-red-600 hover:bg-red-50"
+                                className="h-auto flex-1 w-10 p-0 flex flex-col gap-1 items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                                 onClick={cancelEdit}
                                 title="Cancel Editing"
                             >
@@ -1361,9 +1361,9 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
 
             {/* 3. Library (Horizontal Scroll)
                 Grid layout keeps snippet chips aligned for tessellation and consistent sizing. */}
-            <div className="px-3 py-2 border-b border-amber-200 shadow-sm shrink-0 bg-white/60">
+            <div className="px-3 py-2 border-b border-amber-200 dark:border-border/60 shadow-sm shrink-0 bg-white/60 dark:bg-surface-raised/60">
                 <div className="mb-2">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase block">Snippets (Double-click to Add, Drag to Reorder, Long-press to Edit)</span>
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase block">Snippets (Double-click to Add, Drag to Reorder, Long-press to Edit)</span>
                 </div>
                 <DndContext
                     sensors={sensors}
@@ -1404,7 +1404,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
             {/* 4. Canvas (Vertical / Flex Wrap) */}
             <div className="flex-1 overflow-y-auto p-4 relative bg-amber-50/60">
                 {!isTargetValid ? (
-                    <div className="h-full flex flex-col items-center justify-center text-slate-400 text-sm select-none gap-2 opacity-60">
+                    <div className="h-full flex flex-col items-center justify-center text-muted-foreground text-sm select-none gap-2 opacity-60">
                         <CornerDownLeft size={32} />
                         <span className="font-semibold">{targetField ? "Unsupported field type" : "Select a text prompt field to build"}</span>
                         <span className="text-xs">Select a valid text/string box on the right</span>
@@ -1430,7 +1430,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
                                 <Button
                                     variant="ghost"
                                     size="icon"
-                                    className="h-7 w-7 text-slate-400 hover:text-red-500 hover:bg-red-50 border border-slate-200 shadow-sm"
+                                    className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10 border border-border/60 shadow-sm"
                                     onClick={clearCanvas}
                                     title="Clear Canvas"
                                 >
@@ -1444,10 +1444,10 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
                             strategy={rectSortingStrategy}
                         >
                             {/* Canvas grid uses 2-column layout to match snippet bank. */}
-                            <div className="grid grid-cols-2 auto-rows-[minmax(32px,auto)] items-start gap-2 min-h-[100px] p-2 rounded-xl border-2 border-dashed border-amber-300 bg-amber-100/40 transition-colors hover:bg-amber-100/60 relative group/canvas">
+                            <div className="grid grid-cols-2 auto-rows-[minmax(32px,auto)] items-start gap-2 min-h-[100px] p-2 rounded-xl border-2 border-dashed border-amber-300 dark:border-border/60 bg-amber-100/40 dark:bg-muted/20 transition-colors hover:bg-amber-100/60 dark:hover:bg-muted/30 relative group/canvas">
 
                                 {items.length === 0 && (
-                                    <div className="w-full text-center py-10 text-slate-400 text-sm select-none italic flex flex-col items-center gap-2">
+                                    <div className="w-full text-center py-10 text-muted-foreground text-sm select-none italic flex flex-col items-center gap-2">
                                         <CornerDownLeft size={24} className="opacity-20" />
                                         <span>Drag snippets here to build prompt</span>
                                     </div>
@@ -1473,7 +1473,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
                                 })}
                                 <Button
                                     variant="ghost"
-                                    className="h-8 border border-dashed text-slate-500 hover:text-slate-700 hover:bg-white text-[10px] gap-1 ml-1 justify-start"
+                                    className="h-8 border border-dashed text-muted-foreground hover:text-foreground hover:bg-muted/20 text-[10px] gap-1 ml-1 justify-start"
                                     onClick={addTextSpacer}
                                 >
                                     <Type size={10} /> Add Text

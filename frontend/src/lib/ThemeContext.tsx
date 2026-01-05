@@ -72,6 +72,12 @@ export interface CustomThemeTemplate {
 
     /** Optional additional customizations */
     radius?: string;
+
+    /**
+     * Optional hint used to decide whether Tailwind `dark:` utilities should be active.
+     * If omitted, Sweet Tea will infer based on the background color when possible.
+     */
+    appearance?: "light" | "dark";
 }
 
 // Built-in theme definitions
@@ -79,6 +85,7 @@ const LIGHT_THEME: CustomThemeTemplate = {
     id: "light",
     name: "Light",
     version: "1.0",
+    appearance: "light",
     colors: {
         background: "hsl(220 23% 97%)",
         foreground: "hsl(229 24% 18%)",
@@ -112,31 +119,32 @@ const DARK_THEME: CustomThemeTemplate = {
     id: "dark",
     name: "Dark",
     version: "1.0",
+    appearance: "dark",
     colors: {
-        background: "hsl(229 24% 8%)",
-        foreground: "hsl(210 40% 96%)",
-        surface: "hsl(231 18% 14%)",
-        surfaceRaised: "hsl(231 16% 18%)",
-        surfaceOverlay: "hsl(231 14% 22%)",
-        card: "hsl(231 18% 14%)",
-        cardForeground: "hsl(210 40% 96%)",
-        popover: "hsl(231 16% 18%)",
-        popoverForeground: "hsl(210 40% 96%)",
-        primary: "hsl(256 84% 66%)",
-        primaryForeground: "hsl(210 40% 98%)",
-        secondary: "hsl(198 86% 61%)",
-        secondaryForeground: "hsl(210 40% 98%)",
-        muted: "hsl(225 16% 24%)",
-        mutedForeground: "hsl(225 20% 70%)",
-        accent: "hsl(43 100% 64%)",
-        accentForeground: "hsl(229 24% 14%)",
-        destructive: "hsl(0 70% 54%)",
-        destructiveForeground: "hsl(210 40% 98%)",
-        border: "hsl(227 14% 26%)",
-        input: "hsl(227 14% 26%)",
-        ring: "hsl(256 84% 66%)",
-        hover: "hsl(231 16% 22%)",
-        active: "hsl(231 16% 28%)",
+        background: "#050508",
+        foreground: "#e2e8f0",
+        surface: "#0b0c15",
+        surfaceRaised: "#0f111a",
+        surfaceOverlay: "#121428",
+        card: "#0b0c15",
+        cardForeground: "#e2e8f0",
+        popover: "#0f111a",
+        popoverForeground: "#e2e8f0",
+        primary: "#3b82f6",
+        primaryForeground: "#ffffff",
+        secondary: "#60a5fa",
+        secondaryForeground: "#050508",
+        muted: "#111327",
+        mutedForeground: "#94a3b8",
+        accent: "#1e3a8a",
+        accentForeground: "#e2e8f0",
+        destructive: "#ef4444",
+        destructiveForeground: "#ffffff",
+        border: "#1e2235",
+        input: "#1e2235",
+        ring: "#3b82f6",
+        hover: "#0f111a",
+        active: "#121428",
     },
     radius: "0.75rem",
 };
@@ -252,7 +260,48 @@ function validateTheme(theme: unknown): theme is CustomThemeTemplate {
         if (typeof colors[color] !== "string") return false;
     }
 
+    if (t.appearance !== undefined && t.appearance !== "light" && t.appearance !== "dark") {
+        return false;
+    }
+
     return true;
+}
+
+function inferAppearanceFromBackground(background: string): "light" | "dark" | null {
+    const raw = background.trim().toLowerCase();
+    if (raw === "black") return "dark";
+    if (raw === "white") return "light";
+
+    const hex = raw.match(/^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i)?.[1];
+    if (hex) {
+        const expanded = hex.length <= 4
+            ? hex.split("").map((c) => c + c).join("")
+            : hex;
+        const r = parseInt(expanded.slice(0, 2), 16);
+        const g = parseInt(expanded.slice(2, 4), 16);
+        const b = parseInt(expanded.slice(4, 6), 16);
+        const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+        return luminance < 0.5 ? "dark" : "light";
+    }
+
+    const hslMatch = raw.match(/^hsla?\\(\\s*([\\d.]+)\\s*,\\s*([\\d.]+)%\\s*,\\s*([\\d.]+)%/i);
+    if (hslMatch) {
+        const lightness = Number(hslMatch[3]);
+        if (!Number.isFinite(lightness)) return null;
+        return lightness < 50 ? "dark" : "light";
+    }
+
+    const rgbMatch = raw.match(/^rgba?\\(\\s*([\\d.]+)\\s*,\\s*([\\d.]+)\\s*,\\s*([\\d.]+)/i);
+    if (rgbMatch) {
+        const r = Number(rgbMatch[1]);
+        const g = Number(rgbMatch[2]);
+        const b = Number(rgbMatch[3]);
+        if (![r, g, b].every(Number.isFinite)) return null;
+        const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+        return luminance < 0.5 ? "dark" : "light";
+    }
+
+    return null;
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
@@ -303,8 +352,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
         const root = document.documentElement;
 
         if (theme === "custom" && customTheme) {
-            root.classList.remove("light", "dark");
-            root.classList.add("custom");
+            const appearance = customTheme.appearance ?? inferAppearanceFromBackground(customTheme.colors.background) ?? "dark";
+            root.classList.remove("light", "dark", "custom");
+            root.classList.add("custom", appearance);
             applyThemeToDocument(customTheme);
             setResolvedTheme("custom");
         } else {
@@ -409,6 +459,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
             description: "A custom theme for Sweet Tea Studio",
             author: "Your Name",
             version: "1.0",
+            appearance: "light",
             colors: {
                 background: "hsl(220 23% 97%)",
                 foreground: "hsl(229 24% 18%)",

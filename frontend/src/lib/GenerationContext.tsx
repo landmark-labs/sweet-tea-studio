@@ -70,7 +70,9 @@ export function GenerationProvider({ children }: GenerationProviderProps) {
     const [workflows, setWorkflows] = useState<WorkflowTemplate[]>([]);
     const [projects, setProjects] = useState<Project[]>([]);
     const [formData, setFormData] = useState<Record<string, any>>({});
-    const [isGenerating, setIsGenerating] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const hasActiveJobs = useGenerationFeedStore(useCallback(state => state.hasActiveJobs, []));
+    const isGenerating = isSubmitting || hasActiveJobs();
 
     const applyWorkflows = useCallback((items: WorkflowTemplate[]) => {
         setWorkflows(items);
@@ -249,7 +251,7 @@ export function GenerationProvider({ children }: GenerationProviderProps) {
         const workflow = workflows.find(w => String(w.id) === selectedWorkflowId);
         if (!workflow) return;
 
-        setIsGenerating(true);
+        setIsSubmitting(true);
         try {
             const schema = stripSchemaMeta(workflow.input_schema || {});
 
@@ -343,7 +345,7 @@ export function GenerationProvider({ children }: GenerationProviderProps) {
         } catch (err) {
             console.error("Generation failed", err);
         } finally {
-            setIsGenerating(false);
+            setIsSubmitting(false);
         }
     }, [selectedEngineId, selectedWorkflowId, selectedProjectId, formData, workflows, isGenerating, trackFeedStart, updateFeed]);
 

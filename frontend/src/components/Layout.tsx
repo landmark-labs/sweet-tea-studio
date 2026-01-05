@@ -83,7 +83,7 @@ export default function Layout() {
       {/* Sidebar */}
       <aside
         className={cn(
-          "border-r border-border/70 bg-blue-50/80 backdrop-blur flex flex-col transition-all duration-300 shadow-sm",
+          "border-r border-border/70 bg-surface/80 backdrop-blur flex flex-col transition-all duration-300 shadow-sm",
           collapsed ? "w-16" : "w-56"
         )}
       >
@@ -111,7 +111,7 @@ export default function Layout() {
             className={cn(
               "rounded-full transition-all",
               collapsed
-                ? "absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-8 w-8 hover:bg-transparent text-slate-700 font-bold"
+                ? "absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-8 w-8 hover:bg-transparent text-foreground/80 font-bold"
                 : "h-8 w-8"
             )}
             onClick={() => setCollapsed(!collapsed)}
@@ -177,7 +177,7 @@ export default function Layout() {
       {/* Main Content */}
       <main className="flex-1 overflow-auto bg-gradient-to-b from-surface/50 to-background">
         <div className="w-full h-full flex flex-col">
-          <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-3 flex-none border-b border-border/50 bg-blue-50/80">
+          <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-3 flex-none border-b border-border/50 bg-surface/80 backdrop-blur">
             {/* Left: Connection Indicator + ComfyUI Control */}
             <div className="flex items-center gap-3">
               <ConnectionIndicator />
@@ -191,7 +191,12 @@ export default function Layout() {
                 <Button
                   variant="outline"
                   size="sm"
-                  className={cn("text-xs transition-colors", feedOpen ? "bg-blue-500 text-white hover:bg-blue-600 hover:text-white border-blue-600" : "text-slate-500 bg-slate-100 hover:bg-slate-200")}
+                  className={cn(
+                    "text-xs transition-colors",
+                    feedOpen
+                      ? "bg-primary text-primary-foreground hover:bg-primary/90 border-primary"
+                      : "text-muted-foreground bg-muted/40 hover:bg-muted/60 border-border"
+                  )}
                   onClick={() => setFeedOpen(!feedOpen)}
                 >
                   generation feed
@@ -199,7 +204,12 @@ export default function Layout() {
                 <Button
                   variant="outline"
                   size="sm"
-                  className={cn("text-xs transition-colors", libraryOpen ? "bg-blue-500 text-white hover:bg-blue-600 hover:text-white border-blue-600" : "text-slate-500 bg-slate-100 hover:bg-slate-200")}
+                  className={cn(
+                    "text-xs transition-colors",
+                    libraryOpen
+                      ? "bg-primary text-primary-foreground hover:bg-primary/90 border-primary"
+                      : "text-muted-foreground bg-muted/40 hover:bg-muted/60 border-border"
+                  )}
                   onClick={() => setLibraryOpen(!libraryOpen)}
                 >
                   prompt library
@@ -207,7 +217,12 @@ export default function Layout() {
                 <Button
                   variant="outline"
                   size="sm"
-                  className={cn("text-xs transition-colors", perfHudOpen ? "bg-blue-500 text-white hover:bg-blue-600 hover:text-white border-blue-600" : "text-slate-500 bg-slate-100 hover:bg-slate-200")}
+                  className={cn(
+                    "text-xs transition-colors",
+                    perfHudOpen
+                      ? "bg-primary text-primary-foreground hover:bg-primary/90 border-primary"
+                      : "text-muted-foreground bg-muted/40 hover:bg-muted/60 border-border"
+                  )}
                   onClick={() => setPerfHudOpen(!perfHudOpen)}
                 >
                   performance hud
@@ -248,12 +263,12 @@ function GlobalFloatingPanels({ feedOpen, libraryOpen, onFeedClose, onLibraryClo
         defaultPosition={{ x: 20, y: 100 }}
         className={`z-40 ${feedOpen ? "" : "hidden"}`}
       >
-        <div className="bg-white rounded-lg shadow-xl border overflow-hidden" style={{ maxWidth: '90vw' }}>
-          <div className="p-2 bg-slate-100 border-b text-xs font-semibold cursor-move flex items-center justify-between">
+        <div className="bg-card rounded-lg shadow-xl border border-border overflow-hidden" style={{ maxWidth: '90vw' }}>
+          <div className="p-2 bg-muted/30 border-b border-border/50 text-xs font-semibold cursor-move flex items-center justify-between">
             <span>generation feed</span>
             <button
               onClick={onFeedClose}
-              className="p-0.5 rounded hover:bg-slate-200 text-slate-500 hover:text-slate-700"
+              className="p-0.5 rounded hover:bg-muted/60 text-muted-foreground hover:text-foreground"
               aria-label="Close generation feed"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -265,6 +280,7 @@ function GlobalFloatingPanels({ feedOpen, libraryOpen, onFeedClose, onLibraryClo
             items={generationFeed}
             onSelectPreview={() => { }}
             onGenerate={generation?.handleGenerate}
+            isGenerating={generation?.isGenerating}
           />
         </div>
       </DraggablePanel>

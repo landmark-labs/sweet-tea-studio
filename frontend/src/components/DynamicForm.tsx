@@ -181,7 +181,7 @@ const FieldRenderer = React.memo(function FieldRenderer({
                         rows={6}
                         className={cn(
                             "text-xs font-mono transition-all min-h-[150px]",
-                            isActive && "ring-2 ring-blue-400 border-blue-400 bg-blue-50/20"
+                            isActive && "ring-2 ring-blue-400 border-blue-400 bg-blue-50/20 dark:ring-ring dark:border-ring dark:bg-primary/10"
                         )}
                     />
                 )}
@@ -192,15 +192,15 @@ const FieldRenderer = React.memo(function FieldRenderer({
     if (field.widget === "toggle") {
         return (
             <div className="flex items-center justify-between py-2">
-                <Label htmlFor={fieldKey} className={cn("text-xs text-slate-500", isActive && "text-blue-600 font-semibold")}>
+                <Label htmlFor={fieldKey} className={cn("text-xs text-muted-foreground", isActive && "text-blue-600 dark:text-primary font-semibold")}>
                     {field.title || fieldKey}
                 </Label>
                 <div className="flex items-center gap-2">
-                    <span className="text-[10px] text-slate-400 uppercase">{value ? "Bypassed" : "Active"}</span>
+                    <span className="text-[10px] text-muted-foreground uppercase">{value ? "Bypassed" : "Active"}</span>
                     <Switch
                         checked={!!value}
                         onCheckedChange={(c) => onToggleChange(fieldKey, Boolean(c))}
-                        className={cn(value ? "bg-amber-500" : "bg-slate-200")}
+                        className={cn(value ? "bg-amber-500" : "bg-muted")}
                     />
                 </div>
             </div>
@@ -214,7 +214,7 @@ const FieldRenderer = React.memo(function FieldRenderer({
 
     return (
         <div className="flex items-center gap-2 py-0.5">
-            <Label htmlFor={fieldKey} className={cn("text-xs text-slate-500 w-24 flex-shrink-0 text-right", isActive && "text-blue-600 font-semibold")}>{field.title || fieldKey}</Label>
+            <Label htmlFor={fieldKey} className={cn("text-xs text-muted-foreground w-24 flex-shrink-0 text-right", isActive && "text-blue-600 dark:text-primary font-semibold")}>{field.title || fieldKey}</Label>
             {field.enum || dynamicOptions[fieldKey] ? (
                 (() => {
                     const rawOptions = dynamicOptions[fieldKey] || field.enum || [];
@@ -319,7 +319,7 @@ const NodePromptGroup = React.memo(function NodePromptGroup({
     return (
         <div
             className={cn(
-                "rounded-lg border bg-white p-3 space-y-3 shadow-sm transition-opacity",
+                "rounded-lg border bg-card p-3 space-y-3 shadow-sm transition-opacity",
                 isBypassed && "opacity-60"
             )}
             data-node-inline
@@ -329,7 +329,7 @@ const NodePromptGroup = React.memo(function NodePromptGroup({
         >
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                    <span className="text-[11px] font-semibold uppercase text-slate-500 tracking-wide">
+                    <span className="text-[11px] font-semibold uppercase text-muted-foreground tracking-wide">
                         {group.title}
                     </span>
                     {isBypassed && (
@@ -345,7 +345,7 @@ const NodePromptGroup = React.memo(function NodePromptGroup({
                                 checked={Boolean(bypassValue)}
                                 onCheckedChange={(c) => onToggleChange(group.bypassKey!, Boolean(c))}
                                 className={cn(
-                                    "h-3.5 w-6 data-[state=checked]:bg-amber-500 data-[state=unchecked]:bg-slate-200"
+                                    "h-3.5 w-6 data-[state=checked]:bg-amber-500 data-[state=unchecked]:bg-muted"
                                 )}
                             />
                         </div>
@@ -354,7 +354,7 @@ const NodePromptGroup = React.memo(function NodePromptGroup({
                         type="button"
                         variant="ghost"
                         size="icon"
-                        className="h-7 w-7 text-slate-400 hover:text-slate-700"
+                        className="h-7 w-7 text-muted-foreground hover:text-foreground"
                         onClick={onToggleExpanded}
                         aria-expanded={isExpanded}
                         aria-label={isExpanded ? "Collapse prompts" : "Expand prompts"}
@@ -369,13 +369,13 @@ const NodePromptGroup = React.memo(function NodePromptGroup({
                     {isExpanded ? (
                         promptKeys.map(renderField)
                     ) : (
-                        <div className="text-[10px] text-slate-400 italic px-1">
+                        <div className="text-[10px] text-muted-foreground italic px-1">
                             Prompts hidden. Expand to edit.
                         </div>
                     )}
                 </div>
             ) : (
-                <div className="text-[10px] text-slate-400 italic px-1">
+                <div className="text-[10px] text-muted-foreground italic px-1">
                     Node bypassed. Parameters hidden.
                 </div>
             )}
@@ -410,7 +410,7 @@ const NodeMediaGroup = React.memo(function NodeMediaGroup({
     return (
         <div
             className={cn(
-                "rounded-lg border bg-white p-3 space-y-3 shadow-sm transition-opacity",
+                "rounded-lg border bg-card p-3 space-y-3 shadow-sm transition-opacity",
                 isBypassed && "opacity-60"
             )}
             data-node-inline
@@ -420,7 +420,7 @@ const NodeMediaGroup = React.memo(function NodeMediaGroup({
         >
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                    <span className="text-[11px] font-semibold uppercase text-slate-500 tracking-wide">
+                    <span className="text-[11px] font-semibold uppercase text-muted-foreground tracking-wide">
                         {group.title}
                     </span>
                     {isBypassed && (
@@ -436,7 +436,7 @@ const NodeMediaGroup = React.memo(function NodeMediaGroup({
                                 checked={Boolean(bypassValue)}
                                 onCheckedChange={(c) => onToggleChange(group.bypassKey!, Boolean(c))}
                                 className={cn(
-                                    "h-3.5 w-6 data-[state=checked]:bg-amber-500 data-[state=unchecked]:bg-slate-200"
+                                    "h-3.5 w-6 data-[state=checked]:bg-amber-500 data-[state=unchecked]:bg-muted"
                                 )}
                             />
                         </div>
@@ -445,7 +445,7 @@ const NodeMediaGroup = React.memo(function NodeMediaGroup({
                         type="button"
                         variant="ghost"
                         size="icon"
-                        className="h-7 w-7 text-slate-400 hover:text-slate-700"
+                        className="h-7 w-7 text-muted-foreground hover:text-foreground"
                         onClick={onToggleExpanded}
                         aria-expanded={isExpanded}
                         aria-label={isExpanded ? "Collapse media settings" : "Expand media settings"}
@@ -464,7 +464,7 @@ const NodeMediaGroup = React.memo(function NodeMediaGroup({
                     )}
                 </div>
             ) : (
-                <div className="text-[10px] text-slate-400 italic px-1">
+                <div className="text-[10px] text-muted-foreground italic px-1">
                     Node bypassed. Parameters hidden.
                 </div>
             )}
@@ -495,15 +495,15 @@ const PinnedInspectorPanel = React.memo(function PinnedInspectorPanel({
 
     return (
         <div
-            className="rounded-lg border bg-white/95 shadow-lg backdrop-blur p-3 flex flex-col"
+            className="rounded-lg border bg-card/95 shadow-lg backdrop-blur p-3 flex flex-col"
             style={{ maxHeight: maxPanelHeight ?? "70vh" }}
         >
             <div className="flex items-start justify-between gap-3 mb-2">
                 <div className="min-w-0">
-                    <div className="text-[10px] uppercase tracking-wider text-slate-400">
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
                         pinned inspector - {scopeLabel}
                     </div>
-                    <div className="text-sm font-semibold text-slate-800 truncate">{group.title}</div>
+                    <div className="text-sm font-semibold text-foreground truncate">{group.title}</div>
                 </div>
                 <div className="flex items-center gap-2">
                     {group.hasBypass && group.bypassKey && (
@@ -512,7 +512,7 @@ const PinnedInspectorPanel = React.memo(function PinnedInspectorPanel({
                                 checked={Boolean(bypassValue)}
                                 onCheckedChange={(c) => onToggleChange(group.bypassKey!, Boolean(c))}
                                 className={cn(
-                                    "h-3.5 w-6 data-[state=checked]:bg-amber-500 data-[state=unchecked]:bg-slate-200"
+                                    "h-3.5 w-6 data-[state=checked]:bg-amber-500 data-[state=unchecked]:bg-muted"
                                 )}
                             />
                         </div>
@@ -534,13 +534,13 @@ const PinnedInspectorPanel = React.memo(function PinnedInspectorPanel({
                     {fieldsToRender.length > 0 ? (
                         fieldsToRender.map(renderField)
                     ) : (
-                        <div className="text-[10px] text-slate-400 italic px-1">
+                        <div className="text-[10px] text-muted-foreground italic px-1">
                             No parameters exposed for this node.
                         </div>
                     )}
                 </div>
             ) : (
-                <div className="text-[10px] text-slate-400 italic px-1">
+                <div className="text-[10px] text-muted-foreground italic px-1">
                     Node bypassed. Parameters hidden.
                 </div>
             )}
@@ -603,9 +603,9 @@ const NodeStackRow = React.memo(function NodeStackRow({
                 <div
                     ref={rowRef}
                     className={cn(
-                        "flex items-center justify-between rounded-lg border bg-white px-3 py-2 shadow-sm transition-colors",
+                        "flex items-center justify-between rounded-lg border bg-card px-3 py-2 shadow-sm transition-colors",
                         isBypassed && "opacity-60",
-                        isOpen && "border-blue-200 ring-1 ring-blue-100"
+                        isOpen && "border-blue-200 ring-1 ring-blue-100 dark:border-primary/40 dark:ring-primary/20"
                     )}
                     data-node-stack-item
                     data-node-stack-id={stackId}
@@ -632,9 +632,9 @@ const NodeStackRow = React.memo(function NodeStackRow({
                     }}
                 >
                     <div className="flex items-center gap-2 min-w-0">
-                        <span className="text-xs font-semibold text-slate-700 truncate">{group.title}</span>
+                        <span className="text-xs font-semibold text-foreground/80 truncate">{group.title}</span>
                         {paramCount > 0 && (
-                            <span className="text-[9px] text-slate-400 whitespace-nowrap flex-shrink-0">
+                            <span className="text-[9px] text-muted-foreground whitespace-nowrap flex-shrink-0">
                                 {paramCount} params
                             </span>
                         )}
@@ -651,7 +651,7 @@ const NodeStackRow = React.memo(function NodeStackRow({
                                     checked={Boolean(bypassValue)}
                                     onCheckedChange={(c) => onToggleChange(group.bypassKey!, Boolean(c))}
                                     className={cn(
-                                        "h-3.5 w-6 data-[state=checked]:bg-amber-500 data-[state=unchecked]:bg-slate-200"
+                                        "h-3.5 w-6 data-[state=checked]:bg-amber-500 data-[state=unchecked]:bg-muted"
                                     )}
                                 />
                             </div>
@@ -661,7 +661,7 @@ const NodeStackRow = React.memo(function NodeStackRow({
                             variant="ghost"
                             size="icon"
                             className={cn(
-                                "h-7 w-7 text-slate-400 hover:text-slate-700",
+                                "h-7 w-7 text-muted-foreground hover:text-foreground",
                                 isPinned && "text-blue-600"
                             )}
                             title={isPinned ? "Unpin inspector" : "Pin inspector"}
@@ -680,7 +680,7 @@ const NodeStackRow = React.memo(function NodeStackRow({
                 side="right"
                 align="start"
                 sideOffset={12}
-                className="w-[360px] max-h-[70vh] overflow-y-auto p-3 shadow-xl border-slate-200"
+                className="w-[360px] max-h-[70vh] overflow-y-auto p-3 shadow-xl border-border/60"
                 onPointerEnter={onHoldOpen}
                 onPointerLeave={onHoverClose}
                 onFocusCapture={onHoldOpen}
@@ -693,7 +693,7 @@ const NodeStackRow = React.memo(function NodeStackRow({
                 onCloseAutoFocus={(e) => e.preventDefault()}
             >
                 <div className="flex items-center justify-between mb-2">
-                    <div className="text-[11px] font-semibold uppercase text-slate-500 tracking-wide">
+                    <div className="text-[11px] font-semibold uppercase text-muted-foreground tracking-wide">
                         {group.title}
                     </div>
                     <div className="flex items-center gap-2">
@@ -703,7 +703,7 @@ const NodeStackRow = React.memo(function NodeStackRow({
                                     checked={Boolean(bypassValue)}
                                     onCheckedChange={(c) => onToggleChange(group.bypassKey!, Boolean(c))}
                                     className={cn(
-                                        "h-3.5 w-6 data-[state=checked]:bg-amber-500 data-[state=unchecked]:bg-slate-200"
+                                        "h-3.5 w-6 data-[state=checked]:bg-amber-500 data-[state=unchecked]:bg-muted"
                                     )}
                                 />
                             </div>
@@ -713,7 +713,7 @@ const NodeStackRow = React.memo(function NodeStackRow({
                             variant="ghost"
                             size="icon"
                             className={cn(
-                                "h-7 w-7 text-slate-400 hover:text-slate-700",
+                                "h-7 w-7 text-muted-foreground hover:text-foreground",
                                 isPinned && "text-blue-600"
                             )}
                             title={isPinned ? "Unpin inspector" : "Pin inspector"}
@@ -731,13 +731,13 @@ const NodeStackRow = React.memo(function NodeStackRow({
                         {paramCount > 0 ? (
                             fieldsToRender.map(renderField)
                         ) : (
-                            <div className="text-[10px] text-slate-400 italic px-1">
+                            <div className="text-[10px] text-muted-foreground italic px-1">
                                 No parameters exposed for this node.
                             </div>
                         )}
                     </div>
                 ) : (
-                    <div className="text-[10px] text-slate-400 italic px-1">
+                    <div className="text-[10px] text-muted-foreground italic px-1">
                         Node bypassed. Parameters hidden.
                     </div>
                 )}
@@ -1524,31 +1524,31 @@ export const DynamicForm = React.memo(function DynamicForm({
             )}
             {/* 1. Main Inputs (Images) */}
             {groups.inputs.length > 0 && (
-                <div className="space-y-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
-                    <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider">input images</h3>
+                <div className="space-y-4 p-4 bg-muted/20 rounded-lg border border-border/60">
+                    <h3 className="text-sm font-bold text-foreground/80 uppercase tracking-wider">input images</h3>
                     <div className="space-y-4">
                         {groups.inputs.map(renderField)}
                     </div>
                 </div>
             )}
 
-            <div className="space-y-4 p-4 bg-white rounded-lg border border-slate-200">
+            <div className="space-y-4 p-4 bg-card rounded-lg border border-border/60">
                 <div className="flex items-center justify-between">
-                    <h3 className="text-xs font-bold text-slate-800 tracking-wider font-['Space_Grotesk']">CORE PIPE CONTROLS</h3>
+                    <h3 className="text-xs font-bold text-foreground tracking-wider font-['Space_Grotesk']">CORE PIPE CONTROLS</h3>
                     {onReset && (
                         <Button
                             type="button"
                             variant="ghost"
                             size="sm"
                             onClick={onReset}
-                            className="h-6 text-[10px] text-slate-400 hover:text-slate-600 px-2"
+                            className="h-6 text-[10px] text-muted-foreground hover:text-foreground px-2"
                         >
                             reset to defaults
                         </Button>
                     )}
                 </div>
                 {strictCoreGroups.length === 0 ? (
-                    <div className="text-xs text-slate-400 italic py-2">
+                    <div className="text-xs text-muted-foreground italic py-2">
                         No core controls configured. Edit the pipe to add nodes to this section.
                     </div>
                 ) : (
@@ -1626,7 +1626,7 @@ export const DynamicForm = React.memo(function DynamicForm({
                 )}
             </div>
 
-            <div className="space-y-3 p-4 bg-white rounded-lg border border-slate-200">
+            <div className="space-y-3 p-4 bg-card rounded-lg border border-border/60">
                 <div
                     className="flex items-center justify-between cursor-pointer select-none"
                     onClick={() => {
@@ -1635,14 +1635,14 @@ export const DynamicForm = React.memo(function DynamicForm({
                         localStorage.setItem("ds_expanded_controls_collapsed", String(next));
                     }}
                 >
-                    <h3 className="text-xs font-bold text-slate-800 tracking-wider font-['Space_Grotesk']">EXPANDED CONTROLS</h3>
+                    <h3 className="text-xs font-bold text-foreground tracking-wider font-['Space_Grotesk']">EXPANDED CONTROLS</h3>
                     <div className="flex items-center gap-2">
-                        <span className="text-[10px] text-slate-400">hover a node to edit</span>
-                        {expandedControlsCollapsed ? <ChevronDown className="w-4 h-4 text-slate-400" /> : <ChevronUp className="w-4 h-4 text-slate-400" />}
+                        <span className="text-[10px] text-muted-foreground">hover a node to edit</span>
+                        {expandedControlsCollapsed ? <ChevronDown className="w-4 h-4 text-muted-foreground" /> : <ChevronUp className="w-4 h-4 text-muted-foreground" />}
                     </div>
                 </div>
                 {!expandedControlsCollapsed && (stackGroupsWithMeta.length === 0 ? (
-                    <div className="text-xs text-slate-400 italic py-1">
+                    <div className="text-xs text-muted-foreground italic py-1">
                         No expanded controls configured.
                     </div>
                 ) : (

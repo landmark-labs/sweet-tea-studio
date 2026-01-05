@@ -45,6 +45,7 @@ export default function Settings() {
         { value: "light", label: "Light", icon: <Sun className="w-4 h-4" /> },
         { value: "dark", label: "Dark", icon: <Moon className="w-4 h-4" /> },
         { value: "system", label: "System", icon: <Monitor className="w-4 h-4" /> },
+        { value: "custom", label: "Custom", icon: <Palette className="w-4 h-4" /> },
     ];
 
     useEffect(() => {
@@ -486,7 +487,18 @@ export default function Settings() {
                                 {themeOptions.map((option) => (
                                     <button
                                         key={option.value}
-                                        onClick={() => setTheme(option.value)}
+                                        onClick={() => {
+                                            if (option.value === "custom") {
+                                                const idToApply = customTheme?.id ?? customThemes[0]?.id;
+                                                if (idToApply) {
+                                                    applyCustomTheme(idToApply);
+                                                } else {
+                                                    setTheme("custom");
+                                                }
+                                                return;
+                                            }
+                                            setTheme(option.value);
+                                        }}
                                         className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-colors ${theme === option.value
                                             ? "bg-primary text-primary-foreground border-primary"
                                             : "bg-card hover:bg-muted border-border"
@@ -592,7 +604,10 @@ export default function Settings() {
                                                     const json = event.target?.result as string;
                                                     const result = importTheme(json);
                                                     if (result.success) {
-                                                        setSuccess(`Theme "${result.theme?.name}" imported successfully!`);
+                                                        if (result.theme?.id) {
+                                                            applyCustomTheme(result.theme.id);
+                                                        }
+                                                        setSuccess(`Theme "${result.theme?.name}" imported and applied!`);
                                                         setTimeout(() => setSuccess(null), 3000);
                                                     } else {
                                                         setError(result.error || "Failed to import theme");

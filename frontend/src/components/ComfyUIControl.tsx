@@ -207,14 +207,14 @@ export function ComfyUIControl() {
     }[state];
 
     return (
-        <div className="flex items-center gap-1.5 px-2 py-1 bg-slate-100 rounded-lg border border-slate-200">
+        <div className="flex items-center gap-1.5 px-2 py-1 bg-muted/40 rounded-lg border border-border/60">
             {/* Status indicator */}
             <div className="flex items-center gap-1.5">
                 <div className={cn("w-2 h-2 rounded-full", statusColor)} />
-                <span className="text-[10px] font-semibold text-slate-600 uppercase tracking-wide">
+                <span className="text-[10px] font-semibold text-foreground/80 uppercase tracking-wide">
                     ComfyUI
                 </span>
-                <span className="text-[9px] text-slate-400">
+                <span className="text-[9px] text-muted-foreground">
                     {statusText}
                 </span>
             </div>
@@ -228,8 +228,8 @@ export function ComfyUIControl() {
                         className={cn(
                             "h-6 w-6",
                             !isTransitioning
-                                ? "text-red-500 hover:text-red-600 hover:bg-red-50"
-                                : "text-slate-400 cursor-not-allowed"
+                                ? "text-destructive hover:text-destructive hover:bg-destructive/10"
+                                : "text-muted-foreground/70 cursor-not-allowed"
                         )}
                         onClick={handleStop}
                         disabled={isTransitioning}
@@ -248,8 +248,8 @@ export function ComfyUIControl() {
                         className={cn(
                             "h-6 w-6",
                             canLaunch && !isTransitioning
-                                ? "text-green-600 hover:text-green-700 hover:bg-green-50"
-                                : "text-slate-400 cursor-not-allowed"
+                                ? "text-green-600 dark:text-green-400 hover:text-green-700 dark:hover:text-green-300 hover:bg-green-500/10"
+                                : "text-muted-foreground/70 cursor-not-allowed"
                         )}
                         onClick={handleStart}
                         disabled={isTransitioning || !canLaunch}
@@ -273,7 +273,7 @@ export function ComfyUIControl() {
                 <Button
                     variant="ghost"
                     size="icon"
-                    className="h-6 w-6 text-slate-400 hover:text-slate-600 hover:bg-slate-200"
+                    className="h-6 w-6 text-muted-foreground hover:text-foreground hover:bg-muted/60"
                     onClick={() => setLogsOpen(true)}
                     title="View ComfyUI Logs"
                 >
@@ -289,7 +289,7 @@ export function ComfyUIControl() {
                                 ComfyUI Logs
                             </DialogTitle>
                         </DialogHeader>
-                        <div className="flex-1 bg-black text-green-400 font-mono text-xs p-4 rounded-md overflow-auto whitespace-pre-wrap border border-slate-800">
+                        <div className="flex-1 bg-black text-green-400 font-mono text-xs p-4 rounded-md overflow-auto whitespace-pre-wrap border border-border/60">
                             {logs || "No logs available (process might not be managed by Sweet Tea)"}
                         </div>
                     </DialogContent>

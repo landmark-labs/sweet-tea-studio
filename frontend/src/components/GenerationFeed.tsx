@@ -2,6 +2,7 @@ import React from "react";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDuration, formatSpeed, type GenerationState } from "@/lib/generationState";
 
@@ -55,9 +56,10 @@ interface GenerationFeedProps {
   items: GenerationFeedItem[];
   onSelectPreview?: (item: GenerationFeedItem & { selectedPath?: string }) => void;
   onGenerate?: () => void;
+  isGenerating?: boolean;
 }
 
-export const GenerationFeed = React.memo(function GenerationFeed({ items, onSelectPreview, onGenerate }: GenerationFeedProps) {
+export const GenerationFeed = React.memo(function GenerationFeed({ items, onSelectPreview, onGenerate, isGenerating }: GenerationFeedProps) {
   const activeItem = items[0];
   const [previewOrientation, setPreviewOrientation] = React.useState<PreviewOrientation>("portrait");
   const previewOrientationByJobId = React.useRef<Record<number, PreviewOrientation>>({});
@@ -100,14 +102,14 @@ export const GenerationFeed = React.memo(function GenerationFeed({ items, onSele
   return (
     <div className="w-full h-full pointer-events-auto">
       {activeItem ? (
-        <div className="shadow-lg border border-blue-100 bg-blue-50/95 backdrop-blur overflow-hidden rounded-lg">
+        <div className="shadow-lg border border-blue-100 bg-blue-50/95 dark:border-border/60 dark:bg-card/95 backdrop-blur overflow-hidden rounded-lg">
           {/* Header */}
-          <div className="flex items-center justify-between px-3 py-2 border-b border-slate-200 bg-slate-50/50">
-            <div className="text-xs font-semibold text-slate-700 flex items-center gap-2">
-              <span className={cn("w-2 h-2 rounded-full", isRunning ? "bg-green-500 animate-pulse" : "bg-slate-300")} />
+          <div className="flex items-center justify-between px-3 py-2 border-b border-slate-200 bg-slate-50/50 dark:border-border/60 dark:bg-muted/20">
+            <div className="text-xs font-semibold text-foreground/80 flex items-center gap-2">
+              <span className={cn("w-2 h-2 rounded-full", isRunning ? "bg-green-500 animate-pulse" : "bg-muted-foreground/40")} />
               generation status
             </div>
-            <Badge variant="outline" className="text-[10px] text-slate-500 h-5 px-1.5 font-normal">
+            <Badge variant="outline" className="text-[10px] text-muted-foreground h-5 px-1.5 font-normal">
               job #{activeItem.jobId}
             </Badge>
           </div>
@@ -117,7 +119,7 @@ export const GenerationFeed = React.memo(function GenerationFeed({ items, onSele
             {/* Preview Image */}
             {activeItem.previewBlob ? (
               <div
-                className="relative rounded overflow-hidden bg-black/5 border border-slate-200 mx-auto"
+                className="relative rounded overflow-hidden bg-muted/20 border border-border/60 mx-auto"
                 style={previewBoxStyle}
               >
                 <img src={activeItem.previewBlob} alt="Live Preview" className="w-full h-full object-contain" />
@@ -129,24 +131,24 @@ export const GenerationFeed = React.memo(function GenerationFeed({ items, onSele
               </div>
             ) : (activeItem.previewPaths?.[0] || activeItem.previewPath) ? (
               <div
-                className="relative w-full h-72 rounded overflow-hidden bg-black/5 border border-slate-200 cursor-pointer hover:opacity-90 transition-opacity"
+                className="relative w-full h-72 rounded overflow-hidden bg-muted/20 border border-border/60 cursor-pointer hover:opacity-90 transition-opacity"
                 onClick={() => {
                   const path = activeItem.previewPaths?.[0] || activeItem.previewPath;
                   if (path) onSelectPreview?.({ ...activeItem, selectedPath: path });
                 }}
               >
-                <div className="w-full h-full flex flex-col items-center justify-center text-xs text-slate-400">
+                <div className="w-full h-full flex flex-col items-center justify-center text-xs text-muted-foreground">
                   <span className="font-semibold">ready</span>
                   <span className="text-[10px]">click to view</span>
                 </div>
               </div>
             ) : (
-              <div className="w-full h-72 rounded bg-slate-100 border border-slate-200" />
+              <div className="w-full h-72 rounded bg-muted/20 border border-border/60" />
             )}
 
             {/* Progress */}
             <div className="space-y-1">
-              <div className="flex justify-between text-[10px] text-slate-500 tracking-wider font-semibold">
+              <div className="flex justify-between text-[10px] text-muted-foreground tracking-wider font-semibold">
                 <span className="lowercase">{activeItem.status}</span>
                 <span>{Math.round(activeItem.progress)}%</span>
               </div>
@@ -154,7 +156,7 @@ export const GenerationFeed = React.memo(function GenerationFeed({ items, onSele
 
               {/* Stats row - only show when running or has data */}
               {(isRunning || hasStats) && (
-                <div className="flex justify-between text-[9px] text-slate-400 pt-0.5">
+                <div className="flex justify-between text-[9px] text-muted-foreground pt-0.5">
                   <span>
                     {activeItem.elapsedMs ? formatDuration(activeItem.elapsedMs) : ""}
                     {activeItem.currentStep && activeItem.totalSteps ? ` • ${activeItem.currentStep}/${activeItem.totalSteps}` : ""}
@@ -181,22 +183,26 @@ export const GenerationFeed = React.memo(function GenerationFeed({ items, onSele
                     if (onGenerate) onGenerate();
                   }}
                 >
-                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                  </svg>
-                  generate
+                  {isGenerating ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : (
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                  )}
+                  {isGenerating ? 'generating...' : 'generate'}
                 </Button>
               )}
             </div>
           </div>
         </div>
       ) : (
-        <div className="shadow-lg border border-slate-200 bg-white/95 backdrop-blur overflow-hidden rounded-lg" style={{ width: '384px', height: '100%', display: 'flex', flexDirection: 'column' }}>
-          <div className="flex-1 p-4 flex flex-col items-center justify-center text-center space-y-2 text-slate-400">
-            <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center mb-1">
-              <div className="w-2 h-2 rounded-full bg-slate-300" />
+        <div className="shadow-lg border border-border/60 bg-card/95 backdrop-blur overflow-hidden rounded-lg" style={{ width: '384px', height: '100%', display: 'flex', flexDirection: 'column' }}>
+          <div className="flex-1 p-4 flex flex-col items-center justify-center text-center space-y-2 text-muted-foreground">
+            <div className="w-8 h-8 rounded-full bg-muted/30 flex items-center justify-center mb-1">
+              <div className="w-2 h-2 rounded-full bg-muted-foreground/40" />
             </div>
-            <div className="text-xs font-medium text-slate-500">ready to generate</div>
+            <div className="text-xs font-medium text-muted-foreground">ready to generate</div>
             <div className="text-[10px]">waiting for job...</div>
             {onGenerate && (
               <Button
@@ -208,10 +214,14 @@ export const GenerationFeed = React.memo(function GenerationFeed({ items, onSele
                   if (onGenerate) onGenerate();
                 }}
               >
-                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
-                generate
+                {isGenerating ? (
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                ) : (
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                )}
+                {isGenerating ? 'generating...' : 'generate'}
               </Button>
             )}
           </div>

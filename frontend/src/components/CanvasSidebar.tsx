@@ -88,7 +88,7 @@ export function CanvasSidebar({ collapsed }: CanvasSidebarProps) {
     <div className={cn("border-t border-border/70", collapsed ? "p-2" : "p-3")}>
       <div className={cn("flex items-center justify-between", collapsed ? "flex-col gap-2" : "mb-2")}>
         {!collapsed && (
-          <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+          <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
             <Layers className="h-3 w-3" />
             canvases
           </div>
@@ -97,7 +97,7 @@ export function CanvasSidebar({ collapsed }: CanvasSidebarProps) {
           <Button
             variant="ghost"
             size="icon"
-            className="h-7 w-7 text-slate-500 hover:text-slate-700"
+            className="h-7 w-7 text-muted-foreground hover:text-foreground"
             onClick={handleSave}
             disabled={isDisabled}
             title={snapshotProvider ? "Save canvas (Ctrl+S)" : "Open Prompt Studio to save"}
@@ -107,7 +107,7 @@ export function CanvasSidebar({ collapsed }: CanvasSidebarProps) {
           <Button
             variant="ghost"
             size="icon"
-            className="h-7 w-7 text-slate-500 hover:text-slate-700"
+            className="h-7 w-7 text-muted-foreground hover:text-foreground"
             onClick={handleOpenCreate}
             disabled={isDisabled}
             title={snapshotProvider ? "Save as new canvas" : "Open Prompt Studio to save"}
@@ -117,7 +117,7 @@ export function CanvasSidebar({ collapsed }: CanvasSidebarProps) {
           <Button
             variant="ghost"
             size="icon"
-            className="h-7 w-7 text-slate-500 hover:text-slate-700"
+            className="h-7 w-7 text-muted-foreground hover:text-foreground"
             onClick={refreshCanvases}
             title="Refresh canvases"
           >
@@ -128,12 +128,12 @@ export function CanvasSidebar({ collapsed }: CanvasSidebarProps) {
 
       {!collapsed && (
         <>
-          <div className="px-2 pb-2 text-[10px] text-slate-400">
+          <div className="px-2 pb-2 text-[10px] text-muted-foreground">
             click a canvas to load
           </div>
           <ScrollArea className="max-h-[220px] pr-1">
             {canvases.length === 0 ? (
-              <div className="text-xs text-slate-400 px-2 py-2">no canvases yet</div>
+              <div className="text-xs text-muted-foreground px-2 py-2">no canvases yet</div>
             ) : (
               <div className="space-y-1">
                 {canvases.map((canvas) => {
@@ -148,7 +148,7 @@ export function CanvasSidebar({ collapsed }: CanvasSidebarProps) {
                         variant={isActive ? "secondary" : "ghost"}
                         className={cn(
                           "w-full justify-start text-xs gap-2",
-                          isActive && "bg-blue-100 text-blue-900 font-medium hover:bg-blue-200"
+                          isActive && "bg-primary/10 text-foreground font-medium hover:bg-primary/15"
                         )}
                         onClick={() => handleOpenCanvas(canvas.id)}
                         title={isActive ? `${title} (active - Ctrl+S saves here)` : title}
@@ -157,7 +157,7 @@ export function CanvasSidebar({ collapsed }: CanvasSidebarProps) {
                       </Button>
                       <div className="absolute right-1 top-0.5 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button
-                          className="p-0.5 rounded text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+                          className="p-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted/60"
                           onClick={(e) => {
                             e.stopPropagation();
                             handleOpenCanvas(canvas.id);
@@ -167,7 +167,7 @@ export function CanvasSidebar({ collapsed }: CanvasSidebarProps) {
                           <ArrowUpRight className="h-2.5 w-2.5" />
                         </button>
                         <button
-                          className="p-0.5 rounded text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+                          className="p-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted/60"
                           onClick={(e) => {
                             e.stopPropagation();
                             handleOpenRename(canvas.id, canvas.name);
@@ -177,7 +177,7 @@ export function CanvasSidebar({ collapsed }: CanvasSidebarProps) {
                           <Pencil className="h-2.5 w-2.5" />
                         </button>
                         <button
-                          className="p-0.5 rounded text-slate-400 hover:text-red-600 hover:bg-red-50"
+                          className="p-0.5 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                           onClick={(e) => {
                             e.stopPropagation();
                             handleDelete(canvas.id);
@@ -208,7 +208,7 @@ export function CanvasSidebar({ collapsed }: CanvasSidebarProps) {
               onChange={(e) => setCreateName(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleCreate()}
             />
-            <p className="text-[11px] text-slate-400">
+            <p className="text-[11px] text-muted-foreground">
               Leave blank to use the default name.
             </p>
           </div>

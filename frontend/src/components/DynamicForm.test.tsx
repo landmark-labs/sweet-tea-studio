@@ -87,10 +87,20 @@ describe("DynamicForm grouping", () => {
                 title: "Node B Extra",
                 x_node_id: "node-b",
                 x_form: { section: "nodes", groupId: "node-b", groupTitle: "Node B" }
+            },
+            node_c_extra: {
+                title: "Node C Extra",
+                x_node_id: "node-c",
+                x_form: { section: "nodes", groupId: "node-c", groupTitle: "Node C" }
+            },
+            node_d_extra: {
+                title: "Node D Extra",
+                x_node_id: "node-d",
+                x_form: { section: "nodes", groupId: "node-d", groupTitle: "Node D" }
             }
         };
 
-        const nodeOrder = ["node-b", "node-a"]; // B should render before A everywhere
+        const nodeOrder = ["node-b", "node-a", "node-d", "node-c"]; // B before A; D before C in expanded
 
         const { container } = renderForm(
             <DynamicForm
@@ -111,7 +121,7 @@ describe("DynamicForm grouping", () => {
         const expandedTitles = Array.from(expandedStack?.querySelectorAll("[data-node-stack-item]") || [])
             .map(el => el.getAttribute("data-node-title"))
             .filter(Boolean);
-        expect(expandedTitles).toEqual(["Node B", "Node A"]);
+        expect(expandedTitles).toEqual(["Node D", "Node C"]);
     });
 
     it("applies bypass toggle defaults from schema", () => {

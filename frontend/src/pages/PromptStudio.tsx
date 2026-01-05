@@ -2431,17 +2431,17 @@ export default function PromptStudio() {
   }
 
   return (
-    <div className="h-full w-full bg-slate-100 flex overflow-hidden relative">
+    <div className="h-full w-full bg-transparent flex overflow-hidden relative">
 
       {/* 1. Left Column - Prompt Constructor (Collapsible) */}
       <div
-        className={`flex-none bg-amber-50/80 border-r hidden xl:flex flex-col overflow-hidden transition-all duration-200 ${promptConstructorCollapsed ? 'w-8 cursor-pointer hover:bg-amber-100/50' : 'w-[380px]'
+        className={`flex-none bg-amber-50/80 dark:bg-surface/80 border-r hidden xl:flex flex-col overflow-hidden transition-all duration-200 ${promptConstructorCollapsed ? 'w-8 cursor-pointer hover:bg-amber-100/50 dark:hover:bg-muted/60' : 'w-[380px]'
           }`}
         onClick={promptConstructorCollapsed ? () => setPromptConstructorCollapsed(false) : undefined}
       >
         {promptConstructorCollapsed ? (
           // Collapsed state - narrow bar with icon
-          <div className="flex flex-col items-center justify-center h-full gap-2 text-slate-400">
+          <div className="flex flex-col items-center justify-center h-full gap-2 text-muted-foreground">
             <ChevronRight className="w-4 h-4" />
             <span className="text-[9px] font-medium tracking-wider uppercase [writing-mode:vertical-lr] rotate-180">
               prompts
@@ -2451,11 +2451,11 @@ export default function PromptStudio() {
           // Expanded state - full prompt constructor
           <>
             {/* Collapse toggle header */}
-            <div className="flex-none flex items-center justify-between px-3 py-2 border-b bg-amber-100/50">
-              <span className="text-xs font-bold text-slate-800 tracking-wider font-['Space_Grotesk']">PROMPT CONSTRUCTOR</span>
+            <div className="flex-none flex items-center justify-between px-3 py-2 border-b bg-amber-100/50 dark:bg-surface-raised/70">
+              <span className="text-xs font-bold text-foreground tracking-wider font-['Space_Grotesk']">PROMPT CONSTRUCTOR</span>
               <button
                 onClick={() => setPromptConstructorCollapsed(true)}
-                className="p-1 rounded hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors"
+                className="p-1 rounded hover:bg-muted/60 text-muted-foreground hover:text-foreground transition-colors"
                 title="Collapse prompt constructor"
               >
                 <ChevronLeft className="w-4 h-4" />
@@ -2476,7 +2476,7 @@ export default function PromptStudio() {
                   externalValueSyncKey={externalValueSyncKey}
                 />
               ) : (
-                <div className="p-4 text-xs text-slate-400">select a prompt pipe to use the constructor</div>
+                <div className="p-4 text-xs text-muted-foreground">select a prompt pipe to use the constructor</div>
               )}
             </div>
           </>
@@ -2484,16 +2484,16 @@ export default function PromptStudio() {
       </div>
 
       {/* 2. Configuration (Left) - NEW LAYOUT */}
-      <div className="w-[420px] flex-none bg-blue-50 border-r border-blue-100 flex flex-col h-full overflow-hidden">
+      <div className="w-[420px] flex-none bg-blue-50 dark:bg-surface border-r border-blue-100 dark:border-border/70 flex flex-col h-full overflow-hidden">
 
         {/* Sticky Header Section */}
-        <div className="flex-none p-3 space-y-2 border-b bg-slate-50/50 backdrop-blur z-10">
-          <div className="text-xs font-bold text-slate-800 tracking-wider font-['Space_Grotesk']">CONFIGURATOR</div>
+        <div className="flex-none p-3 space-y-2 border-b bg-slate-50/50 dark:bg-surface-raised/60 backdrop-blur z-10">
+          <div className="text-xs font-bold text-foreground tracking-wider font-['Space_Grotesk']">CONFIGURATOR</div>
 
           {/* Project + Destination Row */}
           <div className="flex gap-2 items-end">
             <div className="flex-1">
-              <label className="text-xs font-medium text-slate-600">project</label>
+              <label className="text-xs font-medium text-muted-foreground">project</label>
               <Select
                 value={selectedProjectId || "none"}
                 onValueChange={(value) => {
@@ -2530,7 +2530,7 @@ export default function PromptStudio() {
             {/* Destination Selector (Compact) - hidden for drafts project which has no subfolders */}
             {selectedProjectId && selectedProject?.slug !== "drafts" && (
               <div className="flex-1">
-                <label className="text-xs font-medium text-slate-600">destination</label>
+                <label className="text-xs font-medium text-muted-foreground">destination</label>
                 <Select
                   value={generationTarget || "engine-default"}
                   onValueChange={(value) => setGenerationTarget(value === "engine-default" ? "" : value)}
@@ -2595,7 +2595,7 @@ export default function PromptStudio() {
 
             {/* Queue Count Input */}
             <div className="flex items-center gap-1">
-              <span className="text-[10px] text-slate-400">×</span>
+              <span className="text-[10px] text-muted-foreground">×</span>
               <input
                 type="number"
                 min={1}
@@ -2623,7 +2623,7 @@ export default function PromptStudio() {
                   }
                 }}
                 disabled={isBusy}
-                className="w-12 h-10 text-center text-sm font-semibold border rounded-md bg-white disabled:bg-slate-100 disabled:text-slate-400"
+                className="w-12 h-10 text-center text-sm font-semibold border rounded-md bg-white dark:bg-surface-raised disabled:bg-muted/40 disabled:text-muted-foreground"
                 title="Number of times to run (1-100)"
               />
             </div>
@@ -2635,7 +2635,7 @@ export default function PromptStudio() {
 
           {/* Pipe Selector */}
           <div className="space-y-2">
-            <label className="text-xs font-semibold text-slate-500 lowercase">pipe</label>
+            <label className="text-xs font-semibold text-muted-foreground lowercase">pipe</label>
             <Select
               value={selectedWorkflowId ? String(selectedWorkflowId) : undefined}
               onValueChange={setSelectedWorkflowId}
@@ -2657,7 +2657,7 @@ export default function PromptStudio() {
                     <SelectItem key={w.id} value={String(w.id)} title={w.description || undefined}>
                       <div className="flex flex-col gap-0.5">
                         <span className="font-medium">{w.name}</span>
-                        <span className="text-[11px] text-slate-500 line-clamp-2">{w.description || "No description"}</span>
+                        <span className="text-[11px] text-muted-foreground line-clamp-2">{w.description || "No description"}</span>
                       </div>
                     </SelectItem>
                   ))
@@ -2712,13 +2712,13 @@ export default function PromptStudio() {
 
         {/* Progress Status Footer */}
         {lastJobId && isBusy && (
-          <div className="flex-none p-4 border-t bg-slate-50">
+          <div className="flex-none p-4 border-t bg-slate-50 dark:bg-surface-raised/60">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-medium text-blue-600 capitalize">{statusLabel || (generationState === "queued" ? "queued" : "processing")}</span>
-              <span className="text-xs text-slate-500">{Math.round(progress)}%</span>
+              <span className="text-xs font-medium text-blue-600 dark:text-primary capitalize">{statusLabel || (generationState === "queued" ? "queued" : "processing")}</span>
+              <span className="text-xs text-muted-foreground">{Math.round(progress)}%</span>
             </div>
             <Progress value={progress} className="h-1 mb-2" />
-            <Button variant="ghost" size="sm" onClick={handleCancel} className="w-full text-red-500 h-6 text-xs hover:text-red-600 hover:bg-red-50">
+            <Button variant="ghost" size="sm" onClick={handleCancel} className="w-full text-destructive h-6 text-xs hover:text-destructive hover:bg-destructive/10">
               cancel job
             </Button>
           </div>
@@ -2727,7 +2727,7 @@ export default function PromptStudio() {
       </div>
 
       {/* 3. Center Preview with Navigation and Auto-Discard */}
-      <div className="flex-1 overflow-hidden relative bg-slate-900/90 flex flex-col">
+      <div className="flex-1 overflow-hidden relative bg-slate-900/90 dark:bg-background flex flex-col">
         <ErrorBoundary>
           <ImageViewer
             images={projectGalleryImages.length > 0

@@ -598,7 +598,7 @@ export const ImageViewer = React.memo(function ImageViewer({
     // Show empty state only if no image to display at all
     if (!currentImage) {
         return (
-            <div className="h-full flex items-center justify-center bg-slate-100 text-slate-400">
+            <div className="h-full flex items-center justify-center bg-muted/40 text-muted-foreground">
                 Select a job or image to view
             </div>
         );
@@ -610,7 +610,7 @@ export const ImageViewer = React.memo(function ImageViewer({
 
     return (
         <>
-            <div ref={containerRef} className="h-full flex flex-col bg-slate-900 relative">
+            <div ref={containerRef} className="h-full flex flex-col bg-slate-900 dark:bg-background relative">
 
                 {/* Image Area */}
                 <div
@@ -625,7 +625,7 @@ export const ImageViewer = React.memo(function ImageViewer({
                             <Button
                                 variant="ghost"
                                 size="icon"
-                                className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/50 hover:bg-white/80 rounded-full z-10"
+                                className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/50 hover:bg-white/80 dark:bg-surface/60 dark:hover:bg-surface/80 border border-white/10 dark:border-border/60 rounded-full z-10"
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     e.stopPropagation();
@@ -634,12 +634,12 @@ export const ImageViewer = React.memo(function ImageViewer({
                                 }}
                                 disabled={effectiveIndex <= 0}
                             >
-                                <ArrowLeft className="w-5 h-5 text-slate-800" />
+                                <ArrowLeft className="w-5 h-5 text-slate-800 dark:text-foreground" />
                             </Button>
                             <Button
                                 variant="ghost"
                                 size="icon"
-                                className="absolute right-4 top-1/2 -translate-y-1/2 bg-white/50 hover:bg-white/80 rounded-full z-10"
+                                className="absolute right-4 top-1/2 -translate-y-1/2 bg-white/50 hover:bg-white/80 dark:bg-surface/60 dark:hover:bg-surface/80 border border-white/10 dark:border-border/60 rounded-full z-10"
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     e.stopPropagation();
@@ -648,7 +648,7 @@ export const ImageViewer = React.memo(function ImageViewer({
                                 }}
                                 disabled={effectiveIndex >= displayImages.length - 1}
                             >
-                                <ArrowRight className="w-5 h-5 text-slate-800" />
+                                <ArrowRight className="w-5 h-5 text-slate-800 dark:text-foreground" />
                             </Button>
 
 
@@ -680,23 +680,23 @@ export const ImageViewer = React.memo(function ImageViewer({
                 {/* Context Menu */}
                 {contextMenu && (
                     <div
-                        className="fixed z-[9999] bg-white border border-slate-200 rounded-md shadow-lg py-1 w-48 text-sm text-slate-700 font-medium"
+                        className="fixed z-[9999] bg-popover border border-border/60 rounded-md shadow-lg py-1 w-48 text-sm text-popover-foreground font-medium"
                         style={{ top: contextMenu.y, left: contextMenu.x }}
                     >
                         <div
-                            className="px-3 py-2 hover:bg-slate-100 cursor-pointer flex items-center gap-2"
+                            className="px-3 py-2 hover:bg-muted/50 cursor-pointer flex items-center gap-2"
                             onClick={toggleFullScreen}
                         >
                             {lightboxOpen ? <React.Fragment><ExternalLink size={14} className="rotate-180" /> exit full screen</React.Fragment> : <React.Fragment><ExternalLink size={14} /> full screen</React.Fragment>}
                         </div>
                         <div
-                            className="px-3 py-2 hover:bg-slate-100 cursor-pointer flex items-center gap-2"
+                            className="px-3 py-2 hover:bg-muted/50 cursor-pointer flex items-center gap-2"
                             onClick={handleDownload}
                         >
                             <Download size={14} /> download
                         </div>
                         <div
-                            className="px-3 py-2 hover:bg-slate-100 cursor-pointer flex items-center gap-2"
+                            className="px-3 py-2 hover:bg-muted/50 cursor-pointer flex items-center gap-2"
                             onClick={() => {
                                 const rawPath = resolveRawPath(imagePath);
                                 if (rawPath) {
@@ -709,24 +709,24 @@ export const ImageViewer = React.memo(function ImageViewer({
                         </div>
                         {canDrawMask && (
                             <div
-                                className="px-3 py-2 hover:bg-slate-100 cursor-pointer flex items-center gap-2"
+                                className="px-3 py-2 hover:bg-muted/50 cursor-pointer flex items-center gap-2"
                                 onClick={openMaskEditor}
                             >
                                 <PenTool size={14} /> draw mask
                             </div>
                         )}
-                        <div className="h-px bg-slate-100 my-1" />
+                        <div className="h-px bg-border/50 my-1" />
 
                         {onRegenerate && (
                             <div className="relative group">
-                                <div className="px-3 py-2 hover:bg-slate-100 cursor-pointer flex items-center justify-between">
+                                <div className="px-3 py-2 hover:bg-muted/50 cursor-pointer flex items-center justify-between">
                                     <span className="flex items-center gap-2"><RotateCcw size={14} /> regenerate</span>
                                     <span className="text-xs">▶</span>
                                 </div>
                                 <div className="absolute left-full top-0 pl-2 -ml-1 hidden group-hover:block">
-                                    <div className="bg-white border border-slate-200 rounded-md shadow-lg py-1 w-40">
+                                    <div className="bg-popover border border-border/60 rounded-md shadow-lg py-1 w-40">
                                         <div
-                                            className="px-3 py-2 hover:bg-slate-100 cursor-pointer text-xs"
+                                            className="px-3 py-2 hover:bg-muted/50 cursor-pointer text-xs"
                                             onClick={() => {
                                                 onRegenerate(currentItemForRegenerate || currentMetadata || {}, 'same');
                                                 setContextMenu(null);
@@ -735,7 +735,7 @@ export const ImageViewer = React.memo(function ImageViewer({
                                             same seed
                                         </div>
                                         <div
-                                            className="px-3 py-2 hover:bg-slate-100 cursor-pointer text-xs"
+                                            className="px-3 py-2 hover:bg-muted/50 cursor-pointer text-xs"
                                             onClick={() => {
                                                 onRegenerate(currentItemForRegenerate || currentMetadata || {}, 'random');
                                                 setContextMenu(null);
@@ -750,17 +750,17 @@ export const ImageViewer = React.memo(function ImageViewer({
 
                         {imageWorkflows.length > 0 && (
                             <div className="relative group">
-                                <div className="px-3 py-2 hover:bg-slate-100 cursor-pointer flex items-center justify-between">
+                                <div className="px-3 py-2 hover:bg-muted/50 cursor-pointer flex items-center justify-between">
                                     <span className="flex items-center gap-2">use in pipe</span>
                                     <span className="text-xs">▶</span>
                                 </div>
                                 {/* pl-2 + -ml-1 creates an invisible hover bridge to the right for horizontal submenus */}
                                 <div className="absolute left-full top-0 pl-2 -ml-1 hidden group-hover:block">
-                                    <div className="bg-white border border-slate-200 rounded-md shadow-lg py-1 w-48 max-h-64 overflow-y-auto">
+                                    <div className="bg-popover border border-border/60 rounded-md shadow-lg py-1 w-48 max-h-64 overflow-y-auto">
                                         {imageWorkflows.map(w => (
                                             <div
                                                 key={w.id}
-                                                className="px-3 py-2 hover:bg-slate-100 cursor-pointer truncate"
+                                                className="px-3 py-2 hover:bg-muted/50 cursor-pointer truncate"
                                                 onClick={() => {
                                                     const rawPath = resolveRawPath(imagePath);
                                                     const item = matchingGalleryItem;
@@ -803,9 +803,9 @@ export const ImageViewer = React.memo(function ImageViewer({
 
                         {onDelete && currentImage && (
                             <>
-                                <div className="h-px bg-slate-100 my-1" />
+                                <div className="h-px bg-border/50 my-1" />
                                 <div
-                                    className="px-3 py-2 hover:bg-red-50 cursor-pointer flex items-center gap-2 text-red-600"
+                                    className="px-3 py-2 hover:bg-destructive/10 cursor-pointer flex items-center gap-2 text-destructive"
                                     onClick={async () => {
                                         // Use matchingGalleryItem ID if available (for locked images selected via selectedImagePath)
                                         const imageId = matchingGalleryItem?.image.id ?? currentImage.id;
@@ -854,9 +854,9 @@ export const ImageViewer = React.memo(function ImageViewer({
                 )}
 
                 {/* Bottom Panel: Toolbar + Metadata - Takes ~35% of container height */}
-                <div className="border-t bg-white flex flex-col" style={{ height: '35%', minHeight: '200px' }}>
+                <div className="border-t border-border/60 bg-card flex flex-col" style={{ height: '35%', minHeight: '200px' }}>
                     {/* Toolbar Row */}
-                    <div className="px-4 py-2 border-b bg-slate-50 flex flex-wrap items-center justify-between gap-2 flex-shrink-0">
+                    <div className="px-4 py-2 border-b border-border/60 bg-muted/20 flex flex-wrap items-center justify-between gap-2 flex-shrink-0">
                         {/* Left: Actions */}
                         <div className="flex items-center gap-2">
                             {imageWorkflows.length > 0 && (
@@ -868,7 +868,7 @@ export const ImageViewer = React.memo(function ImageViewer({
                                     <Button
                                         variant="outline"
                                         size="sm"
-                                        className="h-7 text-xs gap-1 border-blue-200 hover:bg-blue-50 text-blue-700"
+                                        className="h-7 text-xs gap-1 border-blue-200 hover:bg-blue-50 text-blue-700 dark:border-border/60 dark:hover:bg-muted/60 dark:text-primary"
                                         onClick={(e) => {
                                             e.stopPropagation();
                                             setUseInPipeMenuOpen((open) => !open);
@@ -878,9 +878,9 @@ export const ImageViewer = React.memo(function ImageViewer({
                                     </Button>
                                     {/* pt-2 + -mt-2 creates an invisible hover bridge between button and menu */}
                                     <div className={`absolute left-0 top-full pt-2 -mt-1 z-50 ${useInPipeMenuOpen ? "block" : "hidden"}`}>
-                                        <div className="bg-white border border-slate-200 rounded-md shadow-lg py-1 w-48 max-h-64 overflow-y-auto">
+                                        <div className="bg-popover border border-border/60 rounded-md shadow-lg py-1 w-48 max-h-64 overflow-y-auto">
                                             {imageWorkflows.map(w => (
-                                                <div key={w.id} className="px-3 py-2 hover:bg-slate-100 cursor-pointer truncate text-xs" onClick={() => {
+                                                <div key={w.id} className="px-3 py-2 hover:bg-muted/50 cursor-pointer truncate text-xs" onClick={() => {
                                                     const rawPath = resolveRawPath(imagePath);
                                                     const item = matchingGalleryItem;
                                                     onUseInPipe?.({
@@ -930,7 +930,7 @@ export const ImageViewer = React.memo(function ImageViewer({
                                     <Button
                                         variant="outline"
                                         size="sm"
-                                        className="h-7 text-xs gap-1 border-green-200 hover:bg-green-50 text-green-700"
+                                        className="h-7 text-xs gap-1 border-green-200 hover:bg-green-50 text-green-700 dark:border-border/60 dark:hover:bg-muted/60 dark:text-green-400"
                                         onClick={(e) => {
                                             e.stopPropagation();
                                             setRegenerateMenuOpen((open) => !open);
@@ -939,9 +939,9 @@ export const ImageViewer = React.memo(function ImageViewer({
                                         <RotateCcw className="w-3 h-3" /> regenerate ▶
                                     </Button>
                                     <div className={`absolute left-0 top-full pt-2 -mt-1 z-50 ${regenerateMenuOpen ? "block" : "hidden"}`}>
-                                        <div className="bg-white border border-slate-200 rounded-md shadow-lg py-1 w-40">
+                                        <div className="bg-popover border border-border/60 rounded-md shadow-lg py-1 w-40">
                                             <div
-                                                className="px-3 py-2 hover:bg-slate-100 cursor-pointer text-xs"
+                                                className="px-3 py-2 hover:bg-muted/50 cursor-pointer text-xs"
                                                 onClick={() => {
                                                     onRegenerate(currentItemForRegenerate || currentMetadata || {}, 'same');
                                                     setRegenerateMenuOpen(false);
@@ -950,7 +950,7 @@ export const ImageViewer = React.memo(function ImageViewer({
                                                 same seed
                                             </div>
                                             <div
-                                                className="px-3 py-2 hover:bg-slate-100 cursor-pointer text-xs"
+                                                className="px-3 py-2 hover:bg-muted/50 cursor-pointer text-xs"
                                                 onClick={() => {
                                                     onRegenerate(currentItemForRegenerate || currentMetadata || {}, 'random');
                                                     setRegenerateMenuOpen(false);
@@ -967,7 +967,7 @@ export const ImageViewer = React.memo(function ImageViewer({
                                 <Button
                                     variant="outline"
                                     size="sm"
-                                    className="h-7 text-xs gap-1 border-orange-200 hover:bg-orange-50 text-orange-700 hover:text-orange-800"
+                                    className="h-7 text-xs gap-1 border-orange-200 hover:bg-orange-50 text-orange-700 hover:text-orange-800 dark:border-border/60 dark:hover:bg-muted/60 dark:text-orange-300 dark:hover:text-orange-200"
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         openMaskEditor();
@@ -987,7 +987,7 @@ export const ImageViewer = React.memo(function ImageViewer({
                                 <Button
                                     variant="outline"
                                     size="sm"
-                                    className="h-7 text-xs text-red-600 border-red-200 hover:bg-red-50"
+                                    className="h-7 text-xs text-destructive border-destructive/30 hover:bg-destructive/10"
                                     onClick={async () => {
                                         // Use matchingGalleryItem ID if available (for locked images selected via selectedImagePath)
                                         // fallback to currentImage.id for in-array images
@@ -1036,8 +1036,8 @@ export const ImageViewer = React.memo(function ImageViewer({
                     <div className="flex-1 overflow-y-auto px-4 py-3">
                         {/* Header */}
                         <div className="flex items-baseline justify-between mb-3">
-                            <h3 className="text-sm font-semibold text-slate-800 truncate">{currentImage?.filename}</h3>
-                            <span className="text-[10px] text-slate-400 font-mono ml-2 flex-shrink-0">{currentImage?.created_at ? new Date(currentImage.created_at).toLocaleString() : ""}</span>
+                            <h3 className="text-sm font-semibold text-foreground truncate">{currentImage?.filename}</h3>
+                            <span className="text-[10px] text-muted-foreground font-mono ml-2 flex-shrink-0">{currentImage?.created_at ? new Date(currentImage.created_at).toLocaleString() : ""}</span>
                         </div>
 
                         {currentMetadata && (
@@ -1046,14 +1046,14 @@ export const ImageViewer = React.memo(function ImageViewer({
                                     {/* Positive Prompt - Full width, auto-height */}
                                     {!!currentMetadata.prompt && (
                                         <div className="w-full relative">
-                                            <span className="font-medium text-slate-500 text-[10px] uppercase block mb-1">Positive Prompt</span>
+                                            <span className="font-medium text-muted-foreground text-[10px] uppercase block mb-1">Positive Prompt</span>
                                             <Tooltip>
                                                 <TooltipTrigger asChild>
                                                     <Button
                                                         variant="ghost"
                                                         size="icon"
                                                         aria-label={copyState.positive ? "Copied positive prompt" : "Copy positive prompt"}
-                                                        className="h-7 w-7 absolute top-0 right-0 text-slate-500 hover:text-slate-800"
+                                                        className="h-7 w-7 absolute top-0 right-0 text-muted-foreground hover:text-foreground"
                                                         onClick={() => handleCopy(String(currentMetadata.prompt), "positive")}
                                                     >
                                                         {copyState.positive ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
@@ -1061,7 +1061,7 @@ export const ImageViewer = React.memo(function ImageViewer({
                                                 </TooltipTrigger>
                                                 <TooltipContent>{copyState.positive ? "Copied!" : "Copy positive prompt"}</TooltipContent>
                                             </Tooltip>
-                                            <p className="text-slate-700 bg-slate-50 p-2 pr-10 rounded border text-[11px] font-mono whitespace-pre-wrap leading-relaxed w-full">
+                                            <p className="text-foreground/80 bg-muted/20 p-2 pr-10 rounded border border-border/60 text-[11px] font-mono whitespace-pre-wrap leading-relaxed w-full">
                                                 {String(currentMetadata.prompt)}
                                             </p>
                                         </div>
@@ -1070,14 +1070,14 @@ export const ImageViewer = React.memo(function ImageViewer({
                                     {/* Negative Prompt - Full width, auto-height */}
                                     {!!currentMetadata.negative_prompt && (
                                         <div className="w-full relative">
-                                            <span className="font-medium text-slate-500 text-[10px] uppercase block mb-1">Negative Prompt</span>
+                                            <span className="font-medium text-muted-foreground text-[10px] uppercase block mb-1">Negative Prompt</span>
                                             <Tooltip>
                                                 <TooltipTrigger asChild>
                                                     <Button
                                                         variant="ghost"
                                                         size="icon"
                                                         aria-label={copyState.negative ? "Copied negative prompt" : "Copy negative prompt"}
-                                                        className="h-7 w-7 absolute top-0 right-0 text-slate-500 hover:text-slate-800"
+                                                        className="h-7 w-7 absolute top-0 right-0 text-muted-foreground hover:text-foreground"
                                                         onClick={() => handleCopy(String(currentMetadata.negative_prompt), "negative")}
                                                     >
                                                         {copyState.negative ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
@@ -1085,7 +1085,7 @@ export const ImageViewer = React.memo(function ImageViewer({
                                                 </TooltipTrigger>
                                                 <TooltipContent>{copyState.negative ? "Copied!" : "Copy negative prompt"}</TooltipContent>
                                             </Tooltip>
-                                            <p className="text-slate-700 bg-red-50/50 p-2 pr-10 rounded border border-red-100 text-[11px] font-mono whitespace-pre-wrap leading-relaxed w-full">
+                                            <p className="text-foreground/80 bg-destructive/10 p-2 pr-10 rounded border border-destructive/20 text-[11px] font-mono whitespace-pre-wrap leading-relaxed w-full">
                                                 {String(currentMetadata.negative_prompt)}
                                             </p>
                                         </div>
@@ -1093,7 +1093,7 @@ export const ImageViewer = React.memo(function ImageViewer({
 
                                     {/* Parameters Grid */}
                                     {!!currentMetadata.job_params && typeof currentMetadata.job_params === 'object' && Object.keys(currentMetadata.job_params).length > 0 && (
-                                        <div className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-x-4 gap-y-2 pt-2 border-t border-slate-100">
+                                        <div className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-x-4 gap-y-2 pt-2 border-t border-border/50">
                                             {Object.entries(currentMetadata.job_params as Record<string, unknown>)
                                                 .filter(([k, v]) => {
                                                     // Exclude null/empty values
@@ -1109,14 +1109,14 @@ export const ImageViewer = React.memo(function ImageViewer({
                                                     <Tooltip key={k}>
                                                         <TooltipTrigger asChild>
                                                             <div className="min-w-0 cursor-default">
-                                                                <span className="font-medium text-slate-500 capitalize text-[9px] uppercase tracking-wide block truncate">{k.replace(/_/g, ' ')}</span>
-                                                                <span className="text-slate-800 font-mono text-xs block truncate">{String(v)}</span>
+                                                                <span className="font-medium text-muted-foreground capitalize text-[9px] uppercase tracking-wide block truncate">{k.replace(/_/g, ' ')}</span>
+                                                                <span className="text-foreground font-mono text-xs block truncate">{String(v)}</span>
                                                             </div>
                                                         </TooltipTrigger>
                                                         <TooltipContent side="top" className="max-w-xs">
                                                             <div className="text-xs">
-                                                                <span className="font-semibold text-slate-600">{k.replace(/_/g, ' ')}</span>
-                                                                <span className="mx-1 text-slate-400">:</span>
+                                                                <span className="font-semibold text-foreground/80">{k.replace(/_/g, ' ')}</span>
+                                                                <span className="mx-1 text-muted-foreground">:</span>
                                                                 <span className="font-mono break-all">{String(v)}</span>
                                                             </div>
                                                         </TooltipContent>
@@ -1128,7 +1128,7 @@ export const ImageViewer = React.memo(function ImageViewer({
 
                                     {/* Loading indicator */}
                                     {metadataLoading && (
-                                        <div className="text-xs text-slate-400 italic">Loading metadata...</div>
+                                        <div className="text-xs text-muted-foreground italic">Loading metadata...</div>
                                     )}
                                 </div>
                             </TooltipProvider>

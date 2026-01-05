@@ -39,61 +39,60 @@
   --color-hover: hsl(225 18% 96%);
   --color-active: hsl(225 18% 90%);
 
+  /* Scrollbars */
+  --scrollbar-track: transparent;
+  --scrollbar-thumb: hsl(223 15% 86%);
+  --scrollbar-thumb-hover: hsl(225 16% 46%);
+
   --radius: 0.75rem;
 }
 
 /* Dark theme - improved based on reference design */
 :root.dark {
-  /* Background colors using slate palette */
-  --color-background: hsl(222 47% 6%);
-  /* #0f172a - slate-900 */
-  --color-foreground: hsl(210 40% 92%);
-  /* Light gray text */
+  /* Near-black base with subtle blue tint (see docs/mock for expectations) */
+  --color-background: #050508;
+  --color-foreground: #e2e8f0;
 
-  --color-surface: hsl(217 33% 12%);
-  /* #1e293b - slate-800 */
-  --color-surface-raised: hsl(215 25% 16%);
-  /* Slightly lighter surface */
-  --color-surface-overlay: hsl(215 20% 20%);
-  /* Even lighter for overlays */
+  /* Surfaces/panels */
+  --color-surface: #0b0c15;
+  --color-surface-raised: #0f111a;
+  --color-surface-overlay: #121428;
 
-  --color-card: hsl(217 33% 12%);
-  /* #1e293b - slate-800 */
-  --color-card-foreground: hsl(210 40% 96%);
+  --color-card: #0b0c15;
+  --color-card-foreground: #e2e8f0;
 
-  --color-popover: hsl(215 25% 16%);
-  --color-popover-foreground: hsl(210 40% 96%);
+  --color-popover: #0f111a;
+  --color-popover-foreground: #e2e8f0;
 
-  /* Violet primary color from reference */
-  --color-primary: hsl(263 70% 66%);
-  /* #8b5cf6 - violet-500 */
-  --color-primary-foreground: hsl(0 0% 100%);
+  /* Brand */
+  --color-primary: #3b82f6;
+  --color-primary-foreground: #ffffff;
 
-  --color-secondary: hsl(263 60% 74%);
-  /* #a78bfa - violet-400 */
-  --color-secondary-foreground: hsl(0 0% 100%);
+  --color-secondary: #60a5fa;
+  --color-secondary-foreground: #050508;
 
-  --color-muted: hsl(217 19% 22%);
-  /* slate-700ish */
-  --color-muted-foreground: hsl(215 20% 60%);
-  /* slate-400 */
+  --color-muted: #111327;
+  --color-muted-foreground: #94a3b8;
 
-  --color-accent: hsl(263 70% 66%);
-  /* Same as primary for consistency */
-  --color-accent-foreground: hsl(0 0% 100%);
+  --color-accent: #1e3a8a;
+  --color-accent-foreground: #e2e8f0;
 
-  --color-destructive: hsl(0 63% 50%);
-  --color-destructive-foreground: hsl(0 0% 100%);
+  --color-destructive: #ef4444;
+  --color-destructive-foreground: #ffffff;
 
-  /* Border colors - slate-700 */
-  --color-border: hsl(215 19% 30%);
-  /* slate-700 */
-  --color-input: hsl(215 19% 30%);
-  --color-ring: hsl(263 70% 66%);
+  /* Borders/inputs */
+  --color-border: #1e2235;
+  --color-input: #1e2235;
+  --color-ring: #3b82f6;
 
   /* Interactive state colors */
-  --color-hover: hsl(217 25% 18%);
-  --color-active: hsl(217 25% 24%);
+  --color-hover: #0f111a;
+  --color-active: #121428;
+
+  /* Scrollbars */
+  --scrollbar-track: #050508;
+  --scrollbar-thumb: #1e2235;
+  --scrollbar-thumb-hover: #2a2f48;
 }
 
 /* Tailwind theme integration */
@@ -128,6 +127,27 @@
 @layer base {
   * {
     @apply border-border;
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: var(--scrollbar-track);
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+    border-radius: 8px;
+    border: 2px solid var(--scrollbar-track);
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--scrollbar-thumb-hover);
   }
 
   body {
