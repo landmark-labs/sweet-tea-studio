@@ -148,6 +148,43 @@ export function GenerationProvider({ children }: GenerationProviderProps) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    // Sync active jobs on mount to prevent stuck spinners
+    useEffect(() => {
+        const checkActiveJobs = async () => {
+            const feed = useGenerationFeedStore.getState().generationFeed;
+            const activeJobs = feed.filter(item =>
+                item.status === 'queued' ||
+                item.status === 'processing' ||
+                item.status === 'running'
+            );
+
+            if (activeJobs.length === 0) return;
+
+            console.log(`[GenerationContext] Checking ${activeJobs.length} active jobs...`);
+            await Promise.all(activeJobs.map(async (job) => {
+                try {
+                    const remoteJob = await api.getJob(job.jobId);
+                    // If remote is done/failed but local is active, sync it
+                    if (['completed', 'failed', 'cancelled'].includes(remoteJob.status)) {
+                        console.log(`[GenerationContext] Syncing stuck job ${job.jobId} -> ${remoteJob.status}`);
+                        let updates: any = { status: remoteJob.status };
+                        if (remoteJob.status === 'completed') {
+                            updates.progress = 100;
+                        }
+                        updateFeed(job.jobId, updates);
+                    }
+                } catch (err) {
+                    console.error(`[GenerationContext] Failed to check job ${job.jobId}`, err);
+                    if (err instanceof Error && err.message.includes("404")) {
+                        updateFeed(job.jobId, { status: "failed" });
+                    }
+                }
+            }));
+        };
+
+        checkActiveJobs();
+    }, [updateFeed]);
+
     const refreshWorkflows = useCallback(async () => {
         try {
             const data = await api.getWorkflows();
