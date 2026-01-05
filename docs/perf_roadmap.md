@@ -31,6 +31,7 @@ Targets: P95 input-to-paint < 50ms for ~2000-char prompts, 60fps during snippet 
 ## Phase 3 - UI interaction perf
 [x] Virtualize snippet library and gallery lists.
 [x] Stabilize handlers/props to minimize re-render cascades.
+[x] Avoid `JSON.stringify` on workflow graphs in render paths (use structural scans).
 [x] Reduce large prop churn in PromptStudio (memoized subcomponents).
 
 ## Phase 4 - Backend perf

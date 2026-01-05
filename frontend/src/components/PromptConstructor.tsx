@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, rectSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -63,7 +63,7 @@ export const COLORS = [
 
 // --- Sub-Components ---
 
-const SortableItem = React.memo(function SortableItem({ item, index, textIndex, onRemove, onUpdateContent, onEditTextSnippet }: { item: PromptItem, index: number, textIndex?: number, onRemove: (id: string, e: React.MouseEvent) => void, onUpdateContent: (id: string, val: string) => void, onEditTextSnippet?: (item: PromptItem, textIndex?: number) => void }) {
+const SortableItem = React.memo(function SortableItem({ item, textIndex, onRemove, onUpdateContent, onEditTextSnippet, onTextFocusChange }: { item: PromptItem, textIndex?: number, onRemove: (id: string, e: React.MouseEvent) => void, onUpdateContent: (id: string, val: string) => void, onEditTextSnippet?: (item: PromptItem, textIndex?: number) => void, onTextFocusChange: (focused: boolean) => void }) {
     const {
         attributes,
         listeners,
@@ -82,12 +82,14 @@ const SortableItem = React.memo(function SortableItem({ item, index, textIndex, 
     };
 
     const handleBlur = () => {
+        onTextFocusChange(false);
         setIsEditing(false);
     };
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
+            onTextFocusChange(false);
             setIsEditing(false);
         }
     };
@@ -100,6 +102,7 @@ const SortableItem = React.memo(function SortableItem({ item, index, textIndex, 
                             value={item.content}
                             autoFocus
                             onChange={(e) => onUpdateContent(item.id, e.target.value)}
+                            onFocus={() => onTextFocusChange(true)}
                             onBlur={handleBlur}
                             onKeyDown={handleKeyDown}
                             className="min-h-[32px] h-auto w-full text-[11px] font-mono border-dashed bg-surface-raised shadow-lg ring-2 ring-blue-500 transition-colors resize-y py-1 px-2 rounded-md"
@@ -492,50 +495,58 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
         });
     }, [schema]);
 
+    useEffect(() => {
+        if (controlledTarget !== undefined) return;
+        if (internalTarget) return;
+        const first = availableFields[0];
+        if (!first) return;
+        setTargetField(first);
+    }, [availableFields, controlledTarget, internalTarget, setTargetField]);
+
     // 2. State
-    const { registerStateChange } = useUndoRedo();
+    const { registerStateChange, setTextInputFocused } = useUndoRedo();
 
     const [fieldItems, setFieldItems] = useState<Record<string, PromptItem[]>>({});
     const items = fieldItems[targetField] || [];
+    const sortableIds = useMemo(() => items.map((item) => item.id), [items]);
     const initializedFieldsRef = useRef<Set<string>>(new Set());
     const lastReconciledRef = useRef<Record<string, string>>({});
     const itemsSourceRef = useRef<{ field: string; source: "constructor" | "reconcile" } | null>(null);
 
-    const applyItems = (target: string, value: PromptItem[]) => {
+    const applyItems = useCallback((target: string, value: PromptItem[]) => {
         if (target) {
             initializedFieldsRef.current.add(target);
             itemsSourceRef.current = { field: target, source: "constructor" };
         }
         setFieldItems(prev => ({ ...prev, [target]: value }));
-    };
+    }, []);
 
-    const setItems = (
+    const setItems = useCallback((
         newItems: PromptItem[] | ((prev: PromptItem[]) => PromptItem[]),
         label = "Prompt items updated",
         record = true,
         source: "constructor" | "reconcile" = "constructor"
     ) => {
-        if (!targetField) return;
-        initializedFieldsRef.current.add(targetField);
-        itemsSourceRef.current = { field: targetField, source };
-        // Collect values for undo/redo registration AFTER the state update
-        let previousItems: PromptItem[] = [];
-        let resolvedItems: PromptItem[] = [];
+        const field = targetField;
+        if (!field) return;
+
+        initializedFieldsRef.current.add(field);
+        itemsSourceRef.current = { field, source };
 
         setFieldItems(prev => {
-            previousItems = prev[targetField] || [];
-            resolvedItems = typeof newItems === 'function' ? newItems(previousItems) : newItems;
-            return { ...prev, [targetField]: resolvedItems };
-        });
+            const previousItems = prev[field] || [];
+            const resolvedItems = typeof newItems === 'function' ? newItems(previousItems) : newItems;
+            if (resolvedItems === previousItems) return prev;
 
-        // Register undo/redo AFTER setFieldItems to avoid setState during render
-        if (record) {
-            // Use queueMicrotask to ensure this runs after the current render
-            queueMicrotask(() => {
-                registerStateChange(label, previousItems, resolvedItems, (val) => applyItems(targetField, val));
-            });
-        }
-    };
+            if (record) {
+                queueMicrotask(() => {
+                    registerStateChange(label, previousItems, resolvedItems, (val) => applyItems(field, val));
+                });
+            }
+
+            return { ...prev, [field]: resolvedItems };
+        });
+    }, [applyItems, registerStateChange, targetField]);
 
     // Library now comes from props (aliasing 'snippets' to 'library' in arg destructuring)
     // Removed internal state initialization
@@ -562,7 +573,12 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
         useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
     );
 
-    const trackSnippetAction = (action: string, extra: Record<string, unknown> = {}) => {
+    const itemCountRef = useRef(0);
+    itemCountRef.current = items.length;
+    const libraryCountRef = useRef(0);
+    libraryCountRef.current = library.length;
+
+    const trackSnippetAction = useCallback((action: string, extra: Record<string, unknown> = {}) => {
         if (typeof performance === "undefined") return;
         const start = performance.now();
         logClientFrameLatency(
@@ -571,13 +587,13 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
             start,
             {
                 action,
-                items: items.length,
-                library: library.length,
+                items: itemCountRef.current,
+                library: libraryCountRef.current,
                 ...extra,
             },
             { sampleRate: 0.1, throttleMs: 2000, minMs: 4 }
         );
-    };
+    }, []);
 
     // --- Effects ---
 
@@ -1299,12 +1315,25 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
         }
     };
 
-    const handleRemoveItem = (id: string, e: React.MouseEvent) => {
+    const handleUpdateItemContent = useCallback((id: string, value: string) => {
+        setItems((prev) => {
+            let mutated = false;
+            const next = prev.map((item) => {
+                if (item.id !== id) return item;
+                if (item.content === value) return item;
+                mutated = true;
+                return { ...item, content: value };
+            });
+            return mutated ? next : prev;
+        }, "Text updated", false);
+    }, [setItems]);
+
+    const handleRemoveItem = useCallback((id: string, e: React.MouseEvent) => {
         e.stopPropagation();
         e.preventDefault();
         trackSnippetAction("remove_item", { target_id: id });
-        setItems(items.filter(i => i.id !== id));
-    };
+        setItems((prev) => prev.filter((item) => item.id !== id), "Removed item");
+    }, [setItems, trackSnippetAction]);
 
 
     return (
@@ -1445,7 +1474,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
                         )}
 
                             <SortableContext
-                                items={items.map(i => i.id)}
+                                items={sortableIds}
                                 strategy={rectSortingStrategy}
                             >
                                 {/* Canvas grid uses 2-column layout to match snippet bank. */}
@@ -1457,25 +1486,23 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
                                         <span>Drag snippets here to build prompt</span>
                                     </div>
                                 )}
-                                {items.map((item, idx) => {
-                                    // Calculate index for text items (1-based enumeration)
+                                {(() => {
                                     let textCount = 0;
-                                    if (item.type === 'text') {
-                                        textCount = items.slice(0, idx + 1).filter(i => i.type === 'text').length;
-                                    }
-
-                                    return (
-                                        <SortableItem
-                                            key={item.id}
-                                            index={idx}
-                                            textIndex={item.type === 'text' ? textCount : undefined}
-                                            item={item}
-                                            onRemove={handleRemoveItem}
-                                            onUpdateContent={(id, val) => setItems(prev => prev.map(i => i.id === id ? { ...i, content: val } : i))}
-                                            onEditTextSnippet={item.type === 'text' ? editTextSnippet : undefined}
-                                        />
-                                    );
-                                })}
+                                    return items.map((item, idx) => {
+                                        const textIndex = item.type === 'text' ? (textCount += 1) : undefined;
+                                        return (
+                                            <SortableItem
+                                                key={item.id}
+                                                textIndex={textIndex}
+                                                item={item}
+                                                onRemove={handleRemoveItem}
+                                                onUpdateContent={handleUpdateItemContent}
+                                                onEditTextSnippet={item.type === 'text' ? editTextSnippet : undefined}
+                                                onTextFocusChange={setTextInputFocused}
+                                            />
+                                        );
+                                    });
+                                })()}
                                 <Button
                                     variant="ghost"
                                     className="h-8 border border-dashed text-muted-foreground hover:text-foreground hover:bg-muted/20 text-[10px] gap-1 ml-1 justify-start"

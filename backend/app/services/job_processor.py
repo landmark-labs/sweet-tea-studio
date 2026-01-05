@@ -984,17 +984,29 @@ def _store_execution_stats(
         session.add(stats)
         
         # Create node timing records
+        base_start_ms = None
+        if execution_metrics.node_timings and execution_metrics.node_timings[0].start_time_ms:
+            base_start_ms = execution_metrics.node_timings[0].start_time_ms
+
+        node_records = []
         for timing in execution_metrics.node_timings:
-            node_record = RunNodeTiming(
-                job_id=job_id,
-                node_id=timing.node_id,
-                node_type=timing.node_type,
-                start_offset_ms=int(timing.start_time_ms - (execution_metrics.node_timings[0].start_time_ms or 0)) if timing.start_time_ms else None,
-                duration_ms=timing.duration_ms,
-                execution_order=timing.execution_order,
-                from_cache=timing.from_cache,
+            start_offset_ms = None
+            if timing.start_time_ms is not None and base_start_ms is not None:
+                start_offset_ms = int(timing.start_time_ms - base_start_ms)
+
+            node_records.append(
+                RunNodeTiming(
+                    job_id=job_id,
+                    node_id=timing.node_id,
+                    node_type=timing.node_type,
+                    start_offset_ms=start_offset_ms,
+                    duration_ms=timing.duration_ms,
+                    execution_order=timing.execution_order,
+                    from_cache=timing.from_cache,
+                )
             )
-            session.add(node_record)
+        if node_records:
+            session.add_all(node_records)
         
         session.commit()
         print(f"[Stats] Stored execution stats for job {job_id}: {execution_metrics.total_duration_ms}ms, {len(execution_metrics.node_timings)} nodes")

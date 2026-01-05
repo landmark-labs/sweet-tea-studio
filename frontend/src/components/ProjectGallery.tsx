@@ -9,6 +9,7 @@ import { VirtualGrid } from "@/components/VirtualGrid";
 import { getScrollPosition, saveScrollPosition } from "@/lib/galleryState";
 import { InpaintEditor } from "@/components/InpaintEditor";
 import { useMediaTrayStore } from "@/lib/stores/mediaTrayStore";
+import { workflowSupportsImageInput } from "@/lib/workflowGraph";
 
 interface ProjectGalleryProps {
     projects: Project[];
@@ -170,6 +171,11 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
     imagesRef.current = images;
 
     const addToMediaTray = useMediaTrayStore(useCallback((state) => state.addItems, []));
+
+    const useInPipeWorkflows = useMemo(() => {
+        if (!onUseInPipe || workflows.length === 0) return [];
+        return workflows.filter((w) => workflowSupportsImageInput(w?.graph_json));
+    }, [onUseInPipe, workflows]);
 
     // Pre-process projects: Sort "drafts" to top, rename to "drafts", ensure it has "output" folder
     const sortedProjects = useMemo(() => {
@@ -823,10 +829,7 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
                     )}
 
                     {/* Use in pipe with workflow submenu */}
-                    {onUseInPipe && workflows.filter(w => {
-                        const jsonStr = JSON.stringify(w.graph_json || {});
-                        return jsonStr.includes("LoadImage") || jsonStr.includes("VAEEncode");
-                    }).length > 0 && (
+                    {onUseInPipe && useInPipeWorkflows.length > 0 && (
                             <div className="relative group">
                                 <div className="w-full px-3 py-1.5 text-left text-xs hover:bg-muted/50 flex items-center justify-between cursor-pointer">
                                     <span className="flex items-center gap-2">use in pipe</span>
@@ -834,10 +837,7 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
                                 </div>
                                 <div className="absolute right-full top-0 pr-1 hidden group-hover:block">
                                     <div className="bg-popover border border-border/60 rounded-md shadow-lg py-1 w-40 max-h-48 overflow-y-auto">
-                                        {workflows.filter(w => {
-                                            const jsonStr = JSON.stringify(w.graph_json || {});
-                                            return jsonStr.includes("LoadImage") || jsonStr.includes("VAEEncode");
-                                        }).map((w: any) => (
+                                        {useInPipeWorkflows.map((w: any) => (
                                             <button
                                                 key={w.id}
                                                 className="w-full px-3 py-1.5 text-left text-xs hover:bg-muted/50 truncate"

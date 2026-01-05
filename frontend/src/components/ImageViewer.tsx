@@ -3,6 +3,7 @@ import { Download, ExternalLink, X, Check, ArrowLeft, ArrowRight, RotateCcw, Cop
 import { Button } from "./ui/button";
 import { api, Image as ApiImage, GalleryItem } from "@/lib/api";
 import { isVideoFile } from "@/lib/media";
+import { workflowSupportsImageInput } from "@/lib/workflowGraph";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 import { InpaintEditor } from "@/components/InpaintEditor";
 import { useMediaTrayStore } from "@/lib/stores/mediaTrayStore";
@@ -572,12 +573,7 @@ export const ImageViewer = React.memo(function ImageViewer({
 
     const imageWorkflows = React.useMemo(() => {
         if (!workflows.length) return [];
-        return workflows.filter(w => {
-            const graphText = typeof w.graph_json === "string"
-                ? w.graph_json
-                : JSON.stringify(w.graph_json || {});
-            return graphText.includes("LoadImage") || graphText.includes("VAEEncode");
-        });
+        return workflows.filter((w) => workflowSupportsImageInput(w?.graph_json));
     }, [workflows]);
 
     // Helper to get a raw path (strip API wrapper if needed)

@@ -25,7 +25,7 @@ import { useGeneration } from "@/lib/GenerationContext";
 import { logClientEventThrottled } from "@/lib/clientDiagnostics";
 import { formDataAtom, setFormDataAtom } from "@/lib/atoms/formAtoms";
 import { useCanvasStore } from "@/lib/stores/canvasStore";
-import { useMediaTrayStore } from "@/lib/stores/mediaTrayStore";
+import { useMediaTrayStore, type MediaTrayItem } from "@/lib/stores/mediaTrayStore";
 
 type PromptConstructorPanelProps = Omit<ComponentProps<typeof PromptConstructor>, "currentValues">;
 
@@ -2422,6 +2422,50 @@ export default function PromptStudio() {
     setSelectedWorkflowId(workflowId);
   }, [selectedEngineId, setSelectedWorkflowId, workflows]);
 
+  const handlePromptFinish = useCallback(() => setFocusedField(""), []);
+
+  const viewerImagesFromProjectGallery = useMemo<ApiImage[]>(() => {
+    return projectGalleryImages.map((fi) => ({
+      id: -1,
+      job_id: -1,
+      path: fi.path,
+      filename: fi.filename,
+      created_at: "",
+    }));
+  }, [projectGalleryImages]);
+
+  const viewerImagesFromRecentGallery = useMemo<ApiImage[]>(() => {
+    return galleryImages.map((gi) => gi.image);
+  }, [galleryImages]);
+
+  const viewerImages = projectGalleryImages.length > 0
+    ? viewerImagesFromProjectGallery
+    : viewerImagesFromRecentGallery;
+
+  const handleViewerImageUpdate = useCallback((updated: ApiImage) => {
+    setGalleryImages((prev) =>
+      prev.map((item) => (item.image.id === updated.id ? { ...item, image: updated } : item))
+    );
+  }, []);
+
+  const handleProjectGallerySelectImage = useCallback((imagePath: string, pgImages: FolderImage[]) => {
+    setPreviewPath(`/api/v1/gallery/image/path?path=${encodeURIComponent(imagePath)}`);
+    setProjectGalleryImages(pgImages);
+    setPreviewMetadata(null);
+  }, []);
+
+  const handleMediaTrayShowInViewer = useCallback((path: string, trayItems: MediaTrayItem[]) => {
+    setPreviewPath(`/api/v1/gallery/image/path?path=${encodeURIComponent(path)}`);
+    setProjectGalleryImages(
+      trayItems.map((item) => ({
+        path: item.path,
+        filename: item.filename,
+        mtime: new Date(item.addedAt).toISOString(),
+      }))
+    );
+    setPreviewMetadata(null);
+  }, []);
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[50vh]">
@@ -2470,7 +2514,7 @@ export default function PromptStudio() {
                   onUpdateMany={handlePromptUpdateMany}
                   targetField={focusedField}
                   onTargetChange={setFocusedField}
-                  onFinish={() => setFocusedField("")}
+                  onFinish={handlePromptFinish}
                   snippets={library}
                   onUpdateSnippets={setLibrary}
                   externalValueSyncKey={externalValueSyncKey}
@@ -2730,22 +2774,15 @@ export default function PromptStudio() {
       <div className="flex-1 overflow-hidden relative bg-slate-900/90 dark:bg-background flex flex-col">
         <ErrorBoundary>
           <ImageViewer
-            images={projectGalleryImages.length > 0
-              ? projectGalleryImages.map(fi => ({ id: -1, job_id: -1, path: fi.path, filename: fi.filename, created_at: '' } as ApiImage))
-              : galleryImages.map(gi => gi.image)
-            }
+            images={viewerImages}
             galleryItems={galleryImages}
             metadata={previewMetadata}
             selectedImagePath={previewPath || undefined}
             workflows={workflows}
             onSelectWorkflow={handleWorkflowSelect}
             onUseInPipe={handleUseInPipe}
-            onImageUpdate={(updatedCalc) => {
-              setGalleryImages(prev => prev.map(item =>
-                item.image.id === updatedCalc.id ? { ...item, image: updatedCalc } : item
-              ));
-            }}
-            onDelete={(id, path) => handleGalleryDelete(id, path)}
+            onImageUpdate={handleViewerImageUpdate}
+            onDelete={handleGalleryDelete}
             onRegenerate={handleRegenerate}
             resetKey={galleryRefresh}
           />
@@ -2760,27 +2797,12 @@ export default function PromptStudio() {
         onUseInPipe={handleUseInPipe}
         externalSelection={canvasGallerySelection || undefined}
         externalSelectionKey={canvasGallerySyncKey}
-        onSelectImage={(imagePath, pgImages) => {
-          // Show clicked image in the viewer and use ProjectGallery's images for navigation
-          setPreviewPath(`/api/v1/gallery/image/path?path=${encodeURIComponent(imagePath)}`);
-          setProjectGalleryImages(pgImages);
-          setPreviewMetadata(null); // Clear old metadata, will be fetched by ImageViewer
-        }}
+        onSelectImage={handleProjectGallerySelectImage}
         onBulkDelete={handleProjectGalleryBulkDelete}
       />
 
       <MediaTray
-        onShowInViewer={(path, trayItems) => {
-          setPreviewPath(`/api/v1/gallery/image/path?path=${encodeURIComponent(path)}`);
-          setProjectGalleryImages(
-            trayItems.map((item) => ({
-              path: item.path,
-              filename: item.filename,
-              mtime: new Date(item.addedAt).toISOString(),
-            }))
-          );
-          setPreviewMetadata(null);
-        }}
+        onShowInViewer={handleMediaTrayShowInViewer}
       />
 
       {/* Floating panels are now rendered globally in Layout.tsx */}

@@ -182,7 +182,7 @@ function MediaTrayPreview({
   );
 }
 
-export function MediaTray({ className, onShowInViewer }: MediaTrayProps) {
+export const MediaTray = React.memo(function MediaTray({ className, onShowInViewer }: MediaTrayProps) {
   const collapsed = useMediaTrayStore(useCallback((s) => s.collapsed, []));
   const setCollapsed = useMediaTrayStore(useCallback((s) => s.setCollapsed, []));
   const toggleCollapsed = useMediaTrayStore(useCallback((s) => s.toggleCollapsed, []));
@@ -393,4 +393,4 @@ export function MediaTray({ className, onShowInViewer }: MediaTrayProps) {
       {previewItem && <MediaTrayPreview item={previewItem} onClose={() => setPreviewItem(null)} />}
     </div>
   );
-}
+});
