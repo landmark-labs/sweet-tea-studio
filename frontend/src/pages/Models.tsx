@@ -297,8 +297,8 @@ export default function Models() {
         <div className="flex items-center gap-2">
           <Sparkles className="text-blue-600" size={20} />
           <div>
-            <h1 className="text-xl font-semibold text-slate-900">models</h1>
-            <p className="text-xs text-slate-600">
+            <h1 className="text-xl font-semibold">models</h1>
+            <p className="text-xs text-muted-foreground">
               manage everything sweet tea feeds to comfyui: checkpoints, loras, controlnets, upscalers, and vlm assets.
             </p>
           </div>
@@ -352,15 +352,15 @@ export default function Models() {
                 {modelFolders.map((folder) => (
                   <button
                     key={folder.name}
-                    className={`w-full text-left px-2 py-1.5 rounded-sm text-xs transition-colors ${activeFolder === folder.name ? "bg-blue-50 text-blue-700 border border-blue-200" : "hover:bg-slate-50"}`}
+                    className={`w-full text-left px-2 py-1.5 rounded-sm text-xs transition-colors ${activeFolder === folder.name ? "bg-blue-50 text-blue-700 border border-blue-200" : "hover:bg-muted/40"}`}
                     onClick={() => setActiveFolder(folder.name)}
                   >
                     <div className="font-medium truncate">{folder.name}</div>
-                    <div className="text-[10px] text-slate-400 break-all truncate">{folder.path}</div>
+                    <div className="text-[10px] text-muted-foreground break-all truncate">{folder.path}</div>
                   </button>
                 ))}
                 {!modelFolders.length && (
-                  <div className="text-xs text-slate-500 px-2 py-1">no folders detected</div>
+                  <div className="text-xs text-muted-foreground px-2 py-1">no folders detected</div>
                 )}
               </div>
             </ScrollArea>
@@ -374,18 +374,18 @@ export default function Models() {
                     return /\.(safetensors|gguf|pth|ckpt|pt|bin|onnx)$/i.test(item.name);
                   })
                   .map((item) => (
-                    <div key={item.path} className="flex items-center gap-2 rounded border border-slate-100 px-2 py-1 text-xs bg-white hover:bg-slate-50 transition-colors">
+                    <div key={item.path} className="flex items-center gap-2 rounded border border-border/60 px-2 py-1 text-xs bg-card hover:bg-muted/30 transition-colors">
                       {item.type === "directory" ? (
-                        <FolderOpen size={12} className="text-slate-500 flex-shrink-0" />
+                        <FolderOpen size={12} className="text-muted-foreground flex-shrink-0" />
                       ) : (
-                        <Link2 size={12} className="text-slate-400 flex-shrink-0" />
+                        <Link2 size={12} className="text-muted-foreground/70 flex-shrink-0" />
                       )}
                       <span className="truncate font-medium">{item.name}</span>
                     </div>
                   ))}
-                {!modelFolders.length && <div className="text-xs text-slate-500">select directory</div>}
+                {!modelFolders.length && <div className="text-xs text-muted-foreground">select directory</div>}
                 {modelFolders.length > 0 && !modelFolders.find((f) => f.name === activeFolder)?.items.length && (
-                  <div className="text-xs text-slate-500">empty folder</div>
+                  <div className="text-xs text-muted-foreground">empty folder</div>
                 )}
               </div>
             </ScrollArea>
@@ -431,7 +431,7 @@ export default function Models() {
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="flex-none h-7 w-7 text-slate-400 hover:text-red-500"
+                    className="flex-none h-7 w-7 text-muted-foreground hover:text-red-500"
                     onClick={() => handleRemoveRow(row.id)}
                     disabled={downloadRows.length === 1 && !row.url}
                   >
@@ -446,7 +446,7 @@ export default function Models() {
               className="w-full text-[10px] gap-1 h-6"
               onClick={handleAddRow}
             >
-              <div className="w-3 h-3 rounded-full bg-slate-200 flex items-center justify-center font-bold text-slate-600">+</div>
+              <div className="w-3 h-3 rounded-full bg-muted flex items-center justify-center font-bold text-muted-foreground">+</div>
               add another link
             </Button>
 
@@ -457,7 +457,7 @@ export default function Models() {
               </Button>
             </div>
 
-            <div className="bg-slate-50 p-2 rounded text-[10px] text-slate-500 space-y-1">
+            <div className="bg-muted/30 p-2 rounded text-[10px] text-muted-foreground space-y-1">
               <div className="flex gap-2 items-center"><Info size={12} /> <span>Auto-sorted by link type</span></div>
               <p>Civitai: API downloader. HF file links: aria2c. HF repo IDs: huggingface_hub (sharded models).</p>
             </div>
@@ -475,7 +475,7 @@ export default function Models() {
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-6 text-[10px] text-slate-500 hover:text-red-500"
+                className="h-6 text-[10px] text-muted-foreground hover:text-red-500"
                 onClick={clearQueue}
               >
                 <Trash2 size={12} className="mr-1" />
@@ -485,30 +485,30 @@ export default function Models() {
           </CardHeader>
           <CardContent className="space-y-2 flex-1 overflow-y-auto p-2 scrollbar-thin">
             {downloadQueue.map((job) => (
-              <div key={job.id} className={`rounded-md border p-2 bg-white space-y-1 ${job.status === "failed" ? "border-red-300 bg-red-50" :
-                job.status === "cancelled" ? "border-slate-300 bg-slate-50" :
-                  job.status === "completed" ? "border-green-200 bg-green-50" :
-                    "border-slate-200"
+              <div key={job.id} className={`rounded-md border p-2 bg-card space-y-1 ${job.status === "failed" ? "border-destructive/40 bg-destructive/10" :
+                job.status === "cancelled" ? "border-border/60 bg-muted/20" :
+                  job.status === "completed" ? "border-emerald-500/30 bg-emerald-500/10" :
+                    "border-border/60"
                 }`}>
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5 w-full overflow-hidden">
-                    <div className="flex items-center gap-1.5 text-xs font-medium text-slate-800">
+                    <div className="flex items-center gap-1.5 text-xs font-medium text-foreground">
                       <ArrowDownCircle size={14} className={`flex-none ${job.status === "downloading" ? "text-blue-500 animate-pulse" :
                         job.status === "completed" ? "text-green-500" :
                           job.status === "failed" ? "text-red-500" :
-                            job.status === "cancelled" ? "text-slate-400" :
-                              "text-slate-500"
+                            job.status === "cancelled" ? "text-muted-foreground/70" :
+                              "text-muted-foreground"
                         }`} />
                       <span className="truncate">{job.filename || job.target}</span>
                     </div>
-                    <p className="text-[10px] text-slate-500 truncate" title={job.link}>{job.link}</p>
+                    <p className="text-[10px] text-muted-foreground truncate" title={job.link}>{job.link}</p>
                   </div>
                   <div className="flex gap-0.5 flex-none">
                     {(job.status === "queued" || job.status === "downloading") && (
                       <Button
                         size="icon"
                         variant="ghost"
-                        className="h-6 w-6 text-slate-400 hover:text-red-500"
+                        className="h-6 w-6 text-muted-foreground hover:text-red-500"
                         onClick={() => cancelJob(job.id)}
                         title="cancel download"
                       >
@@ -516,23 +516,23 @@ export default function Models() {
                       </Button>
                     )}
                     {(job.status === "completed" || job.status === "failed" || job.status === "cancelled") && (
-                      <Button size="icon" variant="ghost" className="h-6 w-6 text-slate-400 hover:text-red-500" onClick={() => cancelJob(job.id)} title="Remove from queue">
+                      <Button size="icon" variant="ghost" className="h-6 w-6 text-muted-foreground hover:text-red-500" onClick={() => cancelJob(job.id)} title="Remove from queue">
                         <Trash2 size={12} />
                       </Button>
                     )}
                   </div>
                 </div>
                 <div className="space-y-1">
-                  <div className="flex items-center justify-between text-[10px] text-slate-500">
+                  <div className="flex items-center justify-between text-[10px] text-muted-foreground">
                     <span className={`capitalize font-medium ${job.status === "downloading" ? "text-blue-600" :
                       job.status === "completed" ? "text-green-600" :
                         job.status === "failed" ? "text-red-600" :
-                          job.status === "cancelled" ? "text-slate-500" :
-                            "text-slate-600"
+                          job.status === "cancelled" ? "text-muted-foreground" :
+                            "text-muted-foreground"
                       }`}>{job.status}</span>
                     <span className="flex items-center gap-2">
                       {job.speed && <span>{job.speed}</span>}
-                      {job.eta && job.status === "downloading" && <span className="text-slate-400">ETA: {job.eta}</span>}
+                      {job.eta && job.status === "downloading" && <span className="text-muted-foreground/70">ETA: {job.eta}</span>}
                     </span>
                   </div>
                   <Progress value={job.progress} className="h-1.5" />
@@ -543,7 +543,7 @@ export default function Models() {
               </div>
             ))}
             {!downloadQueue.length && (
-              <div className="flex flex-col items-center justify-center py-8 text-slate-400">
+              <div className="flex flex-col items-center justify-center py-8 text-muted-foreground/70">
                 <ArrowDownCircle className="w-6 h-6 opacity-20 mb-1" />
                 <p className="text-xs">queue is empty</p>
               </div>
@@ -587,8 +587,8 @@ export default function Models() {
         </CardHeader>
         <CardContent className="flex-1 p-0 overflow-auto">
           <Table className="text-xs w-full">
-            <TableHeader className="bg-slate-50 sticky top-0 z-10 shadow-sm">
-              <TableRow className="h-8 hover:bg-slate-50 border-b">
+            <TableHeader className="bg-muted/30 sticky top-0 z-10 shadow-sm">
+              <TableRow className="h-8 hover:bg-muted/30 border-b border-border/60">
                 <TableHead className="h-8 py-1 pl-4 w-[25%]">name</TableHead>
                 <TableHead className="h-8 py-1 w-[10%]">type</TableHead>
                 <TableHead className="h-8 py-1 w-[10%]">source</TableHead>
@@ -599,18 +599,18 @@ export default function Models() {
             </TableHeader>
             <TableBody>
               {filteredModels.map((model) => (
-                <TableRow key={model.id} className="h-8 hover:bg-slate-50 border-b-0">
+                <TableRow key={model.id} className="h-8 hover:bg-muted/30 border-b-0">
                   <TableCell className="py-1 pl-4 font-medium truncate max-w-[200px]" title={model.name}>{model.name}</TableCell>
                   <TableCell className="py-1">{model.category}</TableCell>
                   <TableCell className="py-1">{model.source}</TableCell>
                   <TableCell className="py-1">{model.size}</TableCell>
-                  <TableCell className="py-1 text-slate-600 truncate max-w-[300px]" title={model.location}>{model.location}</TableCell>
-                  <TableCell className="py-1 text-slate-600 truncate max-w-[150px]">{model.notes || "—"}</TableCell>
+                  <TableCell className="py-1 text-muted-foreground truncate max-w-[300px]" title={model.location}>{model.location}</TableCell>
+                  <TableCell className="py-1 text-muted-foreground truncate max-w-[150px]">{model.notes || "—"}</TableCell>
                 </TableRow>
               ))}
               {!filteredModels.length && (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-slate-500 py-8">
+                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                     no models match the current filters.
                   </TableCell>
                 </TableRow>

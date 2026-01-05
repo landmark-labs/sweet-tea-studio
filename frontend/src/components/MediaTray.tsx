@@ -116,7 +116,7 @@ function SortableTrayCell({
           )}
 
           {reorderMode && (
-            <div className="absolute bottom-1 right-1 bg-white/80 text-slate-700 dark:bg-black/40 dark:text-white rounded p-0.5">
+            <div className="absolute bottom-1 right-1 bg-card/80 text-foreground border border-border/60 backdrop-blur-sm rounded p-0.5">
               <GripVertical className="w-3 h-3" />
             </div>
           )}

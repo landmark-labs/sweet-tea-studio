@@ -31,9 +31,9 @@ export function PromptLibraryQuickPanel({
   if (!open) return null;
 
   return (
-    <div className="w-96 pointer-events-auto">
-      <Card className="shadow-xl border-blue-100 bg-blue-50/95 dark:border-border/60 dark:bg-card/95 backdrop-blur">
-        <div className="flex items-center justify-between px-4 py-2 border-b border-slate-200 dark:border-border/60 cursor-move">
+      <div className="w-96 pointer-events-auto">
+        <Card className="shadow-xl border-blue-100 bg-blue-50/95 dark:border-border/60 dark:bg-card/95 backdrop-blur">
+        <div className="flex items-center justify-between px-4 py-2 border-b border-blue-100/80 dark:border-border/60 cursor-move">
           <div className="font-semibold text-foreground text-sm">prompt library</div>
           <Button variant="ghost" size="sm" className="h-7" onClick={onClose}>
             <X className="w-4 h-4" />

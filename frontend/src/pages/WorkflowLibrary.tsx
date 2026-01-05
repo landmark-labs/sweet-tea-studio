@@ -92,18 +92,18 @@ const NodeCard = ({ node, schemaEdits, setSchemaEdits }: NodeCardProps) => {
             ref={setNodeRef}
             style={style}
             className={cn(
-                "bg-white border rounded-lg overflow-hidden shadow-sm",
+                "bg-card border border-border rounded-lg overflow-hidden shadow-sm",
                 isDragging && "ring-2 ring-blue-200 shadow-lg"
             )}
         >
             <div
-                className="px-4 py-2 bg-slate-100 border-b flex justify-between items-center cursor-pointer hover:bg-slate-150 transition-colors"
+                className="px-4 py-2 bg-muted/40 border-b border-border flex justify-between items-center cursor-pointer hover:bg-muted/60 transition-colors"
                 onClick={() => setIsExpanded(!isExpanded)}
             >
                 <div className="flex items-center gap-2">
                     <button
                         type="button"
-                        className="p-1 rounded-md text-slate-400 hover:text-slate-600 hover:bg-white"
+                        className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-card"
                         aria-label="Reorder node"
                         onClick={(e) => e.stopPropagation()}
                         {...attributes}
@@ -111,18 +111,18 @@ const NodeCard = ({ node, schemaEdits, setSchemaEdits }: NodeCardProps) => {
                     >
                         <GripVertical className="w-4 h-4" />
                     </button>
-                    <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-xs font-mono text-slate-500">{node.id}</div>
+                    <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center text-xs font-mono text-muted-foreground">{node.id}</div>
                     {/* Alias or Title display */}
                     {currentAlias ? (
                         <div className="flex items-center gap-1.5">
-                            <span className="font-medium text-sm text-blue-700">{currentAlias}</span>
-                            <span className="text-[10px] text-slate-400">({node.title})</span>
+                            <span className="font-medium text-sm text-blue-700 dark:text-blue-300">{currentAlias}</span>
+                            <span className="text-[10px] text-muted-foreground">({node.title})</span>
                         </div>
                     ) : (
                         <span className="font-medium text-sm">{node.title}</span>
                     )}
                     {!isExpanded && (
-                        <span className="text-[10px] text-slate-400 ml-1">({paramCount} params)</span>
+                        <span className="text-[10px] text-muted-foreground ml-1">({paramCount} params)</span>
                     )}
                     {node.hiddenInControls && (
                         <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium uppercase text-amber-700">
@@ -132,7 +132,7 @@ const NodeCard = ({ node, schemaEdits, setSchemaEdits }: NodeCardProps) => {
                 </div>
                 <div className="flex items-center gap-3">
                     <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                        <span className="text-[10px] text-slate-400 uppercase">
+                        <span className="text-[10px] text-muted-foreground uppercase">
                             {isCore ? "Core" : "Expanded"}
                         </span>
                         <Switch
@@ -140,23 +140,23 @@ const NodeCard = ({ node, schemaEdits, setSchemaEdits }: NodeCardProps) => {
                             onCheckedChange={toggleCore}
                             className={cn(
                                 "h-4 w-7",
-                                isCore ? "bg-blue-500" : "bg-slate-200"
+                                isCore ? "bg-blue-500" : "bg-muted"
                             )}
                         />
                     </div>
-                    <span className="text-[10px] font-mono text-slate-400">{node.type}</span>
+                    <span className="text-[10px] font-mono text-muted-foreground">{node.type}</span>
                     {isExpanded ? (
-                        <ChevronUp className="w-4 h-4 text-slate-400" />
+                        <ChevronUp className="w-4 h-4 text-muted-foreground" />
                     ) : (
-                        <ChevronDown className="w-4 h-4 text-slate-400" />
+                        <ChevronDown className="w-4 h-4 text-muted-foreground" />
                     )}
                 </div>
             </div>
 
             {/* Alias Editor - shown when expanded */}
             {isExpanded && (
-                <div className="px-4 py-2 bg-slate-50 border-b flex items-center gap-2">
-                    <Label htmlFor={`alias-${node.id}`} className="text-xs text-slate-500 flex-shrink-0">Display Name:</Label>
+                <div className="px-4 py-2 bg-muted/30 border-b border-border flex items-center gap-2">
+                    <Label htmlFor={`alias-${node.id}`} className="text-xs text-muted-foreground flex-shrink-0">Display Name:</Label>
                     <Input
                         id={`alias-${node.id}`}
                         className="h-7 text-xs flex-1 max-w-[200px]"
@@ -169,7 +169,7 @@ const NodeCard = ({ node, schemaEdits, setSchemaEdits }: NodeCardProps) => {
                         <Button
                             variant="ghost"
                             size="sm"
-                            className="h-6 text-xs text-slate-400 hover:text-slate-600 px-1"
+                            className="h-6 text-xs text-muted-foreground hover:text-foreground px-1"
                             onClick={(e) => { e.stopPropagation(); setNodeAlias(""); }}
                         >
                             Clear
@@ -193,7 +193,7 @@ const NodeCard = ({ node, schemaEdits, setSchemaEdits }: NodeCardProps) => {
                             </TableHeader>
                             <TableBody>
                                 {node.active.map(([key, field]: [string, any]) => (
-                                    <TableRow key={key} className="hover:bg-slate-50/50">
+                                    <TableRow key={key} className="hover:bg-muted/30">
                                         <TableCell className="py-2">
                                             <Input
                                                 className="h-7 text-xs"
@@ -205,8 +205,8 @@ const NodeCard = ({ node, schemaEdits, setSchemaEdits }: NodeCardProps) => {
                                                 }}
                                             />
                                         </TableCell>
-                                        <TableCell className="font-mono text-[10px] text-slate-500 py-2">{key}</TableCell>
-                                        <TableCell className="text-xs text-slate-500 py-2">{field.type}</TableCell>
+                                        <TableCell className="font-mono text-[10px] text-muted-foreground py-2">{key}</TableCell>
+                                        <TableCell className="text-xs text-muted-foreground py-2">{field.type}</TableCell>
                                         <TableCell className="py-2">
                                             {field.widget === "toggle" || field.type === "boolean" ? (
                                                 <Switch
@@ -272,16 +272,16 @@ const NodeCard = ({ node, schemaEdits, setSchemaEdits }: NodeCardProps) => {
                     )}
 
                     {node.hidden.length > 0 && (
-                        <div className="bg-slate-50 border-t border-slate-200">
-                            <div className="px-4 py-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Hidden Parameters</div>
+                        <div className="bg-muted/20 border-t border-border">
+                            <div className="px-4 py-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Hidden Parameters</div>
                             <Table>
                                 <TableBody>
                                     {node.hidden.map(([key, field]: [string, any]) => (
-                                        <TableRow key={key} className="hover:bg-slate-100/50 opacity-60">
-                                            <TableCell className="py-2 text-xs text-slate-500 w-[30%]">{field.title || key}</TableCell>
-                                            <TableCell className="font-mono text-[10px] text-slate-400 py-2 w-[20%] break-all">{key}</TableCell>
-                                            <TableCell className="text-xs py-2 text-slate-400 w-[15%]">{field.type}</TableCell>
-                                            <TableCell className="py-2 text-xs text-slate-400 w-[25%]">{String(field.default ?? "-")}</TableCell>
+                                        <TableRow key={key} className="hover:bg-muted/30 opacity-60">
+                                            <TableCell className="py-2 text-xs text-muted-foreground w-[30%]">{field.title || key}</TableCell>
+                                            <TableCell className="font-mono text-[10px] text-muted-foreground py-2 w-[20%] break-all">{key}</TableCell>
+                                            <TableCell className="text-xs py-2 text-muted-foreground w-[15%]">{field.type}</TableCell>
+                                            <TableCell className="py-2 text-xs text-muted-foreground w-[25%]">{String(field.default ?? "-")}</TableCell>
                                             <TableCell className="text-right py-2 w-[10%]">
                                                 <Button variant="ghost" size="sm" className="h-6 text-xs text-blue-500 hover:text-blue-700" onClick={() => {
                                                     const s = { ...schemaEdits };
@@ -362,7 +362,7 @@ const SortableWorkflowCard = ({
             <div
                 {...attributes}
                 {...listeners}
-                className="absolute top-2 left-2 p-1.5 rounded bg-slate-100 hover:bg-slate-200 cursor-grab active:cursor-grabbing text-slate-400 hover:text-slate-600 transition-colors z-10"
+                className="absolute top-2 left-2 p-1.5 rounded bg-muted/40 hover:bg-muted/60 cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground transition-colors z-10"
                 title="Drag to reorder"
             >
                 <GripVertical className="w-4 h-4" />
@@ -371,7 +371,7 @@ const SortableWorkflowCard = ({
             <CardHeader className="pl-10">
                 <div className="flex justify-between items-start">
                     <CardTitle className="truncate pr-4" title={w.name}>{w.name}</CardTitle>
-                    <FileJson className="w-5 h-5 text-slate-400" />
+                    <FileJson className="w-5 h-5 text-muted-foreground" />
                 </div>
                 <CardDescription className="line-clamp-2 h-10" title={w.description || undefined}>
                     {w.description?.split("[Missing")[0] || "No description"}
@@ -393,12 +393,12 @@ const SortableWorkflowCard = ({
                         </ul>
                     </div>
                 )}
-                <div className="mt-4 flex gap-2 text-xs text-slate-500">
-                    <span className="bg-slate-100 px-2 py-1 rounded">{Object.keys(w.graph_json).length} nodes</span>
-                    <span className="bg-slate-100 px-2 py-1 rounded">{Object.keys(stripSchemaMeta(w.input_schema)).length} params</span>
+                <div className="mt-4 flex gap-2 text-xs text-muted-foreground">
+                    <span className="bg-muted/40 px-2 py-1 rounded">{Object.keys(w.graph_json).length} nodes</span>
+                    <span className="bg-muted/40 px-2 py-1 rounded">{Object.keys(stripSchemaMeta(w.input_schema)).length} params</span>
                 </div>
             </CardContent>
-            <CardFooter className="flex justify-end gap-2 text-slate-400">
+            <CardFooter className="flex justify-end gap-2 text-muted-foreground">
                 <Button variant="ghost" size="sm" onClick={() => onViewGraph(w)}>
                     <GitBranch className="w-4 h-4 mr-1" /> view graph
                 </Button>
@@ -780,7 +780,7 @@ export default function WorkflowLibrary() {
         return (
             <div className="container mx-auto p-4 h-[calc(100vh-4rem)] flex flex-row gap-4">
                 {/* Left Sidebar */}
-                <div className="w-72 flex-shrink-0 flex flex-col bg-white border rounded-lg p-4">
+                <div className="w-72 flex-shrink-0 flex flex-col bg-card border border-border rounded-lg p-4">
                     <h1 className="text-xl font-bold mb-4">edit pipe</h1>
 
                     {/* Pipe Name */}
@@ -812,7 +812,7 @@ export default function WorkflowLibrary() {
                             rows={6}
                             className="text-sm resize-none"
                         />
-                        <div className="text-[10px] text-slate-400 text-right">{(editingWorkflow.description || "").length}/500</div>
+                        <div className="text-[10px] text-muted-foreground text-right">{(editingWorkflow.description || "").length}/500</div>
                     </div>
 
                     {/* Spacer to push buttons to bottom */}
@@ -842,19 +842,19 @@ export default function WorkflowLibrary() {
                                             const isBypassedByDefault = hasBypass && schemaEdits[bypassKey]?.default === true;
 
                                             return (
-                                                <div key={id} className={cn("flex justify-between items-center p-2 border rounded hover:bg-slate-50 transition-colors", hasBypass && "bg-blue-50 border-blue-200")}>
+                                                <div key={id} className={cn("flex justify-between items-center p-2 border border-border rounded hover:bg-muted/30 transition-colors", hasBypass && "bg-blue-50 border-blue-200")}>
                                                     <div>
                                                         <div className="font-bold text-sm flex items-center gap-2">
                                                             {node._meta?.title || node.title || `Node ${id}`}
                                                             {hasBypass && <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-mono">BYPASSABLE</span>}
                                                             {isBypassedByDefault && <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-mono">DEFAULT OFF</span>}
                                                         </div>
-                                                        <div className="text-xs text-slate-500">{node.class_type}</div>
+                                                        <div className="text-xs text-muted-foreground">{node.class_type}</div>
                                                     </div>
                                                     <div className="flex items-center gap-2">
                                                         {hasBypass && (
                                                             <div className="flex items-center gap-2 mr-2">
-                                                                <span className="text-[10px] text-slate-500">
+                                                                <span className="text-[10px] text-muted-foreground">
                                                                     {isBypassedByDefault ? "off by default" : "on by default"}
                                                                 </span>
                                                                 <Switch
@@ -867,7 +867,7 @@ export default function WorkflowLibrary() {
                                                                         };
                                                                         setSchemaEdits(s);
                                                                     }}
-                                                                    className={cn("h-4 w-7", isBypassedByDefault ? "bg-amber-500" : "bg-slate-200")}
+                                                                    className={cn("h-4 w-7", isBypassedByDefault ? "bg-amber-500" : "bg-muted")}
                                                                 />
                                                             </div>
                                                         )}
@@ -925,27 +925,27 @@ export default function WorkflowLibrary() {
                                             <div
                                                 key={id}
                                                 className={cn(
-                                                    "flex items-center justify-between rounded border bg-white px-3 py-2 shadow-sm",
-                                                    hidden && "border-amber-200 bg-amber-50"
+                                                    "flex items-center justify-between rounded border border-border bg-card px-3 py-2 shadow-sm",
+                                                    hidden && "border-amber-500/30 bg-amber-500/10"
                                                 )}
                                             >
                                                 <div className="flex flex-col gap-0.5">
                                                     <div className="flex items-center gap-2">
-                                                        <span className="text-xs font-mono text-slate-500">#{id}</span>
-                                                        <span className="text-sm font-semibold text-slate-800">{node._meta?.title || node.title || `Node ${id}`}</span>
+                                                        <span className="text-xs font-mono text-muted-foreground">#{id}</span>
+                                                        <span className="text-sm font-semibold text-foreground">{node._meta?.title || node.title || `Node ${id}`}</span>
                                                         {hidden && (
                                                             <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium uppercase text-amber-700">
                                                                 Hidden in controls
                                                             </span>
                                                         )}
                                                     </div>
-                                                    <span className="text-[11px] text-slate-500">{node.class_type}</span>
+                                                    <span className="text-[11px] text-muted-foreground">{node.class_type}</span>
                                                 </div>
 
                                                 <Switch
                                                     checked={hidden}
                                                     onCheckedChange={(checked) => toggleHidden(String(id), checked)}
-                                                    className={cn("h-5 w-9", hidden ? "bg-amber-500" : "bg-slate-200")}
+                                                    className={cn("h-5 w-9", hidden ? "bg-amber-500" : "bg-muted")}
                                                 />
                                             </div>
                                         );
@@ -981,12 +981,12 @@ export default function WorkflowLibrary() {
                 </div>
 
                 {/* Right Content - Pipe Parameters */}
-                <Card className="flex-1 overflow-auto bg-slate-50/50">
+                <Card className="flex-1 overflow-auto bg-muted/10">
                     <CardHeader className="pb-4">
                         <CardTitle>Pipe Parameters</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                        {nodesRenderData.length === 0 && <div className="text-center text-slate-400 py-8">No parameters exposed.</div>}
+                        {nodesRenderData.length === 0 && <div className="text-center text-muted-foreground py-8">No parameters exposed.</div>}
 
                         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                             <SortableContext items={nodesRenderData.map(node => node.id)} strategy={verticalListSortingStrategy}>
@@ -1106,7 +1106,7 @@ export default function WorkflowLibrary() {
                                             placeholder="how should this composed pipe be used?"
                                             maxLength={500}
                                         />
-                                        <div className="text-[11px] text-slate-500 text-right">{composeDescription.length}/500</div>
+                                        <div className="text-[11px] text-muted-foreground text-right">{composeDescription.length}/500</div>
                                     </div>
                                 </div>
                             </div>
@@ -1151,7 +1151,7 @@ export default function WorkflowLibrary() {
                                             placeholder="what does this pipe do?"
                                             maxLength={500}
                                         />
-                                        <div className="text-[11px] text-slate-500 text-right">{importDescription.length}/500</div>
+                                        <div className="text-[11px] text-muted-foreground text-right">{importDescription.length}/500</div>
                                     </div>
                                 </div>
                                 <div className="grid grid-cols-4 items-center gap-4">
@@ -1207,7 +1207,7 @@ export default function WorkflowLibrary() {
                             visual topology of the pipe
                         </DialogDescription>
                     </DialogHeader>
-                    <div className="flex-1 min-h-0 bg-slate-50 border rounded-md">
+                    <div className="flex-1 min-h-0 bg-muted/10 border border-border rounded-md">
                         {selectedWorkflowForGraph && (
                             <WorkflowGraphViewer
                                 graph={selectedWorkflowForGraph.graph_json}
@@ -1234,16 +1234,16 @@ export default function WorkflowLibrary() {
                     </DialogHeader>
 
                     <div className="py-4 space-y-4">
-                        <div className="flex items-center justify-between rounded-md border p-3 bg-slate-50">
+                        <div className="flex items-center justify-between rounded-md border border-border p-3 bg-muted/20">
                             <div>
                                 <div className="text-sm font-semibold">allow manual git clone fallback</div>
-                                <p className="text-xs text-slate-600">if comfyui manager fails, opt into raw git clone/install to continue.</p>
+                                <p className="text-xs text-muted-foreground">if comfyui manager fails, opt into raw git clone/install to continue.</p>
                             </div>
                             <Switch checked={allowManualClone} onCheckedChange={setAllowManualClone} />
                         </div>
 
                         {!installStatus ? (
-                            <div className="text-center text-slate-500">Starting...</div>
+                            <div className="text-center text-muted-foreground">Starting...</div>
                         ) : (
                             <div className="space-y-4">
                                 <div className="flex items-center justify-between">
@@ -1253,7 +1253,7 @@ export default function WorkflowLibrary() {
                                     {installStatus.status === "failed" && <XCircle className="w-5 h-5 text-red-500" />}
                                 </div>
 
-                                <div className="text-sm text-slate-600 bg-slate-50 p-2 rounded">
+                                <div className="text-sm text-muted-foreground bg-muted/20 p-2 rounded">
                                     {installStatus.progress_text}
                                 </div>
 
@@ -1291,7 +1291,7 @@ export default function WorkflowLibrary() {
                                 )}
 
                                 {installStatus.error && (
-                                    <div className="text-sm text-red-600 bg-red-50 p-2 rounded border border-red-200">
+                                    <div className="text-sm text-destructive bg-destructive/10 p-2 rounded border border-destructive/20">
                                         Error: {installStatus.error}
                                     </div>
                                 )}
@@ -1302,7 +1302,7 @@ export default function WorkflowLibrary() {
                     <DialogFooter>
                         {installStatus?.status === "completed" ? (
                             <div className="flex w-full justify-between items-center">
-                                <div className="text-xs text-slate-500">reboot required to apply changes.</div>
+                                <div className="text-xs text-muted-foreground">reboot required to apply changes.</div>
                                 <div className="flex gap-2">
                                     <Button variant="ghost" onClick={() => setInstallOpen(false)}>close</Button>
                                     <Button variant="default" onClick={handleReboot}>reboot now</Button>

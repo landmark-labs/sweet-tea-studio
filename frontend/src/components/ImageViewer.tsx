@@ -625,7 +625,7 @@ export const ImageViewer = React.memo(function ImageViewer({
                             <Button
                                 variant="ghost"
                                 size="icon"
-                                className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/50 hover:bg-white/80 dark:bg-surface/60 dark:hover:bg-surface/80 border border-white/10 dark:border-border/60 rounded-full z-10"
+                                className="absolute left-4 top-1/2 -translate-y-1/2 bg-surface/70 hover:bg-surface/90 border border-border/60 rounded-full z-10"
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     e.stopPropagation();
@@ -634,12 +634,12 @@ export const ImageViewer = React.memo(function ImageViewer({
                                 }}
                                 disabled={effectiveIndex <= 0}
                             >
-                                <ArrowLeft className="w-5 h-5 text-slate-800 dark:text-foreground" />
+                                <ArrowLeft className="w-5 h-5 text-foreground" />
                             </Button>
                             <Button
                                 variant="ghost"
                                 size="icon"
-                                className="absolute right-4 top-1/2 -translate-y-1/2 bg-white/50 hover:bg-white/80 dark:bg-surface/60 dark:hover:bg-surface/80 border border-white/10 dark:border-border/60 rounded-full z-10"
+                                className="absolute right-4 top-1/2 -translate-y-1/2 bg-surface/70 hover:bg-surface/90 border border-border/60 rounded-full z-10"
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     e.stopPropagation();
@@ -648,7 +648,7 @@ export const ImageViewer = React.memo(function ImageViewer({
                                 }}
                                 disabled={effectiveIndex >= displayImages.length - 1}
                             >
-                                <ArrowRight className="w-5 h-5 text-slate-800 dark:text-foreground" />
+                                <ArrowRight className="w-5 h-5 text-foreground" />
                             </Button>
 
 

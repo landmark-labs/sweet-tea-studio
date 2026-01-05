@@ -617,21 +617,21 @@ export default function Gallery() {
     // Note: We no longer return early for loading - this keeps the sidebar visible for smoother transitions
 
     return (
-        <div className="flex h-screen overflow-hidden bg-slate-50">
+        <div className="flex h-screen overflow-hidden bg-background">
             <ProjectSidebar
                 selectedProjectId={selectedProjectId}
                 onSelectProject={handleSelectProject}
                 projects={projects}
-                className="h-full border-r bg-white"
+                className="h-full border-r border-border bg-card"
                 selectedFolder={selectedFolder}
                 onSelectFolder={handleSelectFolder}
                 projectFolders={projectFolders}
             />
             <div className="flex-1 flex flex-col overflow-hidden">
-                <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between px-8 py-4 border-b bg-slate-50">
+                <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between px-8 py-4 border-b border-border bg-background">
                     <div className="flex items-center gap-4 flex-wrap">
-                        <h1 className="text-3xl font-bold tracking-tight text-slate-900">gallery</h1>
-                        <div className="text-sm text-slate-600 bg-slate-100 border border-slate-200 px-3 py-1 rounded-full whitespace-nowrap">
+                        <h1 className="text-3xl font-bold tracking-tight">gallery</h1>
+                        <div className="text-sm text-muted-foreground bg-muted/40 border border-border px-3 py-1 rounded-full whitespace-nowrap">
                             viewing {selectedProjectId ? projects.find(p => p.id === selectedProjectId)?.name || "project" : "all projects"}
                             {selectedFolder && ` / ${selectedFolder}`}
                         </div>
@@ -661,14 +661,14 @@ export default function Gallery() {
                                         <button onClick={handleBulkDelete} className="hover:underline text-red-600">delete</button>
                                     </>
                                 )}
-                                <button onClick={() => setSelectedIds(new Set())} className="hover:underline text-slate-500">clear</button>
+                                <button onClick={() => setSelectedIds(new Set())} className="hover:underline text-muted-foreground">clear</button>
                             </div>
                         )}
                     </div>
                     <div className="w-full md:max-w-2xl flex flex-col gap-2 md:flex-row md:items-center md:justify-end">
                         <form onSubmit={handleSearch} className="flex-1">
                             <div className="relative">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                                 <Input
                                     type="search"
                                     placeholder="search prompts, tags, captions..."
@@ -712,8 +712,8 @@ export default function Gallery() {
                     )}
                     <div className="relative flex-1 min-h-0">
                         {isLoading && displayItems.length > 0 && (
-                            <div className="absolute inset-0 bg-white/50 flex items-center justify-center z-10 pointer-events-none">
-                                <div className="text-sm text-slate-500 bg-white/90 px-4 py-2 rounded-full shadow-sm border">
+                            <div className="absolute inset-0 bg-background/60 flex items-center justify-center z-10 pointer-events-none">
+                                <div className="text-sm text-muted-foreground bg-card/90 px-4 py-2 rounded-full shadow-sm border border-border">
                                     Loading...
                                 </div>
                             </div>
@@ -733,7 +733,7 @@ export default function Gallery() {
                             getKey={(item) => item.image.id}
                             onRangeChange={handleRangeChange}
                             emptyState={(
-                                <div className="text-center text-slate-500 py-20">
+                                <div className="text-center text-muted-foreground py-20">
                                     {isLoading
                                         ? "Loading gallery..."
                                         : selectedFolder
@@ -791,7 +791,7 @@ export default function Gallery() {
                                             </div>
 
                                             <CardContent
-                                                className="p-4 text-xs space-y-2 bg-white flex-1 relative z-10 overflow-hidden"
+                                                className="p-4 text-xs space-y-2 bg-card flex-1 relative z-10 overflow-hidden"
                                                 style={{ minHeight: CARD_META_HEIGHT - 40 }}
                                                 onClick={() => { }}
                                             >
@@ -802,18 +802,18 @@ export default function Gallery() {
                                                         </span>
                                                     )}
                                                     {item.width && item.height && (
-                                                        <span className="px-1.5 py-0.5 bg-slate-100 text-slate-600 border border-slate-200 rounded text-[10px]">
+                                                        <span className="px-1.5 py-0.5 bg-muted/40 text-muted-foreground border border-border rounded text-[10px]">
                                                             {item.width}A-{item.height}
                                                         </span>
                                                     )}
                                                 </div>
-                                                <div className="flex items-center gap-2 text-slate-500">
+                                                <div className="flex items-center gap-2 text-muted-foreground">
                                                     <Calendar className="w-3 h-3" />
                                                     <span>{new Date(item.created_at).toLocaleString()}</span>
                                                 </div>
 
                                                 {item.caption && (
-                                                    <p className="text-slate-600 line-clamp-2">{item.caption}</p>
+                                                    <p className="text-muted-foreground line-clamp-2">{item.caption}</p>
                                                 )}
 
                                                 {item.prompt_tags && item.prompt_tags.length > 0 && (
@@ -837,12 +837,12 @@ export default function Gallery() {
                                                                     <div className="flex items-center justify-between mb-1">
                                                                         <span className="font-semibold text-green-600 block text-[10px] uppercase">Positive</span>
                                                                         <Button variant="ghost" size="icon" className="h-4 w-4 opacity-0 group-hover/prompt:opacity-100" onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(positive); }}>
-                                                                            <Copy className="h-3 w-3 text-slate-400" />
+                                                                            <Copy className="h-3 w-3 text-muted-foreground" />
                                                                         </Button>
                                                                     </div>
                                                                     <HoverCard openDelay={200}>
                                                                         <HoverCardTrigger asChild>
-                                                                            <p className="line-clamp-6 text-slate-700 leading-relaxed cursor-help select-text">{positive}</p>
+                                                                            <p className="line-clamp-6 text-foreground/80 leading-relaxed cursor-help select-text">{positive}</p>
                                                                         </HoverCardTrigger>
                                                                         <HoverCardContent className="w-[500px] max-h-[60vh] overflow-y-auto p-4 z-[100]" align="start">
                                                                             <div className="space-y-4">
@@ -850,14 +850,14 @@ export default function Gallery() {
                                                                                     <div className="flex items-center gap-2 mb-1">
                                                                                         <span className="font-semibold text-green-600 text-xs uppercase">Positive Prompt</span>
                                                                                     </div>
-                                                                                    <p className="text-sm text-slate-700 whitespace-pre-wrap font-mono text-[11px] leading-relaxed select-text">{positive}</p>
+                                                                                    <p className="text-sm text-foreground/80 whitespace-pre-wrap font-mono text-[11px] leading-relaxed select-text">{positive}</p>
                                                                                 </div>
                                                                                 {negative && (
                                                                                     <div className="border-t pt-3">
                                                                                         <div className="flex items-center gap-2 mb-1">
                                                                                             <span className="font-semibold text-red-500 text-xs uppercase">Negative Prompt</span>
                                                                                         </div>
-                                                                                        <p className="text-sm text-slate-600 whitespace-pre-wrap font-mono text-[11px] leading-relaxed select-text">{negative}</p>
+                                                                                        <p className="text-sm text-muted-foreground whitespace-pre-wrap font-mono text-[11px] leading-relaxed select-text">{negative}</p>
                                                                                     </div>
                                                                                 )}
                                                                             </div>
@@ -868,7 +868,7 @@ export default function Gallery() {
                                                             {!positive && !negative && (
                                                                 <div className="flex flex-wrap gap-1 mt-2">
                                                                     {Object.entries(item.job_params).slice(0, 4).map(([k, v]) => (
-                                                                        <span key={k} className="px-1.5 py-0.5 bg-slate-100 rounded text-slate-500 border border-slate-200">{k}: {String(v)}</span>
+                                                                        <span key={k} className="px-1.5 py-0.5 bg-muted/40 rounded text-muted-foreground border border-border">{k}: {String(v)}</span>
                                                                     ))}
                                                                 </div>
                                                             )}
@@ -890,7 +890,7 @@ export default function Gallery() {
                         />
 
                         {isLoadingMore && (
-                            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-xs text-slate-500 bg-white/90 px-3 py-1 rounded-full border shadow-sm">
+                            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-xs text-muted-foreground bg-card/90 px-3 py-1 rounded-full border border-border shadow-sm">
                                 Loading more...
                             </div>
                         )}

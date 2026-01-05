@@ -2487,7 +2487,7 @@ export default function PromptStudio() {
       <div className="w-[420px] flex-none bg-blue-50 dark:bg-surface border-r border-blue-100 dark:border-border/70 flex flex-col h-full overflow-hidden">
 
         {/* Sticky Header Section */}
-        <div className="flex-none p-3 space-y-2 border-b bg-slate-50/50 dark:bg-surface-raised/60 backdrop-blur z-10">
+        <div className="flex-none p-3 space-y-2 border-b bg-muted/10 dark:bg-surface-raised/60 backdrop-blur z-10">
           <div className="text-xs font-bold text-foreground tracking-wider font-['Space_Grotesk']">CONFIGURATOR</div>
 
           {/* Project + Destination Row */}
@@ -2623,7 +2623,7 @@ export default function PromptStudio() {
                   }
                 }}
                 disabled={isBusy}
-                className="w-12 h-10 text-center text-sm font-semibold border rounded-md bg-white dark:bg-surface-raised disabled:bg-muted/40 disabled:text-muted-foreground"
+                className="w-12 h-10 text-center text-sm font-semibold border rounded-md bg-surface-raised disabled:bg-muted/40 disabled:text-muted-foreground"
                 title="Number of times to run (1-100)"
               />
             </div>
@@ -2712,7 +2712,7 @@ export default function PromptStudio() {
 
         {/* Progress Status Footer */}
         {lastJobId && isBusy && (
-          <div className="flex-none p-4 border-t bg-slate-50 dark:bg-surface-raised/60">
+          <div className="flex-none p-4 border-t bg-muted/10 dark:bg-surface-raised/60">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-medium text-blue-600 dark:text-primary capitalize">{statusLabel || (generationState === "queued" ? "queued" : "processing")}</span>
               <span className="text-xs text-muted-foreground">{Math.round(progress)}%</span>

@@ -123,10 +123,10 @@ export default function PromptLibrary() {
     return (
         <div className="h-full overflow-auto p-8 max-w-7xl mx-auto">
             <div className="flex items-center justify-between mb-8">
-                <h1 className="text-3xl font-bold tracking-tight text-slate-900">prompt library</h1>
+                <h1 className="text-3xl font-bold tracking-tight">prompt library</h1>
                 <form onSubmit={handleSearch} className="flex gap-2 w-full max-w-sm">
                     <div className="relative flex-1">
-                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />
+                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                         <Input
                             type="search"
                             placeholder="Search prompts..."
@@ -151,12 +151,12 @@ export default function PromptLibrary() {
                 </Alert>
             )}
 
-            <div className="mb-6 p-4 border border-slate-200 rounded-lg bg-white shadow-sm">
+            <div className="mb-6 p-4 border border-border rounded-lg bg-card shadow-sm">
                 <div className="flex items-center gap-2 mb-2">
                     <Sparkles className="w-4 h-4 text-indigo-600" />
-                    <h3 className="font-semibold text-slate-800">Tag → Prompt</h3>
+                    <h3 className="font-semibold text-foreground">Tag → Prompt</h3>
                 </div>
-                <p className="text-xs text-slate-500 mb-3">Paste comma-separated tags and let the VLM expand them into a prompt.</p>
+                <p className="text-xs text-muted-foreground mb-3">Paste comma-separated tags and let the VLM expand them into a prompt.</p>
                 <div className="flex gap-2">
                     <Input
                         value={tagInput}
@@ -186,14 +186,14 @@ export default function PromptLibrary() {
                     </Button>
                 </div>
                 {vlmError && !vlmEnabled && (
-                    <div className="mt-4 p-3 bg-red-50 border border-red-100 rounded text-xs text-red-600">
+                    <div className="mt-4 p-3 bg-destructive/10 border border-destructive/20 rounded text-xs text-destructive">
                         <p className="font-semibold mb-1">VLM Backend Offline</p>
                         <p>The vision/language models are not loaded. Please run the download script in the backend folder to enable this feature.</p>
                     </div>
                 )}
                 {expandedPrompt && (
-                    <div className="mt-3 p-3 bg-indigo-50 border border-indigo-100 rounded flex items-start justify-between gap-2">
-                        <p className="text-sm text-indigo-900 flex-1">{expandedPrompt}</p>
+                    <div className="mt-3 p-3 bg-indigo-500/10 border border-indigo-500/20 rounded flex items-start justify-between gap-2">
+                        <p className="text-sm text-indigo-700 dark:text-indigo-200 flex-1">{expandedPrompt}</p>
                         <Button
                             variant="ghost"
                             size="icon"
@@ -229,10 +229,10 @@ export default function PromptLibrary() {
                     return (
                         <div
                             key={key}
-                            className="flex items-start gap-3 p-3 bg-white rounded-lg border border-slate-200 shadow-sm hover:shadow-md transition-all group"
+                            className="flex items-start gap-3 p-3 bg-card rounded-lg border border-border shadow-sm hover:shadow-md transition-all group"
                         >
                             {/* Thumbnail */}
-                            <div className="w-16 h-16 flex-none bg-slate-100 rounded overflow-hidden relative">
+                            <div className="w-16 h-16 flex-none bg-muted/40 rounded overflow-hidden relative">
                                 {prompt.preview_path ? (
                                     isVideoFile(prompt.preview_path) ? (
                                         <video
@@ -250,7 +250,7 @@ export default function PromptLibrary() {
                                         />
                                     )
                                 ) : (
-                                    <div className="flex items-center justify-center h-full text-slate-300">
+                                    <div className="flex items-center justify-center h-full text-muted-foreground/40">
                                         <LayoutTemplate className="w-5 h-5" />
                                     </div>
                                 )}
@@ -258,8 +258,8 @@ export default function PromptLibrary() {
 
                             {/* Project + Pipe Name */}
                             <div className="flex-none w-24 min-w-0 space-y-0.5">
-                                <div className="text-[11px] font-semibold text-slate-700 truncate" title={prompt.project_name || "No project"}>
-                                    {prompt.project_name || <span className="text-slate-400">No project</span>}
+                                <div className="text-[11px] font-semibold text-foreground/80 truncate" title={prompt.project_name || "No project"}>
+                                    {prompt.project_name || <span className="text-muted-foreground">No project</span>}
                                 </div>
                                 {pipeName && (
                                     <div className="text-[10px] text-blue-600 truncate font-medium" title={pipeName}>
@@ -270,14 +270,14 @@ export default function PromptLibrary() {
 
                             {/* Prompts Side-by-Side - 75% positive, 25% negative */}
                             <div className="flex-1 flex gap-2 min-w-0">
-                                <div className="min-w-0 bg-green-50 rounded p-1.5 border border-green-100" style={{ flex: '3 1 0%' }}>
-                                    <p className="text-[10px] text-green-700 leading-relaxed line-clamp-4">
-                                        {prompt.active_positive || <span className="text-slate-400 italic">No positive prompt</span>}
+                                <div className="min-w-0 bg-emerald-500/10 rounded p-1.5 border border-emerald-500/20" style={{ flex: '3 1 0%' }}>
+                                    <p className="text-[10px] text-emerald-700 dark:text-emerald-300 leading-relaxed line-clamp-4">
+                                        {prompt.active_positive || <span className="text-muted-foreground italic">No positive prompt</span>}
                                     </p>
                                 </div>
-                                <div className="min-w-0 bg-rose-50 rounded p-1.5 border border-rose-100" style={{ flex: '1 1 0%' }}>
-                                    <p className="text-[10px] text-rose-600 leading-relaxed line-clamp-4">
-                                        {prompt.active_negative || <span className="text-slate-400 italic">No negative prompt</span>}
+                                <div className="min-w-0 bg-rose-500/10 rounded p-1.5 border border-rose-500/20" style={{ flex: '1 1 0%' }}>
+                                    <p className="text-[10px] text-rose-700 dark:text-rose-300 leading-relaxed line-clamp-4">
+                                        {prompt.active_negative || <span className="text-muted-foreground italic">No negative prompt</span>}
                                     </p>
                                 </div>
                             </div>
@@ -297,7 +297,7 @@ export default function PromptLibrary() {
                                     variant="ghost"
                                     size="icon"
                                     onClick={() => prompt.prompt_id && handleDelete(prompt.prompt_id)}
-                                    className="h-7 w-7 text-red-400 hover:text-red-600 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-opacity"
+                                    className="h-7 w-7 text-destructive/70 hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-opacity"
                                     disabled={!prompt.prompt_id}
                                 >
                                     <Trash2 className="w-3.5 h-3.5" />
@@ -308,7 +308,7 @@ export default function PromptLibrary() {
                 })}
 
                 {filteredPrompts.length === 0 && (
-                    <div className="text-center py-12 text-slate-500">
+                    <div className="text-center py-12 text-muted-foreground">
                         No prompts found matching your search.
                     </div>
                 )}

@@ -284,7 +284,7 @@ export default function Settings() {
                     </p>
 
                     {launchConfig && (
-                        <div className="text-xs text-slate-500 bg-slate-50 p-3 rounded">
+                        <div className="text-xs text-muted-foreground bg-muted/20 p-3 rounded">
                             <span className="font-medium">Detection: </span>
                             {launchConfig.detection_method === "not_found" ? (
                                 <span className="text-amber-600">Not found - configure path below</span>
@@ -364,7 +364,7 @@ export default function Settings() {
                                     />
                                     <button
                                         type="button"
-                                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                                        className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                                         onClick={() => setShowCivitaiKey(!showCivitaiKey)}
                                     >
                                         {showCivitaiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -399,7 +399,7 @@ export default function Settings() {
                                     />
                                     <button
                                         type="button"
-                                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                                        className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                                         onClick={() => setShowRule34Key(!showRule34Key)}
                                     >
                                         {showRule34Key ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}

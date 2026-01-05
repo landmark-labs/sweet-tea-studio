@@ -96,15 +96,15 @@ const SortableItem = React.memo(function SortableItem({ item, index, textIndex, 
         if (isEditing) {
             return (
                 <div ref={setNodeRef} style={style} className="flex items-center gap-1 group relative z-50">
-                    <Textarea
-                        value={item.content}
-                        autoFocus
-                        onChange={(e) => onUpdateContent(item.id, e.target.value)}
-                        onBlur={handleBlur}
-                        onKeyDown={handleKeyDown}
-                        className="min-h-[32px] h-auto w-full text-[11px] font-mono border-dashed bg-white dark:bg-surface-raised shadow-lg ring-2 ring-blue-500 transition-colors resize-y py-1 px-2 rounded-md"
-                        placeholder="text..."
-                    />
+                        <Textarea
+                            value={item.content}
+                            autoFocus
+                            onChange={(e) => onUpdateContent(item.id, e.target.value)}
+                            onBlur={handleBlur}
+                            onKeyDown={handleKeyDown}
+                            className="min-h-[32px] h-auto w-full text-[11px] font-mono border-dashed bg-surface-raised shadow-lg ring-2 ring-blue-500 transition-colors resize-y py-1 px-2 rounded-md"
+                            placeholder="text..."
+                        />
                 </div>
             );
         }
@@ -130,7 +130,7 @@ const SortableItem = React.memo(function SortableItem({ item, index, textIndex, 
                             <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-4 w-4 rounded-full text-black/20 hover:text-amber-600 hover:bg-amber-50"
+                                className="h-4 w-4 rounded-full text-black/20 hover:text-amber-600 hover:bg-amber-50 dark:text-foreground/30 dark:hover:text-amber-300 dark:hover:bg-amber-500/10"
                                 onPointerDown={(e) => e.stopPropagation()}
                                 onClick={(e) => {
                                     e.stopPropagation();
@@ -416,7 +416,7 @@ const SortableLibrarySnippet = React.memo(function SortableLibrarySnippet({ snip
                                 <Button
                                     variant="ghost"
                                     size="icon"
-                                    className="h-4 w-4 rounded-full bg-white/50 hover:bg-amber-100/80 dark:bg-surface/60 dark:hover:bg-muted/60"
+                                    className="h-4 w-4 rounded-full bg-surface/60 hover:bg-amber-100/80 dark:hover:bg-muted/60"
                                     onPointerDown={(e) => e.stopPropagation()}
                                     onClick={onEdit}
                                     title="Edit Snippet"
@@ -428,7 +428,7 @@ const SortableLibrarySnippet = React.memo(function SortableLibrarySnippet({ snip
                                 <Button
                                     variant="ghost"
                                     size="icon"
-                                    className="h-4 w-4 ml-0.5 rounded-full bg-white/50 hover:bg-red-100/80 dark:bg-surface/60 dark:hover:bg-destructive/20"
+                                    className="h-4 w-4 ml-0.5 rounded-full bg-surface/60 hover:bg-red-100/80 dark:hover:bg-destructive/20"
                                     onPointerDown={(e) => e.stopPropagation()}
                                     onClick={onDelete}
                                     title="Delete Snippet"
@@ -1317,7 +1317,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
                         <div className="flex justify-between items-center">
                             <Input
                                 placeholder="snippet name"
-                                className="h-7 text-xs font-semibold bg-white dark:bg-surface-raised w-full disabled:opacity-80"
+                                className="h-7 text-xs font-semibold bg-surface-raised w-full disabled:opacity-80"
                                 value={snippetTitle}
                                 onChange={e => setSnippetTitle(e.target.value)}
                                 onKeyDown={handleTitleKeyDown}
@@ -1327,7 +1327,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
                         </div>
                         <PromptAutocompleteTextarea
                             placeholder="Prompt text... (Ctrl+Enter to save)"
-                            className="h-[100px] text-xs font-mono bg-white dark:bg-surface-raised resize-none"
+                            className="h-[100px] text-xs font-mono bg-surface-raised resize-none"
                             value={snippetContent}
                             onValueChange={setSnippetContent}
                             onKeyDown={handleKeyDown}
@@ -1361,7 +1361,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
 
             {/* 3. Library (Horizontal Scroll)
                 Grid layout keeps snippet chips aligned for tessellation and consistent sizing. */}
-            <div className="px-3 py-2 border-b border-amber-200 dark:border-border/60 shadow-sm shrink-0 bg-white/60 dark:bg-surface-raised/60">
+            <div className="px-3 py-2 border-b border-amber-200 dark:border-border/60 shadow-sm shrink-0 bg-surface/60 dark:bg-surface-raised/60">
                 <div className="mb-2">
                     <span className="text-[10px] font-bold text-muted-foreground uppercase block">Snippets (Double-click to Add, Drag to Reorder, Long-press to Edit)</span>
                 </div>

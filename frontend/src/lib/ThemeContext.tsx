@@ -284,14 +284,14 @@ function inferAppearanceFromBackground(background: string): "light" | "dark" | n
         return luminance < 0.5 ? "dark" : "light";
     }
 
-    const hslMatch = raw.match(/^hsla?\\(\\s*([\\d.]+)\\s*,\\s*([\\d.]+)%\\s*,\\s*([\\d.]+)%/i);
+    const hslMatch = raw.match(/^hsla?\(\s*([\d.]+)\s*,\s*([\d.]+)%\s*,\s*([\d.]+)%/i);
     if (hslMatch) {
         const lightness = Number(hslMatch[3]);
         if (!Number.isFinite(lightness)) return null;
         return lightness < 50 ? "dark" : "light";
     }
 
-    const rgbMatch = raw.match(/^rgba?\\(\\s*([\\d.]+)\\s*,\\s*([\\d.]+)\\s*,\\s*([\\d.]+)/i);
+    const rgbMatch = raw.match(/^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)/i);
     if (rgbMatch) {
         const r = Number(rgbMatch[1]);
         const g = Number(rgbMatch[2]);
