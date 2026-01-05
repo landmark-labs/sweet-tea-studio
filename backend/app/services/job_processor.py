@@ -1399,6 +1399,14 @@ def process_job(job_id: int):
                 workflow_graph=final_graph,
             )
             
+            # CRITICAL: Re-check cancellation after execution completes
+            # This catches cancellations that happened during ComfyUI execution
+            session.refresh(job)
+            if job.status == "cancelled":
+                print(f"[JobProcessor] Job {job_id} was cancelled during execution, stopping")
+                manager.close_job_sync(str(job_id))
+                return
+            
             # Filter Logic - only process items NOT already handled
             final_tasks = []
             
