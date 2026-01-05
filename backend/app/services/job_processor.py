@@ -1011,6 +1011,12 @@ def process_job(job_id: int):
         if not job:
             return
         
+        # Skip execution if job was already cancelled (e.g., batch cancel from frontend)
+        if job.status == "cancelled":
+            print(f"[JobProcessor] Job {job_id} already cancelled, skipping execution")
+            manager.close_job_sync(str(job_id))
+            return
+        
         # We need engine and workflow too. 
         # Ideally we stored engine_id. 
         engine = session.get(Engine, job.engine_id)
