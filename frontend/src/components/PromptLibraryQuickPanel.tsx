@@ -32,8 +32,8 @@ export function PromptLibraryQuickPanel({
 
   return (
       <div className="w-96 pointer-events-auto">
-        <Card className="shadow-xl border-blue-100 bg-blue-50/95 dark:border-border/60 dark:bg-card/95 backdrop-blur">
-        <div className="flex items-center justify-between px-4 py-2 border-b border-blue-100/80 dark:border-border/60 cursor-move">
+        <Card className="shadow-xl border border-blue-100 bg-blue-50/95 dark:border-border dark:bg-surface/95 ring-1 ring-black/5 dark:ring-white/5 backdrop-blur">
+        <div className="flex items-center justify-between px-4 py-2 border-b border-blue-100/80 bg-blue-50/60 dark:border-border/70 dark:bg-surface-raised/70 cursor-move">
           <div className="font-semibold text-foreground text-sm">prompt library</div>
           <Button variant="ghost" size="sm" className="h-7" onClick={onClose}>
             <X className="w-4 h-4" />
@@ -56,8 +56,8 @@ export function PromptLibraryQuickPanel({
             </Button>
           </div>
 
-          {error && <div className="text-xs text-red-600">{error}</div>}
-          {loading && <div className="text-xs text-muted-foreground">Loading prompt library…</div>}
+          {error && <div className="text-xs text-destructive">{error}</div>}
+          {loading && <div className="text-xs text-muted-foreground">Loading prompt library...</div>}
 
           <ScrollArea className="h-64 pr-2">
             <div className="space-y-2">
@@ -73,7 +73,7 @@ export function PromptLibraryQuickPanel({
                 return (
                   <div
                     key={key}
-                    className="p-2 border border-border/60 rounded-md bg-muted/20 hover:bg-muted/30 transition-colors cursor-pointer"
+                    className="p-2 border border-border/60 rounded-md bg-surface-raised/70 hover:bg-surface-overlay/60 transition-colors cursor-pointer"
                     onClick={() => onApply(prompt)}
                   >
                     <div className="flex items-center justify-between mb-1">
@@ -104,14 +104,14 @@ export function PromptLibraryQuickPanel({
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-1.5">
                       {prompt.active_positive && (
                         <div className="min-w-0">
-                          <div className="text-[8px] text-green-600 font-semibold uppercase mb-0.5">Positive</div>
+                          <div className="text-[8px] text-green-600 dark:text-emerald-300 font-semibold uppercase mb-0.5">Positive</div>
                           <p className="text-[10px] text-foreground/80 line-clamp-2 leading-tight">{prompt.active_positive}</p>
                         </div>
                       )}
                       {prompt.active_negative && (
                         <div className="min-w-0">
-                          <div className="text-[8px] text-red-600 font-semibold uppercase mb-0.5">Negative</div>
-                          <p className="text-[10px] text-muted-foreground line-clamp-2 leading-tight">{prompt.active_negative}</p>
+                          <div className="text-[8px] text-red-600 dark:text-rose-300 font-semibold uppercase mb-0.5">Negative</div>
+                          <p className="text-[10px] text-foreground/70 line-clamp-2 leading-tight">{prompt.active_negative}</p>
                         </div>
                       )}
                       {!prompt.active_positive && !prompt.active_negative && (

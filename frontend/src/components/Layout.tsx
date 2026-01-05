@@ -263,8 +263,8 @@ function GlobalFloatingPanels({ feedOpen, libraryOpen, onFeedClose, onLibraryClo
         defaultPosition={{ x: 20, y: 100 }}
         className={`z-40 ${feedOpen ? "" : "hidden"}`}
       >
-        <div className="bg-card rounded-lg shadow-xl border border-border overflow-hidden" style={{ maxWidth: '90vw' }}>
-          <div className="p-2 bg-muted/30 border-b border-border/50 text-xs font-semibold cursor-move flex items-center justify-between">
+        <div className="bg-card rounded-lg shadow-xl border border-border/80 ring-1 ring-black/5 dark:ring-white/5 overflow-hidden" style={{ maxWidth: '90vw' }}>
+          <div className="p-2 bg-muted/30 border-b border-border/60 text-xs font-semibold cursor-move flex items-center justify-between">
             <span>generation feed</span>
             <button
               onClick={onFeedClose}

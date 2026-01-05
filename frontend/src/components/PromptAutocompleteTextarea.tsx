@@ -519,12 +519,16 @@ export function PromptAutocompleteTextarea({
                 if (m.start > cursor) {
                     nodes.push(debouncedValue.slice(cursor, m.start));
                 }
-                // Extract only bg-* class from color to avoid text-* overriding text-transparent
-                const bgClass = (m.snippet.color || "bg-slate-200").split(" ").find(c => c.startsWith("bg-")) || "bg-slate-200";
+                // Extract bg + dark:bg classes only (avoid text-* overriding text-transparent).
+                // We keep both variants so the highlight matches the current theme.
+                const bgClasses = (m.snippet.color || "bg-slate-200 dark:bg-slate-700/30")
+                    .split(/\s+/g)
+                    .filter((c) => c.startsWith("bg-") || c.startsWith("dark:bg-"))
+                    .join(" ") || "bg-slate-200 dark:bg-slate-700/30";
                 nodes.push(
                     <span
                         key={`${m.start}-${idx}`}
-                        className={cn(bgClass, "rounded-sm opacity-70 text-transparent select-none")}
+                        className={cn(bgClasses, "rounded-sm opacity-60 dark:opacity-100 text-transparent select-none")}
                     >
                         {debouncedValue.slice(m.start, m.end)}
                     </span>

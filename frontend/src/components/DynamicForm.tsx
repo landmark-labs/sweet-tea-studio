@@ -192,11 +192,11 @@ const FieldRenderer = React.memo(function FieldRenderer({
     if (field.widget === "toggle") {
         return (
             <div className="flex items-center justify-between py-2">
-                <Label htmlFor={fieldKey} className={cn("text-xs text-muted-foreground", isActive && "text-blue-600 dark:text-primary font-semibold")}>
+                <Label htmlFor={fieldKey} className={cn("text-xs text-foreground/80", isActive && "text-blue-600 dark:text-primary font-semibold")}>
                     {field.title || fieldKey}
                 </Label>
                 <div className="flex items-center gap-2">
-                    <span className="text-[10px] text-muted-foreground uppercase">{value ? "Bypassed" : "Active"}</span>
+                    <span className="text-[10px] text-foreground/70 uppercase">{value ? "Bypassed" : "Active"}</span>
                     <Switch
                         checked={!!value}
                         onCheckedChange={(c) => onToggleChange(fieldKey, Boolean(c))}
@@ -214,7 +214,7 @@ const FieldRenderer = React.memo(function FieldRenderer({
 
     return (
         <div className="flex items-center gap-2 py-0.5">
-            <Label htmlFor={fieldKey} className={cn("text-xs text-muted-foreground w-24 flex-shrink-0 text-right", isActive && "text-blue-600 dark:text-primary font-semibold")}>{field.title || fieldKey}</Label>
+            <Label htmlFor={fieldKey} className={cn("text-xs text-foreground/80 w-24 flex-shrink-0 text-right", isActive && "text-blue-600 dark:text-primary font-semibold")}>{field.title || fieldKey}</Label>
             {field.enum || dynamicOptions[fieldKey] ? (
                 (() => {
                     const rawOptions = dynamicOptions[fieldKey] || field.enum || [];
@@ -495,7 +495,7 @@ const PinnedInspectorPanel = React.memo(function PinnedInspectorPanel({
 
     return (
         <div
-            className="rounded-lg border bg-card/95 shadow-lg backdrop-blur p-3 flex flex-col"
+            className="rounded-lg border border-border/60 bg-surface/95 shadow-lg backdrop-blur p-3 flex flex-col"
             style={{ maxHeight: maxPanelHeight ?? "70vh" }}
         >
             <div className="flex items-start justify-between gap-3 mb-2">
@@ -1524,7 +1524,7 @@ export const DynamicForm = React.memo(function DynamicForm({
             )}
             {/* 1. Main Inputs (Images) */}
             {groups.inputs.length > 0 && (
-                <div className="space-y-4 p-4 bg-muted/20 rounded-lg border border-border/60">
+                <div className="space-y-4 p-4 bg-surface-raised/70 rounded-lg border border-border/60">
                     <h3 className="text-sm font-bold text-foreground/80 uppercase tracking-wider">input images</h3>
                     <div className="space-y-4">
                         {groups.inputs.map(renderField)}
@@ -1532,7 +1532,7 @@ export const DynamicForm = React.memo(function DynamicForm({
                 </div>
             )}
 
-            <div className="space-y-4 p-4 bg-card rounded-lg border border-border/60">
+            <div className="space-y-4 p-4 bg-surface-raised/70 rounded-lg border border-border/60">
                 <div className="flex items-center justify-between">
                     <h3 className="text-xs font-bold text-foreground tracking-wider font-['Space_Grotesk']">CORE PIPE CONTROLS</h3>
                     {onReset && (
@@ -1626,7 +1626,7 @@ export const DynamicForm = React.memo(function DynamicForm({
                 )}
             </div>
 
-            <div className="space-y-3 p-4 bg-card rounded-lg border border-border/60">
+            <div className="space-y-3 p-4 bg-surface-raised/70 rounded-lg border border-border/60">
                 <div
                     className="flex items-center justify-between cursor-pointer select-none"
                     onClick={() => {

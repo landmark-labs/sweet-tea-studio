@@ -842,12 +842,12 @@ export default function WorkflowLibrary() {
                                             const isBypassedByDefault = hasBypass && schemaEdits[bypassKey]?.default === true;
 
                                             return (
-                                                <div key={id} className={cn("flex justify-between items-center p-2 border border-border rounded hover:bg-muted/30 transition-colors", hasBypass && "bg-blue-50 border-blue-200")}>
+                                                <div key={id} className={cn("flex justify-between items-center p-2 border border-border rounded hover:bg-muted/30 transition-colors", hasBypass && "bg-blue-50 border-blue-200 dark:bg-blue-500/10 dark:border-blue-500/30")}>
                                                     <div>
                                                         <div className="font-bold text-sm flex items-center gap-2">
                                                             {node._meta?.title || node.title || `Node ${id}`}
-                                                            {hasBypass && <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-mono">BYPASSABLE</span>}
-                                                            {isBypassedByDefault && <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-mono">DEFAULT OFF</span>}
+                                                            {hasBypass && <span className="text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-200 dark:border dark:border-blue-500/30 px-1.5 py-0.5 rounded font-mono">BYPASSABLE</span>}
+                                                            {isBypassedByDefault && <span className="text-[10px] bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-200 dark:border dark:border-amber-500/30 px-1.5 py-0.5 rounded font-mono">DEFAULT OFF</span>}
                                                         </div>
                                                         <div className="text-xs text-muted-foreground">{node.class_type}</div>
                                                     </div>

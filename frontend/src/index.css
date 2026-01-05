@@ -1,6 +1,9 @@
 @import "tailwindcss";
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600&display=swap');
 
+/* Tailwind v4 dark mode uses CSS custom variants; map `dark:` to the `.dark` class */
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* Light theme (default) */
 :root {
   --color-background: hsl(220 23% 97%);
@@ -91,8 +94,8 @@
 
   /* Scrollbars */
   --scrollbar-track: #050508;
-  --scrollbar-thumb: #1e2235;
-  --scrollbar-thumb-hover: #2a2f48;
+  --scrollbar-thumb: #1e293b;
+  --scrollbar-thumb-hover: #334155;
 }
 
 /* Tailwind theme integration */

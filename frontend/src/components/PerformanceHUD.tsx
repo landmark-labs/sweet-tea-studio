@@ -72,18 +72,18 @@ export function PerformanceHUD({ className, refreshMs = 3000, visible = true, on
       defaultPosition={{ x: window.innerWidth - 340, y: window.innerHeight - 400 }}
       className={cn("fixed z-40 w-72", !visible && "hidden", className)}
     >
-      <Card className="shadow-xl border-slate-200 bg-white/95 backdrop-blur text-[11px]">
-        <div className="flex items-center justify-between px-2 py-1.5 border-b border-slate-200 cursor-move">
-          <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-800">
-            <Gauge className={cn("w-3 h-3 text-blue-600", loading && "animate-pulse")} />
+      <Card className="shadow-xl border border-border/80 bg-card/95 ring-1 ring-black/5 dark:ring-white/5 backdrop-blur text-[11px] text-foreground">
+        <div className="flex items-center justify-between px-2 py-1.5 border-b border-border/70 bg-surface-raised/70 cursor-move">
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+            <Gauge className={cn("w-3 h-3 text-primary", loading && "animate-pulse")} />
             performance
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="text-[9px] text-slate-400">{Math.round(refreshMs / 1000)}s</span>
+            <span className="text-[9px] text-muted-foreground">{Math.round(refreshMs / 1000)}s</span>
             {onClose && (
               <button
                 onClick={onClose}
-                className="p-0.5 rounded hover:bg-slate-200 text-slate-400 hover:text-slate-600"
+                className="p-0.5 rounded hover:bg-muted/40 text-muted-foreground hover:text-foreground"
                 aria-label="Close performance HUD"
               >
                 <X className="w-3 h-3" />
@@ -92,27 +92,27 @@ export function PerformanceHUD({ className, refreshMs = 3000, visible = true, on
           </div>
         </div>
 
-        <div className="p-2 space-y-2 text-slate-700">
+        <div className="p-2 space-y-2 text-foreground/80">
           {error && (
-            <div className="text-[10px] text-red-600 bg-red-50 border border-red-100 rounded p-1.5">
+            <div className="text-[10px] text-destructive bg-destructive/10 border border-destructive/20 rounded p-1.5">
               {error}
             </div>
           )}
 
           <div className="grid grid-cols-2 gap-2">
             <div className="flex flex-col gap-0.5">
-              <div className="flex items-center gap-1 text-[9px] uppercase tracking-wide text-slate-500">
+              <div className="flex items-center gap-1 text-[9px] uppercase tracking-wide text-muted-foreground">
                 <Activity className="w-2.5 h-2.5" /> CPU
               </div>
-              <div className="text-sm font-bold text-slate-900">{metrics?.cpu.percent ?? "--"}%</div>
-              <div className="text-[9px] text-slate-400">{metrics?.cpu.count ?? 0} threads</div>
+              <div className="text-sm font-bold text-foreground">{metrics?.cpu.percent ?? "--"}%</div>
+              <div className="text-[9px] text-muted-foreground">{metrics?.cpu.count ?? 0} threads</div>
             </div>
             <div className="flex flex-col gap-0.5">
-              <div className="flex items-center gap-1 text-[9px] uppercase tracking-wide text-slate-500">
+              <div className="flex items-center gap-1 text-[9px] uppercase tracking-wide text-muted-foreground">
                 <HardDrive className="w-2.5 h-2.5" /> RAM
               </div>
-              <div className="text-sm font-bold text-slate-900">{metrics?.memory.percent?.toFixed(0) ?? "--"}%</div>
-              <div className="text-[9px] text-slate-400">
+              <div className="text-sm font-bold text-foreground">{metrics?.memory.percent?.toFixed(0) ?? "--"}%</div>
+              <div className="text-[9px] text-muted-foreground">
                 {(metrics?.memory.used ? metrics.memory.used / 1024 / 1024 / 1024 : 0).toFixed(1)} /
                 {(metrics?.memory.total ? metrics.memory.total / 1024 / 1024 / 1024 : 0).toFixed(1)} GB
               </div>
@@ -120,27 +120,27 @@ export function PerformanceHUD({ className, refreshMs = 3000, visible = true, on
           </div>
 
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1 text-[9px] text-slate-500 uppercase">
+            <div className="flex items-center gap-1 text-[9px] text-muted-foreground uppercase">
               <ThermometerSun className="w-2.5 h-2.5" /> Temp
             </div>
-            <div className="text-[10px] text-slate-700">
+            <div className="text-[10px] text-foreground/80">
               {metrics?.temperatures?.cpu ? `${metrics.temperatures.cpu.toFixed(1)}°C` : "n/a"}
             </div>
           </div>
 
           <div className="space-y-1">
-            <div className="flex items-center gap-1 text-[9px] uppercase tracking-wide text-slate-500">
+            <div className="flex items-center gap-1 text-[9px] uppercase tracking-wide text-muted-foreground">
               <Zap className="w-2.5 h-2.5" /> GPUs
             </div>
-            {!gpuUsage && !loading && <div className="text-[9px] text-slate-400">No GPU detected.</div>}
+            {!gpuUsage && !loading && <div className="text-[9px] text-muted-foreground">No GPU detected.</div>}
             {gpuUsage?.map((gpu) => (
-              <div key={gpu.index} className="p-1.5 border border-slate-200 rounded bg-slate-50">
-                <div className="flex items-center justify-between text-[10px] font-semibold text-slate-800">
+              <div key={gpu.index} className="p-1.5 border border-border/60 rounded bg-surface-raised/60">
+                <div className="flex items-center justify-between text-[10px] font-semibold text-foreground">
                   <span className="truncate max-w-[140px]">{gpu.name}</span>
-                  <span className="text-[9px] text-slate-500">{gpu.utilization_percent.toFixed(0)}%</span>
+                  <span className="text-[9px] text-muted-foreground">{gpu.utilization_percent.toFixed(0)}%</span>
                 </div>
                 <Progress value={gpu.memory_percent} className="h-1 mt-1" />
-                <div className="flex justify-between text-[9px] text-slate-400 mt-0.5">
+                <div className="flex justify-between text-[9px] text-muted-foreground mt-0.5">
                   <span>
                     {gpu.memory_used_mb.toFixed(0)} / {gpu.memory_total_mb.toFixed(0)} MB
                   </span>
@@ -153,13 +153,13 @@ export function PerformanceHUD({ className, refreshMs = 3000, visible = true, on
           </div>
 
           {/* Memory Unload Buttons */}
-          <div className="flex gap-1.5 pt-1 border-t border-slate-100">
+          <div className="flex gap-1.5 pt-1 border-t border-border/60">
             <button
               onClick={() => handleFreeMemory("vram")}
               disabled={unloading !== null}
               className={cn(
                 "flex-1 flex items-center justify-center gap-1 px-2 py-1 rounded text-[9px] font-medium transition-colors",
-                "bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100",
+                "bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/20 dark:hover:bg-amber-500/15",
                 unloading === "vram" && "opacity-70 cursor-wait",
                 unloading !== null && unloading !== "vram" && "opacity-50 cursor-not-allowed"
               )}
@@ -173,7 +173,7 @@ export function PerformanceHUD({ className, refreshMs = 3000, visible = true, on
               disabled={unloading !== null}
               className={cn(
                 "flex-1 flex items-center justify-center gap-1 px-2 py-1 rounded text-[9px] font-medium transition-colors",
-                "bg-red-50 text-red-700 border border-red-200 hover:bg-red-100",
+                "bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 dark:bg-destructive/10 dark:text-destructive dark:border-destructive/20 dark:hover:bg-destructive/15",
                 unloading === "all" && "opacity-70 cursor-wait",
                 unloading !== null && unloading !== "all" && "opacity-50 cursor-not-allowed"
               )}
@@ -185,10 +185,10 @@ export function PerformanceHUD({ className, refreshMs = 3000, visible = true, on
           </div>
 
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1 text-[9px] uppercase tracking-wide text-slate-500">
+            <div className="flex items-center gap-1 text-[9px] uppercase tracking-wide text-muted-foreground">
               <HardDrive className="w-2.5 h-2.5" /> Disk
             </div>
-            <div className="text-[10px] text-slate-700">
+            <div className="text-[10px] text-foreground/80">
               {metrics?.disk.bandwidth_mb_s ? `${metrics.disk.bandwidth_mb_s.toFixed(1)} MB/s` : "..."}
             </div>
           </div>

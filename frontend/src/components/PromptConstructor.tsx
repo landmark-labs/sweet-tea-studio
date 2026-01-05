@@ -1323,7 +1323,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
                                 onKeyDown={handleTitleKeyDown}
                                 disabled={!!editingTextId}
                             />
-                            {isEditing && <span className="text-[10px] font-bold text-amber-600 ml-2 whitespace-nowrap">EDITING</span>}
+                            {isEditing && <span className="text-[10px] font-bold text-amber-600 dark:text-amber-300 ml-2 whitespace-nowrap">EDITING</span>}
                         </div>
                         <PromptAutocompleteTextarea
                             placeholder="Prompt text... (Ctrl+Enter to save)"
@@ -1337,7 +1337,12 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
                     <div className="flex flex-col gap-2">
                         <Button
                             variant="default"
-                            className={cn("h-auto flex-1 w-10 p-0 flex flex-col gap-1 items-center justify-center", isEditing ? "bg-amber-600 hover:bg-amber-700" : "bg-slate-800 hover:bg-slate-700")}
+                            className={cn(
+                                "h-auto flex-1 w-10 p-0 flex flex-col gap-1 items-center justify-center",
+                                isEditing
+                                    ? "bg-amber-600 hover:bg-amber-700 dark:bg-amber-500/80 dark:hover:bg-amber-500"
+                                    : "bg-slate-800 hover:bg-slate-700 dark:bg-primary dark:hover:bg-primary/90"
+                            )}
                             onClick={saveSnippet}
                             title={isEditing ? "Update Snippet" : "Create Snippet"}
                         >
@@ -1402,7 +1407,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
             </div>
 
             {/* 4. Canvas (Vertical / Flex Wrap) */}
-            <div className="flex-1 overflow-y-auto p-4 relative bg-amber-50/60">
+            <div className="flex-1 overflow-y-auto p-4 relative bg-amber-50/60 dark:bg-surface">
                 {!isTargetValid ? (
                     <div className="h-full flex flex-col items-center justify-center text-muted-foreground text-sm select-none gap-2 opacity-60">
                         <CornerDownLeft size={32} />
@@ -1421,7 +1426,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
                                 <Button
                                     variant="ghost"
                                     size="icon"
-                                    className="h-7 w-7 text-green-600 bg-green-50 hover:bg-green-100 hover:text-green-700 border border-green-200 shadow-sm"
+                                    className="h-7 w-7 text-green-600 bg-green-50 hover:bg-green-100 hover:text-green-700 border border-green-200 shadow-sm dark:text-emerald-300 dark:bg-emerald-500/10 dark:hover:bg-emerald-500/15 dark:hover:text-emerald-200 dark:border-emerald-500/20"
                                     onClick={() => onFinish?.()}
                                     title="Finish Editing (Deselect)"
                                 >
@@ -1439,12 +1444,12 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
                             </div>
                         )}
 
-                        <SortableContext
-                            items={items.map(i => i.id)}
-                            strategy={rectSortingStrategy}
-                        >
-                            {/* Canvas grid uses 2-column layout to match snippet bank. */}
-                            <div className="grid grid-cols-2 auto-rows-[minmax(32px,auto)] items-start gap-2 min-h-[100px] p-2 rounded-xl border-2 border-dashed border-amber-300 dark:border-border/60 bg-amber-100/40 dark:bg-muted/20 transition-colors hover:bg-amber-100/60 dark:hover:bg-muted/30 relative group/canvas">
+                            <SortableContext
+                                items={items.map(i => i.id)}
+                                strategy={rectSortingStrategy}
+                            >
+                                {/* Canvas grid uses 2-column layout to match snippet bank. */}
+                            <div className="grid grid-cols-2 auto-rows-[minmax(32px,auto)] items-start gap-2 min-h-[100px] p-2 rounded-xl border-2 border-dashed border-amber-300 dark:border-border/60 bg-amber-100/40 dark:bg-surface-raised/60 transition-colors hover:bg-amber-100/60 dark:hover:bg-surface-overlay/60 relative group/canvas">
 
                                 {items.length === 0 && (
                                     <div className="w-full text-center py-10 text-muted-foreground text-sm select-none italic flex flex-col items-center gap-2">

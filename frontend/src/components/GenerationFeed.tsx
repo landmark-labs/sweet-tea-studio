@@ -100,16 +100,16 @@ export const GenerationFeed = React.memo(function GenerationFeed({ items, onSele
   const hasStats = activeItem && (activeItem.elapsedMs || activeItem.iterationsPerSecond);
 
   return (
-    <div className="w-full h-full pointer-events-auto">
-      {activeItem ? (
-        <div className="shadow-lg border border-blue-100 bg-blue-50/95 dark:border-border/60 dark:bg-card/95 backdrop-blur overflow-hidden rounded-lg">
+      <div className="w-full h-full pointer-events-auto">
+        {activeItem ? (
+        <div className="shadow-xl border border-blue-100 bg-blue-50/95 dark:border-border dark:bg-surface/95 ring-1 ring-black/5 dark:ring-white/5 backdrop-blur overflow-hidden rounded-lg">
           {/* Header */}
-          <div className="flex items-center justify-between px-3 py-2 border-b border-slate-200 bg-slate-50/50 dark:border-border/60 dark:bg-muted/20">
-            <div className="text-xs font-semibold text-foreground/80 flex items-center gap-2">
+          <div className="flex items-center justify-between px-3 py-2 border-b border-blue-100/80 bg-blue-50/60 dark:border-border/70 dark:bg-surface-raised/70">
+            <div className="text-xs font-semibold text-foreground flex items-center gap-2">
               <span className={cn("w-2 h-2 rounded-full", isRunning ? "bg-green-500 animate-pulse" : "bg-muted-foreground/40")} />
               generation status
             </div>
-            <Badge variant="outline" className="text-[10px] text-muted-foreground h-5 px-1.5 font-normal">
+            <Badge variant="outline" className="text-[10px] text-muted-foreground h-5 px-2 font-medium">
               job #{activeItem.jobId}
             </Badge>
           </div>
@@ -119,7 +119,7 @@ export const GenerationFeed = React.memo(function GenerationFeed({ items, onSele
             {/* Preview Image */}
             {activeItem.previewBlob ? (
               <div
-                className="relative rounded overflow-hidden bg-muted/20 border border-border/60 mx-auto"
+                className="relative rounded overflow-hidden bg-surface-raised/70 border border-border/60 mx-auto"
                 style={previewBoxStyle}
               >
                 <img src={activeItem.previewBlob} alt="Live Preview" className="w-full h-full object-contain" />
@@ -131,7 +131,7 @@ export const GenerationFeed = React.memo(function GenerationFeed({ items, onSele
               </div>
             ) : (activeItem.previewPaths?.[0] || activeItem.previewPath) ? (
               <div
-                className="relative w-full h-72 rounded overflow-hidden bg-muted/20 border border-border/60 cursor-pointer hover:opacity-90 transition-opacity"
+                className="relative w-full h-72 rounded overflow-hidden bg-surface-raised/70 border border-border/60 cursor-pointer hover:bg-surface-overlay/60 transition-colors"
                 onClick={() => {
                   const path = activeItem.previewPaths?.[0] || activeItem.previewPath;
                   if (path) onSelectPreview?.({ ...activeItem, selectedPath: path });
@@ -143,14 +143,14 @@ export const GenerationFeed = React.memo(function GenerationFeed({ items, onSele
                 </div>
               </div>
             ) : (
-              <div className="w-full h-72 rounded bg-muted/20 border border-border/60" />
+              <div className="w-full h-72 rounded bg-surface-raised/70 border border-border/60" />
             )}
 
             {/* Progress */}
             <div className="space-y-1">
-              <div className="flex justify-between text-[10px] text-muted-foreground tracking-wider font-semibold">
+              <div className="flex justify-between text-[10px] text-foreground/80 tracking-wider font-semibold">
                 <span className="lowercase">{activeItem.status}</span>
-                <span>{Math.round(activeItem.progress)}%</span>
+                <span className="text-foreground">{Math.round(activeItem.progress)}%</span>
               </div>
               <Progress value={activeItem.progress} className="h-1.5" />
 
@@ -197,7 +197,7 @@ export const GenerationFeed = React.memo(function GenerationFeed({ items, onSele
           </div>
         </div>
       ) : (
-        <div className="shadow-lg border border-border/60 bg-card/95 backdrop-blur overflow-hidden rounded-lg" style={{ width: '384px', height: '100%', display: 'flex', flexDirection: 'column' }}>
+        <div className="shadow-lg border border-border/80 bg-card/95 ring-1 ring-black/5 dark:ring-white/5 backdrop-blur overflow-hidden rounded-lg" style={{ width: '384px', height: '100%', display: 'flex', flexDirection: 'column' }}>
           <div className="flex-1 p-4 flex flex-col items-center justify-center text-center space-y-2 text-muted-foreground">
             <div className="w-8 h-8 rounded-full bg-muted/30 flex items-center justify-center mb-1">
               <div className="w-2 h-2 rounded-full bg-muted-foreground/40" />
