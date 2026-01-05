@@ -1143,7 +1143,19 @@ export const ImageViewer = React.memo(function ImageViewer({
                             <div className="bg-white/10 text-white px-3 py-1 rounded backdrop-blur-md text-xs font-mono">{Math.round(scale * 100)}%</div>
                             <button onClick={() => setLightboxOpen(false)} className="text-white hover:text-red-400"><X className="w-8 h-8" /></button>
                         </div>
-                        <div className="w-full h-full flex items-center justify-center" onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp} style={{ cursor: scale > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default' }}>
+                        <div
+                            className="w-full h-full flex items-center justify-center"
+                            onMouseDown={handleMouseDown}
+                            onMouseMove={handleMouseMove}
+                            onMouseUp={handleMouseUp}
+                            onMouseLeave={handleMouseUp}
+                            onDoubleClick={(e) => {
+                                if (e.target === e.currentTarget) {
+                                    toggleFullScreen();
+                                }
+                            }}
+                            style={{ cursor: scale > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default' }}
+                        >
                             {isVideo ? (
                                 <video
                                     src={imageUrl}
