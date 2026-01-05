@@ -652,9 +652,9 @@ export function ImageUpload({
                             {/* Show project folder images when project & folder selected */}
                             {selectedProjectId && selectedFolder && projectFolderImages.length > 0 && (
                                 <div className="grid grid-cols-5 gap-3">
-                                    {projectFolderImages.map((img, i) => (
+                                    {projectFolderImages.map((img) => (
                                         <button
-                                            key={i}
+                                            key={img.path}
                                             type="button"
                                             onClick={() => selectGalleryImage(img.path)}
                                             className="aspect-square relative group bg-white border rounded-md overflow-hidden hover:ring-2 hover:ring-blue-500 focus:outline-none"
@@ -682,9 +682,9 @@ export function ImageUpload({
                             {/* Show project gallery images when project selected but no specific folder */}
                             {selectedProjectId && !selectedFolder && projectGalleryImages.length > 0 && (
                                 <div className="grid grid-cols-5 gap-3">
-                                    {projectGalleryImages.map((path, i) => (
+                                    {projectGalleryImages.map((path) => (
                                         <button
-                                            key={i}
+                                            key={path}
                                             type="button"
                                             onClick={() => selectGalleryImage(path)}
                                             className="aspect-square relative group bg-white border rounded-md overflow-hidden hover:ring-2 hover:ring-blue-500 focus:outline-none"
@@ -736,9 +736,9 @@ export function ImageUpload({
                                 <>
                                     <div>
                                         <div className="grid grid-cols-5 gap-3">
-                                            {galleryImages.map((path, i) => (
+                                            {galleryImages.map((path) => (
                                                 <button
-                                                    key={i}
+                                                    key={path}
                                                     type="button"
                                                     onClick={() => selectGalleryImage(path)}
                                                     className="aspect-square relative group bg-white border rounded-md overflow-hidden hover:ring-2 hover:ring-green-500 focus:outline-none"
