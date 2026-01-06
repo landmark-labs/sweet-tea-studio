@@ -340,6 +340,21 @@ class ComfyUILauncher:
         remaining = self._cooldown_seconds - elapsed
         return max(0.0, remaining)
 
+    def is_externally_running(self) -> bool:
+        """Check if ComfyUI is running on the port but not managed by us."""
+        # If we have our own process handle and it's alive, it's not external
+        if self._process is not None and self._process.poll() is None:
+            return False
+        
+        # Check if something is on the port
+        config = self._resolve_cached_config() or self.detect_comfyui()
+        if config and config.port:
+            proc = self._find_process_by_port(config.port)
+            if proc:
+                # Something is listening, but we don't have a subprocess handle
+                return True
+        return False
+
     def get_status(self) -> dict:
         """Return detailed status for the managed process."""
         config = self.get_config()
@@ -514,6 +529,82 @@ class ComfyUILauncher:
                     except:
                         pass
                     self._log_handle = None
+
+    async def adopt(self) -> dict:
+        """
+        Adopt an externally-started ComfyUI process.
+        
+        Stops the external process and relaunches it with log capture so that
+        Sweet Tea Studio has visibility into console output.
+        """
+        async with self._lock:
+            if not self.is_externally_running():
+                return {
+                    "success": False,
+                    "adopted": False,
+                    "message": "No external ComfyUI process to adopt"
+                }
+            
+            config = self._resolve_cached_config() or self.detect_comfyui()
+            if not config or not config.port:
+                return {
+                    "success": False,
+                    "adopted": False,
+                    "error": "Cannot determine ComfyUI configuration"
+                }
+            
+            # Find and stop the external process
+            proc = self._find_process_by_port(config.port)
+            if not proc:
+                return {
+                    "success": False,
+                    "adopted": False,
+                    "error": "External process disappeared before adoption"
+                }
+            
+            external_pid = proc.pid
+            print(f"[ComfyUI Adopt] Stopping external ComfyUI process (PID: {external_pid})...")
+            
+            try:
+                proc.terminate()
+                try:
+                    proc.wait(timeout=10)
+                except psutil.TimeoutExpired:
+                    proc.kill()
+                    proc.wait(timeout=5)
+            except (psutil.NoSuchProcess, psutil.AccessDenied) as e:
+                return {
+                    "success": False,
+                    "adopted": False,
+                    "error": f"Failed to stop external process: {e}"
+                }
+            
+            # Clear port cache after stopping
+            self._port_check_cache = {"result": None, "timestamp": 0}
+            
+            # Brief pause to ensure port is released
+            await asyncio.sleep(1)
+        
+        # Launch with log capture (outside the lock to avoid nested lock)
+        print("[ComfyUI Adopt] Relaunching ComfyUI with log capture...")
+        result = await self.launch()
+        
+        if result.get("success"):
+            print(f"[ComfyUI Adopt] Successfully adopted ComfyUI (new PID: {result.get('pid')})")
+            return {
+                "success": True,
+                "adopted": True,
+                "message": f"Adopted external ComfyUI (was PID {external_pid}, now PID {result.get('pid')})",
+                "previous_pid": external_pid,
+                "new_pid": result.get("pid")
+            }
+        else:
+            return {
+                "success": False,
+                "adopted": False,
+                "error": f"Stopped external process but failed to relaunch: {result.get('error')}",
+                "previous_pid": external_pid
+            }
 
 
 # Global launcher instance

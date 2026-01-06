@@ -10,6 +10,7 @@ from app.core.error_handlers import register_gallery_error_handlers
 from app.core.websockets import manager
 from app.core.version import get_git_sha_short
 from app.services.comfy_watchdog import watchdog
+from app.services.comfy_launcher import comfy_launcher
 from app.db.init_db import init_db
 
 app = FastAPI(title="Sweet Tea Studio Backend")
@@ -21,7 +22,15 @@ async def on_startup():
     start_tag_cache_refresh_background()  # Populate tags.db for autocomplete
     manager.loop = asyncio.get_running_loop()
     await watchdog.start()
-
+    
+    # Adopt externally-started ComfyUI for log visibility
+    if comfy_launcher.is_externally_running():
+        print("[Startup] Detected externally-running ComfyUI, adopting for log capture...")
+        result = await comfy_launcher.adopt()
+        if result.get("adopted"):
+            print(f"[Startup] {result.get('message')}")
+        else:
+            print(f"[Startup] Adoption failed: {result.get('error', result.get('message'))}")
 
 @app.on_event("shutdown")
 async def on_shutdown():
