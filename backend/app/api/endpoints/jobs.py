@@ -136,8 +136,34 @@ def read_job(job_id: int):
 async def websocket_endpoint(websocket: WebSocket, job_id: str):
     """
     Real-time status updates for a specific job.
+    Sends current job status immediately upon connection to handle race conditions
+    where the job may have already completed/failed before the client connected.
     """
     await manager.connect(websocket, job_id)
+    
+    # Immediately send current job status to handle race condition where job
+    # may have already completed/failed before client connected
+    try:
+        job_id_int = int(job_id)
+        with Session(db_engine) as session:
+            job = session.get(Job, job_id_int)
+            if job and job.status in ["completed", "failed", "cancelled"]:
+                # Job already finished - send status immediately
+                await websocket.send_json({
+                    "type": "status",
+                    "status": job.status,
+                    "job_id": job_id_int
+                })
+                if job.status == "failed" and job.error:
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": job.error,
+                        "job_id": job_id_int
+                    })
+    except (ValueError, Exception) as e:
+        # Non-integer job_id or DB error - continue normally
+        print(f"Warning: Could not check initial job status for {job_id}: {e}")
+    
     try:
         while True:
             # Keep connection alive
@@ -145,3 +171,4 @@ async def websocket_endpoint(websocket: WebSocket, job_id: str):
             manager.mark_seen(websocket)
     except WebSocketDisconnect:
         manager.disconnect(websocket, job_id)
+
