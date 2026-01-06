@@ -10,7 +10,7 @@ import time
 import socket
 import os
 from dataclasses import dataclass, field
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Callable
 from app.models.engine import Engine
 
 
@@ -166,6 +166,124 @@ class ComfyClient:
         except Exception as e:
             print(f"Failed to interrupt: {e}")
 
+    def get_queue(self) -> Dict[str, Any]:
+        """Get the current ComfyUI execution queue."""
+        try:
+            with urllib.request.urlopen(self._get_url("/queue"), timeout=5) as response:
+                return json.loads(response.read())
+        except urllib.error.HTTPError as e:
+            error_body = e.read().decode("utf-8")
+            raise ComfyResponseError(f"ComfyUI Error {e.code}: {error_body}") from e
+        except urllib.error.URLError as e:
+            raise ComfyConnectionError(f"Could not retrieve queue from {self.engine.base_url}") from e
+
+    def update_queue(self, *, clear: bool = False, delete: Optional[List[object]] = None) -> Dict[str, Any]:
+        """
+        Update the ComfyUI queue.
+
+        Args:
+            clear: If True, clear the pending queue.
+            delete: If provided, delete these queue items (token is ComfyUI-defined).
+
+        Returns:
+            Parsed JSON response from ComfyUI.
+        """
+        payload: Dict[str, Any] = {}
+        if clear:
+            payload["clear"] = True
+        if delete:
+            payload["delete"] = delete
+
+        data = json.dumps(payload).encode("utf-8")
+        try:
+            req = urllib.request.Request(self._get_url("/queue"), data=data, method="POST")
+            req.add_header("Content-Type", "application/json")
+            with urllib.request.urlopen(req, timeout=10) as response:
+                body = response.read()
+                return json.loads(body) if body else {"ok": True}
+        except urllib.error.HTTPError as e:
+            error_body = e.read().decode("utf-8")
+            raise ComfyResponseError(f"ComfyUI Error {e.code}: {error_body}") from e
+        except urllib.error.URLError as e:
+            raise ComfyConnectionError(f"Could not update queue on {self.engine.base_url}") from e
+
+    @staticmethod
+    def _extract_queue_entries(queue_items: object) -> List[Dict[str, object]]:
+        """
+        Normalize ComfyUI queue entries into dicts:
+          { "prompt_id": <str>, "delete_token": <object> }
+
+        ComfyUI has changed queue payload shapes over time; keep this permissive.
+        """
+        entries: List[Dict[str, object]] = []
+        if not isinstance(queue_items, list):
+            return entries
+
+        for item in queue_items:
+            prompt_id: Optional[str] = None
+            delete_token: object | None = None
+
+            if isinstance(item, (list, tuple)):
+                if item:
+                    delete_token = item[0]
+                for element in item:
+                    if isinstance(element, str) and element:
+                        prompt_id = element
+                        break
+
+            elif isinstance(item, dict):
+                raw_prompt_id = item.get("prompt_id") or item.get("promptId") or item.get("id")
+                if isinstance(raw_prompt_id, str) and raw_prompt_id:
+                    prompt_id = raw_prompt_id
+                delete_token = item.get("id") or prompt_id
+
+            if isinstance(prompt_id, str) and prompt_id and delete_token is not None:
+                entries.append({"prompt_id": prompt_id, "delete_token": delete_token})
+
+        return entries
+
+    def cancel_prompt(self, prompt_id: str) -> Dict[str, Any]:
+        """
+        Best-effort cancel for a single prompt:
+        - If prompt is currently running, interrupt execution
+        - If prompt is pending, remove it from the queue
+
+        Returns:
+            Dict with diagnostic info about what was attempted.
+        """
+        result: Dict[str, Any] = {
+            "prompt_id": prompt_id,
+            "interrupted": False,
+            "deleted": False,
+            "delete_tokens": [],
+        }
+        if not isinstance(prompt_id, str) or not prompt_id:
+            return result
+
+        queue = self.get_queue()
+        running_entries = self._extract_queue_entries(queue.get("queue_running"))
+        pending_entries = self._extract_queue_entries(queue.get("queue_pending"))
+
+        if any(entry.get("prompt_id") == prompt_id for entry in running_entries):
+            self.interrupt()
+            result["interrupted"] = True
+
+        delete_tokens = [
+            entry.get("delete_token")
+            for entry in (pending_entries + running_entries)
+            if entry.get("prompt_id") == prompt_id and entry.get("delete_token") is not None
+        ]
+        result["delete_tokens"] = delete_tokens
+
+        if delete_tokens:
+            try:
+                self.update_queue(delete=delete_tokens)
+                result["deleted"] = True
+            except Exception:
+                result["deleted"] = False
+
+        return result
+
     def get_object_info(self) -> Dict[str, Any]:
         """Retrieve node definitions from ComfyUI."""
         try:
@@ -232,6 +350,7 @@ class ComfyClient:
         on_image_callback=None,
         track_timing: bool = False,
         workflow_graph: Optional[Dict[str, Any]] = None,
+        cancel_check: Optional[Callable[[], bool]] = None,
     ) -> tuple[List[Dict[str, Any]], Optional[ExecutionMetrics]]:
         """
         Wait for job completion and retrieve output images.
@@ -293,6 +412,10 @@ class ComfyClient:
 
         try:
             while True:
+                if cancel_check and cancel_check():
+                    _close_ws()
+                    return [], None
+
                 try:
                     out = self.ws.recv()
                     backoff = self._default_backoff
@@ -306,6 +429,9 @@ class ComfyClient:
                     # If execution already completed and we timeout, we're done
                     if execution_complete:
                         break
+                    if cancel_check and cancel_check():
+                        _close_ws()
+                        return [], None
                     continue
                 except (websocket.WebSocketException, ConnectionResetError, socket.error):
                     # Hard disconnect; re-establish the connection and back off so we

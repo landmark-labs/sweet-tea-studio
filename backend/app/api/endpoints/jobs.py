@@ -20,7 +20,7 @@ from app.models.workflow import WorkflowTemplate
 from app.models.engine import Engine
 from app.db.engine import engine as db_engine
 from app.core.websockets import manager
-from app.services.job_processor import process_job
+from app.services.job_processor import process_job, signal_job_cancel
 
 # ===== DIAGNOSTIC MODE TOGGLE =====
 DIAGNOSTIC_MODE = True
@@ -81,15 +81,12 @@ def cancel_job(job_id: int):
         if job.status in ["completed", "failed", "cancelled"]:
             return job
 
-        # If running, try to interrupt via ComfyClient
-        if job.status == "running":
-            engine = session.get(Engine, job.engine_id)
-            if engine:
-                client = ComfyClient(engine)
-                try:
-                    client.interrupt()
-                except Exception as e:
-                    print(f"Failed to interrupt job {job_id}: {e}")
+        previous_status = job.status
+        prompt_id = job.comfy_prompt_id
+        engine = session.get(Engine, job.engine_id)
+
+        # Signal any in-flight job processor loops to stop ASAP.
+        signal_job_cancel(job_id)
 
         job.status = "cancelled"
         session.add(job)
@@ -98,6 +95,22 @@ def cancel_job(job_id: int):
         
         manager.broadcast_sync({"type": "status", "status": "cancelled", "job_id": job_id}, str(job_id))
         manager.close_job_sync(str(job_id))
+
+        # Best-effort: stop the matching prompt in ComfyUI and remove it from the queue.
+        # This is critical for batch mode where multiple prompts may already be queued.
+        if engine:
+            try:
+                client = ComfyClient(engine)
+                if prompt_id:
+                    result = client.cancel_prompt(prompt_id)
+                    if not (result.get("deleted") or result.get("interrupted")) and previous_status == "running":
+                        # Fallback: if we couldn't confidently match a running prompt, still try a global interrupt.
+                        client.interrupt()
+                elif previous_status == "running":
+                    client.interrupt()
+            except Exception as e:
+                print(f"Failed to cancel ComfyUI prompt for job {job_id}: {e}")
+
         return job
 
 

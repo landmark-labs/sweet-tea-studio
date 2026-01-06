@@ -61,6 +61,26 @@ _sequence_pattern_cache_max = int(os.getenv("SWEET_TEA_SEQ_PATTERN_CACHE_MAX", "
 _sequence_cache_ttl_s = int(os.getenv("SWEET_TEA_SEQ_CACHE_TTL_S", "3600"))
 _sequence_cache_prune_interval_s = int(os.getenv("SWEET_TEA_SEQ_CACHE_PRUNE_INTERVAL_S", "60"))
 
+_cancel_events: dict[int, threading.Event] = {}
+_cancel_events_lock = threading.Lock()
+
+
+def signal_job_cancel(job_id: int) -> None:
+    """Signal a running job processor to stop promptly."""
+    with _cancel_events_lock:
+        event = _cancel_events.setdefault(job_id, threading.Event())
+    event.set()
+
+
+def _get_cancel_event(job_id: int) -> threading.Event:
+    with _cancel_events_lock:
+        return _cancel_events.setdefault(job_id, threading.Event())
+
+
+def _clear_cancel_event(job_id: int) -> None:
+    with _cancel_events_lock:
+        _cancel_events.pop(job_id, None)
+
 
 def _prune_sequence_caches(now: float) -> None:
     global _sequence_cache_last_prune
@@ -1017,31 +1037,59 @@ def _store_execution_stats(
 
 
 def process_job(job_id: int):
+    cancel_event = _get_cancel_event(job_id)
     with Session(db_engine) as session:
         # Re-fetch objects within session
         job = session.get(Job, job_id)
         if not job:
+            _clear_cancel_event(job_id)
             return
-        
+
         # Skip execution if job was already cancelled (e.g., batch cancel from frontend)
-        if job.status == "cancelled":
+        if job.status == "cancelled" or cancel_event.is_set():
             print(f"[JobProcessor] Job {job_id} already cancelled, skipping execution")
             manager.close_job_sync(str(job_id))
+            _clear_cancel_event(job_id)
             return
-        
-        # We need engine and workflow too. 
-        # Ideally we stored engine_id. 
+
+        last_cancel_db_check = 0.0
+        cancelled_in_db = False
+
+        def cancel_check() -> bool:
+            nonlocal last_cancel_db_check, cancelled_in_db
+            if cancel_event.is_set():
+                return True
+
+            now = time.time()
+            if now - last_cancel_db_check < 1.0:
+                return cancelled_in_db
+
+            last_cancel_db_check = now
+            try:
+                with Session(db_engine) as cancel_session:
+                    job_row = cancel_session.get(Job, job_id)
+                    cancelled_in_db = bool(job_row and job_row.status == "cancelled")
+            except Exception:
+                cancelled_in_db = False
+
+            if cancelled_in_db:
+                cancel_event.set()
+            return cancelled_in_db
+
+        # We need engine and workflow too.
+        # Ideally we stored engine_id.
         engine = session.get(Engine, job.engine_id)
-        
+
         # Workflow - fetch from DB
         workflow = session.get(WorkflowTemplate, job.workflow_template_id)
-        
+
         if not engine or not workflow:
             job.status = "failed"
             job.error = "Engine or Workflow not found during execution"
             session.commit()
             manager.broadcast_sync({"type": "error", "message": job.error}, str(job_id))
             manager.close_job_sync(str(job_id))
+            _clear_cancel_event(job_id)
             return
 
         final_graph: dict | None = None
@@ -1058,9 +1106,9 @@ def process_job(job_id: int):
             job.started_at = datetime.utcnow()
             session.add(job)
             session.commit()
-            
+
             manager.broadcast_sync({"type": "status", "status": "running", "job_id": job_id}, str(job_id))
-             
+
             client = ComfyClient(engine)
             final_graph = copy.deepcopy(workflow.graph_json)
              
@@ -1376,6 +1424,11 @@ def process_job(job_id: int):
                 except Exception as e:
                     print(f"Failed to process streamed image: {e}")
 
+            if cancel_check():
+                print(f"[JobProcessor] Job {job_id} cancelled before queueing prompt")
+                manager.close_job_sync(str(job_id))
+                return
+
             try:
                 prompt_id = client.queue_prompt(final_graph)
             except ComfyResponseError as e:
@@ -1387,9 +1440,18 @@ def process_job(job_id: int):
             job.comfy_prompt_id = prompt_id
             session.add(job)
             session.commit()
-            
+
+            if cancel_check():
+                print(f"[JobProcessor] Job {job_id} cancelled after queueing prompt {prompt_id}, stopping")
+                try:
+                    client.cancel_prompt(prompt_id)
+                except Exception:
+                    pass
+                manager.close_job_sync(str(job_id))
+                return
+             
             manager.broadcast_sync({"type": "started", "prompt_id": prompt_id}, str(job_id))
-            
+             
             # Pass callback to get_images - enable timing tracking for execution stats
             outputs, execution_metrics = client.get_images(
                 prompt_id,
@@ -1397,12 +1459,13 @@ def process_job(job_id: int):
                 on_image_callback=on_image_captured,
                 track_timing=True,
                 workflow_graph=final_graph,
+                cancel_check=cancel_check,
             )
             
             # CRITICAL: Re-check cancellation after execution completes
             # This catches cancellations that happened during ComfyUI execution
             session.refresh(job)
-            if job.status == "cancelled":
+            if job.status == "cancelled" or cancel_event.is_set():
                 print(f"[JobProcessor] Job {job_id} was cancelled during execution, stopping")
                 manager.close_job_sync(str(job_id))
                 return
@@ -1685,3 +1748,6 @@ def process_job(job_id: int):
             session.commit()
             manager.broadcast_sync({"type": "error", "message": str(e)}, str(job_id))
             manager.close_job_sync(str(job_id))
+
+        finally:
+            _clear_cancel_event(job_id)
