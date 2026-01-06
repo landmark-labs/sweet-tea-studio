@@ -567,6 +567,7 @@ export default function PromptStudio() {
         folder: galleryFolder || null,
         collapsed: galleryCollapsed,
       },
+      media_tray: useMediaTrayStore.getState().items.map(({ path, filename, kind }) => ({ path, filename, kind })),
     };
   }, [store, selectedEngineId, selectedWorkflowId, selectedProjectId, projects, generationTarget, library]);
 
@@ -630,6 +631,17 @@ export default function PromptStudio() {
       }
       if (payload.project_gallery.collapsed !== undefined) {
         localStorage.setItem("ds_project_gallery_collapsed", String(Boolean(payload.project_gallery.collapsed)));
+      }
+    }
+
+    // Restore media tray items
+    if (payload.media_tray) {
+      const { clearAll, addItems } = useMediaTrayStore.getState();
+      clearAll();
+      if (payload.media_tray.length > 0) {
+        // Add items in reverse order since addItems prepends
+        const itemsToAdd = [...payload.media_tray].reverse();
+        addItems(itemsToAdd);
       }
     }
 
@@ -2359,14 +2371,21 @@ export default function PromptStudio() {
     const pendingJobs = [...pendingJobIdsRef.current];
     pendingJobIdsRef.current = [];
 
-    // Cancel all pending backend jobs in parallel (fire-and-forget)
-    for (const jobId of pendingJobs) {
-      api.cancelJob(jobId).catch(err =>
-        console.error(`Failed to cancel pending job ${jobId}:`, err)
-      );
-    }
+    // Cancel queued jobs first so their Comfy prompts are removed before we interrupt the current run.
+    // This prevents Comfy from immediately advancing to the next queued prompt after an interrupt.
+    await Promise.all(
+      pendingJobs.map((jobId) =>
+        api.cancelJob(jobId).catch((err) =>
+          console.error(`Failed to cancel pending job ${jobId}:`, err)
+        )
+      )
+    );
 
-    if (!lastJobId) return;
+    if (!lastJobId) {
+      setGenerationState("cancelled");
+      setStatusLabel("cancelled");
+      return;
+    }
     try {
       await api.cancelJob(lastJobId);
       setGenerationState("cancelled");

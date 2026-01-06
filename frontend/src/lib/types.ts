@@ -322,7 +322,13 @@ export interface CanvasPayload {
         folder?: string | null;
         collapsed?: boolean;
     };
+    media_tray?: Array<{
+        path: string;
+        filename: string;
+        kind: "image" | "video";
+    }>;
 }
+
 
 export interface Canvas {
     id: number;
