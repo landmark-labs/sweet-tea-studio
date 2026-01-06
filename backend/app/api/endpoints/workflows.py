@@ -610,6 +610,103 @@ def reorder_workflows(items: List[WorkflowReorderItem]):
         return {"ok": True, "updated": len(items)}
 
 
+def _merge_schemas(
+    source_schema: Dict[str, Any],
+    target_schema: Dict[str, Any],
+    target_id_map: Dict[str, str],
+    removed_node_ids: List[str],
+) -> Dict[str, Any]:
+    """
+    Merge input_schema from source and target workflows for composition.
+    
+    - Source schema entries are copied as-is (node IDs unchanged)
+    - Target schema entries have their x_node_id remapped using target_id_map
+    - __bypass_* keys are remapped with new node IDs
+    - __node_order is merged (source first, then remapped target, excluding removed nodes)
+    - Entries for removed nodes (bridge nodes) are skipped
+    """
+    merged: Dict[str, Any] = {}
+    
+    # Helper to check if a node ID was removed
+    removed_set = set(removed_node_ids)
+    
+    # 1. Copy source schema entries directly
+    for key, value in source_schema.items():
+        if key.startswith("__"):
+            continue  # Handle meta keys separately
+        if not isinstance(value, dict):
+            continue
+        merged[key] = value.copy()
+    
+    # 2. Copy target schema entries with remapped node IDs
+    for key, value in target_schema.items():
+        if key.startswith("__"):
+            continue  # Handle meta keys separately
+        if not isinstance(value, dict):
+            continue
+            
+        old_node_id = str(value.get("x_node_id", ""))
+        new_node_id = target_id_map.get(old_node_id)
+        
+        # Skip if node was removed (bridge node) or not in the map
+        if new_node_id in removed_set:
+            continue
+        
+        if new_node_id:
+            # Create a new entry with remapped node ID
+            new_value = value.copy()
+            new_value["x_node_id"] = new_node_id
+            
+            # Remap the key if it contains the node ID (e.g., "ClassName#12.field")
+            if f"#{old_node_id}." in key:
+                new_key = key.replace(f"#{old_node_id}.", f"#{new_node_id}.")
+            else:
+                new_key = key
+            
+            merged[new_key] = new_value
+        else:
+            # Fallback: copy as-is if no mapping found
+            merged[key] = value.copy()
+    
+    # 3. Handle __bypass_* keys from both schemas
+    for key, value in source_schema.items():
+        if key.startswith("__bypass_"):
+            merged[key] = value.copy() if isinstance(value, dict) else value
+            
+    for key, value in target_schema.items():
+        if key.startswith("__bypass_"):
+            # Extract old node ID and remap
+            old_node_id = key.replace("__bypass_", "")
+            new_node_id = target_id_map.get(old_node_id)
+            
+            if new_node_id and new_node_id not in removed_set:
+                new_key = f"__bypass_{new_node_id}"
+                new_value = value.copy() if isinstance(value, dict) else value
+                if isinstance(new_value, dict) and "x_node_id" in new_value:
+                    new_value["x_node_id"] = new_node_id
+                merged[new_key] = new_value
+    
+    # 4. Merge __node_order (source first, then remapped target, excluding removed)
+    source_order = source_schema.get("__node_order", [])
+    target_order = target_schema.get("__node_order", [])
+    
+    merged_order = list(source_order)  # Copy source order
+    for old_id in target_order:
+        new_id = target_id_map.get(str(old_id))
+        if new_id and new_id not in removed_set:
+            merged_order.append(new_id)
+    
+    merged["__node_order"] = merged_order
+    
+    # 5. Copy other meta fields
+    if "__schema_version" in source_schema:
+        merged["__schema_version"] = source_schema["__schema_version"]
+    elif "__schema_version" in target_schema:
+        merged["__schema_version"] = target_schema["__schema_version"]
+    
+    return merged
+
+
 class WorkflowComposeRequest(BaseModel):
     source_id: int
     target_id: int
@@ -636,13 +733,16 @@ def compose_workflows(req: WorkflowComposeRequest):
             warning_text = " | ".join(merge_result.warnings)
             logger.warning(f"Compose merge incomplete: {warning_text}")
         
-        # Verify engine for schema gen
-        engine = session.exec(select(Engine)).first()
-        client = ComfyClient(engine) if engine else None
-        object_info = client.get_object_info() if client else {}
-        
-        # Schema
-        schema = generate_schema_from_graph(merge_result.graph, object_info)
+        # Merge schemas from both workflows instead of regenerating
+        # This preserves pipe editor settings (bypasses, aliases, visibility, etc.)
+        source_schema = w_source.input_schema or {}
+        target_schema = w_target.input_schema or {}
+        schema = _merge_schemas(
+            source_schema,
+            target_schema,
+            merge_result.target_id_map,
+            merge_result.removed_nodes,
+        )
         
         # Build description with merge status
         base_description = _clean_description(req.description) or f"Composed from '{w_source.name}' + '{w_target.name}'"

@@ -34,6 +34,7 @@ class MergeResult:
     connections_made: int
     removed_nodes: List[str] = field(default_factory=list)
     warnings: List[str] = field(default_factory=list)
+    target_id_map: Dict[str, str] = field(default_factory=dict)  # old_id -> new_id for target workflow
 
 
 class WorkflowMerger:
@@ -193,4 +194,5 @@ class WorkflowMerger:
             connections_made=connections_made,
             removed_nodes=removed_nodes,
             warnings=warnings,
+            target_id_map=target_map,
         )
