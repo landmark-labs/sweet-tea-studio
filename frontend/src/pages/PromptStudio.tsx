@@ -1398,7 +1398,8 @@ export default function PromptStudio() {
         return lower.endsWith('.mp4') || lower.endsWith('.webm') || lower.endsWith('.mov') || lower.endsWith('.mkv') || lower.endsWith('.avi');
       };
 
-      const hasVideoField = findMediaFieldsInSchema(schema, "video").length > 0;
+      const schemaNodeOrder = Array.isArray(schema.__node_order) ? schema.__node_order.map(String) : [];
+      const hasVideoField = findMediaFieldsInSchema(schema, "video", schemaNodeOrder).length > 0;
       const isVideo = loadParams.image?.path ? isVideoPath(loadParams.image.path) : false;
 
       // Determine what kind of media slot we want to target
@@ -1406,7 +1407,7 @@ export default function PromptStudio() {
       // Otherwise default to image slots (unless it's a video file and we want to prevent mismatch?)
       const mediaType = (isVideo && hasVideoField) ? "video" : "image";
 
-      const mediaFields = findMediaFieldsInSchema(schema, mediaType);
+      const mediaFields = findMediaFieldsInSchema(schema, mediaType, schemaNodeOrder);
       console.log(`[LoadParams] Detected media type: ${mediaType}, fields:`, mediaFields);
 
       if (mediaFields.length > 0) {

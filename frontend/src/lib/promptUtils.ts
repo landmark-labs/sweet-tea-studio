@@ -275,8 +275,9 @@ const resolveMediaKind = (field: { x_media_kind?: unknown }): MediaKind | null =
 };
 
 export function findMediaFieldsInSchema(
-    schema: Record<string, { widget?: string; title?: string; x_media_kind?: unknown; x_class_type?: unknown;[k: string]: unknown }>,
-    kind: MediaKind = "image"
+    schema: Record<string, { widget?: string; title?: string; x_media_kind?: unknown; x_class_type?: unknown; x_node_id?: string | number;[k: string]: unknown }>,
+    kind: MediaKind = "image",
+    nodeOrder?: string[]
 ): string[] {
     const mediaFields: string[] = [];
 
@@ -310,11 +311,29 @@ export function findMediaFieldsInSchema(
         }
     }
 
+    // Sort by nodeOrder if provided (respects user-defined order from pipe editor)
+    if (nodeOrder && nodeOrder.length > 0) {
+        mediaFields.sort((a, b) => {
+            const aNodeId = String(schema[a]?.x_node_id ?? "");
+            const bNodeId = String(schema[b]?.x_node_id ?? "");
+            const aIndex = nodeOrder.indexOf(aNodeId);
+            const bIndex = nodeOrder.indexOf(bNodeId);
+            // If both found in nodeOrder, sort by position
+            if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
+            // If only one found, prioritize the one in nodeOrder
+            if (aIndex !== -1) return -1;
+            if (bIndex !== -1) return 1;
+            // Neither in nodeOrder, keep original order
+            return 0;
+        });
+    }
+
     return mediaFields;
 }
 
 export function findImageFieldsInSchema(
-    schema: Record<string, { widget?: string; title?: string; x_media_kind?: unknown;[k: string]: unknown }>
+    schema: Record<string, { widget?: string; title?: string; x_media_kind?: unknown; x_node_id?: string | number;[k: string]: unknown }>,
+    nodeOrder?: string[]
 ): string[] {
-    return findMediaFieldsInSchema(schema, "image");
+    return findMediaFieldsInSchema(schema, "image", nodeOrder);
 }
