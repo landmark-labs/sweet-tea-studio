@@ -185,6 +185,51 @@ def _get_next_sequence_start(session: Session, filename_prefix: str, reserve: in
         _sequence_cache[filename_prefix] = {"next": start + reserve, "last_used": now}
         return start
 
+
+def _derive_output_filename(
+    original_name: str | None,
+    seq_num: int,
+    ext: str,
+    fallback_prefix: str,
+    save_dir: str,
+) -> str:
+    """
+    Derive output filename, preserving save node naming pattern if present.
+    
+    If original_name has a pattern like 'Prefix_00001.mp4', extract 'Prefix_'
+    and generate 'Prefix_{seq_num:05d}.mp4' (matching the zero-padding width).
+    
+    Falls back to sweet-tea naming '{fallback_prefix}-{seq_num:04d}.{ext}'.
+    """
+    if not original_name:
+        return f"{fallback_prefix}-{seq_num:04d}.{ext}"
+    
+    # Extract base name without extension
+    base_name = original_name.rsplit('.', 1)[0] if '.' in original_name else original_name
+    
+    # Pattern: prefix followed by digits (possibly with underscore/dash separator)
+    match = re.match(r'^(.+?)([-_])?(\d+)$', base_name)
+    if match:
+        prefix = match.group(1)
+        separator = match.group(2) or '_'  # Default to underscore if no separator
+        digits = match.group(3)
+        padding = len(digits)
+        
+        # Generate unique filename with this pattern
+        candidate = f"{prefix}{separator}{seq_num:0{padding}d}.{ext}"
+        if not os.path.exists(os.path.join(save_dir, candidate)):
+            return candidate
+        
+        # If still exists, find next available sequence number
+        for i in range(seq_num, seq_num + 1000):
+            candidate = f"{prefix}{separator}{i:0{padding}d}.{ext}"
+            if not os.path.exists(os.path.join(save_dir, candidate)):
+                return candidate
+    
+    # No recognizable pattern - fallback to sweet-tea naming
+    return f"{fallback_prefix}-{seq_num:04d}.{ext}"
+
+
 def apply_params_to_graph(graph: dict, mapping: dict, params: dict):
     for param_name, value in params.items():
         if param_name in mapping:
@@ -1498,10 +1543,10 @@ def process_job(job_id: int):
                     original_ext = "mp4" if output.get("kind") == "video" else "jpg"
 
                 if output.get("kind") == "video":
-                     # Original video logic
-                    preferred_name = original_name or f"{filename_prefix}-{seq_num:04d}.{original_ext}"
-                    if os.path.exists(os.path.join(save_dir, preferred_name)):
-                        preferred_name = f"{filename_prefix}-{seq_num:04d}.{original_ext}"
+                    # Preserve save node naming pattern across batch outputs
+                    preferred_name = _derive_output_filename(
+                        original_name, seq_num, original_ext, filename_prefix, save_dir
+                    )
                     video_tasks.append(
                         (output, idx, save_dir, preferred_name, video_provenance_json, engine.output_dir, engine_root_dir)
                     )
