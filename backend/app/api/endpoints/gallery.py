@@ -1663,7 +1663,7 @@ def download_images(req: DownloadRequest, session: Session = Depends(get_session
         return FileResponse(
             img.path,
             media_type=_guess_media_type(img.path),
-            filename=img.filename or os.path.basename(img.path)
+            filename=os.path.basename(img.path)
         )
     
     # Multiple images - create zip
@@ -1671,7 +1671,9 @@ def download_images(req: DownloadRequest, session: Session = Depends(get_session
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
         used_names = set()
         for img in valid_images:
-            filename = img.filename or os.path.basename(img.path)
+            # Always use the actual filename from the file path - this is the source of truth
+            # img.filename may be stale if the file was renamed on disk or if save nodes use custom naming
+            filename = os.path.basename(img.path)
             # Handle duplicate filenames
             base_name = filename
             counter = 1
