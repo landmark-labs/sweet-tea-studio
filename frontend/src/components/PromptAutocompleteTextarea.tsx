@@ -517,18 +517,23 @@ export function PromptAutocompleteTextarea({
 
             selectedMatches.forEach((m, idx) => {
                 if (m.start > cursor) {
-                    nodes.push(debouncedValue.slice(cursor, m.start));
+                    // Non-highlighted text: use theme foreground color
+                    nodes.push(
+                        <span key={`plain-${cursor}-${idx}`} className="text-foreground">
+                            {debouncedValue.slice(cursor, m.start)}
+                        </span>
+                    );
                 }
-                // Extract bg + dark:bg classes only (avoid text-* overriding text-transparent).
-                // We keep both variants so the highlight matches the current theme.
+                // Extract bg + dark:bg classes only for the highlight background.
                 const bgClasses = (m.snippet.color || "bg-slate-200 dark:bg-slate-700/30")
                     .split(/\s+/g)
                     .filter((c) => c.startsWith("bg-") || c.startsWith("dark:bg-"))
                     .join(" ") || "bg-slate-200 dark:bg-slate-700/30";
+                // Highlighted text: visible dark text for contrast against light highlight backgrounds
                 nodes.push(
                     <span
                         key={`${m.start}-${idx}`}
-                        className={cn(bgClasses, "rounded-sm opacity-60 dark:opacity-100 text-transparent select-none")}
+                        className={cn(bgClasses, "rounded-sm opacity-80 dark:opacity-100 text-gray-900 select-none")}
                     >
                         {debouncedValue.slice(m.start, m.end)}
                     </span>
@@ -537,7 +542,12 @@ export function PromptAutocompleteTextarea({
             });
 
             if (cursor < debouncedValue.length) {
-                nodes.push(debouncedValue.slice(cursor));
+                // Trailing non-highlighted text: use theme foreground color
+                nodes.push(
+                    <span key={`trailing-${cursor}`} className="text-foreground">
+                        {debouncedValue.slice(cursor)}
+                    </span>
+                );
             }
 
             setHighlightedContent(nodes);
@@ -585,8 +595,8 @@ export function PromptAutocompleteTextarea({
                         ref={backdropRef}
                         aria-hidden="true"
                         className={cn(
-                            // Match Textarea base styles EXACTLY
-                            "absolute inset-0 z-0 p-3 text-xs font-mono whitespace-pre-wrap break-words overflow-auto bg-transparent border border-transparent pointer-events-none text-transparent",
+                            // Match Textarea base styles EXACTLY. z-20 puts overlay on top of textarea.
+                            "absolute inset-0 z-20 p-3 text-xs font-mono whitespace-pre-wrap break-words overflow-auto bg-transparent border border-transparent pointer-events-none",
                             // Must match textarea sizing/resize
                             className?.includes("h-") ? "" : "h-auto" // If height is fixed in class, it inherits naturally via inset. If auto, we might drift.
                             // Actually, Scroll Sync handles offset.
@@ -676,6 +686,9 @@ export function PromptAutocompleteTextarea({
                         isActive && "ring-2 ring-blue-400 border-blue-400",
                         highlightSnippets ? "bg-transparent focus:bg-transparent" : "",
                         highlightSnippets && isActive && "bg-blue-50/10", // slight tint if active but transparent
+                        // When overlay is showing highlighted content, make textarea text transparent
+                        // but keep caret visible so user can see cursor position
+                        highlightSnippets && highlightedContent && "text-transparent caret-foreground",
                         className,
                         // Ensure padding matches overlay
                         !className?.includes("p-") && "p-3"
