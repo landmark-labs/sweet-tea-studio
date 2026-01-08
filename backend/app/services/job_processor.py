@@ -48,6 +48,8 @@ DUMP_GRAPH = os.getenv("SWEET_TEA_DUMP_GRAPH", "").lower() in ("1", "true", "yes
 GRAPH_AUDIT = os.getenv("SWEET_TEA_GRAPH_AUDIT", "").lower() in ("1", "true", "yes") or DUMP_GRAPH
 GRAPH_AUDIT_HASH_INPUT_FILES = os.getenv("SWEET_TEA_GRAPH_AUDIT_HASH_INPUT_FILES", "").lower() in ("1", "true", "yes")
 GRAPH_AUDIT_MAX_HASH_BYTES = int(os.getenv("SWEET_TEA_GRAPH_AUDIT_MAX_HASH_BYTES", str(50 * 1024 * 1024)))
+GRAPH_RESOLVE_VALUES = os.getenv("SWEET_TEA_GRAPH_RESOLVE_VALUES", "").lower() in ("1", "true", "yes") or DUMP_GRAPH
+DUMP_COMFY_HISTORY = os.getenv("SWEET_TEA_DUMP_COMFY_HISTORY", "").lower() in ("1", "true", "yes") or DUMP_GRAPH
 
 if DIAGNOSTIC_MODE:
     from app.core.comfy_diagnostics import DiagnosticComfyClient as ComfyClient
@@ -253,6 +255,10 @@ def _stable_json_sha256(data: object) -> str:
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
 
+def _is_scalar(value: object) -> bool:
+    return isinstance(value, (str, int, float, bool)) or value is None
+
+
 def _sort_node_ids(node_ids: list[str] | set[str]) -> list[str]:
     def sort_key(val: str) -> tuple[int, str]:
         text = str(val)
@@ -265,6 +271,384 @@ def _is_link(value: object) -> bool:
     if not (isinstance(value, list) and len(value) == 2):
         return False
     return value[0] is not None and value[1] is not None
+
+
+def _read_png_size(path: Path) -> tuple[int, int] | None:
+    try:
+        with path.open("rb") as f:
+            header = f.read(24)
+        if len(header) < 24 or header[:8] != b"\x89PNG\r\n\x1a\n":
+            return None
+        # IHDR width/height are big-endian at bytes 16..24
+        width = int.from_bytes(header[16:20], "big")
+        height = int.from_bytes(header[20:24], "big")
+        if width <= 0 or height <= 0:
+            return None
+        return width, height
+    except Exception:
+        return None
+
+
+def _read_jpeg_size(path: Path) -> tuple[int, int] | None:
+    # Minimal JPEG SOF parser (baseline/progressive). Returns None on failure.
+    try:
+        with path.open("rb") as f:
+            data = f.read(1024 * 1024)  # header scan only; JPEG dims are near the start
+        if len(data) < 4 or data[0:2] != b"\xFF\xD8":
+            return None
+        i = 2
+        while i + 9 < len(data):
+            if data[i] != 0xFF:
+                i += 1
+                continue
+            # Skip fill bytes
+            while i < len(data) and data[i] == 0xFF:
+                i += 1
+            if i >= len(data):
+                break
+            marker = data[i]
+            i += 1
+            # Standalone markers
+            if marker in (0xD8, 0xD9, 0x01) or (0xD0 <= marker <= 0xD7):
+                continue
+            if i + 2 > len(data):
+                break
+            length = int.from_bytes(data[i:i+2], "big")
+            if length < 2:
+                break
+            segment_start = i + 2
+            segment_end = segment_start + (length - 2)
+            if segment_end > len(data):
+                break
+            # SOF markers that contain size
+            if marker in (0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7, 0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF):
+                if segment_start + 7 > len(data):
+                    break
+                height = int.from_bytes(data[segment_start + 1:segment_start + 3], "big")
+                width = int.from_bytes(data[segment_start + 3:segment_start + 5], "big")
+                if width <= 0 or height <= 0:
+                    return None
+                return width, height
+            i = segment_end
+        return None
+    except Exception:
+        return None
+
+
+def _read_image_size(path: Path) -> tuple[int, int] | None:
+    try:
+        from PIL import Image as PILImage  # type: ignore
+
+        with PILImage.open(path) as img:
+            width, height = img.size
+            if width <= 0 or height <= 0:
+                return None
+            return int(width), int(height)
+    except Exception:
+        pass
+
+    suffix = path.suffix.lower()
+    if suffix == ".png":
+        return _read_png_size(path)
+    if suffix in (".jpg", ".jpeg"):
+        return _read_jpeg_size(path)
+    # Unknown; best-effort only.
+    return None
+
+
+def _resolve_graph_scalar_values(graph: dict, *, engine: Engine | None) -> dict[str, Any]:
+    """
+    Best-effort resolver for scalar values produced by common "calculated" nodes.
+
+    This is purely diagnostic: it does not alter the prompt sent to ComfyUI.
+    It exists to answer: "what number does this link evaluate to at runtime?"
+    """
+    UNRESOLVED = object()
+
+    input_dir: Path | None = None
+    if engine and engine.input_dir:
+        try:
+            input_dir = Path(engine.input_dir)
+        except Exception:
+            input_dir = None
+
+    memo: dict[tuple[str, int], object] = {}
+    visiting: set[tuple[str, int]] = set()
+    image_size_cache: dict[str, tuple[int, int]] = {}
+
+    def resolve_value(val: object) -> object:
+        if _is_link(val):
+            try:
+                return resolve_output(str(val[0]), int(val[1]))
+            except Exception:
+                return UNRESOLVED
+        return val
+
+    def resolve_output(node_id: str, slot: int) -> object:
+        key = (str(node_id), int(slot))
+        if key in memo:
+            return memo[key]
+        if key in visiting:
+            return UNRESOLVED
+        visiting.add(key)
+        result: object = UNRESOLVED
+        try:
+            node = graph.get(key[0])
+            if not isinstance(node, dict):
+                result = UNRESOLVED
+                return result
+            class_type = str(node.get("class_type") or "")
+            inputs = node.get("inputs", {})
+            if not isinstance(inputs, dict):
+                inputs = {}
+
+            # --- Interactive scalar widgets ---
+            if class_type == "InteractiveInteger":
+                if slot != 0:
+                    result = UNRESOLVED
+                    return result
+                raw = inputs.get("integer")
+                if isinstance(raw, bool):
+                    result = UNRESOLVED
+                    return result
+                if isinstance(raw, int):
+                    result = raw
+                    return result
+                if isinstance(raw, float) and raw.is_integer():
+                    result = int(raw)
+                    return result
+                if isinstance(raw, str):
+                    text = raw.strip()
+                    if text and text.lstrip("-").isdigit():
+                        result = int(text)
+                        return result
+                result = UNRESOLVED
+                return result
+
+            if class_type == "InteractiveFloat":
+                if slot != 0:
+                    result = UNRESOLVED
+                    return result
+                raw = inputs.get("float")
+                if isinstance(raw, bool):
+                    result = UNRESOLVED
+                    return result
+                if isinstance(raw, (int, float)):
+                    result = float(raw)
+                    return result
+                if isinstance(raw, str):
+                    try:
+                        result = float(raw.strip())
+                        return result
+                    except Exception:
+                        result = UNRESOLVED
+                        return result
+                result = UNRESOLVED
+                return result
+
+            # --- Load image / size ---
+            if class_type == "Get Image Size":
+                if slot not in (0, 1):
+                    result = UNRESOLVED
+                    return result
+                image_in = inputs.get("image")
+                if not _is_link(image_in):
+                    result = UNRESOLVED
+                    return result
+
+                upstream_id = str(image_in[0])
+                upstream = graph.get(upstream_id)
+                if not isinstance(upstream, dict):
+                    result = UNRESOLVED
+                    return result
+                if str(upstream.get("class_type") or "") != "LoadImage":
+                    result = UNRESOLVED
+                    return result
+
+                upstream_inputs = upstream.get("inputs", {})
+                if not isinstance(upstream_inputs, dict):
+                    result = UNRESOLVED
+                    return result
+
+                filename = upstream_inputs.get("image")
+                if not isinstance(filename, str) or not filename.strip():
+                    result = UNRESOLVED
+                    return result
+                filename = filename.strip().strip('"').strip("'")
+
+                cached = image_size_cache.get(filename)
+                if cached is None:
+                    candidate = Path(filename)
+                    if not candidate.is_absolute() and input_dir:
+                        candidate = input_dir / candidate
+
+                    if candidate.exists() and candidate.is_file():
+                        size = _read_image_size(candidate)
+                        if size:
+                            image_size_cache[filename] = size
+                            cached = size
+                    if cached is None:
+                        result = UNRESOLVED
+                        return result
+
+                result = int(cached[0] if slot == 0 else cached[1])
+                return result
+
+            # --- easy-use nodes (common in STS graphs) ---
+            if class_type == "easy mathInt":
+                if slot != 0:
+                    result = UNRESOLVED
+                    return result
+                op = inputs.get("operation")
+                a_val = resolve_value(inputs.get("a"))
+                b_val = resolve_value(inputs.get("b"))
+                if not isinstance(op, str):
+                    result = UNRESOLVED
+                    return result
+                if not isinstance(a_val, (int, float)) or not isinstance(b_val, (int, float)):
+                    result = UNRESOLVED
+                    return result
+
+                a_num = float(a_val)
+                b_num = float(b_val)
+                op_norm = op.strip().lower()
+                try:
+                    if op_norm == "add":
+                        result = int(a_num + b_num)
+                        return result
+                    if op_norm == "subtract":
+                        result = int(a_num - b_num)
+                        return result
+                    if op_norm == "multiply":
+                        result = int(a_num * b_num)
+                        return result
+                    if op_norm == "divide":
+                        if b_num == 0:
+                            result = UNRESOLVED
+                            return result
+                        result = int(a_num // b_num)
+                        return result
+                    if op_norm == "mod":
+                        if b_num == 0:
+                            result = UNRESOLVED
+                            return result
+                        result = int(a_num % b_num)
+                        return result
+                    if op_norm == "max":
+                        result = int(max(a_num, b_num))
+                        return result
+                    if op_norm == "min":
+                        result = int(min(a_num, b_num))
+                        return result
+                except Exception:
+                    result = UNRESOLVED
+                    return result
+                result = UNRESOLVED
+                return result
+
+            if class_type == "easy compare":
+                if slot != 0:
+                    result = UNRESOLVED
+                    return result
+                comparison = inputs.get("comparison")
+                a_val = resolve_value(inputs.get("a"))
+                b_val = resolve_value(inputs.get("b"))
+                if not isinstance(comparison, str) or not isinstance(a_val, (int, float)) or not isinstance(b_val, (int, float)):
+                    result = UNRESOLVED
+                    return result
+                expr = comparison.strip().replace(" ", "")
+                a_num = float(a_val)
+                b_num = float(b_val)
+                try:
+                    if expr == "a<b":
+                        result = a_num < b_num
+                        return result
+                    if expr == "a<=b":
+                        result = a_num <= b_num
+                        return result
+                    if expr == "a>b":
+                        result = a_num > b_num
+                        return result
+                    if expr == "a>=b":
+                        result = a_num >= b_num
+                        return result
+                    if expr == "a==b":
+                        result = a_num == b_num
+                        return result
+                    if expr == "a!=b":
+                        result = a_num != b_num
+                        return result
+                except Exception:
+                    result = UNRESOLVED
+                    return result
+                result = UNRESOLVED
+                return result
+
+            if class_type == "easy ifElse":
+                if slot != 0:
+                    result = UNRESOLVED
+                    return result
+                cond_val = resolve_value(inputs.get("boolean"))
+                if not isinstance(cond_val, bool):
+                    result = UNRESOLVED
+                    return result
+                chosen = inputs.get("on_true") if cond_val else inputs.get("on_false")
+                result = resolve_value(chosen)
+                return result
+
+            result = UNRESOLVED
+            return result
+        finally:
+            visiting.discard(key)
+            memo[key] = result
+
+    # Build outputs map for all nodes/slots we can resolve (bounded).
+    computed_outputs: dict[str, dict[str, object]] = {}
+    for node_id in _sort_node_ids(list(graph.keys())):
+        # Common scalar producers tend to have <=2 scalar outputs; probe a few.
+        for slot in range(0, 4):
+            key = (node_id, slot)
+            if key in memo:
+                val = memo[key]
+            else:
+                val = resolve_output(node_id, slot)
+            if val is UNRESOLVED or not _is_scalar(val):
+                continue
+            computed_outputs.setdefault(node_id, {})[str(slot)] = val
+
+    # Resolve inputs for every node where possible.
+    resolved_inputs: dict[str, dict[str, object]] = {}
+    resolved_numeric_inputs: dict[str, dict[str, object]] = {}
+    for node_id in _sort_node_ids(list(graph.keys())):
+        node = graph.get(node_id)
+        if not isinstance(node, dict):
+            continue
+        inputs = node.get("inputs", {})
+        if not isinstance(inputs, dict):
+            continue
+        node_resolved: dict[str, object] = {}
+        node_numeric: dict[str, object] = {}
+        for input_name, input_val in inputs.items():
+            if _is_link(input_val):
+                resolved = resolve_value(input_val)
+                if resolved is not UNRESOLVED and _is_scalar(resolved):
+                    node_resolved[str(input_name)] = resolved
+                    if isinstance(resolved, (int, float, bool)) or resolved is None:
+                        node_numeric[str(input_name)] = resolved
+                else:
+                    node_resolved[str(input_name)] = input_val
+            else:
+                node_resolved[str(input_name)] = input_val
+        resolved_inputs[node_id] = node_resolved
+        if node_numeric:
+            resolved_numeric_inputs[node_id] = node_numeric
+
+    return {
+        "computed_outputs": computed_outputs,
+        "resolved_inputs": resolved_inputs,
+        "resolved_numeric_inputs": resolved_numeric_inputs,
+        "image_size_cache": {k: {"width": v[0], "height": v[1]} for k, v in image_size_cache.items()},
+    }
 
 
 def _graph_link_signature(graph: dict) -> dict:
@@ -354,6 +738,140 @@ def _sha256_file(path: Path, *, max_bytes: int) -> str | None:
         return h.hexdigest()
     except Exception:
         return None
+
+
+def _unwrap_scalar_history_value(value: object) -> object | None:
+    """
+    Coerce common ComfyUI history output shapes into scalars when possible.
+
+    Many nodes emit scalars as `[123]` or `{'result': 123}`; this tries to unwrap
+    the most common patterns for debugging numeric pipelines.
+    """
+    if _is_scalar(value):
+        return value
+    if isinstance(value, list):
+        if len(value) == 1 and _is_scalar(value[0]):
+            return value[0]
+        if value and all(_is_scalar(v) for v in value):
+            # Keep small scalar lists (e.g. [w, h]) intact.
+            return value
+        return None
+    if isinstance(value, dict):
+        # Heuristic: if there's exactly one scalar entry, use it.
+        scalar_items = [(k, v) for k, v in value.items() if _is_scalar(v)]
+        if len(scalar_items) == 1:
+            return scalar_items[0][1]
+        # Common keys
+        for k in ("result", "value", "int", "float", "width", "height"):
+            v = value.get(k)
+            if _is_scalar(v):
+                return v
+        return None
+    return None
+
+
+def _resolve_scalar_links_from_history(
+    graph: dict,
+    *,
+    object_info: dict[str, Any] | None,
+    history_outputs: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """
+    Build a "resolved inputs" view using ComfyUI history outputs.
+
+    For any input that is a link `[node_id, slot]`, if the upstream node has a
+    scalar output in history that matches that slot, substitute the scalar.
+    """
+    if not isinstance(graph, dict) or not isinstance(history_outputs, dict) or not history_outputs:
+        return {"resolved_numeric_inputs": {}, "resolved_inputs": {}, "warnings": ["Missing history outputs."]}
+
+    warnings: list[str] = []
+
+    def output_key_for_slot(src_node_id: str, slot: int) -> str | None:
+        node = graph.get(src_node_id)
+        if not isinstance(node, dict):
+            return None
+        class_type = node.get("class_type")
+        if not isinstance(class_type, str) or not class_type:
+            return None
+        out_map = history_outputs.get(src_node_id)
+        if not isinstance(out_map, dict) or not out_map:
+            return None
+
+        # Prefer object_info's output_name ordering when available.
+        if isinstance(object_info, dict):
+            node_def = object_info.get(class_type)
+            if isinstance(node_def, dict):
+                names = node_def.get("output_name")
+                if isinstance(names, list) and 0 <= slot < len(names) and isinstance(names[slot], str):
+                    return names[slot]
+
+        # Fallback: only safe when slot==0 and there's a single output key.
+        if slot == 0 and len(out_map) == 1:
+            only_key = next(iter(out_map.keys()))
+            return only_key if isinstance(only_key, str) else None
+
+        # Best-effort fallback: assume JSON key order matches output slot order.
+        # This is not guaranteed, but is useful for debugging scalar pipelines.
+        ordered_keys = [k for k in out_map.keys() if isinstance(k, str)]
+        if 0 <= slot < len(ordered_keys):
+            return ordered_keys[slot]
+
+        return None
+
+    resolved_inputs: dict[str, dict[str, object]] = {}
+    resolved_numeric_inputs: dict[str, dict[str, object]] = {}
+
+    for node_id in _sort_node_ids(list(graph.keys())):
+        node = graph.get(node_id)
+        if not isinstance(node, dict):
+            continue
+        inputs = node.get("inputs", {})
+        if not isinstance(inputs, dict) or not inputs:
+            continue
+
+        node_resolved: dict[str, object] = {}
+        node_numeric: dict[str, object] = {}
+
+        for input_name, input_val in inputs.items():
+            if not _is_link(input_val):
+                continue
+            try:
+                src_id = str(input_val[0])
+                slot = int(input_val[1])
+            except Exception:
+                continue
+
+            out_map = history_outputs.get(src_id)
+            if not isinstance(out_map, dict) or not out_map:
+                continue
+
+            out_key = output_key_for_slot(src_id, slot)
+            if not out_key:
+                continue
+
+            raw = out_map.get(out_key)
+            unwrapped = _unwrap_scalar_history_value(raw)
+            if unwrapped is None:
+                continue
+
+            node_resolved[str(input_name)] = unwrapped
+            if isinstance(unwrapped, (int, float, bool)) or unwrapped is None:
+                node_numeric[str(input_name)] = unwrapped
+
+        if node_resolved:
+            resolved_inputs[node_id] = node_resolved
+        if node_numeric:
+            resolved_numeric_inputs[node_id] = node_numeric
+
+    if not resolved_inputs:
+        warnings.append("No scalar link inputs could be resolved from history outputs (missing output_name mapping or non-scalar outputs).")
+
+    return {
+        "resolved_inputs": resolved_inputs,
+        "resolved_numeric_inputs": resolved_numeric_inputs,
+        "warnings": warnings,
+    }
 
 
 def _build_graph_audit_report(
@@ -583,6 +1101,12 @@ def _build_graph_audit_report(
             report["hashes"]["core_params_sha256"] = _stable_json_sha256(core_params)
     except Exception:
         pass
+
+    if GRAPH_RESOLVE_VALUES:
+        try:
+            report["resolved_values"] = _resolve_graph_scalar_values(graph, engine=engine)
+        except Exception as exc:
+            report["warnings"].append(f"Graph scalar resolution failed: {exc}")
 
     return report
 
@@ -977,17 +1501,33 @@ def _dump_prompt_graph_and_audit(
         from app.core.config import settings
 
         graph_payload = graph
-        audit_payload = {
+        audit_payload: dict[str, Any] = {
             "job_id": job_id,
             "bypass_nodes": [str(n) for n in (bypass_nodes or [])],
             "params": params,
             "audit": audit or {},
         }
 
+        resolved_graph_payload: dict | None = None
+        try:
+            resolved_inputs = (audit_payload.get("audit") or {}).get("resolved_values", {}).get("resolved_inputs")
+            if isinstance(resolved_inputs, dict) and resolved_inputs:
+                resolved_graph_payload = copy.deepcopy(graph_payload)
+                for node_id, inputs in resolved_inputs.items():
+                    if not isinstance(inputs, dict):
+                        continue
+                    node = resolved_graph_payload.get(str(node_id))
+                    if isinstance(node, dict):
+                        node["inputs"] = inputs
+        except Exception:
+            resolved_graph_payload = None
+
         graph_path = settings.meta_dir / f"debug_job_{job_id}_graph.json"
         audit_path = settings.meta_dir / f"debug_job_{job_id}_audit.json"
+        resolved_graph_path = settings.meta_dir / f"debug_job_{job_id}_graph_resolved.json"
         last_graph_path = settings.meta_dir / "debug_last_graph.json"
         last_audit_path = settings.meta_dir / "debug_last_graph_audit.json"
+        last_resolved_graph_path = settings.meta_dir / "debug_last_graph_resolved.json"
 
         with open(graph_path, "w", encoding="utf-8") as f:
             json.dump(graph_payload, f, indent=2, default=str)
@@ -997,6 +1537,13 @@ def _dump_prompt_graph_and_audit(
             json.dump(graph_payload, f, indent=2, default=str)
         with open(last_audit_path, "w", encoding="utf-8") as f:
             json.dump(audit_payload, f, indent=2, default=str)
+
+        if resolved_graph_payload is not None:
+            with open(resolved_graph_path, "w", encoding="utf-8") as f:
+                json.dump(resolved_graph_payload, f, indent=2, default=str)
+            with open(last_resolved_graph_path, "w", encoding="utf-8") as f:
+                json.dump(resolved_graph_payload, f, indent=2, default=str)
+            written.extend([str(resolved_graph_path), str(last_resolved_graph_path)])
 
         written.extend([str(graph_path), str(audit_path), str(last_graph_path), str(last_audit_path)])
         print(f"[JobProcessor] Wrote prompt graph/audit to {graph_path} and {audit_path}")
@@ -1011,8 +1558,10 @@ def _dump_prompt_graph_and_audit(
         logs_dir.mkdir(parents=True, exist_ok=True)
         logs_graph_path = logs_dir / f"debug_job_{job_id}_graph.json"
         logs_audit_path = logs_dir / f"debug_job_{job_id}_audit.json"
+        logs_resolved_graph_path = logs_dir / f"debug_job_{job_id}_graph_resolved.json"
         logs_last_graph_path = logs_dir / "debug_last_graph.json"
         logs_last_audit_path = logs_dir / "debug_last_graph_audit.json"
+        logs_last_resolved_graph_path = logs_dir / "debug_last_graph_resolved.json"
 
         with open(logs_graph_path, "w", encoding="utf-8") as f:
             json.dump(graph, f, indent=2, default=str)
@@ -1023,10 +1572,142 @@ def _dump_prompt_graph_and_audit(
         with open(logs_last_audit_path, "w", encoding="utf-8") as f:
             json.dump(audit_payload, f, indent=2, default=str)
 
+        if resolved_graph_payload is not None:
+            with open(logs_resolved_graph_path, "w", encoding="utf-8") as f:
+                json.dump(resolved_graph_payload, f, indent=2, default=str)
+            with open(logs_last_resolved_graph_path, "w", encoding="utf-8") as f:
+                json.dump(resolved_graph_payload, f, indent=2, default=str)
+            written.extend([str(logs_resolved_graph_path), str(logs_last_resolved_graph_path)])
+
         written.extend([str(logs_graph_path), str(logs_audit_path), str(logs_last_graph_path), str(logs_last_audit_path)])
         print(f"[JobProcessor] Mirrored prompt graph/audit to backend/logs")
     except Exception as dump_err:
         print(f"[JobProcessor] Failed to dump prompt graph/audit to backend/logs: {dump_err}")
+
+    return written
+
+
+def _dump_comfy_history_and_resolved(
+    job_id: int,
+    *,
+    prompt_id: str,
+    graph: dict,
+    history_map: dict,
+    history_resolved: dict | None = None,
+) -> list[str]:
+    written: list[str] = []
+    try:
+        from app.core.config import settings
+
+        history_path = settings.meta_dir / f"debug_job_{job_id}_comfy_history.json"
+        last_history_path = settings.meta_dir / "debug_last_comfy_history.json"
+        resolved_path = settings.meta_dir / f"debug_job_{job_id}_comfy_history_resolved.json"
+        last_resolved_path = settings.meta_dir / "debug_last_comfy_history_resolved.json"
+        resolved_graph_path = settings.meta_dir / f"debug_job_{job_id}_graph_resolved_from_history.json"
+        last_resolved_graph_path = settings.meta_dir / "debug_last_graph_resolved_from_history.json"
+
+        payload = {
+            "job_id": job_id,
+            "prompt_id": prompt_id,
+            "history": history_map,
+        }
+        with open(history_path, "w", encoding="utf-8") as f:
+            json.dump(payload, f, indent=2, default=str)
+        with open(last_history_path, "w", encoding="utf-8") as f:
+            json.dump(payload, f, indent=2, default=str)
+
+        written.extend([str(history_path), str(last_history_path)])
+
+        if history_resolved is not None:
+            resolved_graph_payload: dict | None = None
+            try:
+                resolved_inputs = history_resolved.get("resolved_inputs")
+                if isinstance(resolved_inputs, dict) and resolved_inputs:
+                    resolved_graph_payload = copy.deepcopy(graph)
+                    for node_id, inputs in resolved_inputs.items():
+                        if not isinstance(inputs, dict):
+                            continue
+                        node = resolved_graph_payload.get(str(node_id))
+                        if isinstance(node, dict):
+                            node_inputs = node.get("inputs")
+                            if not isinstance(node_inputs, dict):
+                                node_inputs = {}
+                            node_inputs.update(inputs)
+                            node["inputs"] = node_inputs
+            except Exception:
+                resolved_graph_payload = None
+
+            resolved_payload = {
+                "job_id": job_id,
+                "prompt_id": prompt_id,
+                "resolved": history_resolved,
+            }
+            with open(resolved_path, "w", encoding="utf-8") as f:
+                json.dump(resolved_payload, f, indent=2, default=str)
+            with open(last_resolved_path, "w", encoding="utf-8") as f:
+                json.dump(resolved_payload, f, indent=2, default=str)
+            written.extend([str(resolved_path), str(last_resolved_path)])
+
+            if resolved_graph_payload is not None:
+                with open(resolved_graph_path, "w", encoding="utf-8") as f:
+                    json.dump(resolved_graph_payload, f, indent=2, default=str)
+                with open(last_resolved_graph_path, "w", encoding="utf-8") as f:
+                    json.dump(resolved_graph_payload, f, indent=2, default=str)
+                written.extend([str(resolved_graph_path), str(last_resolved_graph_path)])
+
+        print(f"[JobProcessor] Wrote ComfyUI history dump: {history_path}")
+    except Exception as dump_err:
+        print(f"[JobProcessor] Failed to dump ComfyUI history to meta dir: {dump_err}")
+        return written
+
+    try:
+        backend_dir = Path(__file__).resolve().parents[2]
+        logs_dir = backend_dir / "logs"
+        logs_dir.mkdir(parents=True, exist_ok=True)
+        logs_history_path = logs_dir / f"debug_job_{job_id}_comfy_history.json"
+        logs_last_history_path = logs_dir / "debug_last_comfy_history.json"
+        logs_resolved_path = logs_dir / f"debug_job_{job_id}_comfy_history_resolved.json"
+        logs_last_resolved_path = logs_dir / "debug_last_comfy_history_resolved.json"
+        logs_resolved_graph_path = logs_dir / f"debug_job_{job_id}_graph_resolved_from_history.json"
+        logs_last_resolved_graph_path = logs_dir / "debug_last_graph_resolved_from_history.json"
+
+        payload = {
+            "job_id": job_id,
+            "prompt_id": prompt_id,
+            "history": history_map,
+        }
+        with open(logs_history_path, "w", encoding="utf-8") as f:
+            json.dump(payload, f, indent=2, default=str)
+        with open(logs_last_history_path, "w", encoding="utf-8") as f:
+            json.dump(payload, f, indent=2, default=str)
+        written.extend([str(logs_history_path), str(logs_last_history_path)])
+
+        if history_resolved is not None:
+            resolved_payload = {
+                "job_id": job_id,
+                "prompt_id": prompt_id,
+                "resolved": history_resolved,
+            }
+            with open(logs_resolved_path, "w", encoding="utf-8") as f:
+                json.dump(resolved_payload, f, indent=2, default=str)
+            with open(logs_last_resolved_path, "w", encoding="utf-8") as f:
+                json.dump(resolved_payload, f, indent=2, default=str)
+            written.extend([str(logs_resolved_path), str(logs_last_resolved_path)])
+
+            # Mirror the resolved graph overlay if available
+            try:
+                if "resolved_graph_payload" in locals() and resolved_graph_payload is not None:
+                    with open(logs_resolved_graph_path, "w", encoding="utf-8") as f:
+                        json.dump(resolved_graph_payload, f, indent=2, default=str)
+                    with open(logs_last_resolved_graph_path, "w", encoding="utf-8") as f:
+                        json.dump(resolved_graph_payload, f, indent=2, default=str)
+                    written.extend([str(logs_resolved_graph_path), str(logs_last_resolved_graph_path)])
+            except Exception:
+                pass
+
+        print(f"[JobProcessor] Mirrored ComfyUI history dump to backend/logs")
+    except Exception as dump_err:
+        print(f"[JobProcessor] Failed to dump ComfyUI history to backend/logs: {dump_err}")
 
     return written
 
@@ -1932,6 +2613,39 @@ def process_job(job_id: int):
                 workflow_graph=final_graph,
                 cancel_check=cancel_check,
             )
+
+            # Optional: dump ComfyUI history (includes computed outputs for "calculated" nodes).
+            if DUMP_COMFY_HISTORY:
+                try:
+                    history_map = client.get_history(prompt_id)
+                    history = None
+                    if isinstance(history_map, dict):
+                        history = history_map.get(prompt_id) or history_map.get(str(prompt_id))
+                        if history is None and prompt_id in history_map:
+                            history = history_map[prompt_id]
+
+                    history_outputs = history.get("outputs") if isinstance(history, dict) else None
+
+                    object_info = None
+                    try:
+                        object_info = client.get_object_info()
+                    except Exception:
+                        object_info = None
+
+                    history_resolved = _resolve_scalar_links_from_history(
+                        final_graph,
+                        object_info=object_info,
+                        history_outputs=history_outputs,
+                    )
+                    _dump_comfy_history_and_resolved(
+                        job_id,
+                        prompt_id=prompt_id,
+                        graph=final_graph,
+                        history_map=history_map if isinstance(history_map, dict) else {"raw": history_map},
+                        history_resolved=history_resolved,
+                    )
+                except Exception as exc:
+                    print(f"[JobProcessor] Failed to dump ComfyUI history for job {job_id}: {exc}")
             
             # CRITICAL: Re-check cancellation after execution completes
             # This catches cancellations that happened during ComfyUI execution

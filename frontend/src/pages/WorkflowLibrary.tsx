@@ -815,72 +815,84 @@ export default function WorkflowLibrary() {
                         <div className="text-[10px] text-muted-foreground text-right">{(editingWorkflow.description || "").length}/500</div>
                     </div>
 
+
                     {/* Spacer to push buttons to bottom */}
                     <div className="flex-1" />
 
                     {/* Action Buttons */}
                     <div className="space-y-2 pt-4 border-t">
-                        <Dialog>
+                        <Dialog open={visibilityDialogOpen} onOpenChange={setVisibilityDialogOpen}>
                             <DialogTrigger asChild>
                                 <Button variant="secondary" size="sm" className="w-full justify-start">
-                                    <AlertTriangle className="w-4 h-4 mr-2" />
-                                    manage bypasses
+                                    <GitBranch className="w-4 h-4 mr-2" />
+                                    manage nodes
                                 </Button>
                             </DialogTrigger>
-                            <DialogContent>
+                            <DialogContent className="max-w-xl">
                                 <DialogHeader>
-                                    <DialogTitle>add node bypass toggle</DialogTitle>
+                                    <DialogTitle>Manage nodes</DialogTitle>
                                     <DialogDescription>
-                                        Select a node to allow bypassing.
+                                        Configure bypass toggles and visibility for each node in the configurator.
                                     </DialogDescription>
                                 </DialogHeader>
-                                <div className="space-y-4 max-h-[60vh] overflow-y-auto">
-                                    {Object.entries(editingWorkflow.graph_json)
-                                        .map(([id, node]: [string, any]) => {
-                                            const bypassKey = `__bypass_${id}`;
-                                            const hasBypass = !!schemaEdits[bypassKey];
-                                            const isBypassedByDefault = hasBypass && schemaEdits[bypassKey]?.default === true;
 
-                                            return (
-                                                <div key={id} className={cn("flex justify-between items-center p-2 border border-border rounded hover:bg-muted/30 transition-colors", hasBypass && "bg-blue-50 border-blue-200 dark:bg-blue-500/10 dark:border-blue-500/30")}>
-                                                    <div>
-                                                        <div className="font-bold text-sm flex items-center gap-2">
-                                                            {node._meta?.title || node.title || `Node ${id}`}
-                                                            {hasBypass && <span className="text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-200 dark:border dark:border-blue-500/30 px-1.5 py-0.5 rounded font-mono">BYPASSABLE</span>}
-                                                            {isBypassedByDefault && <span className="text-[10px] bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-200 dark:border dark:border-amber-500/30 px-1.5 py-0.5 rounded font-mono">DEFAULT OFF</span>}
-                                                        </div>
-                                                        <div className="text-xs text-muted-foreground">{node.class_type}</div>
-                                                    </div>
-                                                    <div className="flex items-center gap-2">
-                                                        {hasBypass && (
-                                                            <div className="flex items-center gap-2 mr-2">
-                                                                <span className="text-[10px] text-muted-foreground">
-                                                                    {isBypassedByDefault ? "off by default" : "on by default"}
-                                                                </span>
-                                                                <Switch
-                                                                    checked={isBypassedByDefault}
-                                                                    onCheckedChange={(checked) => {
-                                                                        const s = { ...schemaEdits };
-                                                                        s[bypassKey] = {
-                                                                            ...s[bypassKey],
-                                                                            default: checked
-                                                                        };
-                                                                        setSchemaEdits(s);
-                                                                    }}
-                                                                    className={cn("h-4 w-7", isBypassedByDefault ? "bg-amber-500" : "bg-muted")}
-                                                                />
+                                <div className="space-y-3 max-h-[60vh] overflow-y-auto pt-2">
+                                    {sortedNodeIds.map((id) => {
+                                        const node = editingWorkflow.graph_json[id];
+                                        if (!node) return null;
+
+                                        // Get alias from schema fields for this node
+                                        const nodeFields = Object.entries(schemaEdits)
+                                            .filter(([_, val]: [string, any]) => String(val.x_node_id) === String(id));
+                                        const alias = (nodeFields.find(([_, f]: [string, any]) => f.x_node_alias)?.[1] as any)?.x_node_alias || "";
+
+                                        const hidden = Boolean(node._meta?.hiddenInControls);
+                                        const bypassKey = `__bypass_${id}`;
+                                        const hasBypass = !!schemaEdits[bypassKey];
+                                        const isBypassedByDefault = hasBypass && schemaEdits[bypassKey]?.default === true;
+
+                                        const nodeTitle = node._meta?.title || node.title || `Node ${id}`;
+
+                                        return (
+                                            <div
+                                                key={id}
+                                                className={cn(
+                                                    "flex items-center justify-between rounded-lg border border-border bg-card px-3 py-2.5 shadow-sm",
+                                                    (hidden || hasBypass) && "border-blue-500/30 bg-blue-500/5"
+                                                )}
+                                            >
+                                                <div className="flex flex-col gap-0.5 min-w-0 flex-1 mr-3">
+                                                    <div className="flex items-center gap-2 flex-wrap">
+                                                        <span className="text-xs font-mono text-muted-foreground">#{id}</span>
+                                                        {alias ? (
+                                                            <div className="flex items-center gap-1">
+                                                                <span className="text-sm font-semibold text-blue-700 dark:text-blue-300">{alias}</span>
+                                                                <span className="text-xs text-muted-foreground">({nodeTitle})</span>
                                                             </div>
+                                                        ) : (
+                                                            <span className="text-sm font-semibold text-foreground">{nodeTitle}</span>
                                                         )}
-                                                        <Button
-                                                            size="sm"
-                                                            variant={hasBypass ? "destructive" : "outline"}
+                                                    </div>
+                                                    <span className="text-[11px] text-muted-foreground">{node.class_type}</span>
+                                                    {hasBypass && isBypassedByDefault && (
+                                                        <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">
+                                                            bypassed by default
+                                                        </span>
+                                                    )}
+                                                </div>
+
+                                                <div className="flex items-center gap-2 flex-shrink-0">
+                                                    {/* Bypass toggle button */}
+                                                    <div className="flex flex-col items-center gap-1">
+                                                        <button
+                                                            type="button"
                                                             onClick={() => {
                                                                 const s = { ...schemaEdits };
                                                                 if (hasBypass) {
                                                                     delete s[bypassKey];
                                                                 } else {
                                                                     s[bypassKey] = {
-                                                                        title: `Bypass ${node._meta?.title || node.title || id}`,
+                                                                        title: `Bypass ${nodeTitle}`,
                                                                         widget: "toggle",
                                                                         x_node_id: id,
                                                                         type: "boolean",
@@ -889,64 +901,47 @@ export default function WorkflowLibrary() {
                                                                 }
                                                                 setSchemaEdits(s);
                                                             }}
+                                                            className={cn(
+                                                                "w-9 h-9 rounded-lg flex items-center justify-center text-xs font-medium transition-all border",
+                                                                hasBypass
+                                                                    ? "bg-blue-500 text-white border-blue-600 hover:bg-blue-600"
+                                                                    : "bg-muted text-muted-foreground border-border hover:bg-muted/80"
+                                                            )}
+                                                            title={hasBypass ? "Bypass enabled - click to disable" : "Click to enable bypass toggle"}
                                                         >
-                                                            {hasBypass ? "Remove" : "Enable"}
-                                                        </Button>
+                                                            <AlertTriangle className="w-4 h-4" />
+                                                        </button>
+                                                        <span className="text-[9px] text-muted-foreground">bypass</span>
+                                                    </div>
+
+
+                                                    {/* Visibility toggle button */}
+                                                    <div className="flex flex-col items-center gap-1">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => toggleHidden(String(id), !hidden)}
+                                                            className={cn(
+                                                                "w-9 h-9 rounded-lg flex items-center justify-center text-xs font-medium transition-all border",
+                                                                !hidden
+                                                                    ? "bg-blue-500 text-white border-blue-600 hover:bg-blue-600"
+                                                                    : "bg-muted text-muted-foreground border-border hover:bg-muted/80"
+                                                            )}
+                                                            title={hidden ? "Hidden in controls - click to show" : "Visible in controls - click to hide"}
+                                                        >
+                                                            {hidden ? (
+                                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                                                                </svg>
+                                                            ) : (
+                                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                                                </svg>
+                                                            )}
+                                                        </button>
+                                                        <span className="text-[9px] text-muted-foreground">visible</span>
                                                     </div>
                                                 </div>
-                                            );
-                                        })
-                                    }
-                                </div>
-                            </DialogContent>
-                        </Dialog>
-
-                        <Dialog open={visibilityDialogOpen} onOpenChange={setVisibilityDialogOpen}>
-                            <DialogTrigger asChild>
-                                <Button variant="secondary" size="sm" className="w-full justify-start">
-                                    <GitBranch className="w-4 h-4 mr-2" />
-                                    manage visibility
-                                </Button>
-                            </DialogTrigger>
-                            <DialogContent className="max-w-xl">
-                                <DialogHeader>
-                                    <DialogTitle>Hide nodes from configurator</DialogTitle>
-                                    <DialogDescription>
-                                        Hidden nodes stay in the execution graph with their defaults intact; they just don't show up in the configurator UI.
-                                    </DialogDescription>
-                                </DialogHeader>
-
-                                <div className="space-y-3 max-h-[60vh] overflow-y-auto pt-2">
-                                    {sortedNodeIds.map((id) => {
-                                        const node = editingWorkflow.graph_json[id];
-                                        if (!node) return null;
-                                        const hidden = Boolean(node._meta?.hiddenInControls);
-                                        return (
-                                            <div
-                                                key={id}
-                                                className={cn(
-                                                    "flex items-center justify-between rounded border border-border bg-card px-3 py-2 shadow-sm",
-                                                    hidden && "border-amber-500/30 bg-amber-500/10"
-                                                )}
-                                            >
-                                                <div className="flex flex-col gap-0.5">
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="text-xs font-mono text-muted-foreground">#{id}</span>
-                                                        <span className="text-sm font-semibold text-foreground">{node._meta?.title || node.title || `Node ${id}`}</span>
-                                                        {hidden && (
-                                                            <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium uppercase text-amber-700">
-                                                                Hidden in controls
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                    <span className="text-[11px] text-muted-foreground">{node.class_type}</span>
-                                                </div>
-
-                                                <Switch
-                                                    checked={hidden}
-                                                    onCheckedChange={(checked) => toggleHidden(String(id), checked)}
-                                                    className={cn("h-5 w-9", hidden ? "bg-amber-500" : "bg-muted")}
-                                                />
                                             </div>
                                         );
                                     })}
@@ -979,6 +974,7 @@ export default function WorkflowLibrary() {
                         </div>
                     </div>
                 </div>
+
 
                 {/* Right Content - Pipe Parameters */}
                 <Card className="flex-1 overflow-auto bg-muted/10">
