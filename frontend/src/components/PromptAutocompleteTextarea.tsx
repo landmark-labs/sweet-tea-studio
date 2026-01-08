@@ -531,8 +531,12 @@ export function PromptAutocompleteTextarea({
 
                 selectedMatches.forEach((m, idx) => {
                     if (m.start > cursor) {
-                        // Non-highlighted text: rendered as transparent text in the backdrop (caret/text come from textarea)
-                        nodes.push(valueToHighlight.slice(cursor, m.start));
+                        // Non-highlighted text: transparent in light mode, visible light color in dark mode
+                        nodes.push(
+                            <span key={`text-${cursor}`} className="text-transparent dark:text-slate-300">
+                                {valueToHighlight.slice(cursor, m.start)}
+                            </span>
+                        );
                     }
                     const bgClasses = buildHighlightBgClasses(m.snippet.color);
                     nodes.push(
@@ -540,10 +544,13 @@ export function PromptAutocompleteTextarea({
                             key={`${m.start}-${idx}`}
                             className={cn(
                                 bgClasses,
-                                "rounded-sm opacity-80 dark:opacity-100 text-transparent",
-                                // Dark mode: snippet highlights are often very light (pastels). Darken the highlight
-                                // itself so the (light) textarea text stays readable.
-                                "dark:brightness-50 dark:saturate-150"
+                                "rounded-sm opacity-80",
+                                // Dark mode: keep highlights bright and vibrant, render text in black
+                                // for maximum readability contrast. The textarea text above will be
+                                // made transparent so this black text shows through.
+                                "dark:opacity-100 dark:text-black dark:font-medium",
+                                // Light mode: keep text transparent so textarea text shows
+                                "text-transparent"
                             )}
                         >
                             {valueToHighlight.slice(m.start, m.end)}
@@ -553,8 +560,12 @@ export function PromptAutocompleteTextarea({
                 });
 
                 if (cursor < valueToHighlight.length) {
-                    // Trailing non-highlighted text
-                    nodes.push(valueToHighlight.slice(cursor));
+                    // Trailing non-highlighted text: transparent in light mode, visible in dark mode
+                    nodes.push(
+                        <span key={`text-${cursor}`} className="text-transparent dark:text-slate-300">
+                            {valueToHighlight.slice(cursor)}
+                        </span>
+                    );
                 }
 
                 setHighlightedContent(nodes);
@@ -698,6 +709,8 @@ export function PromptAutocompleteTextarea({
                         isActive && "ring-2 ring-blue-400 border-blue-400",
                         highlightSnippets ? "bg-transparent focus:bg-transparent" : "",
                         highlightSnippets && isActive && "bg-blue-50/10", // slight tint if active but transparent
+                        // Dark mode with highlighting: make text transparent so backdrop text shows through
+                        highlightSnippets && highlightedContent && "dark:text-transparent dark:caret-slate-300",
                         className,
                         // Ensure padding matches overlay
                         !className?.includes("p-") && "p-3"
