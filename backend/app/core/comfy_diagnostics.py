@@ -58,7 +58,11 @@ def _ts() -> str:
 def _log(msg: str, level: str = "INFO"):
     """Append to main log file and print."""
     line = f"[{_ts()}] [{level}] {msg}"
-    print(line)
+    try:
+        print(line)
+    except UnicodeEncodeError:
+        # Windows consoles often default to legacy codepages; keep diagnostics robust.
+        print(line.encode("ascii", errors="backslashreplace").decode("ascii"))
     with open(MAIN_LOG, "a", encoding="utf-8") as f:
         f.write(line + "\n")
 

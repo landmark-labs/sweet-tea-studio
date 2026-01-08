@@ -22,6 +22,7 @@ import json
 import re
 import threading
 import time
+from collections import Counter
 from pathlib import Path
 from datetime import datetime
 from typing import Any, List, Optional
@@ -41,9 +42,12 @@ from app.services.comfy_watchdog import watchdog
 from app.services.gallery_search import build_search_text, update_gallery_fts
 
 # ===== DIAGNOSTIC MODE TOGGLE =====
-DIAGNOSTIC_MODE = False
+DIAGNOSTIC_MODE = os.getenv("SWEET_TEA_DIAGNOSTIC_MODE", "").lower() in ("1", "true", "yes")
 PREVIEW_DEBUG = os.getenv("SWEET_TEA_PREVIEW_DEBUG", "").lower() in ("1", "true", "yes")
 DUMP_GRAPH = os.getenv("SWEET_TEA_DUMP_GRAPH", "").lower() in ("1", "true", "yes")
+GRAPH_AUDIT = os.getenv("SWEET_TEA_GRAPH_AUDIT", "").lower() in ("1", "true", "yes") or DUMP_GRAPH
+GRAPH_AUDIT_HASH_INPUT_FILES = os.getenv("SWEET_TEA_GRAPH_AUDIT_HASH_INPUT_FILES", "").lower() in ("1", "true", "yes")
+GRAPH_AUDIT_MAX_HASH_BYTES = int(os.getenv("SWEET_TEA_GRAPH_AUDIT_MAX_HASH_BYTES", str(50 * 1024 * 1024)))
 
 if DIAGNOSTIC_MODE:
     from app.core.comfy_diagnostics import DiagnosticComfyClient as ComfyClient
@@ -242,6 +246,345 @@ def apply_params_to_graph(graph: dict, mapping: dict, params: dict):
                 for part in field_path[:-1]:
                     current = current.get(part, {})
                 current[field_path[-1]] = value
+
+
+def _stable_json_sha256(data: object) -> str:
+    serialized = json.dumps(data, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def _sort_node_ids(node_ids: list[str] | set[str]) -> list[str]:
+    def sort_key(val: str) -> tuple[int, str]:
+        text = str(val)
+        return (0, f"{int(text):020d}") if text.isdigit() else (1, text)
+
+    return sorted({str(v) for v in node_ids}, key=sort_key)
+
+
+def _is_link(value: object) -> bool:
+    if not (isinstance(value, list) and len(value) == 2):
+        return False
+    return value[0] is not None and value[1] is not None
+
+
+def _graph_link_signature(graph: dict) -> dict:
+    signature: dict[str, dict[str, object]] = {}
+    for node_id in _sort_node_ids(list(graph.keys())):
+        node = graph.get(node_id)
+        if not isinstance(node, dict):
+            continue
+        class_type = node.get("class_type")
+        if not isinstance(class_type, str):
+            class_type = str(class_type) if class_type is not None else ""
+        inputs = node.get("inputs", {})
+        if not isinstance(inputs, dict):
+            inputs = {}
+        links: dict[str, list] = {}
+        for input_name, input_val in inputs.items():
+            if _is_link(input_val):
+                try:
+                    links[str(input_name)] = [str(input_val[0]), int(input_val[1])]
+                except Exception:
+                    # If a link is malformed, keep a stable placeholder so hashing doesn't explode.
+                    links[str(input_name)] = ["?", "?"]
+        signature[str(node_id)] = {"class_type": class_type, "links": links}
+    return signature
+
+
+def _follow_lora_chain(graph: dict, start_link: object, *, expected_slot: int, next_input: str) -> list[str]:
+    chain: list[str] = []
+    current = start_link
+    seen: set[str] = set()
+
+    for _ in range(128):
+        if not _is_link(current):
+            break
+        src_id = str(current[0])
+        try:
+            slot = int(current[1])
+        except Exception:
+            break
+        if slot != expected_slot:
+            break
+        if src_id in seen:
+            break
+        seen.add(src_id)
+
+        node = graph.get(src_id)
+        if not isinstance(node, dict):
+            break
+        if str(node.get("class_type") or "") != "LoraLoader":
+            break
+
+        chain.append(src_id)
+        inputs = node.get("inputs", {})
+        if not isinstance(inputs, dict):
+            break
+        current = inputs.get(next_input)
+
+    return chain
+
+
+def _looks_like_sampler_node(class_type: str, inputs: dict) -> bool:
+    if class_type in ("KSampler", "KSamplerAdvanced"):
+        return True
+    if "UltimateSDUpscale" in class_type:
+        return True
+    if not (isinstance(inputs, dict) and inputs):
+        return False
+    if not all(key in inputs for key in ("model", "positive", "negative")):
+        return False
+    return any(key in inputs for key in ("seed", "steps", "cfg")) and any(key in inputs for key in ("sampler_name", "scheduler"))
+
+
+def _sha256_file(path: Path, *, max_bytes: int) -> str | None:
+    try:
+        if not path.exists() or not path.is_file():
+            return None
+        size = path.stat().st_size
+        if size > max_bytes:
+            return None
+        h = hashlib.sha256()
+        with path.open("rb") as f:
+            while True:
+                chunk = f.read(1024 * 1024)
+                if not chunk:
+                    break
+                h.update(chunk)
+        return h.hexdigest()
+    except Exception:
+        return None
+
+
+def _build_graph_audit_report(
+    graph: dict,
+    *,
+    engine: Engine | None,
+    workflow: WorkflowTemplate | None,
+    params: dict,
+    bypass_nodes: list[str],
+) -> dict[str, Any]:
+    report: dict[str, Any] = {
+        "job": {
+            "workflow_id": getattr(workflow, "id", None),
+            "workflow_name": getattr(workflow, "name", None),
+            "engine_id": getattr(engine, "id", None),
+        },
+        "hashes": {
+            "prompt_sha256": _stable_json_sha256(graph),
+            "links_sha256": _stable_json_sha256(_graph_link_signature(graph)),
+        },
+        "counts": {
+            "nodes": len(graph) if isinstance(graph, dict) else 0,
+        },
+        "bypass_nodes": [str(n) for n in (bypass_nodes or [])],
+        "warnings": [],
+        "samplers": [],
+        "loras": [],
+        "clip_text_encoders": [],
+        "sdxl_conditioning": [],
+        "input_files": [],
+    }
+
+    if not isinstance(graph, dict) or not graph:
+        report["warnings"].append("Graph is empty or invalid.")
+        return report
+
+    type_counts = Counter()
+    for node in graph.values():
+        if isinstance(node, dict):
+            type_counts[str(node.get("class_type") or "?")] += 1
+    report["counts"]["class_types"] = dict(type_counts)
+
+    # --- LoRA nodes ---
+    lora_nodes: dict[str, dict[str, Any]] = {}
+    for node_id, node in graph.items():
+        if not isinstance(node, dict):
+            continue
+        if str(node.get("class_type") or "") != "LoraLoader":
+            continue
+        inputs = node.get("inputs", {})
+        if not isinstance(inputs, dict):
+            inputs = {}
+
+        lora_name = inputs.get("lora_name")
+        strength_model = inputs.get("strength_model")
+        strength_clip = inputs.get("strength_clip")
+
+        active = bool(isinstance(lora_name, str) and lora_name.strip()) and any(
+            isinstance(val, (int, float)) and float(val) != 0.0
+            for val in (strength_model, strength_clip)
+        )
+
+        entry = {
+            "node_id": str(node_id),
+            "lora_name": lora_name,
+            "strength_model": strength_model,
+            "strength_clip": strength_clip,
+            "active": active,
+            "model_in": inputs.get("model"),
+            "clip_in": inputs.get("clip"),
+        }
+        lora_nodes[str(node_id)] = entry
+
+    report["loras"] = [lora_nodes[nid] for nid in _sort_node_ids(list(lora_nodes.keys()))]
+
+    # --- Samplers / terminal nodes ---
+    used_lora_nodes: set[str] = set()
+    for node_id, node in graph.items():
+        if not isinstance(node, dict):
+            continue
+        class_type = str(node.get("class_type") or "")
+        inputs = node.get("inputs", {})
+        if not isinstance(inputs, dict):
+            continue
+        if not _looks_like_sampler_node(class_type, inputs):
+            continue
+
+        model_chain = _follow_lora_chain(graph, inputs.get("model"), expected_slot=0, next_input="model")
+        used_lora_nodes.update(model_chain)
+
+        sampler_entry = {
+            "node_id": str(node_id),
+            "class_type": class_type,
+            "model": inputs.get("model"),
+            "model_lora_chain": model_chain,
+            "seed": inputs.get("seed"),
+            "steps": inputs.get("steps"),
+            "cfg": inputs.get("cfg"),
+            "sampler_name": inputs.get("sampler_name"),
+            "scheduler": inputs.get("scheduler"),
+            "denoise": inputs.get("denoise"),
+        }
+        report["samplers"].append(sampler_entry)
+
+    report["samplers"] = sorted(report["samplers"], key=lambda x: (0, int(x["node_id"])) if str(x.get("node_id", "")).isdigit() else (1, str(x.get("node_id", ""))))
+
+    active_lora_ids = [nid for nid, entry in lora_nodes.items() if entry.get("active")]
+    if active_lora_ids:
+        if not used_lora_nodes:
+            report["warnings"].append(
+                "LoRA loader nodes are active, but no sampler/terminal node is receiving a LoRA'd MODEL. "
+                "This usually means the sampler's `model` input is wired to the checkpoint (or another branch) instead of the LoRA chain."
+            )
+        else:
+            unused = [nid for nid in active_lora_ids if nid not in used_lora_nodes]
+            if unused:
+                report["warnings"].append(f"Active LoRA loader node(s) not used by any sampler/terminal node: {', '.join(_sort_node_ids(unused))}")
+
+        for sampler in report["samplers"]:
+            if not sampler.get("model_lora_chain"):
+                report["warnings"].append(f"Sampler/terminal node {sampler['node_id']} ({sampler['class_type']}) receives an un-LoRA'd MODEL (no LoraLoader chain).")
+
+    # --- CLIPTextEncode clip chain (helps catch 'model LoRA applied but clip isn't') ---
+    for node_id, node in graph.items():
+        if not isinstance(node, dict):
+            continue
+        class_type = str(node.get("class_type") or "")
+        if class_type != "CLIPTextEncode":
+            continue
+        inputs = node.get("inputs", {})
+        if not isinstance(inputs, dict):
+            continue
+        clip_chain = _follow_lora_chain(graph, inputs.get("clip"), expected_slot=1, next_input="clip")
+        report["clip_text_encoders"].append(
+            {
+                "node_id": str(node_id),
+                "title": (node.get("_meta", {}) or {}).get("title"),
+                "clip": inputs.get("clip"),
+                "clip_lora_chain": clip_chain,
+            }
+        )
+
+    report["clip_text_encoders"] = sorted(report["clip_text_encoders"], key=lambda x: (0, int(x["node_id"])) if str(x.get("node_id", "")).isdigit() else (1, str(x.get("node_id", ""))))
+
+    # --- SDXL size conditioning ---
+    sdxl_nodes: list[dict[str, Any]] = []
+    for node_id, node in graph.items():
+        if not isinstance(node, dict):
+            continue
+        class_type = str(node.get("class_type") or "")
+        if "SDXL" not in class_type and "Sdxl" not in class_type:
+            continue
+        inputs = node.get("inputs", {})
+        if not isinstance(inputs, dict):
+            continue
+        size_keys = ("width", "height", "target_width", "target_height", "crop_w", "crop_h")
+        if not any(k in inputs for k in size_keys):
+            continue
+        entry = {"node_id": str(node_id), "class_type": class_type, "title": (node.get("_meta", {}) or {}).get("title")}
+        for k in size_keys:
+            if k in inputs:
+                entry[k] = inputs.get(k)
+        sdxl_nodes.append(entry)
+    report["sdxl_conditioning"] = sorted(sdxl_nodes, key=lambda x: (0, int(x["node_id"])) if str(x.get("node_id", "")).isdigit() else (1, str(x.get("node_id", ""))))
+
+    if len(report["sdxl_conditioning"]) >= 2:
+        # If multiple SDXL conditioning nodes disagree on width/height/etc, warn.
+        def sig(n: dict[str, Any]) -> tuple:
+            return tuple(n.get(k) for k in ("width", "height", "target_width", "target_height", "crop_w", "crop_h"))
+
+        unique = {sig(n) for n in report["sdxl_conditioning"]}
+        if len(unique) > 1:
+            report["warnings"].append("SDXL conditioning nodes have mismatched size/crop metadata (width/height/target/crop differ across nodes).")
+
+    # --- Input files (LoadImage, etc) ---
+    input_dir: Path | None = None
+    if engine and engine.input_dir:
+        try:
+            input_dir = Path(engine.input_dir)
+        except Exception:
+            input_dir = None
+
+    for node_id, node in graph.items():
+        if not isinstance(node, dict):
+            continue
+        class_type = str(node.get("class_type") or "")
+        if "LoadImage" not in class_type and class_type != "LoadImage":
+            continue
+        inputs = node.get("inputs", {})
+        if not isinstance(inputs, dict):
+            continue
+        filename = inputs.get("image")
+        if not isinstance(filename, str) or not filename.strip():
+            continue
+
+        record: dict[str, Any] = {
+            "node_id": str(node_id),
+            "class_type": class_type,
+            "image": filename,
+        }
+
+        resolved_path: Path | None = None
+        if input_dir:
+            try:
+                resolved_path = input_dir / Path(filename)
+            except Exception:
+                resolved_path = None
+
+        if resolved_path:
+            record["resolved_path"] = str(resolved_path)
+            try:
+                record["exists"] = resolved_path.exists()
+                if record["exists"]:
+                    record["size_bytes"] = resolved_path.stat().st_size
+                    if GRAPH_AUDIT_HASH_INPUT_FILES:
+                        record["sha256"] = _sha256_file(resolved_path, max_bytes=GRAPH_AUDIT_MAX_HASH_BYTES)
+            except Exception:
+                record["exists"] = False
+
+        report["input_files"].append(record)
+
+    # If schema-based params include typical core keys, add a small checksum so we can compare runs.
+    try:
+        core_keys = ("seed", "steps", "cfg", "denoise", "sampler_name", "scheduler", "width", "height")
+        core_params = {k: params.get(k) for k in core_keys if k in params}
+        if core_params:
+            report["hashes"]["core_params_sha256"] = _stable_json_sha256(core_params)
+    except Exception:
+        pass
+
+    return report
 
 
 def _normalize_comfy_type(type_name: object) -> str | None:
@@ -619,6 +962,72 @@ def _dump_failed_prompt_graph(
         print(f"[JobProcessor] Wrote ComfyUI error graph dump: {logs_dump_path}")
     except Exception as dump_err:
         print(f"[JobProcessor] Failed to dump ComfyUI error graph to backend/logs: {dump_err}")
+    return written
+
+
+def _dump_prompt_graph_and_audit(
+    job_id: int,
+    graph: dict,
+    bypass_nodes: list[str],
+    params: dict,
+    audit: dict | None = None,
+) -> list[str]:
+    written: list[str] = []
+    try:
+        from app.core.config import settings
+
+        graph_payload = graph
+        audit_payload = {
+            "job_id": job_id,
+            "bypass_nodes": [str(n) for n in (bypass_nodes or [])],
+            "params": params,
+            "audit": audit or {},
+        }
+
+        graph_path = settings.meta_dir / f"debug_job_{job_id}_graph.json"
+        audit_path = settings.meta_dir / f"debug_job_{job_id}_audit.json"
+        last_graph_path = settings.meta_dir / "debug_last_graph.json"
+        last_audit_path = settings.meta_dir / "debug_last_graph_audit.json"
+
+        with open(graph_path, "w", encoding="utf-8") as f:
+            json.dump(graph_payload, f, indent=2, default=str)
+        with open(audit_path, "w", encoding="utf-8") as f:
+            json.dump(audit_payload, f, indent=2, default=str)
+        with open(last_graph_path, "w", encoding="utf-8") as f:
+            json.dump(graph_payload, f, indent=2, default=str)
+        with open(last_audit_path, "w", encoding="utf-8") as f:
+            json.dump(audit_payload, f, indent=2, default=str)
+
+        written.extend([str(graph_path), str(audit_path), str(last_graph_path), str(last_audit_path)])
+        print(f"[JobProcessor] Wrote prompt graph/audit to {graph_path} and {audit_path}")
+    except Exception as dump_err:
+        print(f"[JobProcessor] Failed to dump prompt graph/audit to meta dir: {dump_err}")
+        return written
+
+    # Also mirror into backend/logs for convenience when SWEET_TEA_ROOT_DIR differs.
+    try:
+        backend_dir = Path(__file__).resolve().parents[2]
+        logs_dir = backend_dir / "logs"
+        logs_dir.mkdir(parents=True, exist_ok=True)
+        logs_graph_path = logs_dir / f"debug_job_{job_id}_graph.json"
+        logs_audit_path = logs_dir / f"debug_job_{job_id}_audit.json"
+        logs_last_graph_path = logs_dir / "debug_last_graph.json"
+        logs_last_audit_path = logs_dir / "debug_last_graph_audit.json"
+
+        with open(logs_graph_path, "w", encoding="utf-8") as f:
+            json.dump(graph, f, indent=2, default=str)
+        with open(logs_audit_path, "w", encoding="utf-8") as f:
+            json.dump(audit_payload, f, indent=2, default=str)
+        with open(logs_last_graph_path, "w", encoding="utf-8") as f:
+            json.dump(graph, f, indent=2, default=str)
+        with open(logs_last_audit_path, "w", encoding="utf-8") as f:
+            json.dump(audit_payload, f, indent=2, default=str)
+
+        written.extend([str(logs_graph_path), str(logs_audit_path), str(logs_last_graph_path), str(logs_last_audit_path)])
+        print(f"[JobProcessor] Mirrored prompt graph/audit to backend/logs")
+    except Exception as dump_err:
+        print(f"[JobProcessor] Failed to dump prompt graph/audit to backend/logs: {dump_err}")
+
     return written
 
 
@@ -1214,9 +1623,14 @@ def process_job(job_id: int):
             node_mapping = dict(node_mapping) if node_mapping else {}
             schema = workflow.input_schema or {}
             if schema:
-                fallback_mapping = _build_node_mapping_from_schema(schema)
-                for key, mapping in fallback_mapping.items():
-                    node_mapping.setdefault(key, mapping)
+                schema_mapping = _build_node_mapping_from_schema(schema)
+                # Schema (x_node_id + mock_field) is authoritative for UI-exposed keys.
+                # This prevents stale node_mapping entries from silently targeting the wrong node after graph edits.
+                for key, mapping in schema_mapping.items():
+                    existing = node_mapping.get(key)
+                    if GRAPH_AUDIT and existing and existing != mapping:
+                        print(f"[JobProcessor] Mapping override for '{key}': {existing} -> {mapping}")
+                    node_mapping[key] = mapping
 
             if node_mapping:
                 apply_params_to_graph(final_graph, node_mapping, working_params)
@@ -1233,13 +1647,25 @@ def process_job(job_id: int):
                 except Exception as e:
                     print(f"WebSocket broadcast failed: {e}")
 
-            # Debug: Dump graph to file
-            if DUMP_GRAPH:
+            audit_report: dict[str, Any] | None = None
+            if GRAPH_AUDIT:
                 try:
-                    with open("debug_last_graph.json", "w") as f:
-                        json.dump(final_graph, f, indent=2)
+                    audit_report = _build_graph_audit_report(
+                        final_graph,
+                        engine=engine,
+                        workflow=workflow,
+                        params=working_params,
+                        bypass_nodes=bypass_nodes,
+                    )
+                    if audit_report.get("warnings"):
+                        for warning in audit_report["warnings"]:
+                            print(f"[JobProcessor][GraphAudit] {warning}")
                 except Exception as e:
-                    print(f"Failed to dump debug graph: {e}")
+                    print(f"[JobProcessor] Graph audit failed: {e}")
+
+            # Debug: Dump graph (+ audit) to file(s)
+            if DUMP_GRAPH:
+                _dump_prompt_graph_and_audit(job_id, final_graph, bypass_nodes, working_params, audit=audit_report)
 
             # Race Condition Fix: Connect BEFORE queuing to catch fast/cached execution events
             # Race Condition Fix: Connect BEFORE queuing to catch fast/cached execution events
