@@ -192,6 +192,60 @@ def test_bypass_does_not_passthrough_any_typed_inputs():
     assert "image" not in graph["3"]["inputs"]
 
 
+def test_bypass_controlnet_apply_preserves_positive_negative_outputs():
+    """
+    Regression: ControlNetApplyAdvanced outputs two CONDITIONING values (positive, negative).
+
+    When bypassed, Sweet Tea must not map *both* outputs to the first conditioning input.
+    The bypass pass-through should preserve the slot semantics:
+      output[0] -> positive input
+      output[1] -> negative input
+    """
+    graph = {
+        "10": {"class_type": "PosCond", "inputs": {}},
+        "11": {"class_type": "NegCond", "inputs": {}},
+        "12": {"class_type": "ControlNet", "inputs": {}},
+        "13": {"class_type": "LoadImage", "inputs": {"image": "example.png"}},
+        "20": {
+            "class_type": "ControlNetApplyAdvanced",
+            "inputs": {
+                "positive": ["10", 0],
+                "negative": ["11", 0],
+                "control_net": ["12", 0],
+                "image": ["13", 0],
+            },
+        },
+        "30": {
+            "class_type": "UltimateConsumer",
+            "inputs": {
+                "positive": ["20", 0],
+                "negative": ["20", 1],
+            },
+        },
+    }
+
+    object_info = {
+        "ControlNetApplyAdvanced": {
+            "input": {
+                "required": {
+                    "positive": ["CONDITIONING", {}],
+                    "negative": ["CONDITIONING", {}],
+                    "control_net": ["CONTROL_NET", {}],
+                    "image": ["IMAGE", {}],
+                }
+            },
+            "output": ["CONDITIONING", "CONDITIONING"],
+            "output_name": ["positive", "negative"],
+        }
+    }
+
+    apply_bypass_to_graph(graph, ["20"], object_info=object_info)
+
+    assert "20" not in graph
+    assert graph["30"]["inputs"]["positive"] == ["10", 0]
+    assert graph["30"]["inputs"]["negative"] == ["11", 0]
+
+
 def test_bypass_wan_optional_end_inputs_disconnected():
     """
     Regression for Wan workflows where the end-image branch is bypassed.

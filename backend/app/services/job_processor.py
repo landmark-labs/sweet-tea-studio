@@ -1197,14 +1197,63 @@ def _build_bypass_output_map(
     if not connected_inputs_in_order or not input_types:
         return {}
 
-    mapping: dict[int, list] = {}
+    # Prefer output_name -> input_name matching when available, otherwise fall back to
+    # a type-based mapping that avoids reusing the same input for multiple outputs
+    # of the same type (e.g. ControlNetApplyAdvanced outputs [positive, negative]).
+    raw_output_names = node_def.get("output_name")
+    output_names: list[str] = []
+    if isinstance(raw_output_names, list):
+        for name in raw_output_names:
+            if isinstance(name, str) and name.strip():
+                output_names.append(name.strip())
+            else:
+                output_names.append("")
+
+    def norm_name(text: str) -> str:
+        return "".join(ch for ch in text.strip().lower() if ch.isalnum())
+
+    slot_map: dict[int, tuple[str, list]] = {}
+
+    # Pass 1: map by name (output_name slot -> input of same name) when possible.
+    if output_names and len(output_names) >= len(output_types):
+        for out_slot, out_type in enumerate(output_types):
+            out_name = output_names[out_slot] if out_slot < len(output_names) else ""
+            if not out_name:
+                continue
+            out_norm = norm_name(out_name)
+            for input_name, input_val in connected_inputs_in_order:
+                if norm_name(input_name) != out_norm:
+                    continue
+                in_type = input_types.get(input_name)
+                if _comfy_types_match(in_type, out_type):
+                    slot_map[out_slot] = (input_name, input_val)
+                    break
+
+    # Pass 2: type-based mapping, but avoid reusing the same input when multiple
+    # outputs share a type and multiple matching inputs exist.
+    used_inputs: set[str] = {name for name, _val in slot_map.values()}
     for out_slot, out_type in enumerate(output_types):
+        if out_slot in slot_map:
+            continue
+
+        candidates = [
+            (input_name, input_val)
+            for input_name, input_val in connected_inputs_in_order
+            if input_name not in used_inputs and _comfy_types_match(input_types.get(input_name), out_type)
+        ]
+        if candidates:
+            input_name, input_val = candidates[0]
+            slot_map[out_slot] = (input_name, input_val)
+            used_inputs.add(input_name)
+            continue
+
+        # If we have more outputs than matching inputs, allow reuse as a fallback.
         for input_name, input_val in connected_inputs_in_order:
-            in_type = input_types.get(input_name)
-            if _comfy_types_match(in_type, out_type):
-                mapping[out_slot] = input_val
+            if _comfy_types_match(input_types.get(input_name), out_type):
+                slot_map[out_slot] = (input_name, input_val)
                 break
-    return mapping
+
+    return {slot: val for slot, (_name, val) in slot_map.items()}
 
 
 def _topological_sort_bypass_nodes(
