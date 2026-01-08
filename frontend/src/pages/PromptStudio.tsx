@@ -17,6 +17,7 @@ import { InstallStatusDialog, InstallStatus } from "@/components/InstallStatusDi
 import { PromptConstructor, COLORS } from "@/components/PromptConstructor";
 import { CanvasPayload, PromptItem } from "@/lib/types";
 
+import { stripDarkVariantClasses } from "@/lib/utils";
 import { useUndoRedo } from "@/lib/undoRedo";
 import { ProjectGallery } from "@/components/ProjectGallery";
 import { MediaTray } from "@/components/MediaTray";
@@ -248,7 +249,7 @@ export default function PromptStudio() {
           type: "block" as const,
           label: s.label,
           content: s.content,
-          color: s.color || COLORS[0],
+          color: stripDarkVariantClasses(s.color) || COLORS[0],
         }));
         setLibrary(items);
         setSnippetsLoaded(true);
@@ -286,7 +287,7 @@ export default function PromptStudio() {
         await snippetApi.bulkUpsert(library.map(item => ({
           label: item.label || "Untitled",
           content: item.content,
-          color: item.color,
+          color: stripDarkVariantClasses(item.color),
         })));
         // Clear localStorage after successful save to backend
         localStorage.removeItem("ds_prompt_snippets");

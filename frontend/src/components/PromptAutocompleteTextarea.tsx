@@ -480,41 +480,12 @@ export function PromptAutocompleteTextarea({
     const highlightTokenRef = useRef(0);
 
     const buildHighlightBgClasses = useCallback((rawColor: string | null | undefined) => {
-        const fallback = "bg-slate-200 dark:bg-slate-700/30";
-        const tokens = (rawColor || fallback).split(/\s+/g).filter(Boolean);
-        const bgTokens = tokens.filter((c) => c.startsWith("bg-") || c.startsWith("dark:bg-"));
-
-        const hasDarkBg = bgTokens.some((c) => c.startsWith("dark:bg-"));
-        const lightBg = bgTokens.find((c) => c.startsWith("bg-"));
-
-        const deriveDarkBg = (bgClass: string | undefined) => {
-            if (!bgClass) return "dark:bg-slate-700/40";
-
-            // Normalize "bg-" prefix, keep any opacity suffix.
-            // Examples: bg-sky-100, bg-sky-100/80, bg-white, bg-black
-            const match = bgClass.match(/^bg-([a-z]+)-(\d{2,3})(?:\/(\d{1,3}))?$/);
-            if (match) {
-                const [, color, shadeRaw] = match;
-                const neutral = new Set(["slate", "gray", "zinc", "neutral", "stone"]);
-                const darkShade = neutral.has(color) ? "700" : "900";
-                const alpha = neutral.has(color) ? "45" : "30";
-                return `dark:bg-${color}-${darkShade}/${alpha}`;
-            }
-
-            if (bgClass === "bg-white") return "dark:bg-slate-700/40";
-            if (bgClass === "bg-black") return "dark:bg-black/40";
-            if (bgClass.startsWith("bg-")) return "dark:bg-slate-700/40";
-
-            return "dark:bg-slate-700/40";
-        };
-
-        const bgClasses = bgTokens.join(" ") || fallback;
-        if (hasDarkBg) return bgClasses;
-
-        // If snippet colors only specify light-mode backgrounds (common), ensure we
-        // provide a dark-mode background too. Otherwise dark mode can become
-        // unreadable (light highlight behind light text).
-        return `${bgClasses} ${deriveDarkBg(lightBg)}`.trim();
+        // We intentionally ignore any `dark:*` snippet classes here so snippet colors
+        // stay consistent across themes (matches light mode appearance).
+        const fallback = "bg-slate-200";
+        const tokens = (rawColor || "").split(/\s+/g).filter(Boolean);
+        const bgTokens = tokens.filter((c) => c.startsWith("bg-"));
+        return bgTokens.join(" ") || fallback;
     }, []);
 
     useEffect(() => {
@@ -567,7 +538,13 @@ export function PromptAutocompleteTextarea({
                     nodes.push(
                         <span
                             key={`${m.start}-${idx}`}
-                            className={cn(bgClasses, "rounded-sm opacity-80 dark:opacity-100 text-transparent")}
+                            className={cn(
+                                bgClasses,
+                                "rounded-sm opacity-80 dark:opacity-100 text-transparent",
+                                // Dark mode: snippet highlights are often very light (pastels). Darken the highlight
+                                // itself so the (light) textarea text stays readable.
+                                "dark:brightness-50 dark:saturate-150"
+                            )}
                         >
                             {valueToHighlight.slice(m.start, m.end)}
                         </span>

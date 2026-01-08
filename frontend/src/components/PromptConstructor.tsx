@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "@/components/ui/context-menu";
 import { Plus, X, Type, Trash2, CornerDownLeft, Eraser, Check, Pencil } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, stripDarkVariantClasses } from "@/lib/utils";
 import { useUndoRedo } from "@/lib/undoRedo";
 import { PromptAutocompleteTextarea } from "./PromptAutocompleteTextarea";
 import { VirtualGrid } from "@/components/VirtualGrid";
@@ -37,28 +37,28 @@ interface PromptConstructorProps {
 // --- Constants ---
 
 export const COLORS = [
-    "bg-stone-100 border-stone-300 text-stone-900 dark:bg-stone-900/30 dark:border-stone-700 dark:text-stone-100",
-    "bg-indigo-100 border-indigo-300 text-indigo-900 dark:bg-indigo-950/25 dark:border-indigo-700 dark:text-indigo-100",
-    "bg-emerald-100 border-emerald-300 text-emerald-900 dark:bg-emerald-950/20 dark:border-emerald-700 dark:text-emerald-100",
-    "bg-red-100 border-red-300 text-red-900 dark:bg-red-950/20 dark:border-red-700 dark:text-red-100",
-    "bg-cyan-100 border-cyan-300 text-cyan-900 dark:bg-cyan-950/20 dark:border-cyan-700 dark:text-cyan-100",
-    "bg-amber-200 border-amber-400 text-amber-900 dark:bg-amber-950/20 dark:border-amber-700 dark:text-amber-100", // Darkened for contrast vs bg-amber-50
-    "bg-fuchsia-100 border-fuchsia-300 text-fuchsia-900 dark:bg-fuchsia-950/20 dark:border-fuchsia-700 dark:text-fuchsia-100",
-    "bg-lime-100 border-lime-300 text-lime-900 dark:bg-lime-950/20 dark:border-lime-700 dark:text-lime-100",
-    "bg-violet-100 border-violet-300 text-violet-900 dark:bg-violet-950/20 dark:border-violet-700 dark:text-violet-100",
-    "bg-orange-100 border-orange-300 text-orange-900 dark:bg-orange-950/20 dark:border-orange-700 dark:text-orange-100",
-    "bg-teal-100 border-teal-300 text-teal-900 dark:bg-teal-950/20 dark:border-teal-700 dark:text-teal-100",
-    "bg-rose-100 border-rose-300 text-rose-900 dark:bg-rose-950/20 dark:border-rose-700 dark:text-rose-100",
-    "bg-blue-100 border-blue-300 text-blue-900 dark:bg-blue-950/20 dark:border-blue-700 dark:text-blue-100",
-    "bg-yellow-200 border-yellow-400 text-yellow-900 dark:bg-yellow-950/20 dark:border-yellow-700 dark:text-yellow-100", // Darkened for contrast vs bg-amber-50
-    "bg-purple-100 border-purple-300 text-purple-900 dark:bg-purple-950/20 dark:border-purple-700 dark:text-purple-100",
-    "bg-green-100 border-green-300 text-green-900 dark:bg-green-950/20 dark:border-green-700 dark:text-green-100",
-    "bg-sky-100 border-sky-300 text-sky-900 dark:bg-sky-950/20 dark:border-sky-700 dark:text-sky-100",
-    "bg-pink-100 border-pink-300 text-pink-900 dark:bg-pink-950/20 dark:border-pink-700 dark:text-pink-100",
-    "bg-slate-100 border-slate-300 text-slate-900 dark:bg-slate-900/30 dark:border-slate-700 dark:text-slate-100",
-    "bg-zinc-100 border-zinc-300 text-zinc-900 dark:bg-zinc-950/20 dark:border-zinc-700 dark:text-zinc-100",
-    "bg-gray-100 border-gray-300 text-gray-900 dark:bg-gray-900/30 dark:border-gray-700 dark:text-gray-100",
-    "bg-neutral-100 border-neutral-300 text-neutral-900 dark:bg-neutral-900/30 dark:border-neutral-700 dark:text-neutral-100",
+    "bg-stone-100 border-stone-300 text-stone-900",
+    "bg-indigo-100 border-indigo-300 text-indigo-900",
+    "bg-emerald-100 border-emerald-300 text-emerald-900",
+    "bg-red-100 border-red-300 text-red-900",
+    "bg-cyan-100 border-cyan-300 text-cyan-900",
+    "bg-amber-200 border-amber-400 text-amber-900", // Darkened for contrast vs bg-amber-50
+    "bg-fuchsia-100 border-fuchsia-300 text-fuchsia-900",
+    "bg-lime-100 border-lime-300 text-lime-900",
+    "bg-violet-100 border-violet-300 text-violet-900",
+    "bg-orange-100 border-orange-300 text-orange-900",
+    "bg-teal-100 border-teal-300 text-teal-900",
+    "bg-rose-100 border-rose-300 text-rose-900",
+    "bg-blue-100 border-blue-300 text-blue-900",
+    "bg-yellow-200 border-yellow-400 text-yellow-900", // Darkened for contrast vs bg-amber-50
+    "bg-purple-100 border-purple-300 text-purple-900",
+    "bg-green-100 border-green-300 text-green-900",
+    "bg-sky-100 border-sky-300 text-sky-900",
+    "bg-pink-100 border-pink-300 text-pink-900",
+    "bg-slate-100 border-slate-300 text-slate-900",
+    "bg-zinc-100 border-zinc-300 text-zinc-900",
+    "bg-gray-100 border-gray-300 text-gray-900",
+    "bg-neutral-100 border-neutral-300 text-neutral-900",
 ];
 
 // --- Sub-Components ---
@@ -181,7 +181,7 @@ const SortableItem = React.memo(function SortableItem({ item, textIndex, onRemov
                     style={style}
                     className={cn(
                         "flex items-center gap-1 px-2 py-1 rounded-md border shadow-sm cursor-grab active:cursor-grabbing select-none group relative text-[11px] font-medium w-full min-w-0 min-h-[32px] transition-all hover:-translate-y-0.5 hover:shadow-md",
-                        item.color || "bg-muted/20 border-border/60",
+                        stripDarkVariantClasses(item.color) || "bg-muted/20 border-border/60",
                         isDragging && "ring-2 ring-blue-200 shadow-lg"
                     )}
                     {...attributes}
@@ -398,7 +398,7 @@ const SortableLibrarySnippet = React.memo(function SortableLibrarySnippet({ snip
                             style={style}
                             className={cn(
                                 "flex items-center gap-1 px-1.5 py-1 rounded-md border shadow-sm cursor-grab active:cursor-grabbing select-none group relative text-[10px] font-medium w-full h-full min-w-0 min-h-[28px] transition-all hover:-translate-y-0.5 hover:shadow-md overflow-hidden",
-                                snippet.color,
+                                stripDarkVariantClasses(snippet.color),
                                 isEditing ? "ring-2 ring-amber-400 ring-offset-1" : "",
                                 isDragging && "ring-2 ring-blue-200 shadow-lg"
                             )}
