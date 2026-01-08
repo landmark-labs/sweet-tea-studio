@@ -16,7 +16,7 @@ const AUTOCOMPLETE_CACHE_TTL_MS = 10 * 60 * 1000;
 const MAX_HIGHLIGHT_LENGTH = 5000;
 const MAX_HIGHLIGHT_MATCHES = 500;
 const HIGHLIGHT_DEBOUNCE_MS = 250;
-const HIGHLIGHT_IDLE_TIMEOUT_MS = 1200;
+const HIGHLIGHT_IDLE_TIMEOUT_MS = 400;
 
 interface PromptAutocompleteTextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
     value: string;
@@ -89,7 +89,7 @@ function stripWeights(text: string): string {
     // Remove single emphasis parens if they wrap the entire segment
     result = result.replace(/^\(([^()]+)\)$/g, "$1");
     // Remove bracket de-emphasis: [text] → text
-    result = result.replace(/\[([^\[\]]+)\]/g, "$1");
+    result = result.replace(/\[([^\x5B\x5D]+)\]/g, "$1");
     return result;
 }
 
@@ -474,18 +474,25 @@ export function PromptAutocompleteTextarea({
     // Ref to access snippetIndex in effects without adding it as a dependency (prevents infinite loops)
     const snippetIndexRef = useRef(snippetIndex);
     snippetIndexRef.current = snippetIndex;
-    const [highlightedContent, setHighlightedContent] = useState<React.ReactNode[] | null>(null);
+    const [highlightState, setHighlightState] = useState<{ value: string; nodes: React.ReactNode[] } | null>(null);
     const highlightHandleRef = useRef<IdleHandle | null>(null);
     const highlightDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const highlightTokenRef = useRef(0);
+    const highlightBgClassCacheRef = useRef<Map<string, string>>(new Map());
 
     const buildHighlightBgClasses = useCallback((rawColor: string | null | undefined) => {
+        const key = rawColor || "";
+        const cached = highlightBgClassCacheRef.current.get(key);
+        if (cached) return cached;
+
         // We intentionally ignore any `dark:*` snippet classes here so snippet colors
         // stay consistent across themes (matches light mode appearance).
         const fallback = "bg-slate-200";
         const tokens = (rawColor || "").split(/\s+/g).filter(Boolean);
         const bgTokens = tokens.filter((c) => c.startsWith("bg-"));
-        return bgTokens.join(" ") || fallback;
+        const result = bgTokens.join(" ") || fallback;
+        highlightBgClassCacheRef.current.set(key, result);
+        return result;
     }, []);
 
     useEffect(() => {
@@ -503,7 +510,7 @@ export function PromptAutocompleteTextarea({
 
         if (!highlightSnippets || !localValue || localValue.length > MAX_HIGHLIGHT_LENGTH || currentIndex.entries.length === 0) {
             // Only update state if it's not already null to prevent infinite loops
-            setHighlightedContent((prev) => prev === null ? prev : null);
+            setHighlightState((prev) => prev === null ? prev : null);
             return;
         }
 
@@ -514,14 +521,14 @@ export function PromptAutocompleteTextarea({
 
                 const matches = findSnippetMatches(valueToHighlight, snippetIndexRef.current, { maxMatches: MAX_HIGHLIGHT_MATCHES });
                 if (!matches || matches.length === 0) {
-                    setHighlightedContent((prev) => prev === null ? prev : null);
+                    setHighlightState((prev) => prev === null ? prev : null);
                     highlightHandleRef.current = null;
                     return;
                 }
 
                 const selectedMatches = selectNonOverlappingMatches(matches);
                 if (selectedMatches.length === 0) {
-                    setHighlightedContent((prev) => prev === null ? prev : null);
+                    setHighlightState((prev) => prev === null ? prev : null);
                     highlightHandleRef.current = null;
                     return;
                 }
@@ -531,12 +538,8 @@ export function PromptAutocompleteTextarea({
 
                 selectedMatches.forEach((m, idx) => {
                     if (m.start > cursor) {
-                        // Non-highlighted text: transparent in light mode, visible light color in dark mode
-                        nodes.push(
-                            <span key={`text-${cursor}`} className="text-transparent dark:text-slate-300">
-                                {valueToHighlight.slice(cursor, m.start)}
-                            </span>
-                        );
+                        // Non-highlighted text: inherits `text-transparent dark:text-slate-300` from the backdrop container.
+                        nodes.push(valueToHighlight.slice(cursor, m.start));
                     }
                     const bgClasses = buildHighlightBgClasses(m.snippet.color);
                     nodes.push(
@@ -560,15 +563,11 @@ export function PromptAutocompleteTextarea({
                 });
 
                 if (cursor < valueToHighlight.length) {
-                    // Trailing non-highlighted text: transparent in light mode, visible in dark mode
-                    nodes.push(
-                        <span key={`text-${cursor}`} className="text-transparent dark:text-slate-300">
-                            {valueToHighlight.slice(cursor)}
-                        </span>
-                    );
+                    // Trailing non-highlighted text: inherits `text-transparent dark:text-slate-300` from the backdrop container.
+                    nodes.push(valueToHighlight.slice(cursor));
                 }
 
-                setHighlightedContent(nodes);
+                setHighlightState({ value: valueToHighlight, nodes });
                 highlightHandleRef.current = null;
             }, { timeout: HIGHLIGHT_IDLE_TIMEOUT_MS });
         }, HIGHLIGHT_DEBOUNCE_MS);
@@ -584,8 +583,18 @@ export function PromptAutocompleteTextarea({
         // Note: snippetIndex is included (via its entries.length check in body) so the effect
         // re-runs when snippets load on startup. Without this, highlighting won't work until
         // a snippet is added/removed after restart.
-    }, [localValue, highlightSnippets, snippetIndex]);
+    }, [localValue, highlightSnippets, snippetIndex, buildHighlightBgClasses]);
 
+
+    const canHighlight =
+        Boolean(highlightSnippets) &&
+        Boolean(localValue) &&
+        localValue.length <= MAX_HIGHLIGHT_LENGTH &&
+        snippetIndex.entries.length > 0;
+    const showHighlightOverlay = Boolean(canHighlight && highlightState);
+    const highlightedContent = showHighlightOverlay
+        ? (highlightState?.value === localValue ? highlightState.nodes : [localValue])
+        : null;
 
     return (
         <div className="flex flex-col gap-1 w-full group/container">
@@ -613,13 +622,13 @@ export function PromptAutocompleteTextarea({
 
             <div className="relative w-full">
                 {/* Overlay for highlighting */}
-                {highlightSnippets && highlightedContent && (
+                {showHighlightOverlay && (
                     <div
                         ref={backdropRef}
                         aria-hidden="true"
                         className={cn(
                             // Match Textarea base styles EXACTLY. Keep it behind the textarea so text stays responsive.
-                            "absolute inset-0 z-0 p-3 text-xs font-mono whitespace-pre-wrap break-words overflow-auto bg-transparent border border-transparent pointer-events-none text-transparent",
+                            "absolute inset-0 z-0 p-3 text-xs font-mono whitespace-pre-wrap break-words overflow-auto bg-transparent border border-transparent pointer-events-none text-transparent dark:text-slate-300",
                             // Must match textarea sizing/resize
                             className?.includes("h-") ? "" : "h-auto" // If height is fixed in class, it inherits naturally via inset. If auto, we might drift.
                             // Actually, Scroll Sync handles offset.
@@ -710,7 +719,7 @@ export function PromptAutocompleteTextarea({
                         highlightSnippets ? "bg-transparent focus:bg-transparent" : "",
                         highlightSnippets && isActive && "bg-blue-50/10", // slight tint if active but transparent
                         // Dark mode with highlighting: make text transparent so backdrop text shows through
-                        highlightSnippets && highlightedContent && "dark:text-transparent dark:caret-slate-300",
+                        showHighlightOverlay && "dark:text-transparent dark:caret-slate-300",
                         className,
                         // Ensure padding matches overlay
                         !className?.includes("p-") && "p-3"
