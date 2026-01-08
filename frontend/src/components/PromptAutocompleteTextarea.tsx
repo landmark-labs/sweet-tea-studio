@@ -15,6 +15,8 @@ const AUTOCOMPLETE_CACHE_MAX = 200;
 const AUTOCOMPLETE_CACHE_TTL_MS = 10 * 60 * 1000;
 const MAX_HIGHLIGHT_LENGTH = 5000;
 const MAX_HIGHLIGHT_MATCHES = 500;
+const HIGHLIGHT_DEBOUNCE_MS = 250;
+const HIGHLIGHT_IDLE_TIMEOUT_MS = 1200;
 
 interface PromptAutocompleteTextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
     value: string;
@@ -467,101 +469,100 @@ export function PromptAutocompleteTextarea({
         onKeyDown?.(e);
     };
 
-    // --- Highlighting Logic (debounced for performance) ---
-    const [debouncedValue, setDebouncedValue] = useState(localValue);
+    // --- Highlighting Logic (debounced + idle to avoid blocking typing) ---
     const snippetIndex = useMemo(() => buildSnippetIndex(snippets), [snippets]);
     // Ref to access snippetIndex in effects without adding it as a dependency (prevents infinite loops)
     const snippetIndexRef = useRef(snippetIndex);
     snippetIndexRef.current = snippetIndex;
     const [highlightedContent, setHighlightedContent] = useState<React.ReactNode[] | null>(null);
     const highlightHandleRef = useRef<IdleHandle | null>(null);
+    const highlightDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const highlightTokenRef = useRef(0);
-
-    // Debounce value updates for highlighting (doesn't affect typing)
-    useEffect(() => {
-        const timer = setTimeout(() => setDebouncedValue(localValue), 150);
-        return () => clearTimeout(timer);
-    }, [localValue]);
 
     useEffect(() => {
         highlightTokenRef.current += 1;
         const token = highlightTokenRef.current;
 
         const currentIndex = snippetIndexRef.current;
-        if (!highlightSnippets || !debouncedValue || debouncedValue.length > MAX_HIGHLIGHT_LENGTH || currentIndex.entries.length === 0) {
-            cancelIdle(highlightHandleRef.current);
-            highlightHandleRef.current = null;
+        if (highlightDebounceTimerRef.current) {
+            clearTimeout(highlightDebounceTimerRef.current);
+            highlightDebounceTimerRef.current = null;
+        }
+
+        cancelIdle(highlightHandleRef.current);
+        highlightHandleRef.current = null;
+
+        if (!highlightSnippets || !localValue || localValue.length > MAX_HIGHLIGHT_LENGTH || currentIndex.entries.length === 0) {
             // Only update state if it's not already null to prevent infinite loops
             setHighlightedContent((prev) => prev === null ? prev : null);
             return;
         }
 
-        cancelIdle(highlightHandleRef.current);
-        highlightHandleRef.current = scheduleIdle(() => {
-            if (token !== highlightTokenRef.current) return;
+        const valueToHighlight = localValue;
+        highlightDebounceTimerRef.current = setTimeout(() => {
+            highlightHandleRef.current = scheduleIdle(() => {
+                if (token !== highlightTokenRef.current) return;
 
-            const matches = findSnippetMatches(debouncedValue, snippetIndexRef.current, { maxMatches: MAX_HIGHLIGHT_MATCHES });
-            if (!matches || matches.length === 0) {
-                setHighlightedContent((prev) => prev === null ? prev : null);
-                return;
-            }
+                const matches = findSnippetMatches(valueToHighlight, snippetIndexRef.current, { maxMatches: MAX_HIGHLIGHT_MATCHES });
+                if (!matches || matches.length === 0) {
+                    setHighlightedContent((prev) => prev === null ? prev : null);
+                    highlightHandleRef.current = null;
+                    return;
+                }
 
-            const selectedMatches = selectNonOverlappingMatches(matches);
-            if (selectedMatches.length === 0) {
-                setHighlightedContent((prev) => prev === null ? prev : null);
-                return;
-            }
+                const selectedMatches = selectNonOverlappingMatches(matches);
+                if (selectedMatches.length === 0) {
+                    setHighlightedContent((prev) => prev === null ? prev : null);
+                    highlightHandleRef.current = null;
+                    return;
+                }
 
-            const nodes: React.ReactNode[] = [];
-            let cursor = 0;
+                const nodes: React.ReactNode[] = [];
+                let cursor = 0;
 
-            selectedMatches.forEach((m, idx) => {
-                if (m.start > cursor) {
-                    // Non-highlighted text: use theme foreground color
+                selectedMatches.forEach((m, idx) => {
+                    if (m.start > cursor) {
+                        // Non-highlighted text: rendered as transparent text in the backdrop (caret/text come from textarea)
+                        nodes.push(valueToHighlight.slice(cursor, m.start));
+                    }
+                    // Extract bg + dark:bg classes only for the highlight background.
+                    const bgClasses = (m.snippet.color || "bg-slate-200 dark:bg-slate-700/30")
+                        .split(/\s+/g)
+                        .filter((c) => c.startsWith("bg-") || c.startsWith("dark:bg-"))
+                        .join(" ") || "bg-slate-200 dark:bg-slate-700/30";
                     nodes.push(
-                        <span key={`plain-${cursor}-${idx}`} className="text-foreground">
-                            {debouncedValue.slice(cursor, m.start)}
+                        <span
+                            key={`${m.start}-${idx}`}
+                            className={cn(bgClasses, "rounded-sm opacity-80 dark:opacity-100 text-transparent")}
+                        >
+                            {valueToHighlight.slice(m.start, m.end)}
                         </span>
                     );
+                    cursor = m.end;
+                });
+
+                if (cursor < valueToHighlight.length) {
+                    // Trailing non-highlighted text
+                    nodes.push(valueToHighlight.slice(cursor));
                 }
-                // Extract bg + dark:bg classes only for the highlight background.
-                const bgClasses = (m.snippet.color || "bg-slate-200 dark:bg-slate-700/30")
-                    .split(/\s+/g)
-                    .filter((c) => c.startsWith("bg-") || c.startsWith("dark:bg-"))
-                    .join(" ") || "bg-slate-200 dark:bg-slate-700/30";
-                // Highlighted text: visible dark text for contrast against light highlight backgrounds
-                nodes.push(
-                    <span
-                        key={`${m.start}-${idx}`}
-                        className={cn(bgClasses, "rounded-sm opacity-80 dark:opacity-100 text-gray-900 select-none")}
-                    >
-                        {debouncedValue.slice(m.start, m.end)}
-                    </span>
-                );
-                cursor = m.end;
-            });
 
-            if (cursor < debouncedValue.length) {
-                // Trailing non-highlighted text: use theme foreground color
-                nodes.push(
-                    <span key={`trailing-${cursor}`} className="text-foreground">
-                        {debouncedValue.slice(cursor)}
-                    </span>
-                );
-            }
-
-            setHighlightedContent(nodes);
-            highlightHandleRef.current = null;
-        }, { timeout: 300 });
+                setHighlightedContent(nodes);
+                highlightHandleRef.current = null;
+            }, { timeout: HIGHLIGHT_IDLE_TIMEOUT_MS });
+        }, HIGHLIGHT_DEBOUNCE_MS);
 
         return () => {
+            if (highlightDebounceTimerRef.current) {
+                clearTimeout(highlightDebounceTimerRef.current);
+                highlightDebounceTimerRef.current = null;
+            }
             cancelIdle(highlightHandleRef.current);
             highlightHandleRef.current = null;
         };
         // Note: snippetIndex is included (via its entries.length check in body) so the effect
         // re-runs when snippets load on startup. Without this, highlighting won't work until
         // a snippet is added/removed after restart.
-    }, [debouncedValue, highlightSnippets, snippetIndex]);
+    }, [localValue, highlightSnippets, snippetIndex]);
 
 
     return (
@@ -595,8 +596,8 @@ export function PromptAutocompleteTextarea({
                         ref={backdropRef}
                         aria-hidden="true"
                         className={cn(
-                            // Match Textarea base styles EXACTLY. z-20 puts overlay on top of textarea.
-                            "absolute inset-0 z-20 p-3 text-xs font-mono whitespace-pre-wrap break-words overflow-auto bg-transparent border border-transparent pointer-events-none",
+                            // Match Textarea base styles EXACTLY. Keep it behind the textarea so text stays responsive.
+                            "absolute inset-0 z-0 p-3 text-xs font-mono whitespace-pre-wrap break-words overflow-auto bg-transparent border border-transparent pointer-events-none text-transparent",
                             // Must match textarea sizing/resize
                             className?.includes("h-") ? "" : "h-auto" // If height is fixed in class, it inherits naturally via inset. If auto, we might drift.
                             // Actually, Scroll Sync handles offset.
@@ -686,9 +687,6 @@ export function PromptAutocompleteTextarea({
                         isActive && "ring-2 ring-blue-400 border-blue-400",
                         highlightSnippets ? "bg-transparent focus:bg-transparent" : "",
                         highlightSnippets && isActive && "bg-blue-50/10", // slight tint if active but transparent
-                        // When overlay is showing highlighted content, make textarea text transparent
-                        // but keep caret visible so user can see cursor position
-                        highlightSnippets && highlightedContent && "text-transparent caret-foreground",
                         className,
                         // Ensure padding matches overlay
                         !className?.includes("p-") && "p-3"
