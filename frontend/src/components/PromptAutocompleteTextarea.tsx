@@ -1,4 +1,4 @@
-import React, { useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
@@ -479,6 +479,44 @@ export function PromptAutocompleteTextarea({
     const highlightDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const highlightTokenRef = useRef(0);
 
+    const buildHighlightBgClasses = useCallback((rawColor: string | null | undefined) => {
+        const fallback = "bg-slate-200 dark:bg-slate-700/30";
+        const tokens = (rawColor || fallback).split(/\s+/g).filter(Boolean);
+        const bgTokens = tokens.filter((c) => c.startsWith("bg-") || c.startsWith("dark:bg-"));
+
+        const hasDarkBg = bgTokens.some((c) => c.startsWith("dark:bg-"));
+        const lightBg = bgTokens.find((c) => c.startsWith("bg-"));
+
+        const deriveDarkBg = (bgClass: string | undefined) => {
+            if (!bgClass) return "dark:bg-slate-700/40";
+
+            // Normalize "bg-" prefix, keep any opacity suffix.
+            // Examples: bg-sky-100, bg-sky-100/80, bg-white, bg-black
+            const match = bgClass.match(/^bg-([a-z]+)-(\d{2,3})(?:\/(\d{1,3}))?$/);
+            if (match) {
+                const [, color, shadeRaw] = match;
+                const neutral = new Set(["slate", "gray", "zinc", "neutral", "stone"]);
+                const darkShade = neutral.has(color) ? "700" : "900";
+                const alpha = neutral.has(color) ? "45" : "30";
+                return `dark:bg-${color}-${darkShade}/${alpha}`;
+            }
+
+            if (bgClass === "bg-white") return "dark:bg-slate-700/40";
+            if (bgClass === "bg-black") return "dark:bg-black/40";
+            if (bgClass.startsWith("bg-")) return "dark:bg-slate-700/40";
+
+            return "dark:bg-slate-700/40";
+        };
+
+        const bgClasses = bgTokens.join(" ") || fallback;
+        if (hasDarkBg) return bgClasses;
+
+        // If snippet colors only specify light-mode backgrounds (common), ensure we
+        // provide a dark-mode background too. Otherwise dark mode can become
+        // unreadable (light highlight behind light text).
+        return `${bgClasses} ${deriveDarkBg(lightBg)}`.trim();
+    }, []);
+
     useEffect(() => {
         highlightTokenRef.current += 1;
         const token = highlightTokenRef.current;
@@ -525,11 +563,7 @@ export function PromptAutocompleteTextarea({
                         // Non-highlighted text: rendered as transparent text in the backdrop (caret/text come from textarea)
                         nodes.push(valueToHighlight.slice(cursor, m.start));
                     }
-                    // Extract bg + dark:bg classes only for the highlight background.
-                    const bgClasses = (m.snippet.color || "bg-slate-200 dark:bg-slate-700/30")
-                        .split(/\s+/g)
-                        .filter((c) => c.startsWith("bg-") || c.startsWith("dark:bg-"))
-                        .join(" ") || "bg-slate-200 dark:bg-slate-700/30";
+                    const bgClasses = buildHighlightBgClasses(m.snippet.color);
                     nodes.push(
                         <span
                             key={`${m.start}-${idx}`}
