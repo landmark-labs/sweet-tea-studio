@@ -1039,8 +1039,11 @@ export default function PromptStudio() {
   const handlePromptUpdateMany = useCallback((updates: Record<string, string>) => {
     if (!updates || Object.keys(updates).length === 0) return;
     const currentData = store.get(formDataAtom) || {};
+    const hasChanges = Object.entries(updates).some(([key, value]) => currentData[key] !== value);
+    if (!hasChanges) return;
     handleFormChange({ ...currentData, ...updates });
-  }, [handleFormChange, store]);
+    setExternalValueSyncKey((prev) => prev + 1);
+  }, [handleFormChange, setExternalValueSyncKey, store]);
 
   const handleUseInPipe = useCallback(({ workflowId, imagePath, galleryItem }: { workflowId: string; imagePath: string; galleryItem: GalleryItem }) => {
     flushPendingPersist();

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, rectSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -599,11 +599,11 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
 
     // Ref Pattern: Track currentValues without triggering effects in Output channel
     const valuesRef = useRef(currentValues);
-    useEffect(() => { valuesRef.current = currentValues; }, [currentValues]);
+    useLayoutEffect(() => { valuesRef.current = currentValues; }, [currentValues]);
 
     // Ref Pattern: Track fieldItems for library sync without triggering on every change
     const fieldItemsRef = useRef(fieldItems);
-    useEffect(() => { fieldItemsRef.current = fieldItems; }, [fieldItems]);
+    useLayoutEffect(() => { fieldItemsRef.current = fieldItems; }, [fieldItems]);
 
     // Guard Ref: To prevent "Echo" loops where we parse what we just compiled
     const lastCompiledRef = useRef<{ field: string, value: string } | null>(null);
@@ -619,6 +619,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
     // Ref to access snippetIndex in effects without adding it as a dependency (prevents infinite loops)
     const snippetIndexRef = useRef(snippetIndex);
     snippetIndexRef.current = snippetIndex;
+    const prevLibraryRef = useRef<PromptItem[] | null>(null);
     const reconcileHandleRef = useRef<IdleHandle | null>(null);
     const reconcileTokenRef = useRef(0);
 
@@ -794,8 +795,45 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
     // Important: reconciliation depends on `library`, so we must guard against it
     // running on a library edit before the parent prompt text is updated.
     useEffect(() => {
+        const prevLibrary = prevLibraryRef.current;
+        prevLibraryRef.current = library;
+
         if (!library || library.length === 0) return;
         if (syncingLibraryRef.current) return;
+
+        const contentReplacements = (() => {
+            if (!prevLibrary || prevLibrary.length === 0) return [];
+            const prevById = new Map(prevLibrary.map((snippet) => [snippet.id, snippet]));
+            const replacements: Array<{ from: string; to: string }> = [];
+            for (const next of library) {
+                if (next.type !== "block") continue;
+                const prev = prevById.get(next.id);
+                if (!prev || prev.type !== "block") continue;
+                const from = prev.content || "";
+                const to = next.content || "";
+                if (!from || !to) continue;
+                if (from === to) continue;
+                replacements.push({ from, to });
+            }
+            // Avoid partial replacements when snippets overlap (prefer longest old content first).
+            replacements.sort((a, b) => b.from.length - a.from.length);
+            return replacements;
+        })();
+
+        const applyContentReplacements = (value: string) => {
+            if (!value || contentReplacements.length === 0) {
+                return { value, didReplace: false };
+            }
+            let nextValue = value;
+            let didReplace = false;
+            for (const { from, to } of contentReplacements) {
+                if (!from) continue;
+                if (!nextValue.includes(from)) continue;
+                nextValue = nextValue.split(from).join(to);
+                didReplace = true;
+            }
+            return { value: nextValue, didReplace };
+        };
 
         // Use refs to access current state without dependencies
         const currentFieldItems = fieldItemsRef.current;
@@ -815,12 +853,14 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
             const currentVal = typeof currentRaw === "string"
                 ? currentRaw
                 : (currentRaw === null || currentRaw === undefined ? "" : String(currentRaw));
+            const { value: rewrittenVal, didReplace } = applyContentReplacements(currentVal);
+            const valueForRebuild = didReplace ? rewrittenVal : currentVal;
 
             let updated = existing;
             let didChangeField = false;
 
-            if (updated.length === 0 && currentVal) {
-                const rebuilt = buildItemsFromValue(currentVal, snippetIndexRef.current);
+            if (updated.length === 0 && valueForRebuild) {
+                const rebuilt = buildItemsFromValue(valueForRebuild, snippetIndexRef.current);
                 if (rebuilt && rebuilt.length > 0) {
                     updated = rebuilt;
                     didChangeField = true;
@@ -854,7 +894,15 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
             }
 
             const hasLinkedBlocks = synced.some(i => i.type === "block" && !!i.sourceId);
-            if (!hasLinkedBlocks) continue;
+            if (!hasLinkedBlocks) {
+                // If a snippet's content changed, we can still keep prompt text "linked" by
+                // rewriting old snippet content to the new one in-place, even if this field
+                // hasn't been initialized in the constructor yet.
+                if (didReplace && rewrittenVal !== currentVal) {
+                    valueUpdates[fieldKey] = rewrittenVal;
+                }
+                continue;
+            }
 
             const compiled = synced.map(i => i.content).join(", ");
 
