@@ -1865,6 +1865,18 @@ export default function PromptStudio() {
             // Fetch latest images for this folder to keep viewer context valid
             api.getProjectFolderImages(parseInt(activeProjectId), activeFolder)
               .then(folderImages => {
+                // BUGFIX: Ensure the completed image is at index 0
+                // When inpaint saves both mask and output, the mask may have a later mtime
+                // and appear first in the sorted list. Reorder to prioritize the actual output.
+                const completedPath = data.images[0]?.path;
+                if (completedPath && folderImages.length > 0) {
+                  const completedIndex = folderImages.findIndex(img => img.path === completedPath);
+                  if (completedIndex > 0) {
+                    // Move the completed image to index 0
+                    const [completedImage] = folderImages.splice(completedIndex, 1);
+                    folderImages.unshift(completedImage);
+                  }
+                }
                 // Update the viewer's navigation list with the folder contents
                 setProjectGalleryImages(folderImages);
               })
