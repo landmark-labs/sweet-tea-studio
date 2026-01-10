@@ -110,6 +110,7 @@ export interface Job {
     id: number;
     engine_id: number;
     workflow_template_id: number;
+    project_id?: number | null;
     status: string;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     input_params: any;

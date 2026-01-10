@@ -176,12 +176,14 @@ export default function PromptStudio() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const [isLoading, setIsLoading] = useState(true);
+  const [isBootLoading, setIsBootLoading] = useState(true);
+  const [isTransferringImage, setIsTransferringImage] = useState(false);
   const [generationState, setGenerationState] = useState<GenerationState>("idle");
   const [statusLabel, setStatusLabel] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [lastJobId, setLastJobId] = useState<number | null>(null);
   const lastSubmittedParamsRef = useRef<any>(null); // Track params for preview
+  const jobOutputContextRef = useRef(new Map<number, { projectId: string | null; outputDir: string | null }>());
   const [progress, setProgress] = useState<number>(0);
   const [jobStartTime, setJobStartTime] = useState<number | null>(null);
   const progressHistoryRef = useRef<ProgressHistoryEntry[]>([]);
@@ -1937,38 +1939,52 @@ export default function PromptStudio() {
           // Clear previewPath so ImageViewer doesn't try to align to it
           setPreviewPath(null);
 
-          // CRITICAL FIX: Sync with Project Gallery context if active
-          // This ensures the viewer playlist respects the user's current folder instead of falling back to "recent all"
-          const activeProjectId = localStorage.getItem("ds_project_gallery_project");
-          const activeFolder = localStorage.getItem("ds_project_gallery_folder");
+          // Sync viewer navigation list to the job's output destination when applicable.
+          // This keeps ProjectGallery browsing state independent and avoids full resets on pipe/project changes.
+          const completedPath = data.images[0]?.path;
+          const syncViewerContext = async () => {
+            let outputProjectId: number | null = null;
+            let outputDir: string | null = null;
 
-          if (activeProjectId && activeFolder) {
-            // Fetch latest images for this folder to keep viewer context valid
-            api.getProjectFolderImages(parseInt(activeProjectId), activeFolder)
-              .then(folderImages => {
-                // BUGFIX: Ensure the completed image is at index 0
-                // When inpaint saves both mask and output, the mask may have a later mtime
-                // and appear first in the sorted list. Reorder to prioritize the actual output.
-                const completedPath = data.images[0]?.path;
-                if (completedPath && folderImages.length > 0) {
-                  const completedIndex = folderImages.findIndex(img => img.path === completedPath);
-                  if (completedIndex > 0) {
-                    // Move the completed image to index 0
-                    const [completedImage] = folderImages.splice(completedIndex, 1);
-                    folderImages.unshift(completedImage);
-                  }
+            const stored = jobOutputContextRef.current.get(lastJobId) || null;
+            if (stored) {
+              outputProjectId = stored.projectId ? parseInt(stored.projectId, 10) : null;
+              outputDir = stored.outputDir || null;
+              jobOutputContextRef.current.delete(lastJobId);
+            } else {
+              try {
+                const job = await api.getJob(lastJobId);
+                outputProjectId = job.project_id ?? null;
+                outputDir = job.output_dir ?? null;
+              } catch (err) {
+                outputProjectId = null;
+                outputDir = null;
+              }
+            }
+
+            if (!outputProjectId) {
+              setProjectGalleryImages([]);
+              return;
+            }
+
+            const folderName = outputDir || "output";
+            try {
+              const folderImages = await api.getProjectFolderImages(outputProjectId, folderName);
+              if (completedPath && folderImages.length > 0) {
+                const completedIndex = folderImages.findIndex(img => img.path === completedPath);
+                if (completedIndex > 0) {
+                  const [completedImage] = folderImages.splice(completedIndex, 1);
+                  folderImages.unshift(completedImage);
                 }
-                // Update the viewer's navigation list with the folder contents
-                setProjectGalleryImages(folderImages);
-              })
-              .catch(err => {
-                console.warn("Failed to sync project gallery context:", err);
-                setProjectGalleryImages([]); // Fallback to safe empty state (will use galleryImages)
-              });
-          } else {
-            // No active folder context, clear to allow fallback to global galleryImages
-            setProjectGalleryImages([]);
-          }
+              }
+              setProjectGalleryImages(folderImages);
+            } catch (e) {
+              console.warn("Failed to sync viewer output context:", e);
+              setProjectGalleryImages([]);
+            }
+          };
+
+          void syncViewerContext();
 
           // Optimistically add new image to galleryImages immediately
           // This ensures index 0 has the new image when resetKey effect runs
@@ -2179,13 +2195,10 @@ export default function PromptStudio() {
 
   useEffect(() => {
     // If GenerationContext already has workflows, use them instead of fetching again
-    if (contextWorkflows && contextWorkflows.length > 0) {
-      setWorkflows(contextWorkflows);
-      if (!selectedWorkflowId && contextWorkflows.length > 0) {
-        setSelectedWorkflowId(String(contextWorkflows[0].id));
-      }
-    }
-  }, [contextWorkflows, selectedWorkflowId]);
+    if (!contextWorkflows || contextWorkflows.length === 0) return;
+    setWorkflows(contextWorkflows);
+    setSelectedWorkflowId((prev) => prev || String(contextWorkflows[0].id));
+  }, [contextWorkflows]);
 
   useEffect(() => {
     // If GenerationContext already has projects, use them
@@ -2198,7 +2211,7 @@ export default function PromptStudio() {
 
   const loadData = useCallback(async (isReconnect = false) => {
     try {
-      if (!isReconnect) setIsLoading(true);
+      if (!isReconnect) setIsBootLoading(true);
 
       // On reconnect, we force reload workflows/engines as they might have changed or be available now
       // For initial load, we respect context data (use refs to avoid callback identity changes)
@@ -2216,7 +2229,9 @@ export default function PromptStudio() {
       if (enginesRes.status === "fulfilled") {
         const enginesData = enginesRes.value;
         setEngines(enginesData);
-        if (!selectedEngineId && enginesData.length > 0) setSelectedEngineId(String(enginesData[0].id));
+        if (enginesData.length > 0) {
+          setSelectedEngineId((prev) => prev || String(enginesData[0].id));
+        }
       } else {
         console.error("Failed to load engines", enginesRes.reason);
       }
@@ -2225,7 +2240,7 @@ export default function PromptStudio() {
         const workflowsData = workflowsRes.value;
         if (workflowsData.length > 0) {
           setWorkflows(workflowsData);
-          if (!selectedWorkflowId && workflowsData.length > 0) setSelectedWorkflowId(String(workflowsData[0].id));
+          setSelectedWorkflowId((prev) => prev || String(workflowsData[0].id));
         }
       } else if (needsWorkflows && workflowsRes.status === "rejected") {
         console.error("Failed to load workflows", workflowsRes.reason);
@@ -2248,9 +2263,9 @@ export default function PromptStudio() {
       console.error("Critical error loading data", err);
       if (!isReconnect) setError(err instanceof Error ? err.message : "Failed to load data");
     } finally {
-      if (!isReconnect) setIsLoading(false);
+      if (!isReconnect) setIsBootLoading(false);
     }
-  }, [selectedEngineId, selectedWorkflowId]);
+  }, []);
 
   // Initial load
   useEffect(() => {
@@ -2381,6 +2396,10 @@ export default function PromptStudio() {
         cleanParams,
         generationTarget || null
       );
+      jobOutputContextRef.current.set(job.id, {
+        projectId: selectedProjectId || null,
+        outputDir: selectedProjectId ? (generationTarget || null) : null,
+      });
       if (!selectedProjectId) {
         setUnsavedJobIds((prev) => (prev.includes(job.id) ? prev : [...prev, job.id]));
       }
@@ -2467,6 +2486,10 @@ export default function PromptStudio() {
           cleanParams,
           generationTarget || null
         );
+        jobOutputContextRef.current.set(job.id, {
+          projectId: selectedProjectId || null,
+          outputDir: selectedProjectId ? (generationTarget || null) : null,
+        });
 
         // Add to pending queue - WebSocket completion handler will pick this up
         pendingJobIdsRef.current.push(job.id);
@@ -2538,7 +2561,7 @@ export default function PromptStudio() {
 
   const handleWorkflowSelect = useCallback(async (workflowId: string, fromImagePath?: string) => {
     if (fromImagePath) {
-      setIsLoading(true);
+      setIsTransferringImage(true);
       try {
         const url = `/api/v1/gallery/image/path?path=${encodeURIComponent(fromImagePath)}`;
         const res = await fetch(url);
@@ -2566,7 +2589,7 @@ export default function PromptStudio() {
         console.error("Failed to transfer image", e);
         setError("Failed to transfer image to workflow");
       } finally {
-        setIsLoading(false);
+        setIsTransferringImage(false);
       }
     }
 
@@ -2617,7 +2640,7 @@ export default function PromptStudio() {
     setPreviewMetadata(null);
   }, []);
 
-  if (isLoading) {
+  if (isBootLoading) {
     return (
       <div className="flex items-center justify-center min-h-[50vh]">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -2627,6 +2650,14 @@ export default function PromptStudio() {
 
   return (
     <div className="h-full w-full bg-transparent flex overflow-hidden relative">
+      {isTransferringImage && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/60 backdrop-blur-sm">
+          <div className="flex items-center gap-2 text-sm">
+            <Loader2 className="w-5 h-5 animate-spin text-primary" />
+            <span>transferring image...</span>
+          </div>
+        </div>
+      )}
 
       {/* 1. Left Column - Prompt Constructor (Collapsible) */}
       <div
@@ -2702,14 +2733,6 @@ export default function PromptStudio() {
                   }
                   // Reset navigation context (arrow keys) but keep current preview visible
                   setProjectGalleryImages([]);
-
-                  // Clear persistent sidebar context so completion handler doesn't sync old folder
-                  localStorage.removeItem("ds_project_gallery_project");
-                  localStorage.removeItem("ds_project_gallery_folder");
-
-                  // Clear visual sidebar selection
-                  setCanvasGallerySelection({ projectId: null, folder: null });
-                  setCanvasGallerySyncKey(prev => prev + 1);
 
                   setGalleryRefresh((prev) => prev + 1);
                 }}
@@ -2855,7 +2878,7 @@ export default function PromptStudio() {
                 </SelectValue>
               </SelectTrigger>
               <SelectContent className="max-h-[60vh] overflow-y-auto">
-                {isLoading ? (
+                {isBootLoading ? (
                   <SelectItem value="__loading" disabled>loading pipes...</SelectItem>
                 ) : (workflows.length === 0 && error) ? (
                   <SelectItem value="__error" disabled>error loading: {error}</SelectItem>
