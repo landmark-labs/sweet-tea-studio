@@ -1681,23 +1681,25 @@ def move_images(req: MoveImagesRequest, session: Session = Depends(get_session))
     if not engine:
         engine = session.exec(select(Engine)).first()
     
-    if not engine or not engine.output_dir:
-        raise HTTPException(status_code=500, detail="No engine configured with output directory")
+    if not engine:
+        raise HTTPException(status_code=500, detail="No engine configured")
     
-    # Determine destination directory based on folder type
+    # Determine destination directory - all outputs go to ComfyUI/input/<project>/<subfolder>
     subfolder = req.subfolder or "output"
     
-    if subfolder == "output":
-        # Output folder: ComfyUI/sweet_tea/{project}/output
-        dest_dir = settings.get_project_output_dir_in_comfy(engine.output_dir, project.slug)
-    else:
-        # Non-output folders (input, masks, custom): ComfyUI/input/{project}/{subfolder}
-        # This matches the directory structure used by ProjectGallery
-        if engine.input_dir:
-            dest_dir = settings.get_project_input_dir_in_comfy(engine.input_dir, project.slug) / subfolder
+    if engine.input_dir:
+        # Preferred: use input_dir/<project>/<subfolder>
+        dest_dir = Path(engine.input_dir) / project.slug / subfolder
+    elif engine.output_dir:
+        # Fallback: derive input dir from output_dir (ComfyUI/output -> ComfyUI/input)
+        output_path = Path(engine.output_dir)
+        if output_path.name in ("output", "input"):
+            comfy_root = output_path.parent
         else:
-            # Fallback to legacy sweet_tea structure if input_dir not configured
-            dest_dir = settings.get_project_dir_in_comfy(engine.output_dir, project.slug) / subfolder
+            comfy_root = output_path
+        dest_dir = comfy_root / "input" / project.slug / subfolder
+    else:
+        raise HTTPException(status_code=500, detail="No input or output directory configured")
     
     dest_dir.mkdir(parents=True, exist_ok=True)
     
@@ -1948,7 +1950,18 @@ def resync_images_from_disk(session: Session = Depends(get_session)):
             except Exception:
                 pass
 
-        # Only scan project-specific subtrees under input_dir to avoid importing unrelated inputs.
+        # Discover project slugs from input_dir too (new structure: input/<project>/<subfolder>)
+        if eng.input_dir:
+            base = PathlibPath(eng.input_dir)
+            try:
+                if base.exists():
+                    for child in base.iterdir():
+                        if child.is_dir() and child.name:
+                            slugs_for_engine.add(child.name)
+            except Exception:
+                pass
+
+        # Scan project-specific subtrees under input_dir
         if eng.input_dir and slugs_for_engine:
             base = PathlibPath(eng.input_dir)
             for slug in sorted(slugs_for_engine):

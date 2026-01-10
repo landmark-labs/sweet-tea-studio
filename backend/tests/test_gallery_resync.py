@@ -24,15 +24,16 @@ def _write_noise_png(path: Path, comment_json: str) -> None:
 def test_resync_imports_file_and_captures_generation_info(client, session, tmp_path):
     comfy_root = tmp_path / "comfy"
     output_dir = comfy_root / "output"
-    sweet_tea_dir = comfy_root / "sweet_tea"
-    (sweet_tea_dir / "proj1" / "output").mkdir(parents=True, exist_ok=True)
+    input_dir = comfy_root / "input"
+    # New structure: images go to input/<project>/<subfolder>
+    (input_dir / "proj1" / "output").mkdir(parents=True, exist_ok=True)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     engine = Engine(
         name="Local ComfyUI",
         base_url="http://localhost:8188",
         output_dir=str(output_dir),
-        input_dir=str(comfy_root / "input"),
+        input_dir=str(input_dir),
         is_active=True,
     )
     session.add(engine)
@@ -53,7 +54,8 @@ def test_resync_imports_file_and_captures_generation_info(client, session, tmp_p
         "timestamp": "2026-01-01T00:00:00Z",
         "params": {"seed": 123, "steps": 20},
     }
-    img_path = sweet_tea_dir / "proj1" / "output" / "gen.png"
+    # Images now go to input/<project>/<subfolder> instead of sweet_tea
+    img_path = input_dir / "proj1" / "output" / "gen.png"
     _write_noise_png(img_path, json.dumps(payload))
 
     res = client.post("/api/v1/gallery/resync")
@@ -76,15 +78,16 @@ def test_resync_imports_file_and_captures_generation_info(client, session, tmp_p
 def test_resync_backfills_metadata_for_existing_rows(client, session, tmp_path):
     comfy_root = tmp_path / "comfy2"
     output_dir = comfy_root / "output"
-    sweet_tea_dir = comfy_root / "sweet_tea"
-    (sweet_tea_dir / "proj2" / "output").mkdir(parents=True, exist_ok=True)
+    input_dir = comfy_root / "input"
+    # New structure: images go to input/<project>/<subfolder>
+    (input_dir / "proj2" / "output").mkdir(parents=True, exist_ok=True)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     engine = Engine(
         name="Local ComfyUI",
         base_url="http://localhost:8188",
         output_dir=str(output_dir),
-        input_dir=str(comfy_root / "input"),
+        input_dir=str(input_dir),
         is_active=True,
     )
     session.add(engine)
@@ -92,7 +95,8 @@ def test_resync_backfills_metadata_for_existing_rows(client, session, tmp_path):
     session.refresh(engine)
 
     payload = {"positive_prompt": "a dog", "negative_prompt": "no", "params": {"seed": 1}}
-    img_path = sweet_tea_dir / "proj2" / "output" / "existing.png"
+    # Images now go to input/<project>/<subfolder>
+    img_path = input_dir / "proj2" / "output" / "existing.png"
     _write_noise_png(img_path, json.dumps(payload))
 
     # Simulate a previously-imported orphan without metadata.
@@ -119,15 +123,16 @@ def test_resync_backfills_metadata_for_existing_rows(client, session, tmp_path):
 def test_resync_persists_prompt_backfill_for_existing_metadata_dict(client, session, tmp_path):
     comfy_root = tmp_path / "comfy4"
     output_dir = comfy_root / "output"
-    sweet_tea_dir = comfy_root / "sweet_tea"
-    (sweet_tea_dir / "proj4" / "output").mkdir(parents=True, exist_ok=True)
+    input_dir = comfy_root / "input"
+    # New structure: images go to input/<project>/<subfolder>
+    (input_dir / "proj4" / "output").mkdir(parents=True, exist_ok=True)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     engine = Engine(
         name="Local ComfyUI",
         base_url="http://localhost:8188",
         output_dir=str(output_dir),
-        input_dir=str(comfy_root / "input"),
+        input_dir=str(input_dir),
         is_active=True,
     )
     session.add(engine)
@@ -135,7 +140,8 @@ def test_resync_persists_prompt_backfill_for_existing_metadata_dict(client, sess
     session.refresh(engine)
 
     payload = {"positive_prompt": "a tiger", "negative_prompt": "no", "params": {"seed": 2}}
-    img_path = sweet_tea_dir / "proj4" / "output" / "existing-meta.png"
+    # Images now go to input/<project>/<subfolder>
+    img_path = input_dir / "proj4" / "output" / "existing-meta.png"
     _write_noise_png(img_path, json.dumps(payload))
 
     existing_meta = {
@@ -184,22 +190,24 @@ def test_resync_persists_prompt_backfill_for_existing_metadata_dict(client, sess
 def test_resync_skips_masks_folder(client, session, tmp_path):
     comfy_root = tmp_path / "comfy3"
     output_dir = comfy_root / "output"
-    sweet_tea_dir = comfy_root / "sweet_tea"
-    (sweet_tea_dir / "proj3" / "masks").mkdir(parents=True, exist_ok=True)
+    input_dir = comfy_root / "input"
+    # Masks folder should be skipped regardless of location
+    (input_dir / "proj3" / "masks").mkdir(parents=True, exist_ok=True)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     engine = Engine(
         name="Local ComfyUI",
         base_url="http://localhost:8188",
         output_dir=str(output_dir),
-        input_dir=str(comfy_root / "input"),
+        input_dir=str(input_dir),
         is_active=True,
     )
     session.add(engine)
     session.commit()
 
     payload = {"positive_prompt": "mask", "negative_prompt": "", "params": {"seed": 1}}
-    img_path = sweet_tea_dir / "proj3" / "masks" / "mask.png"
+    # Masks in input/<project>/masks should also be skipped
+    img_path = input_dir / "proj3" / "masks" / "mask.png"
     _write_noise_png(img_path, json.dumps(payload))
 
     res = client.post("/api/v1/gallery/resync")

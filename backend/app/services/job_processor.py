@@ -2403,34 +2403,25 @@ def process_job(job_id: int):
             
             # --- START PRE-CALCULATION OF META/DIRS (Moved from post-execution) ---
             # Determine Target Directory for saving images
+            # All outputs go to ComfyUI/input/<project>/<subfolder> for consistency
             target_output_dir = None
             if job.project_id:
                 project = session.get(Project, job.project_id)
                 if project:
                     folder_name = job.output_dir if job.output_dir else "output"
-                    if folder_name == "output":
-                        if engine.output_dir:
-                            output_path = Path(engine.output_dir)
-                            if output_path.name in ("output", "input"):
-                                comfy_root = output_path.parent
-                            else:
-                                comfy_root = output_path
-                            target_output_dir = str(comfy_root / "sweet_tea" / project.slug / "output")
+                    if engine.input_dir:
+                        # Preferred: use input_dir/<project>/<folder>
+                        target_output_dir = str(Path(engine.input_dir) / project.slug / folder_name)
+                    elif engine.output_dir:
+                        # Fallback: derive input dir from output_dir (ComfyUI/output -> ComfyUI/input)
+                        output_path = Path(engine.output_dir)
+                        if output_path.name in ("output", "input"):
+                            comfy_root = output_path.parent
                         else:
-                            target_output_dir = job.output_dir
+                            comfy_root = output_path
+                        target_output_dir = str(comfy_root / "input" / project.slug / folder_name)
                     else:
-                        if engine.input_dir:
-                            target_output_dir = str(Path(engine.input_dir) / project.slug / folder_name)
-                        else:
-                            if engine.output_dir:
-                                output_path = Path(engine.output_dir)
-                                if output_path.name in ("output", "input"):
-                                    comfy_root = output_path.parent
-                                else:
-                                    comfy_root = output_path
-                                target_output_dir = str(comfy_root / "sweet_tea" / project.slug / folder_name)
-                            else:
-                                target_output_dir = job.output_dir
+                        target_output_dir = job.output_dir
                 else:
                     target_output_dir = job.output_dir
             else:
