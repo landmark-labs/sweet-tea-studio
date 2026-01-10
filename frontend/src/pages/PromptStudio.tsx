@@ -273,6 +273,10 @@ export default function PromptStudio() {
 
   // Snippet Library (Backend-persisted)
   const [library, setLibrary] = useState<PromptItem[]>([]);
+  const libraryRef = useRef<PromptItem[]>([]);
+  useEffect(() => {
+    libraryRef.current = library;
+  }, [library]);
   const [snippetsLoaded, setSnippetsLoaded] = useState(false);
   const pendingSaveRef = useRef<NodeJS.Timeout | null>(null);
   const allowEmptySnippetSyncRef = useRef(false);
@@ -295,7 +299,10 @@ export default function PromptStudio() {
 
   // Load snippets from backend on mount
   useEffect(() => {
-    const loadSnippets = async () => {
+    let isMounted = true;
+    let retryTimeout: NodeJS.Timeout | null = null;
+
+    const tryLoadSnippets = async (isRetry = false) => {
       try {
         const { snippetApi } = await import("@/lib/api");
         const snippets = await snippetApi.getSnippets();
@@ -307,22 +314,50 @@ export default function PromptStudio() {
           content: s.content,
           color: stripDarkVariantClasses(s.color) || COLORS[0],
         }));
-        setLibrary(items);
+        if (!isMounted) return;
+        if (retryTimeout) {
+          clearTimeout(retryTimeout);
+          retryTimeout = null;
+        }
+
+        // Only hydrate if we still don't have any snippets yet. This prevents
+        // overwriting local changes when the backend was temporarily unavailable.
+        if (libraryRef.current.length === 0) {
+          setLibrary(items);
+        }
         setSnippetsLoaded(true);
       } catch (e) {
-        console.error("Failed to load snippets from backend", e);
-        // Fallback to localStorage migration
-        try {
-          const saved = localStorage.getItem("ds_prompt_snippets");
-          if (saved) {
-            const parsed = JSON.parse(saved);
-            setLibrary(parsed);
-          }
-        } catch (e2) { console.error("Failed to parse local snippets", e2); }
-        setSnippetsLoaded(true);
+        if (!isMounted) return;
+        if (!isRetry) {
+          console.error("Failed to load snippets from backend", e);
+          // Fallback to localStorage migration
+          try {
+            const saved = localStorage.getItem("ds_prompt_snippets");
+            if (saved) {
+              const parsed = JSON.parse(saved);
+              if (Array.isArray(parsed)) {
+                libraryRef.current = parsed;
+                setLibrary(parsed);
+              }
+            }
+          } catch (e2) { console.error("Failed to parse local snippets", e2); }
+          setSnippetsLoaded(true);
+        }
+
+        // If we still don't have any snippets, keep retrying until the backend is ready.
+        if (libraryRef.current.length === 0) {
+          retryTimeout = setTimeout(() => {
+            void tryLoadSnippets(true);
+          }, 2000);
+        }
       }
     };
-    loadSnippets();
+
+    void tryLoadSnippets(false);
+    return () => {
+      isMounted = false;
+      if (retryTimeout) clearTimeout(retryTimeout);
+    };
   }, []);
 
   // Save snippets to backend when library changes (debounced)
