@@ -70,3 +70,9 @@ def set_sqlite_pragma_ingestion(dbapi_connection, connection_record):
     cursor.execute("PRAGMA journal_mode=WAL")
     cursor.execute("PRAGMA synchronous=NORMAL")
     cursor.close()
+
+def dispose_all_engines():
+    """Dispose all SQLAlchemy engines to release file locks."""
+    engine.dispose()
+    tags_engine.dispose()
+    ingestion_engine.dispose()

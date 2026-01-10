@@ -34,14 +34,22 @@ async def on_startup():
 
 @app.on_event("shutdown")
 async def on_shutdown():
-    # Best-effort: fold WAL into the DB so backups/copies are single-file consistent.
+    # 1. Dispose SQLAlchemy engines to release their locks on the files
     try:
-        from app.db.sqlite_health import checkpoint_wal
-
-        checkpoint_wal(settings.database_path)
-        checkpoint_wal(settings.meta_dir / "tags.db")
+        from app.db.engine import dispose_all_engines
+        dispose_all_engines()
     except Exception as exc:
-        print(f"[Shutdown] SQLite WAL checkpoint skipped: {exc}")
+        print(f"[Shutdown] Engine disposal failed: {exc}")
+
+    # 2. Clean up WAL files so backups/copies are single-file consistent.
+    # We use remove_wal (journal_mode=DELETE) to force the merge and deletion of -wal files.
+    try:
+        from app.db.sqlite_health import remove_wal
+
+        remove_wal(settings.database_path)
+        remove_wal(settings.meta_dir / "tags.db")
+    except Exception as exc:
+        print(f"[Shutdown] SQLite WAL cleanup skipped: {exc}")
 
     await watchdog.stop()
 

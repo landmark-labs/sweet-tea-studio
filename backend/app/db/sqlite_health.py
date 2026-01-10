@@ -37,6 +37,21 @@ def checkpoint_wal(db_path: Path, *, mode: str = "TRUNCATE", timeout_s: float = 
         conn.execute(f"PRAGMA wal_checkpoint({mode});").fetchall()
 
 
+def remove_wal(db_path: Path, *, timeout_s: float = 5.0) -> None:
+    """
+    Forcefully remove WAL by switching journal mode to DELETE.
+    This effectively merges the WAL back into the DB and deletes the -wal/-shm files.
+    """
+    if not db_path.exists():
+        return
+
+    try:
+        with sqlite3.connect(str(db_path), timeout=timeout_s) as conn:
+            conn.execute("PRAGMA journal_mode = DELETE;")
+    except Exception as e:
+        print(f"[DB] Failed to remove WAL for {db_path}: {e}")
+
+
 def quick_check_path(db_path: Path, *, timeout_s: float = 5.0) -> str:
     if not db_path.exists():
         return "missing"
