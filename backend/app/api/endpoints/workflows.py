@@ -281,39 +281,6 @@ def generate_schema_from_graph(graph: Dict[str, Any], object_info: Dict[str, Any
                     **base_field,
                 }
                 fields_added = True
-            
-            elif val_type == "COMBO":
-                # Handle COMBO type which is ["COMBO", [options...]]
-                # The config is in input_config[1]
-                options = []
-                if isinstance(config, list):
-                    options = config
-                elif isinstance(config, dict) and "default" not in config: 
-                    # Sometimes config can be the list itself if it wasn't parsed as dict? 
-                    # But based on standard structure: ["COMBO", [list]] -> val_type="COMBO", config=[list]
-                    # Let's inspect 'input_config' directly from source loop if needed, but 'config' variable 
-                    # was set as input_config[1].
-                    pass
-                
-                # If the definition is ["COMBO", ["a", "b"]], then val_type="COMBO" and config=["a", "b"]
-                # If the definition is ["COMBO", {"default": "a"}], this is likely invalid or handled elsewhere?
-                # Actually, some nodes might use ["COMBO", { ... }] but standard combo is list.
-                
-                # Let's re-read the input_config to be safe because 'config' logic above assumed dict.
-                raw_config = input_config[1] if len(input_config) > 1 else None
-                
-                if isinstance(raw_config, list):
-                     options = raw_config
-                
-                if options:
-                    schema[field_key] = {
-                        "type": "string",
-                        "title": f"{input_name} ({class_type}{'' if count == 1 else f' #{node_id}'})",
-                        "default": current_val if current_val is not None else (options[0] if options else ""),
-                        "enum": options,
-                        **base_field,
-                    }
-                    fields_added = True
 
         if not fields_added and node_meta[node_id]["skipped"] is None:
             node_meta[node_id]["skipped"] = "no_exposed_inputs"
