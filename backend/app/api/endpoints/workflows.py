@@ -234,7 +234,7 @@ def generate_schema_from_graph(graph: Dict[str, Any], object_info: Dict[str, Any
                 continue
 
             # Simple mapping logic
-            if val_type == "INT":
+            if isinstance(val_type, str) and val_type.upper() == "INT":
                 # Special case: Allow -1 for seed fields (randomize on each run)
                 min_val = config.get("min")
                 if "seed" in input_name.lower() and min_val is not None and min_val > -1:
@@ -250,7 +250,7 @@ def generate_schema_from_graph(graph: Dict[str, Any], object_info: Dict[str, Any
                 }
                 fields_added = True
 
-            elif val_type == "FLOAT":
+            elif isinstance(val_type, str) and val_type.upper() == "FLOAT":
                 schema[field_key] = {
                     "type": "number", 
                     "title": f"{input_name} ({class_type}{'' if count == 1 else f' #{node_id}'})",
@@ -261,8 +261,8 @@ def generate_schema_from_graph(graph: Dict[str, Any], object_info: Dict[str, Any
                     **base_field,
                 }
                 fields_added = True
-            elif val_type == "STRING":
-                 # Check for multiline
+            elif isinstance(val_type, str) and val_type.upper() == "STRING":
+                  # Check for multiline
                 widget = "textarea" if config.get("multiline") else "text"
                 schema[field_key] = {
                     "type": "string",
@@ -272,6 +272,30 @@ def generate_schema_from_graph(graph: Dict[str, Any], object_info: Dict[str, Any
                     **base_field,
                 }
                 fields_added = True
+            elif isinstance(val_type, str) and val_type.upper() == "BOOLEAN":
+                schema[field_key] = {
+                    "type": "boolean",
+                    "title": f"{input_name} ({class_type}{'' if count == 1 else f' #{node_id}'})",
+                    "default": bool(current_val) if current_val is not None else bool(config.get("default", False)),
+                    "widget": "toggle",
+                    **base_field,
+                }
+                fields_added = True
+            elif isinstance(val_type, str) and val_type.upper() == "COMBO":
+                options = config.get("options")
+                if isinstance(options, list):
+                    schema[field_key] = {
+                        "type": "string",
+                        "title": f"{input_name} ({class_type}{'' if count == 1 else f' #{node_id}'})",
+                        "default": (
+                            current_val
+                            if current_val is not None
+                            else config.get("default", options[0] if options else "")
+                        ),
+                        "enum": options,
+                        **base_field,
+                    }
+                    fields_added = True
             elif isinstance(val_type, list):
                 # Enum
                 schema[field_key] = {
