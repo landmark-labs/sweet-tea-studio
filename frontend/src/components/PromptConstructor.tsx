@@ -101,16 +101,16 @@ const SortableItem = React.memo(function SortableItem({ item, textIndex, onRemov
         if (isEditing) {
             return (
                 <div ref={setNodeRef} style={style} className="flex items-center gap-1 group relative z-50">
-                        <Textarea
-                            value={item.content}
-                            autoFocus
-                            onChange={(e) => onUpdateContent(item.id, e.target.value)}
-                            onFocus={() => onTextFocusChange(true)}
-                            onBlur={handleBlur}
-                            onKeyDown={handleKeyDown}
-                            className="min-h-[32px] h-auto w-full text-[11px] font-mono border-dashed bg-surface-raised shadow-lg ring-2 ring-blue-500 transition-colors resize-y py-1 px-2 rounded-md"
-                            placeholder="text..."
-                        />
+                    <Textarea
+                        value={item.content}
+                        autoFocus
+                        onChange={(e) => onUpdateContent(item.id, e.target.value)}
+                        onFocus={() => onTextFocusChange(true)}
+                        onBlur={handleBlur}
+                        onKeyDown={handleKeyDown}
+                        className="min-h-[32px] h-auto w-full text-[11px] font-mono border-dashed bg-surface-raised shadow-lg ring-2 ring-blue-500 transition-colors resize-y py-1 px-2 rounded-md"
+                        placeholder="text..."
+                    />
                 </div>
             );
         }
@@ -1228,7 +1228,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
             reconcileHandleRef.current = null;
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentValues[targetField], targetField, isTargetValid]);
+    }, [currentValues[targetField], targetField, isTargetValid, snippetIndex]);
 
 
     // Compile (OUTPUT Channel: Items -> Parent)
@@ -1379,8 +1379,9 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
 
         } else if (editingSnippetId) {
             // UPDATE GLOBAL SNIPPET
-            // Use a direct imperative approach: compute updated values and push to parent
-            // instead of relying on the library sync effect (which had timing issues)
+            // We update the library state; the existing "Sync Library" useEffect 
+            // will detect the change, rewrite prompt text (if content changed),
+            // and update fieldItems safely.
 
             const updatedLibrary = library.map(s =>
                 s.id === editingSnippetId
@@ -1388,58 +1389,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
                     : s
             );
 
-            // Compute updated fieldItems
-            const currentFieldItems = fieldItemsRef.current;
-            const nextFieldItems: Record<string, PromptItem[]> = {};
-            const valueUpdates: Record<string, string> = {};
-
-            Object.keys(currentFieldItems).forEach(fieldKey => {
-                const fieldItemsList = currentFieldItems[fieldKey] || [];
-                const updatedItems = fieldItemsList.map(item => {
-                    if (item.type === 'block' && item.sourceId === editingSnippetId) {
-                        return { ...item, label: snippetTitle, content: snippetContent };
-                    }
-                    return item;
-                });
-                nextFieldItems[fieldKey] = updatedItems;
-
-                // Check if this field has linked blocks that were updated
-                const hasLinkedBlocks = updatedItems.some(i => i.type === 'block' && i.sourceId === editingSnippetId);
-                if (hasLinkedBlocks) {
-                    // Compile the new value
-                    const compiled = compileItemsToPrompt(updatedItems);
-                    valueUpdates[fieldKey] = compiled;
-                }
-            });
-
-            // Prevent library sync effect from re-processing this change
-            syncingLibraryRef.current = true;
-
-            // Update library (parent state)
             setLibrary(updatedLibrary);
-
-            // Update local fieldItems state and ref
-            fieldItemsRef.current = nextFieldItems;
-            setFieldItems(nextFieldItems);
-
-            // Directly update parent with new compiled values
-            if (Object.keys(valueUpdates).length > 0) {
-                suppressCompileRef.current = true;
-                if (onUpdateMany) {
-                    onUpdateMany(valueUpdates);
-                } else {
-                    // Fallback: update each field individually
-                    Object.entries(valueUpdates).forEach(([field, value]) => {
-                        onUpdate(field, value);
-                    });
-                }
-            }
-
-            // Clear sync flag after state settles
-            setTimeout(() => {
-                syncingLibraryRef.current = false;
-            }, 0);
-
             cancelEdit();
 
         } else {
@@ -1716,11 +1666,11 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
                             </div>
                         )}
 
-                            <SortableContext
-                                items={sortableIds}
-                                strategy={rectSortingStrategy}
-                            >
-                                {/* Canvas grid uses 2-column layout to match snippet bank. */}
+                        <SortableContext
+                            items={sortableIds}
+                            strategy={rectSortingStrategy}
+                        >
+                            {/* Canvas grid uses 2-column layout to match snippet bank. */}
                             <div className="grid grid-cols-2 auto-rows-[minmax(32px,auto)] items-start gap-2 min-h-[100px] p-2 rounded-xl border-2 border-dashed border-amber-300 dark:border-border/60 bg-amber-100/40 dark:bg-surface-raised/60 transition-colors hover:bg-amber-100/60 dark:hover:bg-surface-overlay/60 relative group/canvas">
 
                                 {items.length === 0 && (
