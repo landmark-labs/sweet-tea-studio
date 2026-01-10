@@ -100,6 +100,125 @@ def _decode_xp_comment(raw: Any) -> Optional[str]:
     return None
 
 
+def _extract_metadata_from_file(file_path: str) -> Optional[Dict[str, Any]]:
+    """
+    Extract metadata from an image file (PNG, JPEG) for resync.
+    
+    Returns a dict with prompt, negative_prompt, parameters, and source,
+    or None if no metadata could be extracted.
+    """
+    try:
+        with PILImage.open(file_path) as img:
+            info = img.info or {}
+            result = {
+                "prompt": None,
+                "negative_prompt": None,
+                "parameters": {},
+                "source": "none"
+            }
+            
+            # Try JPEG/EXIF comment path
+            try:
+                comment_text = None
+                if "comment" in info:
+                    comment_text = _decode_xp_comment(info.get("comment"))
+                else:
+                    exif = img.getexif()
+                    if exif:
+                        XP_COMMENT_TAG = 0x9C9C  # 40092
+                        if XP_COMMENT_TAG in exif:
+                            comment_text = _decode_xp_comment(exif[XP_COMMENT_TAG])
+                        
+                        if not comment_text:
+                            for tag_id, value in exif.items():
+                                tag_name = ExifTags.TAGS.get(tag_id, tag_id)
+                                if str(tag_name).lower() in {"xpcomment", "usercomment", "comment"}:
+                                    comment_text = _decode_xp_comment(value)
+                                    if comment_text:
+                                        break
+                
+                if comment_text:
+                    parsed = _extract_prompts_from_comment_blob(comment_text)
+                    if parsed.get("prompt"):
+                        result["prompt"] = parsed.get("prompt")
+                    if parsed.get("negative_prompt"):
+                        result["negative_prompt"] = parsed.get("negative_prompt")
+                    if result["prompt"] or result["negative_prompt"]:
+                        result["source"] = "jpeg_comment"
+            except Exception:
+                pass
+            
+            # Try Sweet Tea provenance
+            if "sweet_tea_provenance" in info:
+                try:
+                    provenance = json.loads(info["sweet_tea_provenance"])
+                    result["prompt"] = result["prompt"] or provenance.get("positive_prompt")
+                    result["negative_prompt"] = result["negative_prompt"] or provenance.get("negative_prompt")
+                    result["parameters"] = {
+                        k: v for k, v in provenance.items()
+                        if k not in ["positive_prompt", "negative_prompt", "models", "params"]
+                        and v is not None
+                    }
+                    if "params" in provenance and isinstance(provenance["params"], dict):
+                        result["parameters"].update(provenance["params"])
+                    result["source"] = "sweet_tea"
+                except json.JSONDecodeError:
+                    pass
+            
+            # Try ComfyUI "prompt" metadata
+            if "prompt" in info and result["source"] == "none":
+                try:
+                    prompt_data = json.loads(info["prompt"])
+                    for node_id, node in prompt_data.items():
+                        if isinstance(node, dict):
+                            class_type = node.get("class_type", "")
+                            inputs = node.get("inputs", {})
+                            if class_type == "CLIPTextEncode":
+                                text = inputs.get("text", "")
+                                if not result["prompt"]:
+                                    result["prompt"] = text
+                                elif not result["negative_prompt"]:
+                                    result["negative_prompt"] = text
+                            elif "KSampler" in class_type or "Sampler" in class_type:
+                                for k in ["seed", "steps", "cfg", "sampler_name", "scheduler", "denoise"]:
+                                    if k in inputs and inputs[k] is not None:
+                                        result["parameters"][k] = inputs[k]
+                            elif "CheckpointLoader" in class_type or "Load Checkpoint" in class_type:
+                                ckpt = inputs.get("ckpt_name")
+                                if ckpt:
+                                    result["parameters"]["checkpoint"] = ckpt
+                    result["source"] = "comfyui"
+                except json.JSONDecodeError:
+                    pass
+            
+            # Return result if any metadata was found
+            if result["source"] != "none" or result["prompt"] or result["negative_prompt"]:
+                return result
+    
+    except Exception:
+        pass
+    
+    # Try sidecar JSON file
+    try:
+        sidecar_path = os.path.splitext(file_path)[0] + ".json"
+        if os.path.exists(sidecar_path):
+            with open(sidecar_path, "r", encoding="utf-8") as sf:
+                sidecar_data = json.load(sf)
+                if isinstance(sidecar_data, dict):
+                    result = {
+                        "prompt": sidecar_data.get("positive_prompt"),
+                        "negative_prompt": sidecar_data.get("negative_prompt"),
+                        "parameters": {},
+                        "source": "sidecar_json"
+                    }
+                    if "params" in sidecar_data and isinstance(sidecar_data["params"], dict):
+                        result["parameters"].update(sidecar_data["params"])
+                    return result
+    except Exception:
+        pass
+    
+    return None
+
 def _extract_prompts_from_comment_blob(comment: Optional[str]) -> Dict[str, Optional[str]]:
     """
     Attempt to pull positive/negative prompts from a JPEG comment/XPComment blob.
@@ -1341,9 +1460,30 @@ def resync_images_from_disk(session: Session = Depends(get_session)):
         scanned.append(folder)
         
         # Recursively find all image files
+        # Patterns to skip (thumbnails, trash, cache, etc.)
+        SKIP_DIRS = {'.trash', '.cache', '.thumbnails', 'thumbnails', '__pycache__'}
+        SKIP_PATTERNS = {'_thumb', '_thumbnail', '-thumb', '-thumbnail'}
+        
         for ext in IMAGE_EXTENSIONS:
             for img_path in folder_path.rglob(f"*{ext}"):
                 if not img_path.is_file():
+                    continue
+                
+                # Skip files in excluded directories
+                path_parts_lower = [p.lower() for p in img_path.parts]
+                if any(skip_dir in path_parts_lower for skip_dir in SKIP_DIRS):
+                    continue
+                
+                # Skip thumbnail files by name pattern
+                filename_lower = img_path.stem.lower()
+                if any(pattern in filename_lower for pattern in SKIP_PATTERNS):
+                    continue
+                
+                # Skip very small files (likely thumbnails, < 10KB)
+                try:
+                    if img_path.stat().st_size < 10240:
+                        continue
+                except OSError:
                     continue
                     
                 found += 1
@@ -1359,6 +1499,18 @@ def resync_images_from_disk(session: Session = Depends(get_session)):
                     if file_ext == 'jpeg':
                         file_ext = 'jpg'
                     
+                    # Extract metadata from file
+                    file_metadata = _extract_metadata_from_file(path_str)
+                    extra_metadata = None
+                    if file_metadata:
+                        extra_metadata = {
+                            "positive_prompt": file_metadata.get("prompt"),
+                            "negative_prompt": file_metadata.get("negative_prompt"),
+                            "params": file_metadata.get("parameters", {}),
+                            "source": file_metadata.get("source"),
+                            "recovered": True,
+                        }
+                    
                     # Create Image record with job_id=-1 (orphaned marker)
                     new_image = Image(
                         job_id=-1,  # Special marker for recovered images
@@ -1367,6 +1519,7 @@ def resync_images_from_disk(session: Session = Depends(get_session)):
                         format=file_ext,
                         is_kept=True,  # Mark as kept since user wanted to recover them
                         created_at=datetime.fromtimestamp(img_path.stat().st_mtime),
+                        extra_metadata=extra_metadata,
                     )
                     session.add(new_image)
                     existing_paths.add(path_str)  # Prevent duplicates in same scan
@@ -1379,6 +1532,23 @@ def resync_images_from_disk(session: Session = Depends(get_session)):
             # Also check uppercase extension
             for img_path in folder_path.rglob(f"*{ext.upper()}"):
                 if not img_path.is_file():
+                    continue
+                
+                # Skip files in excluded directories
+                path_parts_lower = [p.lower() for p in img_path.parts]
+                if any(skip_dir in path_parts_lower for skip_dir in SKIP_DIRS):
+                    continue
+                
+                # Skip thumbnail files by name pattern
+                filename_lower = img_path.stem.lower()
+                if any(pattern in filename_lower for pattern in SKIP_PATTERNS):
+                    continue
+                
+                # Skip very small files (likely thumbnails, < 10KB)
+                try:
+                    if img_path.stat().st_size < 10240:
+                        continue
+                except OSError:
                     continue
                     
                 found += 1
@@ -1393,6 +1563,18 @@ def resync_images_from_disk(session: Session = Depends(get_session)):
                     if file_ext == 'jpeg':
                         file_ext = 'jpg'
                     
+                    # Extract metadata from file
+                    file_metadata = _extract_metadata_from_file(path_str)
+                    extra_metadata = None
+                    if file_metadata:
+                        extra_metadata = {
+                            "positive_prompt": file_metadata.get("prompt"),
+                            "negative_prompt": file_metadata.get("negative_prompt"),
+                            "params": file_metadata.get("parameters", {}),
+                            "source": file_metadata.get("source"),
+                            "recovered": True,
+                        }
+                    
                     new_image = Image(
                         job_id=-1,
                         path=path_str,
@@ -1400,6 +1582,7 @@ def resync_images_from_disk(session: Session = Depends(get_session)):
                         format=file_ext,
                         is_kept=True,
                         created_at=datetime.fromtimestamp(img_path.stat().st_mtime),
+                        extra_metadata=extra_metadata,
                     )
                     session.add(new_image)
                     existing_paths.add(path_str)
