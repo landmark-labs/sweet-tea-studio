@@ -85,6 +85,8 @@ app.include_router(snippets.router, prefix="/api/v1/snippets", tags=["snippets"]
 app.include_router(status.router, prefix="/api/v1", tags=["status"])
 from app.api.endpoints import settings as settings_endpoints
 app.include_router(settings_endpoints.router, prefix="/api/v1", tags=["settings"])
+from app.api.endpoints import database
+app.include_router(database.router, prefix="/api/v1/database", tags=["database"])
 
 @app.get("/")
 def root():
