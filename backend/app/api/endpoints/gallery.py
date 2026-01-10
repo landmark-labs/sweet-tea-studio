@@ -32,6 +32,7 @@ from app.models.project import Project
 from app.models.prompt import Prompt
 from app.models.workflow import WorkflowTemplate
 from app.core.config import settings
+from app.services.gallery_search import build_search_text_from_image, update_gallery_fts
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -100,6 +101,249 @@ def _decode_xp_comment(raw: Any) -> Optional[str]:
     return None
 
 
+def _normalize_fs_path(path: str) -> str:
+    cleaned = (path or "").strip().strip('"').strip("'")
+    if not cleaned:
+        return ""
+    try:
+        return os.path.normcase(os.path.normpath(cleaned))
+    except Exception:
+        return cleaned
+
+
+def _coerce_json_dict(value: Any) -> Dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+            return parsed if isinstance(parsed, dict) else {}
+        except Exception:
+            return {}
+    return {}
+
+
+def _compute_ahash(img: PILImage.Image, size: int = 16) -> str:
+    """
+    Compute a simple average-hash (aHash) for rename/move matching.
+
+    Returns a fixed-width hex string (size*size bits).
+    """
+    try:
+        resample = getattr(PILImage, "Resampling", PILImage).LANCZOS
+    except Exception:
+        resample = getattr(PILImage, "LANCZOS", 1)
+
+    small = img.convert("L").resize((size, size), resample=resample)
+    pixels = list(small.getdata())
+    if not pixels:
+        return ""
+    avg = sum(pixels) / len(pixels)
+    bits = "".join("1" if px > avg else "0" for px in pixels)
+    return hex(int(bits, 2))[2:].zfill((size * size) // 4)
+
+
+def _ahash_for_thumbnail_bytes(data: bytes) -> Optional[str]:
+    if not data:
+        return None
+    try:
+        with PILImage.open(io.BytesIO(data)) as img:
+            return _compute_ahash(img)
+    except Exception:
+        return None
+
+
+def _ahash_for_image_path(path: str) -> Optional[str]:
+    if not path:
+        return None
+    try:
+        with PILImage.open(path) as img:
+            return _compute_ahash(img)
+    except Exception:
+        return None
+
+
+def _is_skipped_media_path(path: Path) -> bool:
+    """
+    Filter out non-gallery media like masks, thumbnails, and cache/trash artifacts.
+
+    Keep this conservative: better to skip obvious non-gallery assets than to import noise.
+    """
+    parts_lower = {p.lower() for p in path.parts}
+    skip_dirs = {
+        ".trash",
+        ".cache",
+        ".thumbnails",
+        "thumbnails",
+        "__pycache__",
+        "masks",
+        "mask",
+    }
+    if parts_lower & skip_dirs:
+        return True
+
+    name_lower = path.name.lower()
+    stem_lower = path.stem.lower()
+    if any(token in stem_lower for token in ("_thumb", "_thumbnail", "-thumb", "-thumbnail")):
+        return True
+    if any(token in name_lower for token in ("thumb", "thumbnail")):
+        return True
+
+    # Heuristic: mask exports often contain a clear "mask" token even outside /masks.
+    if path.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp"}:
+        if stem_lower == "mask":
+            return True
+        if stem_lower.startswith(("mask_", "mask-")):
+            return True
+        if stem_lower.endswith(("_mask", "-mask")):
+            return True
+
+    return False
+
+
+def _safe_int(value: Any) -> Optional[int]:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        stripped = value.strip()
+        if stripped.isdigit():
+            try:
+                return int(stripped)
+            except Exception:
+                return None
+    return None
+
+
+def _create_inline_thumbnail(
+    path: str,
+    max_px: int = 256,
+    quality: int = 45,
+) -> tuple[Optional[bytes], Optional[int], Optional[int]]:
+    """
+    Create a compact inline thumbnail for DB storage.
+
+    Returns (thumbnail_bytes, width, height).
+    """
+    try:
+        with PILImage.open(path) as img:
+            img = ImageOps.exif_transpose(img)
+            width, height = img.size
+            img.thumbnail((max_px, max_px))
+            if img.mode in ("RGBA", "P"):
+                img = img.convert("RGB")
+            buf = io.BytesIO()
+            img.save(buf, format="JPEG", quality=quality)
+            return buf.getvalue(), width, height
+    except Exception:
+        return None, None, None
+
+
+def _build_resync_extra_metadata(
+    *,
+    prompt: Optional[str],
+    negative_prompt: Optional[str],
+    parameters: Dict[str, Any],
+    source: str,
+    mtime: datetime,
+    recovered: bool = True,
+) -> Dict[str, Any]:
+    timestamp = mtime.isoformat()
+    active_prompt = {
+        "stage": 0,
+        "positive_text": prompt,
+        "negative_text": negative_prompt,
+        "timestamp": timestamp,
+        "source": source or "resync",
+    }
+    return {
+        "active_prompt": active_prompt,
+        "prompt_history": [active_prompt],
+        "generation_params": parameters or {},
+        "recovered": recovered,
+        "recovered_source": source or "resync",
+        "recovered_at": timestamp,
+    }
+
+
+def _merge_resync_extra_metadata(
+    existing: Any,
+    *,
+    file_metadata: Optional[Dict[str, Any]],
+    mtime: datetime,
+) -> tuple[Optional[Dict[str, Any]], bool]:
+    """
+    Backfill/normalize extra_metadata to the canonical Sweet Tea structure.
+
+    Returns (merged_metadata, changed).
+    """
+    current = _coerce_json_dict(existing)
+    changed = False
+
+    prompt = None
+    negative_prompt = None
+    parameters: Dict[str, Any] = {}
+    source = "resync"
+
+    if file_metadata:
+        prompt = file_metadata.get("prompt")
+        negative_prompt = file_metadata.get("negative_prompt")
+        parameters = file_metadata.get("parameters") if isinstance(file_metadata.get("parameters"), dict) else {}
+        source = str(file_metadata.get("source") or source)
+
+    # Legacy resync payload (pre-fix): {"positive_prompt","negative_prompt","params",...}
+    if not prompt and isinstance(current.get("positive_prompt"), str):
+        prompt = current.get("positive_prompt")
+    if not negative_prompt and isinstance(current.get("negative_prompt"), str):
+        negative_prompt = current.get("negative_prompt")
+    if not parameters and isinstance(current.get("params"), dict):
+        parameters = current.get("params") or {}
+
+    active_prompt = current.get("active_prompt")
+    if not isinstance(active_prompt, dict):
+        current.update(_build_resync_extra_metadata(
+            prompt=prompt,
+            negative_prompt=negative_prompt,
+            parameters=parameters,
+            source=source,
+            mtime=mtime,
+            recovered=bool(current.get("recovered", True)),
+        ))
+        changed = True
+        return current, changed
+
+    if prompt and not active_prompt.get("positive_text"):
+        active_prompt["positive_text"] = prompt
+        changed = True
+    if negative_prompt and not active_prompt.get("negative_text"):
+        active_prompt["negative_text"] = negative_prompt
+        changed = True
+
+    if not isinstance(current.get("prompt_history"), list):
+        current["prompt_history"] = [active_prompt]
+        changed = True
+
+    gen_params = current.get("generation_params")
+    if not isinstance(gen_params, dict):
+        current["generation_params"] = parameters or {}
+        changed = True
+    elif parameters:
+        for k, v in parameters.items():
+            if k not in gen_params:
+                gen_params[k] = v
+                changed = True
+
+    if current.get("recovered") is None:
+        current["recovered"] = True
+        changed = True
+    if not current.get("recovered_source"):
+        current["recovered_source"] = source
+        changed = True
+
+    return current, changed
+
+
 def _extract_metadata_from_file(file_path: str) -> Optional[Dict[str, Any]]:
     """
     Extract metadata from an image file (PNG, JPEG) for resync.
@@ -117,25 +361,33 @@ def _extract_metadata_from_file(file_path: str) -> Optional[Dict[str, Any]]:
                 "source": "none"
             }
             
-            # Try JPEG/EXIF comment path
+            # Try comment metadata (PNG text chunks, JPEG comment segments, EXIF XPComment/UserComment)
             try:
                 comment_text = None
-                if "comment" in info:
-                    comment_text = _decode_xp_comment(info.get("comment"))
-                else:
+                for key in ("comment", "Comment", "Description", "parameters", "Parameters"):
+                    if key in info and info.get(key):
+                        comment_text = _decode_xp_comment(info.get(key))
+                        if comment_text:
+                            break
+
+                exif = None
+                try:
                     exif = img.getexif()
-                    if exif:
-                        XP_COMMENT_TAG = 0x9C9C  # 40092
-                        if XP_COMMENT_TAG in exif:
-                            comment_text = _decode_xp_comment(exif[XP_COMMENT_TAG])
-                        
-                        if not comment_text:
-                            for tag_id, value in exif.items():
-                                tag_name = ExifTags.TAGS.get(tag_id, tag_id)
-                                if str(tag_name).lower() in {"xpcomment", "usercomment", "comment"}:
-                                    comment_text = _decode_xp_comment(value)
-                                    if comment_text:
-                                        break
+                except Exception:
+                    exif = None
+
+                if not comment_text and exif:
+                    XP_COMMENT_TAG = 0x9C9C  # 40092
+                    if XP_COMMENT_TAG in exif:
+                        comment_text = _decode_xp_comment(exif[XP_COMMENT_TAG])
+
+                    if not comment_text:
+                        for tag_id, value in exif.items():
+                            tag_name = ExifTags.TAGS.get(tag_id, tag_id)
+                            if str(tag_name).lower() in {"xpcomment", "usercomment", "comment"}:
+                                comment_text = _decode_xp_comment(value)
+                                if comment_text:
+                                    break
                 
                 if comment_text:
                     parsed = _extract_prompts_from_comment_blob(comment_text)
@@ -143,10 +395,10 @@ def _extract_metadata_from_file(file_path: str) -> Optional[Dict[str, Any]]:
                         result["prompt"] = parsed.get("prompt")
                     if parsed.get("negative_prompt"):
                         result["negative_prompt"] = parsed.get("negative_prompt")
-                    if parsed.get("parameters"):
-                        result["parameters"].update(parsed.get("parameters"))
-                    if result["prompt"] or result["negative_prompt"]:
-                        result["source"] = "jpeg_comment"
+                    if isinstance(parsed.get("parameters"), dict) and parsed.get("parameters"):
+                        result["parameters"].update(parsed.get("parameters") or {})
+                    if result["prompt"] or result["negative_prompt"] or result["parameters"]:
+                        result["source"] = "comment"
             except Exception:
                 pass
             
@@ -225,7 +477,7 @@ def _extract_prompts_from_comment_blob(comment: Optional[str]) -> Dict[str, Any]
     """
     Attempt to pull positive/negative prompts from a JPEG comment/XPComment blob.
     """
-    result = {"prompt": None, "negative_prompt": None}
+    result: Dict[str, Any] = {"prompt": None, "negative_prompt": None, "parameters": {}}
     if not comment:
         return result
 
@@ -235,6 +487,16 @@ def _extract_prompts_from_comment_blob(comment: Optional[str]) -> Dict[str, Any]
         if isinstance(parsed, dict):
             result["prompt"] = parsed.get("positive_prompt") or parsed.get("prompt") or parsed.get("text") or parsed.get("text_positive")
             result["negative_prompt"] = parsed.get("negative_prompt") or parsed.get("text_negative") or parsed.get("negative")
+
+            params = parsed.get("params") if isinstance(parsed.get("params"), dict) else {}
+            result["parameters"].update(params)
+            for k, v in parsed.items():
+                if k in {"positive_prompt", "negative_prompt", "prompt", "text", "text_positive", "text_negative", "negative", "params"}:
+                    continue
+                if v is None or isinstance(v, (dict, list)):
+                    continue
+                result["parameters"][k] = v
+
             return result
     except json.JSONDecodeError:
         pass
@@ -243,7 +505,7 @@ def _extract_prompts_from_comment_blob(comment: Optional[str]) -> Dict[str, Any]
     # Also look for parameters line (usually at the end, starting with Steps: or Size:)
     
     rest_text = comment
-    params_dict = {}
+    params_dict: Dict[str, Any] = {}
     
     # Try to find parameters line at the end
     lines = comment.strip().split('\n')
@@ -255,11 +517,20 @@ def _extract_prompts_from_comment_blob(comment: Optional[str]) -> Dict[str, Any]
             try:
                 # Naive split by comma might fail if values contain commas, but it's a good start for this format
                 # A better regex structure would be needed for complex cases
-                items = [x.strip() for x in last_line.split(',')]
+                items = [x.strip() for x in last_line.split(',') if x.strip()]
                 for item in items:
                     if ':' in item:
                         k, v = item.split(':', 1)
                         params_dict[k.strip()] = v.strip()
+
+                size_raw = params_dict.get("Size")
+                if isinstance(size_raw, str) and "x" in size_raw:
+                    w_raw, h_raw = size_raw.lower().split("x", 1)
+                    try:
+                        params_dict["width"] = int(w_raw.strip())
+                        params_dict["height"] = int(h_raw.strip())
+                    except Exception:
+                        pass
                 
                 # Remove the params line from text
                 rest_text = '\n'.join(lines[:-1]).strip()
@@ -1428,6 +1699,8 @@ class ResyncResult(BaseModel):
     found: int
     already_in_db: int
     imported: int
+    updated: int
+    relinked: int
     errors: int
     scanned_folders: List[str]
 
@@ -1443,185 +1716,368 @@ def resync_images_from_disk(session: Session = Depends(get_session)):
     Scans all project directories under the configured sweet_tea output paths.
     """
     from pathlib import Path as PathlibPath
-    
-    IMAGE_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp', '.tiff', '.mp4', '.webm', '.mov'}
-    
-    # Get all engines to find output directories
+
+    IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tiff", ".tif"}
+    MEDIA_EXTENSIONS = set(IMAGE_EXTENSIONS) | set(VIDEO_EXTENSIONS)
+    MIN_IMAGE_BYTES = 10 * 1024
+
     engines = session.exec(select(Engine)).all()
-    
-    folders_to_scan: List[str] = []
-    
+    projects = session.exec(select(Project)).all()
+    project_slugs = [p.slug for p in projects if getattr(p, "slug", None)]
+
+    scanned_folders: List[str] = []
+    roots_to_scan: List[PathlibPath] = []
+    seen_roots: set[str] = set()
+
+    def add_root(root: PathlibPath) -> None:
+        try:
+            if not root or not root.exists():
+                return
+        except Exception:
+            return
+
+        normalized = _normalize_fs_path(str(root))
+        if not normalized or normalized in seen_roots:
+            return
+        seen_roots.add(normalized)
+        roots_to_scan.append(root)
+        scanned_folders.append(str(root))
+
     for eng in engines:
+        slugs_for_engine: set[str] = {slug for slug in project_slugs if slug}
         if eng.output_dir:
-            # Scan sweet_tea folder inside ComfyUI output parent
             sweet_tea_dir = settings.get_sweet_tea_dir_from_engine_path(eng.output_dir)
-            if sweet_tea_dir.exists():
-                folders_to_scan.append(str(sweet_tea_dir))
-        
-        if eng.input_dir:
-            # Also scan input directories
-            input_path = PathlibPath(eng.input_dir)
-            if input_path.exists():
-                folders_to_scan.append(str(input_path))
-    
-    if not folders_to_scan:
+            add_root(sweet_tea_dir)
+            try:
+                if sweet_tea_dir and sweet_tea_dir.exists():
+                    for child in sweet_tea_dir.iterdir():
+                        if child.is_dir() and child.name:
+                            slugs_for_engine.add(child.name)
+            except Exception:
+                pass
+
+        # Only scan project-specific subtrees under input_dir to avoid importing unrelated inputs.
+        if eng.input_dir and slugs_for_engine:
+            base = PathlibPath(eng.input_dir)
+            for slug in sorted(slugs_for_engine):
+                add_root(base / slug)
+
+    if not roots_to_scan:
         return ResyncResult(
             found=0,
             already_in_db=0,
             imported=0,
+            updated=0,
+            relinked=0,
             errors=0,
             scanned_folders=[],
         )
-    
-    # Get existing paths from DB
-    existing_paths_rows = session.exec(select(Image.path)).all()
-    existing_paths = set(existing_paths_rows)
-    
+
+    existing_by_norm_path: Dict[str, List[int]] = {}
+    try:
+        existing_rows = session.exec(select(Image.id, Image.path)).all()
+        for row in existing_rows:
+            try:
+                image_id, image_path = row
+            except Exception:
+                continue
+            if not image_id or not image_path:
+                continue
+            key = _normalize_fs_path(str(image_path))
+            if not key:
+                continue
+            existing_by_norm_path.setdefault(key, []).append(int(image_id))
+    except Exception:
+        existing_by_norm_path = {}
+
+    # Build a rename/move index for missing images, keyed by thumbnail aHash.
+    missing_by_ahash: Dict[str, List[Dict[str, Any]]] = {}
+    try:
+        candidates = session.exec(
+            select(Image)
+            .where(Image.trash_path == None)  # noqa: E711
+            .where(or_(Image.file_exists == False, Image.is_deleted == True))  # noqa: E712
+        ).all()
+        for img in candidates:
+            if not img or not img.id or not img.path:
+                continue
+            if os.path.exists(img.path):
+                continue
+            if not img.thumbnail_data:
+                continue
+            ahash = _ahash_for_thumbnail_bytes(img.thumbnail_data)
+            if not ahash:
+                continue
+            missing_by_ahash.setdefault(ahash, []).append(
+                {"id": img.id, "job_id": img.job_id, "width": img.width, "height": img.height}
+            )
+    except Exception:
+        missing_by_ahash = {}
+
+    def iter_media_files(root: PathlibPath):
+        skip_dir_names = {".trash", ".cache", ".thumbnails", "thumbnails", "__pycache__", "masks", "mask"}
+        for dirpath, dirnames, filenames in os.walk(root):
+            # Prune directory traversal early
+            try:
+                dirnames[:] = [d for d in dirnames if d and d.lower() not in skip_dir_names]
+            except Exception:
+                pass
+
+            for filename in filenames:
+                try:
+                    candidate = PathlibPath(dirpath) / filename
+                    if not candidate.is_file():
+                        continue
+                    if candidate.suffix.lower() not in MEDIA_EXTENSIONS:
+                        continue
+                    if _is_skipped_media_path(Path(str(candidate))):
+                        continue
+
+                    # Skip very small images (likely thumbnails or cache artifacts)
+                    if candidate.suffix.lower() not in VIDEO_EXTENSIONS:
+                        try:
+                            if candidate.stat().st_size < MIN_IMAGE_BYTES:
+                                continue
+                        except Exception:
+                            continue
+
+                    yield candidate
+                except Exception:
+                    continue
+
     found = 0
     already_in_db = 0
     imported = 0
+    updated = 0
+    relinked = 0
     errors = 0
-    scanned = []
-    
-    for folder in folders_to_scan:
-        folder_path = PathlibPath(folder)
-        if not folder_path.exists():
-            continue
-            
-        scanned.append(folder)
-        
-        # Recursively find all image files
-        # Patterns to skip (thumbnails, trash, cache, etc.)
-        SKIP_DIRS = {'.trash', '.cache', '.thumbnails', 'thumbnails', '__pycache__'}
-        SKIP_PATTERNS = {'_thumb', '_thumbnail', '-thumb', '-thumbnail'}
-        
-        for ext in IMAGE_EXTENSIONS:
-            for img_path in folder_path.rglob(f"*{ext}"):
-                if not img_path.is_file():
-                    continue
-                
-                # Skip files in excluded directories
-                path_parts_lower = [p.lower() for p in img_path.parts]
-                if any(skip_dir in path_parts_lower for skip_dir in SKIP_DIRS):
-                    continue
-                
-                # Skip thumbnail files by name pattern
-                filename_lower = img_path.stem.lower()
-                if any(pattern in filename_lower for pattern in SKIP_PATTERNS):
-                    continue
-                
-                # Skip very small files (likely thumbnails, < 10KB)
+    fts_enabled = _fts_available(session)
+
+    for root in roots_to_scan:
+        for media_path in iter_media_files(root):
+            found += 1
+
+            try:
+                path_str = str(media_path)
+                norm_path = _normalize_fs_path(path_str)
+                file_ext = media_path.suffix.lower().lstrip(".")
+                if file_ext == "jpeg":
+                    file_ext = "jpg"
+
                 try:
-                    if img_path.stat().st_size < 10240:
-                        continue
-                except OSError:
-                    continue
-                    
-                found += 1
-                path_str = str(img_path)
-                
-                if path_str in existing_paths:
-                    already_in_db += 1
-                    continue
-                
-                try:
-                    # Determine format from extension
-                    file_ext = img_path.suffix.lower().lstrip('.')
-                    if file_ext == 'jpeg':
-                        file_ext = 'jpg'
-                    
-                    # Extract metadata from file
-                    file_metadata = _extract_metadata_from_file(path_str)
-                    extra_metadata = None
-                    if file_metadata:
-                        extra_metadata = {
-                            "positive_prompt": file_metadata.get("prompt"),
-                            "negative_prompt": file_metadata.get("negative_prompt"),
-                            "params": file_metadata.get("parameters", {}),
-                            "source": file_metadata.get("source"),
-                            "recovered": True,
-                        }
-                    
-                    # Create Image record with job_id=-1 (orphaned marker)
-                    new_image = Image(
-                        job_id=-1,  # Special marker for recovered images
-                        path=path_str,
-                        filename=img_path.name,
-                        format=file_ext,
-                        is_kept=True,  # Mark as kept since user wanted to recover them
-                        created_at=datetime.fromtimestamp(img_path.stat().st_mtime),
-                        extra_metadata=extra_metadata,
-                    )
-                    session.add(new_image)
-                    existing_paths.add(path_str)  # Prevent duplicates in same scan
-                    imported += 1
-                    
-                except Exception as e:
-                    logger.exception("Error importing recovered image", extra={"path": path_str, "error": str(e)})
-                    errors += 1
-            
-            # Also check uppercase extension
-            for img_path in folder_path.rglob(f"*{ext.upper()}"):
-                if not img_path.is_file():
-                    continue
-                
-                # Skip files in excluded directories
-                path_parts_lower = [p.lower() for p in img_path.parts]
-                if any(skip_dir in path_parts_lower for skip_dir in SKIP_DIRS):
-                    continue
-                
-                # Skip thumbnail files by name pattern
-                filename_lower = img_path.stem.lower()
-                if any(pattern in filename_lower for pattern in SKIP_PATTERNS):
-                    continue
-                
-                # Skip very small files (likely thumbnails, < 10KB)
-                try:
-                    if img_path.stat().st_size < 10240:
-                        continue
-                except OSError:
-                    continue
-                    
-                found += 1
-                path_str = str(img_path)
-                
-                if path_str in existing_paths:
-                    already_in_db += 1
-                    continue
-                
-                try:
-                    file_ext = img_path.suffix.lower().lstrip('.')
-                    if file_ext == 'jpeg':
-                        file_ext = 'jpg'
-                    
-                    # Extract metadata from file
-                    file_metadata = _extract_metadata_from_file(path_str)
-                    extra_metadata = None
-                    if file_metadata:
-                        extra_metadata = {
-                            "positive_prompt": file_metadata.get("prompt"),
-                            "negative_prompt": file_metadata.get("negative_prompt"),
-                            "params": file_metadata.get("parameters", {}),
-                            "source": file_metadata.get("source"),
-                            "recovered": True,
-                        }
-                    
-                    new_image = Image(
-                        job_id=-1,
-                        path=path_str,
-                        filename=img_path.name,
-                        format=file_ext,
-                        is_kept=True,
-                        created_at=datetime.fromtimestamp(img_path.stat().st_mtime),
-                        extra_metadata=extra_metadata,
-                    )
-                    session.add(new_image)
-                    existing_paths.add(path_str)
-                    imported += 1
-                    
+                    mtime = datetime.fromtimestamp(media_path.stat().st_mtime)
                 except Exception:
-                    errors += 1
-    
+                    mtime = datetime.utcnow()
+
+                # If already present by path, optionally backfill metadata/thumbnails/flags.
+                if norm_path in existing_by_norm_path:
+                    already_in_db += 1
+                    for image_id in existing_by_norm_path.get(norm_path, []):
+                        img = session.get(Image, image_id)
+                        if not img:
+                            continue
+
+                        record_changed = False
+
+                        if img.path != path_str:
+                            img.path = path_str
+                            record_changed = True
+                        if img.filename != media_path.name:
+                            img.filename = media_path.name
+                            record_changed = True
+                        if img.format != file_ext:
+                            img.format = file_ext
+                            record_changed = True
+
+                        if img.file_exists is not True:
+                            img.file_exists = True
+                            record_changed = True
+
+                        # If this was auto-soft-deleted due to missing file, revive it.
+                        if img.is_deleted and not img.trash_path:
+                            img.is_deleted = False
+                            img.deleted_at = None
+                            record_changed = True
+
+                        file_metadata: Optional[Dict[str, Any]] = None
+                        meta_dict = _coerce_json_dict(img.extra_metadata)
+                        active_prompt = meta_dict.get("active_prompt")
+                        gen_params = meta_dict.get("generation_params")
+                        needs_meta_backfill = (
+                            not isinstance(active_prompt, dict)
+                            or (isinstance(active_prompt, dict) and not active_prompt.get("positive_text") and not active_prompt.get("negative_text"))
+                            or not isinstance(gen_params, dict)
+                            or (isinstance(gen_params, dict) and not gen_params)
+                            or any(k in meta_dict for k in ("positive_prompt", "negative_prompt", "params"))
+                        )
+                        if img.thumbnail_data is None or img.width is None or img.height is None or needs_meta_backfill:
+                            file_metadata = _extract_metadata_from_file(path_str)
+
+                        # Backfill thumbnails/dimensions for images (videos rely on path-thumbnail endpoint).
+                        if media_path.suffix.lower() not in VIDEO_EXTENSIONS:
+                            if img.thumbnail_data is None or img.width is None or img.height is None:
+                                thumb_data, w, h = _create_inline_thumbnail(path_str)
+                                if thumb_data and img.thumbnail_data is None:
+                                    img.thumbnail_data = thumb_data
+                                    record_changed = True
+                                if w and img.width is None:
+                                    img.width = w
+                                    record_changed = True
+                                if h and img.height is None:
+                                    img.height = h
+                                    record_changed = True
+
+                        merged_meta, meta_changed = _merge_resync_extra_metadata(
+                            img.extra_metadata, file_metadata=file_metadata, mtime=mtime
+                        )
+                        if meta_changed and merged_meta is not None:
+                            img.extra_metadata = merged_meta
+                            record_changed = True
+
+                        if record_changed:
+                            session.add(img)
+                            updated += 1
+                            if fts_enabled and img.id:
+                                search_text = build_search_text_from_image(img)
+                                update_gallery_fts(session, img.id, search_text)
+
+                    continue
+
+                # Not found by path. Try to relink renamed/moved files via thumbnail hash.
+                file_metadata = _extract_metadata_from_file(path_str)
+                job_id_hint = None
+                if file_metadata and isinstance(file_metadata.get("parameters"), dict):
+                    job_id_hint = _safe_int(file_metadata["parameters"].get("job_id"))
+
+                relink_match: Optional[Dict[str, Any]] = None
+                ahash = None
+                if media_path.suffix.lower() not in VIDEO_EXTENSIONS:
+                    ahash = _ahash_for_image_path(path_str)
+                if ahash and ahash in missing_by_ahash:
+                    candidates = list(missing_by_ahash.get(ahash) or [])
+                    if job_id_hint is not None:
+                        job_filtered = [c for c in candidates if c.get("job_id") == job_id_hint]
+                        if job_filtered:
+                            candidates = job_filtered
+
+                    if len(candidates) > 1:
+                        try:
+                            with PILImage.open(path_str) as probe:
+                                w, h = probe.size
+                        except Exception:
+                            w, h = None, None
+                        if w and h:
+                            wh_filtered = [
+                                c
+                                for c in candidates
+                                if (c.get("width") in (None, w) and c.get("height") in (None, h))
+                            ]
+                            if wh_filtered:
+                                candidates = wh_filtered
+
+                    if len(candidates) == 1:
+                        relink_match = candidates[0]
+
+                if relink_match:
+                    img = session.get(Image, relink_match["id"])
+                    if img:
+                        img.path = path_str
+                        img.filename = media_path.name
+                        img.format = file_ext
+                        img.file_exists = True
+                        if img.is_deleted and not img.trash_path:
+                            img.is_deleted = False
+                            img.deleted_at = None
+
+                        # Backfill metadata and thumbnail if needed.
+                        merged_meta, meta_changed = _merge_resync_extra_metadata(
+                            img.extra_metadata, file_metadata=file_metadata, mtime=mtime
+                        )
+                        if meta_changed and merged_meta is not None:
+                            img.extra_metadata = merged_meta
+
+                        if media_path.suffix.lower() not in VIDEO_EXTENSIONS:
+                            if img.thumbnail_data is None or img.width is None or img.height is None:
+                                thumb_data, w, h = _create_inline_thumbnail(path_str)
+                                if thumb_data and img.thumbnail_data is None:
+                                    img.thumbnail_data = thumb_data
+                                if w and img.width is None:
+                                    img.width = w
+                                if h and img.height is None:
+                                    img.height = h
+
+                        session.add(img)
+                        updated += 1
+                        relinked += 1
+                        if fts_enabled and img.id:
+                            search_text = build_search_text_from_image(img)
+                            update_gallery_fts(session, img.id, search_text)
+
+                        # Mark as present for the remainder of this run.
+                        if norm_path:
+                            existing_by_norm_path.setdefault(norm_path, []).append(img.id)
+
+                        # Remove used candidate to avoid double matches.
+                        if ahash and ahash in missing_by_ahash:
+                            remaining = [c for c in missing_by_ahash.get(ahash, []) if c.get("id") != img.id]
+                            if remaining:
+                                missing_by_ahash[ahash] = remaining
+                            else:
+                                missing_by_ahash.pop(ahash, None)
+
+                        continue
+
+                # Import new orphaned image/video
+                parameters = file_metadata.get("parameters") if isinstance(file_metadata, dict) else {}
+                parameters = parameters if isinstance(parameters, dict) else {}
+                source = file_metadata.get("source") if isinstance(file_metadata, dict) else "none"
+
+                job_id_to_set = -1
+                if job_id_hint is not None and session.get(Job, job_id_hint):
+                    job_id_to_set = job_id_hint
+
+                extra_metadata = _build_resync_extra_metadata(
+                    prompt=file_metadata.get("prompt") if file_metadata else None,
+                    negative_prompt=file_metadata.get("negative_prompt") if file_metadata else None,
+                    parameters=parameters,
+                    source=str(source or "none"),
+                    mtime=mtime,
+                    recovered=True,
+                )
+
+                thumb_data = None
+                width = None
+                height = None
+                if media_path.suffix.lower() not in VIDEO_EXTENSIONS:
+                    thumb_data, width, height = _create_inline_thumbnail(path_str)
+
+                new_image = Image(
+                    job_id=job_id_to_set,
+                    path=path_str,
+                    filename=media_path.name,
+                    format=file_ext,
+                    width=width,
+                    height=height,
+                    file_exists=True,
+                    thumbnail_data=thumb_data,
+                    is_kept=True,
+                    created_at=mtime,
+                    extra_metadata=extra_metadata,
+                )
+                session.add(new_image)
+                session.flush()
+                imported += 1
+
+                if new_image.id:
+                    existing_by_norm_path.setdefault(norm_path, []).append(new_image.id)
+                    if fts_enabled:
+                        search_text = build_search_text_from_image(new_image)
+                        update_gallery_fts(session, new_image.id, search_text)
+
+            except Exception as e:
+                logger.exception("Error importing recovered image", extra={"path": str(media_path), "error": str(e)})
+                errors += 1
+
     try:
         session.commit()
         logger.info(
@@ -1630,21 +2086,25 @@ def resync_images_from_disk(session: Session = Depends(get_session)):
                 "found": found,
                 "already_in_db": already_in_db,
                 "imported": imported,
+                "updated": updated,
+                "relinked": relinked,
                 "errors": errors,
-                "folders": scanned,
-            }
+                "folders": scanned_folders,
+            },
         )
     except SQLAlchemyError:
         session.rollback()
         logger.exception("Failed to commit resync transaction")
         raise HTTPException(status_code=500, detail="Failed to save resynced images")
-    
+
     return ResyncResult(
         found=found,
         already_in_db=already_in_db,
         imported=imported,
+        updated=updated,
+        relinked=relinked,
         errors=errors,
-        scanned_folders=scanned,
+        scanned_folders=scanned_folders,
     )
 
 
@@ -1812,29 +2272,36 @@ def get_image_metadata_by_path(path: str, session: Session = Depends(get_session
         with PILImage.open(actual_path) as img:
             info = img.info or {}
 
-            # JPEG/EXIF comment path (commonly where prompts are stored)
+            # Comment fields (PNG text chunks, JPEG comment segments, EXIF XPComment/UserComment)
             try:
-                # PIL stores JPEG comments in info["comment"]; EXIF has XPComment/UserComment
                 comment_text = None
-                if "comment" in info:
-                    comment_text = _decode_xp_comment(info.get("comment"))
-                else:
+                for key in ("comment", "Comment", "Description", "parameters", "Parameters"):
+                    if key in info and info.get(key):
+                        comment_text = _decode_xp_comment(info.get(key))
+                        if comment_text:
+                            break
+
+                exif = None
+                try:
                     exif = img.getexif()
-                    if exif:
-                        # XPComment tag ID is 0x9C9C (40092)
-                        # Check by tag ID first since ExifTags.TAGS may not include XPComment
-                        XP_COMMENT_TAG = 0x9C9C  # 40092
-                        if XP_COMMENT_TAG in exif:
-                            comment_text = _decode_xp_comment(exif[XP_COMMENT_TAG])
-                        
-                        if not comment_text:
-                            # Fallback to name-based lookup
-                            for tag_id, value in exif.items():
-                                tag_name = ExifTags.TAGS.get(tag_id, tag_id)
-                                if str(tag_name).lower() in {"xpcomment", "usercomment", "comment"}:
-                                    comment_text = _decode_xp_comment(value)
-                                    if comment_text:
-                                        break
+                except Exception:
+                    exif = None
+
+                if not comment_text and exif:
+                    # XPComment tag ID is 0x9C9C (40092)
+                    # Check by tag ID first since ExifTags.TAGS may not include XPComment
+                    XP_COMMENT_TAG = 0x9C9C  # 40092
+                    if XP_COMMENT_TAG in exif:
+                        comment_text = _decode_xp_comment(exif[XP_COMMENT_TAG])
+
+                    if not comment_text:
+                        # Fallback to name-based lookup
+                        for tag_id, value in exif.items():
+                            tag_name = ExifTags.TAGS.get(tag_id, tag_id)
+                            if str(tag_name).lower() in {"xpcomment", "usercomment", "comment"}:
+                                comment_text = _decode_xp_comment(value)
+                                if comment_text:
+                                    break
 
                 if comment_text:
                     parsed_comment = _extract_prompts_from_comment_blob(comment_text)
@@ -1842,8 +2309,10 @@ def get_image_metadata_by_path(path: str, session: Session = Depends(get_session
                         result["prompt"] = parsed_comment.get("prompt")
                     if parsed_comment.get("negative_prompt") and not result["negative_prompt"]:
                         result["negative_prompt"] = parsed_comment.get("negative_prompt")
-                    if parsed_comment.get("prompt") or parsed_comment.get("negative_prompt"):
-                        result["source"] = result["source"] if result["source"] != "none" else "jpeg_comment"
+                    if isinstance(parsed_comment.get("parameters"), dict) and parsed_comment.get("parameters"):
+                        result["parameters"].update(parsed_comment.get("parameters") or {})
+                    if parsed_comment.get("prompt") or parsed_comment.get("negative_prompt") or parsed_comment.get("parameters"):
+                        result["source"] = result["source"] if result["source"] != "none" else "comment"
             except Exception:
                 pass
             

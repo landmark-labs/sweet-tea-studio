@@ -224,7 +224,19 @@ export default function Settings() {
             });
             if (res.ok) {
                 const data = await res.json();
-                setSuccess(`Resync complete: ${data.found || 0} images discovered`);
+                const found = Number(data?.found || 0);
+                const imported = Number(data?.imported || 0);
+                const updated = Number(data?.updated || 0);
+                const relinked = Number(data?.relinked || 0);
+                const errors = Number(data?.errors || 0);
+                const parts = [
+                    `found ${found}`,
+                    `imported ${imported}`,
+                    `updated ${updated}`,
+                    `relinked ${relinked}`,
+                    errors ? `errors ${errors}` : null,
+                ].filter(Boolean);
+                setSuccess(`Resync complete: ${parts.join(", ")}`);
             } else {
                 const err = await res.json().catch(() => ({}));
                 setError(err.detail || "Failed to resync images");
