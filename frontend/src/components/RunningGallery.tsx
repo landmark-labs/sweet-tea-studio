@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { GalleryItem } from "@/lib/api";
+import { GalleryItem, IMAGE_API_BASE } from "@/lib/api";
 import { isVideoFile } from "@/lib/media";
 import { Card } from "@/components/ui/card";
 import { RefreshCw, Trash2, Check, CheckCircle2, RotateCcw } from "lucide-react";
@@ -132,7 +132,7 @@ export function RunningGallery({
                 {images.map((item) => {
                     const isSelected = selectedIds.has(item.image.id);
                     const isVideo = isVideoFile(item.image.path, item.image.filename);
-                    const mediaUrl = `/api/v1/gallery/image/path?path=${encodeURIComponent(item.image.path)}`;
+                    const mediaUrl = `${IMAGE_API_BASE}/gallery/image/path?path=${encodeURIComponent(item.image.path)}`;
                     return (
                         <Card
                             key={item.image.id}

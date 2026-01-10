@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import { Upload, X, Loader2, Grid, PenTool, FolderOpen, ChevronRight, Image as ImageIcon, Video as VideoIcon } from "lucide-react";
-import { api, Project, FolderImage } from "@/lib/api";
+import { api, Project, FolderImage, IMAGE_API_BASE } from "@/lib/api";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
@@ -43,10 +43,10 @@ const detectFileKind = (file: File) => {
 const BROWSE_THUMB_MAX_PX = 256;
 
 const galleryMediaUrl = (path: string) =>
-    `/api/v1/gallery/image/path?path=${encodeURIComponent(path)}`;
+    `${IMAGE_API_BASE}/gallery/image/path?path=${encodeURIComponent(path)}`;
 
 const galleryThumbnailUrl = (path: string, maxPx = BROWSE_THUMB_MAX_PX) =>
-    `/api/v1/gallery/image/path/thumbnail?path=${encodeURIComponent(path)}&max_px=${maxPx}`;
+    `${IMAGE_API_BASE}/gallery/image/path/thumbnail?path=${encodeURIComponent(path)}&max_px=${maxPx}`;
 
 export function ImageUpload({
     value,

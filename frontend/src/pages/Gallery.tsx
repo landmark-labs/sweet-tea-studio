@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { api, GalleryItem, Project } from "@/lib/api";
+import { api, GalleryItem, Project, IMAGE_API_BASE } from "@/lib/api";
 import { isVideoFile } from "@/lib/media";
 import { Card, CardContent } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -86,13 +86,13 @@ function GalleryCardContent({ item, isSelected, handleImageError }: GalleryCardC
 
             {isVideo ? (
                 <VideoThumbnail
-                    src={`/api/v1/gallery/image/${item.image.id}`}
+                    src={`${IMAGE_API_BASE}/gallery/image/${item.image.id}`}
                     className="w-full h-full object-cover object-top transition-transform group-hover:scale-105"
                     isHovering={isHovering}
                 />
             ) : (
                 <img
-                    src={`/api/v1/gallery/image/${item.image.id}`}
+                    src={`${IMAGE_API_BASE}/gallery/image/${item.image.id}`}
                     alt={item.image.filename}
                     className="w-full h-full object-cover object-top transition-transform group-hover:scale-105"
                     loading="lazy"
@@ -562,7 +562,7 @@ export default function Gallery() {
 
     const handleDownload = async (item: GalleryItem) => {
         try {
-            const url = `/api/v1/gallery/image/${item.image.id}`;
+            const url = `${IMAGE_API_BASE}/gallery/image/${item.image.id}`;
             const res = await fetch(url);
             const blob = await res.blob();
             const a = document.createElement("a");
@@ -952,7 +952,7 @@ export default function Gallery() {
                                 )}
                                 {isVideoFile(fullscreenItem.image.path, fullscreenItem.image.filename) ? (
                                     <video
-                                        src={`/api/v1/gallery/image/${fullscreenItem.image.id}`}
+                                        src={`${IMAGE_API_BASE}/gallery/image/${fullscreenItem.image.id}`}
                                         className="max-h-[80vh] w-auto object-contain rounded-lg shadow-2xl transition-transform select-none"
                                         style={{
                                             transform: `scale(${zoomScale}) translate(${panPosition.x / zoomScale}px, ${panPosition.y / zoomScale}px)`,
@@ -965,7 +965,7 @@ export default function Gallery() {
                                     />
                                 ) : (
                                     <img
-                                        src={`/api/v1/gallery/image/${fullscreenItem.image.id}`}
+                                        src={`${IMAGE_API_BASE}/gallery/image/${fullscreenItem.image.id}`}
                                         alt={fullscreenItem.image.filename}
                                         className="max-h-[80vh] w-auto object-contain rounded-lg shadow-2xl transition-transform select-none"
                                         style={{

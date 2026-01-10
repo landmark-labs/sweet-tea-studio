@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { api, PromptSuggestion, WorkflowTemplate } from "@/lib/api";
+import { api, PromptSuggestion, WorkflowTemplate, IMAGE_API_BASE } from "@/lib/api";
 import { isVideoFile } from "@/lib/media";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Trash2, Search, LayoutTemplate, Sparkles, Copy, Loader2, Wand2 } from "lucide-react";
@@ -236,7 +236,7 @@ export default function PromptLibrary() {
                                 {prompt.preview_path ? (
                                     isVideoFile(prompt.preview_path) ? (
                                         <video
-                                            src={`/api/v1/gallery/image/path?path=${encodeURIComponent(prompt.preview_path)}`}
+                                            src={`${IMAGE_API_BASE}/gallery/image/path?path=${encodeURIComponent(prompt.preview_path)}`}
                                             className="w-full h-full object-cover"
                                             preload="metadata"
                                             muted
@@ -244,7 +244,7 @@ export default function PromptLibrary() {
                                         />
                                     ) : (
                                         <img
-                                            src={`/api/v1/gallery/image/path?path=${encodeURIComponent(prompt.preview_path)}`}
+                                            src={`${IMAGE_API_BASE}/gallery/image/path?path=${encodeURIComponent(prompt.preview_path)}`}
                                             className="w-full h-full object-cover"
                                             alt="Prompt preview"
                                         />

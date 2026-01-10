@@ -1,7 +1,7 @@
 import React from "react";
 import { Download, ExternalLink, X, Check, ArrowLeft, ArrowRight, RotateCcw, Copy, Trash2, PenTool, Plus } from "lucide-react";
 import { Button } from "./ui/button";
-import { api, Image as ApiImage, GalleryItem } from "@/lib/api";
+import { api, Image as ApiImage, GalleryItem, IMAGE_API_BASE } from "@/lib/api";
 import { isVideoFile } from "@/lib/media";
 import { workflowSupportsImageInput } from "@/lib/workflowGraph";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
@@ -405,16 +405,56 @@ export const ImageViewer = React.memo(function ImageViewer({
     const [isDragging, setIsDragging] = React.useState(false);
     const [dragStart, setDragStart] = React.useState({ x: 0, y: 0 });
 
+    const MAX_MEDIA_RETRIES = 5;
+    const mediaRetryTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+    const [mediaRetryAttempt, setMediaRetryAttempt] = React.useState(0);
+
     // Compute image display URL - avoid double-encoding if already an API URL
     const imageUrl = React.useMemo(() => {
         if (!imagePath) return "";
-        // If the path is already an API URL, use it directly
-        if (imagePath.startsWith('/api/') || imagePath.startsWith('http')) {
+        // If the path is already an API URL (including /sts-api prefixes), use it directly
+        if (imagePath.startsWith("http") || (imagePath.includes("/api/") && imagePath.includes("path="))) {
             return imagePath;
         }
         // Otherwise, construct the API URL
-        return `/api/v1/gallery/image/path?path=${encodeURIComponent(imagePath)}`;
+        return `${IMAGE_API_BASE}/gallery/image/path?path=${encodeURIComponent(imagePath)}`;
     }, [imagePath]);
+
+    const mediaSrc = React.useMemo(() => {
+        if (!imageUrl) return "";
+        if (mediaRetryAttempt <= 0) return imageUrl;
+        if (imageUrl.startsWith("blob:") || imageUrl.startsWith("data:")) return imageUrl;
+        const sep = imageUrl.includes("?") ? "&" : "?";
+        return `${imageUrl}${sep}__sts_retry=${mediaRetryAttempt}`;
+    }, [imageUrl, mediaRetryAttempt]);
+
+    const handleMediaError = React.useCallback(() => {
+        if (mediaRetryTimeoutRef.current) return;
+        setMediaRetryAttempt((attempt) => {
+            if (attempt >= MAX_MEDIA_RETRIES) return attempt;
+            const nextAttempt = attempt + 1;
+            const delayMs = Math.min(1000 * nextAttempt, 5000);
+            mediaRetryTimeoutRef.current = setTimeout(() => {
+                mediaRetryTimeoutRef.current = null;
+                setMediaRetryAttempt(nextAttempt);
+            }, delayMs);
+            return attempt;
+        });
+    }, []);
+
+    React.useEffect(() => {
+        setMediaRetryAttempt(0);
+        if (mediaRetryTimeoutRef.current) {
+            clearTimeout(mediaRetryTimeoutRef.current);
+            mediaRetryTimeoutRef.current = null;
+        }
+        return () => {
+            if (mediaRetryTimeoutRef.current) {
+                clearTimeout(mediaRetryTimeoutRef.current);
+                mediaRetryTimeoutRef.current = null;
+            }
+        };
+    }, [imageUrl]);
 
     const handleMediaDragStart = (e: React.DragEvent) => {
         // Extract raw file path for drag transfer
@@ -662,20 +702,22 @@ export const ImageViewer = React.memo(function ImageViewer({
 
                     {isVideo ? (
                         <video
-                            src={imageUrl}
+                            src={mediaSrc}
                             className="max-w-full max-h-full object-contain shadow-2xl rounded-lg transition-all"
                             controls
                             preload="metadata"
                             playsInline
                             draggable={false}
+                            onError={handleMediaError}
                         />
                     ) : (
                         <img
-                            src={imageUrl}
+                            src={mediaSrc}
                             className="max-w-full max-h-full object-contain shadow-2xl rounded-lg transition-all"
                             alt="Preview"
                             draggable
                             onDragStart={handleMediaDragStart}
+                            onError={handleMediaError}
                         />
                     )}
 

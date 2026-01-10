@@ -646,10 +646,7 @@ export default function PromptStudio() {
 
     // Check if the currently previewed image was deleted
     if (previewPath) {
-      // Extract the raw path from the preview URL
-      const rawPath = previewPath.includes('?path=')
-        ? decodeURIComponent(previewPath.split('?path=')[1])
-        : previewPath;
+      const rawPath = extractRawViewerPath(previewPath);
 
       const wasDeleted = deletedPaths.some(p => p === rawPath);
       if (wasDeleted) {
@@ -657,7 +654,7 @@ export default function PromptStudio() {
         if (remainingImages.length > 0) {
           // Find the best next image - preferably the one after the deleted item
           const nextImage = remainingImages[0];
-          setPreviewPath(`/api/v1/gallery/image/path?path=${encodeURIComponent(nextImage.path)}`);
+          setPreviewPath(buildViewerApiPath(extractRawViewerPath(nextImage.path)));
           setPreviewMetadata(null);
         } else {
           // No images left - clear the preview
@@ -666,7 +663,7 @@ export default function PromptStudio() {
         }
       }
     }
-  }, [previewPath]);
+  }, [previewPath, extractRawViewerPath, buildViewerApiPath]);
 
   // useOutletContext to get panel states from Layout
   const { feedOpen, libraryOpen } = useOutletContext<{ feedOpen: boolean, libraryOpen: boolean }>();
@@ -1356,7 +1353,7 @@ export default function PromptStudio() {
     };
 
     // Preview immediately
-    setPreviewPath(`/api/v1/gallery/image/path?path=${encodeURIComponent(rawPath)}`);
+    setPreviewPath(buildViewerApiPath(rawPath));
     setPreviewMetadata({
       prompt: loadParams.prompt || loadParams.job_params?.prompt,
       negative_prompt: loadParams.negative_prompt || loadParams.job_params?.negative_prompt,
@@ -1433,7 +1430,7 @@ export default function PromptStudio() {
 
     // Set preview if we have an image path
     if (rawPath) {
-      setPreviewPath(`/api/v1/gallery/image/path?path=${encodeURIComponent(rawPath)}`);
+      setPreviewPath(buildViewerApiPath(rawPath));
       setPreviewMetadata({
         prompt: positivePrompt,
         negative_prompt: negativePrompt,
@@ -1472,7 +1469,7 @@ export default function PromptStudio() {
     setPendingLoadParams({ ...loadParams, __isRegenerate: isRegenerate });
 
     // Set preview immediately (doesn't need workflows)
-    setPreviewPath(`/api/v1/gallery/image/path?path=${encodeURIComponent(loadParams.image.path)}`);
+    setPreviewPath(buildViewerApiPath(extractRawViewerPath(loadParams.image.path)));
     setPreviewMetadata({
       prompt: loadParams.prompt || loadParams.job_params?.prompt,
       negative_prompt: loadParams.negative_prompt || loadParams.job_params?.negative_prompt,
@@ -1698,7 +1695,7 @@ export default function PromptStudio() {
             // Image/Video is in output/other directory - need to upload it
             console.log("[LoadParams] Uploading media to input dir:", imagePath);
             try {
-              const url = `/api/v1/gallery/image/path?path=${encodeURIComponent(imagePath)}`;
+              const url = buildViewerApiPath(extractRawViewerPath(imagePath));
               const res = await fetch(url);
               if (res.ok) {
                 const blob = await res.blob();
@@ -1805,7 +1802,7 @@ export default function PromptStudio() {
         console.log("[ImageInject] Uploading image:", imagePath, "to field:", imageField);
 
         // Fetch the image and upload it
-        const url = `/api/v1/gallery/image/path?path=${encodeURIComponent(imagePath)}`;
+        const url = buildViewerApiPath(extractRawViewerPath(imagePath));
         const res = await fetch(url);
         const blob = await res.blob();
         const filename = imagePath.split(/[\\/]/).pop() || "injected_image.png";
@@ -2782,7 +2779,7 @@ export default function PromptStudio() {
     if (fromImagePath) {
       setIsTransferringImage(true);
       try {
-        const url = `/api/v1/gallery/image/path?path=${encodeURIComponent(fromImagePath)}`;
+        const url = buildViewerApiPath(extractRawViewerPath(fromImagePath));
         const res = await fetch(url);
         const blob = await res.blob();
         const filename = fromImagePath.split(/[\\/]/).pop() || "transfer.png";

@@ -12,7 +12,7 @@ import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { FileJson, AlertTriangle, GitBranch, Edit2, Trash2, Save, RotateCw, CheckCircle2, XCircle, GripVertical, ChevronDown, ChevronUp } from "lucide-react";
-import { api, WorkflowTemplate } from "@/lib/api";
+import { api, WorkflowTemplate, getApiBase } from "@/lib/api";
 import { WorkflowGraphViewer } from "@/components/WorkflowGraphViewer";
 import { cn } from "@/lib/utils";
 import { labels } from "@/ui/labels";
@@ -615,7 +615,7 @@ export default function WorkflowLibrary() {
     const handleDelete = async (id: number) => {
         if (!confirm("Are you sure?")) return;
         try {
-            await fetch(`/api/v1/workflows/${id}`, { method: "DELETE" });
+            await fetch(`${getApiBase()}/workflows/${id}`, { method: "DELETE" });
             setWorkflows(workflows.filter(w => w.id !== id));
         } catch (err) {
             setError("Failed to delete");
@@ -627,7 +627,7 @@ export default function WorkflowLibrary() {
         if (!composeSource || !composeTarget || !composeName) return;
         try {
             const cleanedDescription = composeDescription.trim().slice(0, 500);
-            const res = await fetch("/api/v1/workflows/compose", {
+            const res = await fetch(`${getApiBase()}/workflows/compose`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({

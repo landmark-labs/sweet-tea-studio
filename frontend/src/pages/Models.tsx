@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ArrowDownCircle, FolderOpen, Info, Link2, Rocket, Sparkles, Trash2, XCircle } from "lucide-react";
+import { getApiBase } from "@/lib/api";
 
 type ModelCategory = string;
 
@@ -48,6 +49,7 @@ type ModelFolder = {
 // Models are now fetched from API - see fetchModels()
 
 export default function Models() {
+  const apiBase = getApiBase();
   const [models, setModels] = useState<InstalledModel[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [downloadQueue, setDownloadQueue] = useState<DownloadJob[]>([]);
@@ -68,7 +70,7 @@ export default function Models() {
   const fetchModels = async (refresh = false) => {
     setIsLoading(true);
     try {
-      const url = refresh ? "/api/v1/models/installed?refresh=true" : "/api/v1/models/installed";
+      const url = refresh ? `${apiBase}/models/installed?refresh=true` : `${apiBase}/models/installed`;
       const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
@@ -102,7 +104,7 @@ export default function Models() {
   const fetchDownloads = async () => {
     try {
       // Add timestamp to prevent caching
-      const res = await fetch(`/api/v1/models/downloads?t=${Date.now()}`);
+      const res = await fetch(`${apiBase}/models/downloads?t=${Date.now()}`);
       if (res.ok) {
         const data = await res.json();
         const mapped: DownloadJob[] = data.map((d: any) => ({
@@ -129,7 +131,7 @@ export default function Models() {
 
   const fetchModelFolders = async () => {
     try {
-      const res = await fetch("/api/v1/models/directories");
+      const res = await fetch(`${apiBase}/models/directories`);
       if (!res.ok) return;
       const data = await res.json();
       setModelsRoot(data.root || "");
@@ -146,7 +148,7 @@ export default function Models() {
   // Fetch contents of a specific folder (lazy-loaded)
   const fetchFolderContents = async (folderName: string) => {
     try {
-      const res = await fetch(`/api/v1/models/directories/${folderName}`);
+      const res = await fetch(`${apiBase}/models/directories/${folderName}`);
       if (!res.ok) return;
       const data = await res.json();
       // Update the items for this folder in modelFolders
@@ -231,7 +233,7 @@ export default function Models() {
 
     for (const row of validRows) {
       try {
-        const res = await fetch("/api/v1/models/download", {
+        const res = await fetch(`${apiBase}/models/download`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -265,7 +267,7 @@ export default function Models() {
 
   const cancelJob = async (id: string) => {
     try {
-      const res = await fetch(`/api/v1/models/downloads/${id}`, {
+      const res = await fetch(`${apiBase}/models/downloads/${id}`, {
         method: "DELETE",
       });
       if (res.ok) {
@@ -280,7 +282,7 @@ export default function Models() {
 
   const clearQueue = async () => {
     try {
-      const res = await fetch("/api/v1/models/downloads/clear", {
+      const res = await fetch(`${apiBase}/models/downloads/clear`, {
         method: "DELETE",
       });
       if (res.ok) {
@@ -322,7 +324,7 @@ export default function Models() {
                   if (newPath === null) return; // Cancelled
 
                   try {
-                    const res = await fetch("/api/v1/models/directories", {
+                    const res = await fetch(`${apiBase}/models/directories`, {
                       method: "PUT",
                       headers: { "Content-Type": "application/json" },
                       body: JSON.stringify({ path: newPath || null }),

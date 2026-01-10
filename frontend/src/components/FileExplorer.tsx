@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { api, FileItem } from "@/lib/api";
+import { api, FileItem, IMAGE_API_BASE } from "@/lib/api";
 import { Folder, FolderOpen, FileImage, File as FileIcon, ChevronRight, ChevronDown, Home, ArrowRight } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
@@ -66,7 +66,7 @@ const FileNode = ({
                 draggable={!!isImage}
                 onDragStart={(e) => {
                     if (isImage) {
-                        const url = `/api/v1/gallery/image/path?path=${encodeURIComponent(item.path)}`;
+                        const url = `${IMAGE_API_BASE}/gallery/image/path?path=${encodeURIComponent(item.path)}`;
                         e.dataTransfer.setData("text/plain", url);
                         e.dataTransfer.effectAllowed = "copy";
                     }
