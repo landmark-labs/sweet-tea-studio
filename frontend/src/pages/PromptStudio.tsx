@@ -2169,6 +2169,14 @@ export default function PromptStudio() {
   const contextWorkflows = generation?.workflows;
   const contextProjects = generation?.projects;
 
+  // Refs to access context data inside loadData without causing callback identity changes
+  const contextWorkflowsRef = useRef(contextWorkflows);
+  const contextProjectsRef = useRef(contextProjects);
+  useEffect(() => {
+    contextWorkflowsRef.current = contextWorkflows;
+    contextProjectsRef.current = contextProjects;
+  }, [contextWorkflows, contextProjects]);
+
   useEffect(() => {
     // If GenerationContext already has workflows, use them instead of fetching again
     if (contextWorkflows && contextWorkflows.length > 0) {
@@ -2193,9 +2201,11 @@ export default function PromptStudio() {
       if (!isReconnect) setIsLoading(true);
 
       // On reconnect, we force reload workflows/engines as they might have changed or be available now
-      // For initial load, we respect context data
-      const needsWorkflows = isReconnect || (!contextWorkflows || contextWorkflows.length === 0);
-      const needsProjects = !isReconnect && (!contextProjects || contextProjects.length === 0); // Projects less likely to change on restart
+      // For initial load, we respect context data (use refs to avoid callback identity changes)
+      const ctxWorkflows = contextWorkflowsRef.current;
+      const ctxProjects = contextProjectsRef.current;
+      const needsWorkflows = isReconnect || (!ctxWorkflows || ctxWorkflows.length === 0);
+      const needsProjects = !isReconnect && (!ctxProjects || ctxProjects.length === 0); // Projects less likely to change on restart
 
       const [enginesRes, workflowsRes, projectsRes] = await Promise.allSettled([
         api.getEngines(),
@@ -2240,7 +2250,7 @@ export default function PromptStudio() {
     } finally {
       if (!isReconnect) setIsLoading(false);
     }
-  }, [contextWorkflows, contextProjects, selectedEngineId, selectedWorkflowId]);
+  }, [selectedEngineId, selectedWorkflowId]);
 
   // Initial load
   useEffect(() => {
@@ -2690,11 +2700,8 @@ export default function PromptStudio() {
                   } else {
                     setSelectedProjectId(value);
                   }
-                  // FIX: Clear sidebar/gallery context to ensure Viewer switches to the new project
-                  // instead of showing stale images from the previous project's selected folder.
+                  // Reset navigation context (arrow keys) but keep current preview visible
                   setProjectGalleryImages([]);
-                  setPreviewPath(null);
-                  setPreviewMetadata(null);
 
                   // Clear persistent sidebar context so completion handler doesn't sync old folder
                   localStorage.removeItem("ds_project_gallery_project");
