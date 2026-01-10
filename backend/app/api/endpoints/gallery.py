@@ -2672,6 +2672,13 @@ def get_image_metadata_by_path(path: str, session: Session = Depends(get_session
             job = session.get(Job, image.job_id)
             if job and job.workflow_template_id:
                 result["parameters"]["workflow_template_id"] = job.workflow_template_id
+            # Include Sweet Tea prompt rehydration snapshot if present on the job params.
+            # This is stored in the DB (job.input_params) but intentionally omitted from embedded media metadata.
+            if job and job.input_params:
+                params = job.input_params if isinstance(job.input_params, dict) else {}
+                rehydration = params.get("__st_prompt_rehydration")
+                if rehydration:
+                    result["parameters"]["__st_prompt_rehydration"] = rehydration
     
     return result
 

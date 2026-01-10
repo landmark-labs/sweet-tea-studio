@@ -611,12 +611,14 @@ export function PromptAutocompleteTextarea({
                         nodes.push(valueToHighlight.slice(cursor, m.start));
                     }
                     const bgClasses = buildHighlightBgClasses(m.snippet.color);
+                    const isRehydrationMatch = Boolean((m.snippet as PromptItem | undefined)?.sourceId);
                     nodes.push(
                         <span
                             key={`${m.start}-${idx}`}
                             className={cn(
                                 bgClasses,
                                 "rounded-sm opacity-80",
+                                isRehydrationMatch && "ring-1 ring-black/40 ring-inset underline decoration-dashed decoration-black/60 underline-offset-2",
                                 // Dark mode: keep highlights bright and vibrant, render text in black
                                 // for maximum readability contrast. The textarea text above will be
                                 // made transparent so this black text shows through.

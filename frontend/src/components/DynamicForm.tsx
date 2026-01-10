@@ -154,13 +154,15 @@ const FieldRenderer = React.memo(function FieldRenderer({
     }
 
     if (field.widget === "textarea") {
+        const canRehydrate = Boolean(rehydrationItems && rehydrationItems.length > 0);
+        const shouldUsePromptEditor = Boolean(isPromptField || canRehydrate);
         return (
             <div className="space-y-2">
                 {/* Only show label for non-prompt textareas; prompt fields get their title from the group header */}
                 {!isPromptField && (
                     <Label htmlFor={fieldKey} className={cn(isActive && "text-blue-600 font-semibold")}>{field.title || fieldKey}</Label>
                 )}
-                {isPromptField ? (
+                {shouldUsePromptEditor ? (
                     <PromptAutocompleteTextarea
                         id={fieldKey}
                         value={typeof value === "string" ? value : ""}
@@ -851,9 +853,18 @@ export const DynamicForm = React.memo(function DynamicForm({
                             const inputs = { ...nodeDef.input?.required, ...nodeDef.input?.optional };
                             const inputDef = inputs[paramName];
 
-                            if (inputDef && Array.isArray(inputDef[0])) {
-                                // It's an enum!
-                                newOptions[key] = inputDef[0];
+                            if (inputDef) {
+                                const inputType = inputDef[0];
+                                if (Array.isArray(inputType)) {
+                                    // Legacy enum format: [["a","b","c"]]
+                                    newOptions[key] = inputType;
+                                } else if (typeof inputType === "string" && inputType.toUpperCase() === "COMBO") {
+                                    // Typed enum format: ["COMBO", { options: ["a","b"], default: "a" }]
+                                    const options = inputDef?.[1]?.options;
+                                    if (Array.isArray(options)) {
+                                        newOptions[key] = options;
+                                    }
+                                }
                             }
                         }
                     }
@@ -1374,7 +1385,7 @@ export const DynamicForm = React.memo(function DynamicForm({
         const field = schema[key];
         const isActive = key === activeField;
         const isPromptField = groups.prompts.includes(key);
-        const rehydrationItems = isPromptField ? (promptRehydrationSnapshot?.fields?.[key] as PromptRehydrationItemV1[] | undefined) : undefined;
+        const rehydrationItems = (promptRehydrationSnapshot?.fields?.[key] as PromptRehydrationItemV1[] | undefined);
 
         return (
             <FieldRenderer
@@ -1421,7 +1432,7 @@ export const DynamicForm = React.memo(function DynamicForm({
         const field = schema[key];
         const isActive = key === activeField;
         const isPromptField = groups.prompts.includes(key);
-        const rehydrationItems = isPromptField ? (promptRehydrationSnapshot?.fields?.[key] as PromptRehydrationItemV1[] | undefined) : undefined;
+        const rehydrationItems = (promptRehydrationSnapshot?.fields?.[key] as PromptRehydrationItemV1[] | undefined);
 
         return (
             <FieldRenderer

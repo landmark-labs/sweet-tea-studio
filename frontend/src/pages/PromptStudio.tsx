@@ -4,7 +4,6 @@ import { addProgressEntry, calculateProgressStats, mapStatusToGenerationState, f
 import { useLocation, useNavigate, useOutletContext } from "react-router-dom";
 import { api, Engine, WorkflowTemplate, GalleryItem, EngineHealth, Project, Image as ApiImage, FolderImage, IMAGE_API_BASE } from "@/lib/api";
 import { extractPrompts, findPromptFieldsInSchema, findImageFieldsInSchema, findMediaFieldsInSchema } from "@/lib/promptUtils";
-import { buildSnippetIndex, findSnippetMatches, selectNonOverlappingMatches } from "@/lib/snippetMatcher";
 import { DynamicForm } from "@/components/DynamicForm";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -116,57 +115,47 @@ const normalizeParamsWithDefaults = (
   return normalized;
 };
 
-const MAX_REHYDRATION_SNAPSHOT_MATCHES = 500;
-
-const buildPromptRehydrationSnapshotFromParams = (
+const filterPromptRehydrationSnapshot = (
+  snapshot: PromptRehydrationSnapshotV1 | null | undefined,
   params: Record<string, unknown>,
-  snippets: PromptItem[]
+  library: PromptItem[]
 ): PromptRehydrationSnapshotV1 | null => {
-  const index = buildSnippetIndex(snippets);
-  if (index.entries.length === 0) return null;
+  if (!snapshot || snapshot.version !== 1 || !snapshot.fields || typeof snapshot.fields !== "object") {
+    return null;
+  }
 
   const fields: Record<string, PromptRehydrationItemV1[]> = {};
+  const libraryById = new Map(library.map((snippet) => [snippet.id, snippet]));
 
-  Object.entries(params).forEach(([fieldKey, rawValue]) => {
-    if (typeof rawValue !== "string") return;
-    const value = rawValue;
-    if (!value) return;
+  Object.entries(snapshot.fields).forEach(([fieldKey, items]) => {
+    if (typeof (params as any)?.[fieldKey] !== "string") return;
+    if (!Array.isArray(items) || items.length === 0) return;
 
-    const matches = findSnippetMatches(value, index, { maxMatches: MAX_REHYDRATION_SNAPSHOT_MATCHES });
-    if (!matches || matches.length === 0) return;
-
-    const selected = selectNonOverlappingMatches(matches, { preferLongest: true });
-    if (selected.length === 0) return;
-
-    const items: PromptRehydrationItemV1[] = [];
-    let cursor = 0;
-
-    selected.forEach((m) => {
-      if (m.start > cursor) {
-        items.push({ type: "text", content: value.slice(cursor, m.start) });
+    // Only persist snippet links for blocks that currently match the live snippet content.
+    // If a block is showing historical ("frozen") content, treat it as plain text for this generation.
+    const normalized: PromptRehydrationItemV1[] = items.map((item) => {
+      if (item?.type !== "block" || typeof item?.sourceId !== "string" || !item.sourceId) {
+        return item;
       }
 
-      items.push({
-        type: "block",
-        sourceId: m.snippet.id,
-        content: value.slice(m.start, m.end),
-        label: m.snippet.label,
-        color: m.snippet.color,
-      });
+      const liveSnippet = libraryById.get(item.sourceId);
+      if (!liveSnippet || liveSnippet.type !== "block") {
+        return { type: "text", content: item.content };
+      }
 
-      cursor = m.end;
+      if (item.content !== liveSnippet.content) {
+        return { type: "text", content: item.content };
+      }
+
+      return item;
     });
 
-    if (cursor < value.length) {
-      items.push({ type: "text", content: value.slice(cursor) });
-    }
-
-    const hasSnippet = items.some(
-      (item) => item.type === "block" && typeof item.sourceId === "string" && item.sourceId.length > 0
+    const hasLiveLinkedSnippet = normalized.some(
+      (item) => item?.type === "block" && typeof item?.sourceId === "string" && item.sourceId.length > 0
     );
-    if (!hasSnippet) return;
+    if (!hasLiveLinkedSnippet) return;
 
-    fields[fieldKey] = items;
+    fields[fieldKey] = normalized;
   });
 
   if (Object.keys(fields).length === 0) return null;
@@ -366,6 +355,10 @@ export default function PromptStudio() {
     collapsed?: boolean;
   } | null>(null);
   const [canvasGallerySyncKey, setCanvasGallerySyncKey] = useState(0);
+  const promptRehydrationSnapshotRef = useRef<PromptRehydrationSnapshotV1 | null>(null);
+  const handlePromptRehydrationSnapshot = useCallback((snapshot: PromptRehydrationSnapshotV1) => {
+    promptRehydrationSnapshotRef.current = snapshot;
+  }, []);
   const [activeRehydrationSnapshot, setActiveRehydrationSnapshot] = useState<PromptRehydrationSnapshotV1 | null>(null);
   const [activeRehydrationKey, setActiveRehydrationKey] = useState(0);
 
@@ -2604,7 +2597,7 @@ export default function PromptStudio() {
         return acc;
       }, {} as Record<string, any>);
 
-      const rehydration = buildPromptRehydrationSnapshotFromParams(cleanParams, library);
+      const rehydration = filterPromptRehydrationSnapshot(promptRehydrationSnapshotRef.current, cleanParams, library);
       if (rehydration) {
         cleanParams.__st_prompt_rehydration = rehydration;
       }
@@ -2694,7 +2687,7 @@ export default function PromptStudio() {
           return acc;
         }, {} as Record<string, any>);
 
-        const rehydration = buildPromptRehydrationSnapshotFromParams(cleanParams, library);
+        const rehydration = filterPromptRehydrationSnapshot(promptRehydrationSnapshotRef.current, cleanParams, library);
         if (rehydration) {
           cleanParams.__st_prompt_rehydration = rehydration;
         }
@@ -2931,6 +2924,7 @@ export default function PromptStudio() {
                   snippets={library}
                   onUpdateSnippets={setLibrary}
                   externalValueSyncKey={externalValueSyncKey}
+                  onRehydrationSnapshot={handlePromptRehydrationSnapshot}
                   rehydrationSnapshot={activeRehydrationSnapshot}
                   rehydrationKey={activeRehydrationKey}
                 />
