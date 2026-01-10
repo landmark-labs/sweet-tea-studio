@@ -34,6 +34,15 @@ async def on_startup():
 
 @app.on_event("shutdown")
 async def on_shutdown():
+    # Best-effort: fold WAL into the DB so backups/copies are single-file consistent.
+    try:
+        from app.db.sqlite_health import checkpoint_wal
+
+        checkpoint_wal(settings.database_path)
+        checkpoint_wal(settings.meta_dir / "tags.db")
+    except Exception as exc:
+        print(f"[Shutdown] SQLite WAL checkpoint skipped: {exc}")
+
     await watchdog.stop()
 
 # Helps confirm which backend build is running (especially in container deployments).

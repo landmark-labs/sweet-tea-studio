@@ -1273,6 +1273,167 @@ def cleanup_images(req: CleanupRequest, session: Session = Depends(get_session))
     return {"status": "cleaned", "count": count, "files_deleted": deleted_files, "soft_delete": True}
 
 
+class ResyncResult(BaseModel):
+    """Result of resync operation."""
+    found: int
+    already_in_db: int
+    imported: int
+    errors: int
+    scanned_folders: List[str]
+
+
+@router.post("/resync", response_model=ResyncResult)
+def resync_images_from_disk(session: Session = Depends(get_session)):
+    """
+    Scan project directories for images that exist on disk but are missing from the database.
+    
+    This is useful after database rollback or corruption recovery when files exist
+    on disk but their database entries were lost.
+    
+    Scans all project directories under the configured sweet_tea output paths.
+    """
+    from pathlib import Path as PathlibPath
+    
+    IMAGE_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp', '.tiff', '.mp4', '.webm', '.mov'}
+    
+    # Get all engines to find output directories
+    engines = session.exec(select(Engine)).all()
+    
+    folders_to_scan: List[str] = []
+    
+    for eng in engines:
+        if eng.output_dir:
+            # Scan sweet_tea folder inside ComfyUI output parent
+            sweet_tea_dir = settings.get_sweet_tea_dir_from_engine_path(eng.output_dir)
+            if sweet_tea_dir.exists():
+                folders_to_scan.append(str(sweet_tea_dir))
+        
+        if eng.input_dir:
+            # Also scan input directories
+            input_path = PathlibPath(eng.input_dir)
+            if input_path.exists():
+                folders_to_scan.append(str(input_path))
+    
+    if not folders_to_scan:
+        return ResyncResult(
+            found=0,
+            already_in_db=0,
+            imported=0,
+            errors=0,
+            scanned_folders=[],
+        )
+    
+    # Get existing paths from DB
+    existing_paths_rows = session.exec(select(Image.path)).all()
+    existing_paths = set(existing_paths_rows)
+    
+    found = 0
+    already_in_db = 0
+    imported = 0
+    errors = 0
+    scanned = []
+    
+    for folder in folders_to_scan:
+        folder_path = PathlibPath(folder)
+        if not folder_path.exists():
+            continue
+            
+        scanned.append(folder)
+        
+        # Recursively find all image files
+        for ext in IMAGE_EXTENSIONS:
+            for img_path in folder_path.rglob(f"*{ext}"):
+                if not img_path.is_file():
+                    continue
+                    
+                found += 1
+                path_str = str(img_path)
+                
+                if path_str in existing_paths:
+                    already_in_db += 1
+                    continue
+                
+                try:
+                    # Determine format from extension
+                    file_ext = img_path.suffix.lower().lstrip('.')
+                    if file_ext == 'jpeg':
+                        file_ext = 'jpg'
+                    
+                    # Create Image record with job_id=-1 (orphaned marker)
+                    new_image = Image(
+                        job_id=-1,  # Special marker for recovered images
+                        path=path_str,
+                        filename=img_path.name,
+                        format=file_ext,
+                        is_kept=True,  # Mark as kept since user wanted to recover them
+                        created_at=datetime.fromtimestamp(img_path.stat().st_mtime),
+                    )
+                    session.add(new_image)
+                    existing_paths.add(path_str)  # Prevent duplicates in same scan
+                    imported += 1
+                    
+                except Exception as e:
+                    logger.exception("Error importing recovered image", extra={"path": path_str, "error": str(e)})
+                    errors += 1
+            
+            # Also check uppercase extension
+            for img_path in folder_path.rglob(f"*{ext.upper()}"):
+                if not img_path.is_file():
+                    continue
+                    
+                found += 1
+                path_str = str(img_path)
+                
+                if path_str in existing_paths:
+                    already_in_db += 1
+                    continue
+                
+                try:
+                    file_ext = img_path.suffix.lower().lstrip('.')
+                    if file_ext == 'jpeg':
+                        file_ext = 'jpg'
+                    
+                    new_image = Image(
+                        job_id=-1,
+                        path=path_str,
+                        filename=img_path.name,
+                        format=file_ext,
+                        is_kept=True,
+                        created_at=datetime.fromtimestamp(img_path.stat().st_mtime),
+                    )
+                    session.add(new_image)
+                    existing_paths.add(path_str)
+                    imported += 1
+                    
+                except Exception:
+                    errors += 1
+    
+    try:
+        session.commit()
+        logger.info(
+            "Resync completed",
+            extra={
+                "found": found,
+                "already_in_db": already_in_db,
+                "imported": imported,
+                "errors": errors,
+                "folders": scanned,
+            }
+        )
+    except SQLAlchemyError:
+        session.rollback()
+        logger.exception("Failed to commit resync transaction")
+        raise HTTPException(status_code=500, detail="Failed to save resynced images")
+    
+    return ResyncResult(
+        found=found,
+        already_in_db=already_in_db,
+        imported=imported,
+        errors=errors,
+        scanned_folders=scanned,
+    )
+
+
 # ----------------------------------------------------------------
 
 @router.get("/image/path/thumbnail")

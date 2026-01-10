@@ -16,9 +16,31 @@ from app.models.portfolio import (
     ComfyWorkflow, Pipe, ModelCatalog, Run, RunModelLink, Output
 )
 from app.core.config import settings
+from app.db.sqlite_health import ensure_sqlite_database_or_raise
 
 
 def init_db():
+    # Ensure directory structure exists before doing any DB checks/IO.
+    settings.ensure_dirs()
+
+    backups_dir = settings.meta_dir / "backups"
+    recovery_dir = settings.meta_dir / "recovery"
+
+    # Validate/backup/recover SQLite files before SQLAlchemy connects (connect() sets pragmas).
+    ensure_sqlite_database_or_raise(
+        settings.database_path,
+        label=f"profile.db ({settings.database_path})",
+        backups_dir=backups_dir,
+        recovery_dir=recovery_dir,
+    )
+    ensure_sqlite_database_or_raise(
+        settings.meta_dir / "tags.db",
+        label=f"tags.db ({settings.meta_dir / 'tags.db'})",
+        backups_dir=backups_dir,
+        recovery_dir=recovery_dir,
+        allow_recreate=True,  # tags.db is a cache and can be rebuilt if unrecoverable
+    )
+
     # Create main app tables in profile.db
     SQLModel.metadata.create_all(engine)
     
@@ -36,9 +58,6 @@ def init_db():
     # Backfill __node_order for existing workflows
     from app.db.migrations.backfill_node_order import migrate as migrate_node_order
     migrate_node_order()
-    
-    # Ensure directory structure exists
-    settings.ensure_dirs()
     
     with Session(engine) as session:
         # Seed default engine if empty

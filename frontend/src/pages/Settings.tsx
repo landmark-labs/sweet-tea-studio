@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from "react";
-import { api, Engine, ComfyLaunchConfig, ApiKeysSettings } from "@/lib/api";
+import { api, Engine, ComfyLaunchConfig, ApiKeysSettings, DatabaseStatusResponse, getApiBase } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { AlertCircle, CheckCircle2, Loader2, Save, RefreshCw, Eye, EyeOff, Database, Sun, Moon, Monitor, Upload, Download, Trash2, Palette } from "lucide-react";
+import { AlertCircle, CheckCircle2, Loader2, Save, RefreshCw, Eye, EyeOff, Database, Sun, Moon, Monitor, Upload, Download, Trash2, Palette, HardDrive, Shield, Clock } from "lucide-react";
 import { useTheme, ThemeMode } from "@/lib/ThemeContext";
 
 export default function Settings() {
@@ -40,6 +40,12 @@ export default function Settings() {
     const [showRule34Key, setShowRule34Key] = useState(false);
     const [isExportingDb, setIsExportingDb] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // Database Health state
+    const [dbStatus, setDbStatus] = useState<DatabaseStatusResponse | null>(null);
+    const [isLoadingDbStatus, setIsLoadingDbStatus] = useState(false);
+    const [isCreatingBackup, setIsCreatingBackup] = useState(false);
+    const [isResyncing, setIsResyncing] = useState(false);
 
     const themeOptions: { value: ThemeMode; label: string; icon: React.ReactNode }[] = [
         { value: "light", label: "Light", icon: <Sun className="w-4 h-4" /> },
@@ -175,6 +181,67 @@ export default function Settings() {
             setIsExportingDb(false);
         }
     };
+
+    const loadDbStatus = async () => {
+        setIsLoadingDbStatus(true);
+        try {
+            const status = await api.getDatabaseStatus();
+            setDbStatus(status);
+        } catch (e) {
+            console.warn("Failed to load database status", e);
+        } finally {
+            setIsLoadingDbStatus(false);
+        }
+    };
+
+    const handleCreateBackup = async () => {
+        setIsCreatingBackup(true);
+        setError(null);
+        try {
+            const result = await api.createDatabaseBackup("profile.db");
+            if (result.success) {
+                setSuccess(`Backup created: ${result.backup?.filename}`);
+                await loadDbStatus(); // Refresh status
+            } else {
+                setError(result.message);
+            }
+            setTimeout(() => setSuccess(null), 5000);
+        } catch (e) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            setError((e as any)?.message || "Failed to create backup");
+        } finally {
+            setIsCreatingBackup(false);
+        }
+    };
+
+    const handleResyncImages = async () => {
+        setIsResyncing(true);
+        setError(null);
+        try {
+            // This will trigger gallery watchdog to scan for missing images
+            const res = await fetch(`${getApiBase()}/gallery/resync`, {
+                method: "POST",
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setSuccess(`Resync complete: ${data.found || 0} images discovered`);
+            } else {
+                const err = await res.json().catch(() => ({}));
+                setError(err.detail || "Failed to resync images");
+            }
+            setTimeout(() => setSuccess(null), 5000);
+        } catch (e) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            setError((e as any)?.message || "Failed to resync images");
+        } finally {
+            setIsResyncing(false);
+        }
+    };
+
+    // Load database status on mount
+    useEffect(() => {
+        loadDbStatus();
+    }, []);
 
     if (loading) {
         return (
@@ -470,6 +537,94 @@ export default function Settings() {
                             export profile
                         </Button>
                     </div>
+                </div>
+
+                {/* Database Health & Backup */}
+                <div className="space-y-6 bg-card rounded-xl p-6 border shadow-sm">
+                    <div className="flex items-center justify-between border-b pb-2">
+                        <h2 className="text-lg font-medium flex items-center gap-2">
+                            <HardDrive className="w-5 h-5" />
+                            database health
+                        </h2>
+                        <Button variant="ghost" size="sm" onClick={loadDbStatus} disabled={isLoadingDbStatus}>
+                            <RefreshCw className={`w-4 h-4 ${isLoadingDbStatus ? "animate-spin" : ""}`} />
+                        </Button>
+                    </div>
+
+                    {dbStatus ? (
+                        <div className="space-y-4">
+                            {/* Database files */}
+                            <div className="space-y-2">
+                                {dbStatus.databases.map((db) => (
+                                    <div key={db.name} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+                                        <div className="flex items-center gap-3">
+                                            <Shield className={`w-4 h-4 ${db.health_status === "ok" ? "text-green-500" : "text-red-500"}`} />
+                                            <div>
+                                                <div className="font-medium text-sm">{db.name}</div>
+                                                <div className="text-xs text-muted-foreground">
+                                                    {db.size_mb.toFixed(2)} MB
+                                                    {db.wal_size_bytes ? ` (+${(db.wal_size_bytes / 1024 / 1024).toFixed(2)} MB WAL)` : ""}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <span className={`text-xs font-medium ${db.health_status === "ok" ? "text-green-600" : "text-red-600"}`}>
+                                            {db.health_status}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* Total size */}
+                            <div className="text-sm text-muted-foreground">
+                                Total: <span className="font-medium">{dbStatus.total_size_mb.toFixed(2)} MB</span>
+                            </div>
+
+                            {/* Backup info */}
+                            <div className="p-3 rounded-lg bg-muted/30 border">
+                                <div className="flex items-center gap-2 text-sm">
+                                    <Clock className="w-4 h-4 text-muted-foreground" />
+                                    <span className="font-medium">Backups:</span>
+                                    <span>{dbStatus.backups_count} saved</span>
+                                </div>
+                                {dbStatus.latest_backup && (
+                                    <div className="text-xs text-muted-foreground mt-1">
+                                        Last backup: {new Date(dbStatus.latest_backup.created_at).toLocaleString()}
+                                        ({dbStatus.latest_backup.size_mb.toFixed(2)} MB)
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Actions */}
+                            <div className="flex flex-wrap gap-3">
+                                <Button onClick={handleCreateBackup} disabled={isCreatingBackup} variant="outline">
+                                    {isCreatingBackup ? (
+                                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                    ) : (
+                                        <Download className="w-4 h-4 mr-2" />
+                                    )}
+                                    create backup now
+                                </Button>
+                                <Button onClick={handleResyncImages} disabled={isResyncing} variant="outline">
+                                    {isResyncing ? (
+                                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                    ) : (
+                                        <RefreshCw className="w-4 h-4 mr-2" />
+                                    )}
+                                    resync images from disk
+                                </Button>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                                "Resync" scans your file system for images that exist on disk but are missing from the database
+                                (e.g., after a database rollback). This will re-discover and catalog them.
+                            </p>
+                        </div>
+                    ) : isLoadingDbStatus ? (
+                        <div className="flex items-center justify-center py-8">
+                            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                        </div>
+                    ) : (
+                        <p className="text-sm text-muted-foreground">Unable to load database status.</p>
+                    )}
                 </div>
 
                 {/* Appearance Settings */}

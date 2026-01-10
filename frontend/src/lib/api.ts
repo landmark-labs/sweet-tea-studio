@@ -314,6 +314,40 @@ export interface ApiKeysUpdate {
     rule34_user_id?: string;
 }
 
+// --- Database Health & Backup ---
+export interface DatabaseFileInfo {
+    name: string;
+    path: string;
+    size_bytes: number;
+    size_mb: number;
+    exists: boolean;
+    health_status: string;
+    wal_size_bytes?: number | null;
+    shm_size_bytes?: number | null;
+}
+
+export interface BackupInfo {
+    filename: string;
+    path: string;
+    size_bytes: number;
+    size_mb: number;
+    created_at: string;
+}
+
+export interface DatabaseStatusResponse {
+    databases: DatabaseFileInfo[];
+    backups_dir: string;
+    backups_count: number;
+    latest_backup?: BackupInfo | null;
+    total_size_mb: number;
+}
+
+export interface BackupCreateResponse {
+    success: boolean;
+    message: string;
+    backup?: BackupInfo | null;
+}
+
 export const api = {
     // --- Engines ---
     getEngines: async (): Promise<Engine[]> => {
@@ -1092,6 +1126,38 @@ export const api = {
             body: JSON.stringify(keys),
         });
         if (!res.ok) throw new Error("Failed to update API keys");
+        return res.json();
+    },
+
+    // --- Database Health & Backup ---
+    getDatabaseStatus: async (): Promise<DatabaseStatusResponse> => {
+        const res = await fetch(`${API_BASE}/database/status`);
+        if (!res.ok) throw new Error("Failed to fetch database status");
+        return res.json();
+    },
+
+    createDatabaseBackup: async (database: string = "profile.db"): Promise<BackupCreateResponse> => {
+        const res = await fetch(`${API_BASE}/database/backup?database=${encodeURIComponent(database)}`, {
+            method: "POST",
+        });
+        if (!res.ok) {
+            const errorData = await res.json().catch(() => ({}));
+            throw new Error(errorData.detail || "Failed to create backup");
+        }
+        return res.json();
+    },
+
+    getDatabaseBackups: async (): Promise<BackupInfo[]> => {
+        const res = await fetch(`${API_BASE}/database/backups`);
+        if (!res.ok) throw new Error("Failed to fetch backups");
+        return res.json();
+    },
+
+    checkpointDatabases: async (): Promise<{ checkpoints: Record<string, string> }> => {
+        const res = await fetch(`${API_BASE}/database/checkpoint`, {
+            method: "POST",
+        });
+        if (!res.ok) throw new Error("Failed to checkpoint databases");
         return res.json();
     },
 };
