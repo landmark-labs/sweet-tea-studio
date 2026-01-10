@@ -12,7 +12,7 @@ import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { PromptAutocompleteTextarea } from "@/components/PromptAutocompleteTextarea";
 import { api } from "@/lib/api";
-import { PromptItem } from "@/lib/types";
+import type { PromptItem, PromptRehydrationSnapshotV1, PromptRehydrationItemV1 } from "@/lib/types";
 import { formDataAtom, formFieldAtom, setFormDataAtom } from "@/lib/atoms/formAtoms";
 import { formatFloatDisplay } from "@/lib/formatters";
 import { ChevronDown, ChevronUp, Pin } from "lucide-react";
@@ -47,6 +47,8 @@ interface FieldRendererProps {
     onValueChange: (key: string, value: string | number | boolean) => void;
     onToggleChange: (key: string, value: boolean) => void;
     snippets: PromptItem[];
+    rehydrationItems?: PromptRehydrationItemV1[];
+    rehydrationKey?: number;
     engineId?: string;
     projectSlug?: string;
     destinationFolder?: string;
@@ -118,6 +120,8 @@ const FieldRenderer = React.memo(function FieldRenderer({
     onValueChange,
     onToggleChange,
     snippets,
+    rehydrationItems,
+    rehydrationKey,
     engineId,
     projectSlug,
     destinationFolder,
@@ -168,6 +172,8 @@ const FieldRenderer = React.memo(function FieldRenderer({
                         snippets={snippets}
                         highlightSnippets={true}
                         externalValueSyncKey={externalValueSyncKey}
+                        rehydrationItems={rehydrationItems}
+                        rehydrationKey={rehydrationKey}
                         showAutocompleteToggle={false}
                     />
                 ) : (
@@ -767,6 +773,8 @@ interface DynamicFormProps {
     isLoading?: boolean;
     submitDisabled?: boolean;
     externalValueSyncKey?: number;
+    promptRehydrationSnapshot?: PromptRehydrationSnapshotV1 | null;
+    promptRehydrationKey?: number;
 }
 
 export const DynamicForm = React.memo(function DynamicForm({
@@ -784,6 +792,8 @@ export const DynamicForm = React.memo(function DynamicForm({
     projectSlug,
     destinationFolder,
     externalValueSyncKey,
+    promptRehydrationSnapshot,
+    promptRehydrationKey,
 }: DynamicFormProps) {
     const [dynamicOptions, setDynamicOptions] = useState<Record<string, string[]>>({});
     const store = useStore();
@@ -1364,6 +1374,7 @@ export const DynamicForm = React.memo(function DynamicForm({
         const field = schema[key];
         const isActive = key === activeField;
         const isPromptField = groups.prompts.includes(key);
+        const rehydrationItems = isPromptField ? (promptRehydrationSnapshot?.fields?.[key] as PromptRehydrationItemV1[] | undefined) : undefined;
 
         return (
             <FieldRenderer
@@ -1378,6 +1389,8 @@ export const DynamicForm = React.memo(function DynamicForm({
                 onValueChange={handleChange}
                 onToggleChange={handleToggleChange}
                 snippets={snippets}
+                rehydrationItems={rehydrationItems}
+                rehydrationKey={promptRehydrationKey}
                 engineId={engineId}
                 projectSlug={projectSlug}
                 destinationFolder={destinationFolder}
@@ -1396,6 +1409,8 @@ export const DynamicForm = React.memo(function DynamicForm({
         handleToggleChange,
         onFieldBlur,
         onFieldFocus,
+        promptRehydrationKey,
+        promptRehydrationSnapshot,
         projectSlug,
         schema,
         snippets,
@@ -1406,6 +1421,7 @@ export const DynamicForm = React.memo(function DynamicForm({
         const field = schema[key];
         const isActive = key === activeField;
         const isPromptField = groups.prompts.includes(key);
+        const rehydrationItems = isPromptField ? (promptRehydrationSnapshot?.fields?.[key] as PromptRehydrationItemV1[] | undefined) : undefined;
 
         return (
             <FieldRenderer
@@ -1420,6 +1436,8 @@ export const DynamicForm = React.memo(function DynamicForm({
                 onValueChange={handleChange}
                 onToggleChange={handleToggleChange}
                 snippets={snippets}
+                rehydrationItems={rehydrationItems}
+                rehydrationKey={promptRehydrationKey}
                 engineId={engineId}
                 projectSlug={projectSlug}
                 destinationFolder={destinationFolder}
@@ -1440,6 +1458,8 @@ export const DynamicForm = React.memo(function DynamicForm({
         handleToggleChange,
         onFieldBlur,
         onFieldFocus,
+        promptRehydrationKey,
+        promptRehydrationSnapshot,
         projectSlug,
         schema,
         snippets,

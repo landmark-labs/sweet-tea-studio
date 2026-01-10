@@ -3,11 +3,11 @@ import { createPortal } from "react-dom";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { api, TagSuggestion } from "@/lib/api";
-import { PromptItem } from "@/lib/types";
+import type { PromptItem, PromptRehydrationItemV1 } from "@/lib/types";
 import { useUndoRedo } from "@/lib/undoRedo";
 import { logClientFrameLatency } from "@/lib/clientDiagnostics";
 import { cancelIdle, scheduleIdle, type IdleHandle } from "@/lib/idleScheduler";
-import { buildSnippetIndex, findSnippetMatches, selectNonOverlappingMatches } from "@/lib/snippetMatcher";
+import { buildSnippetIndex, findSnippetMatches, selectNonOverlappingMatches, type SnippetMatch } from "@/lib/snippetMatcher";
 
 const AUTOCOMPLETE_STORAGE_KEY = "sts_autocomplete_enabled";
 const AUTOCOMPLETE_EVENT_NAME = "sts-autocomplete-enabled-changed";
@@ -25,6 +25,8 @@ interface PromptAutocompleteTextareaProps extends React.TextareaHTMLAttributes<H
     snippets?: PromptItem[];
     highlightSnippets?: boolean;
     externalValueSyncKey?: number;
+    rehydrationItems?: PromptRehydrationItemV1[];
+    rehydrationKey?: number;
     showAutocompleteToggle?: boolean;
 }
 
@@ -102,6 +104,8 @@ export function PromptAutocompleteTextarea({
     snippets = [],
     highlightSnippets,
     externalValueSyncKey,
+    rehydrationItems,
+    rehydrationKey,
     showAutocompleteToggle = true,
     ...props
 }: PromptAutocompleteTextareaProps) {
@@ -470,11 +474,51 @@ export function PromptAutocompleteTextarea({
     };
 
     // --- Highlighting Logic (debounced + idle to avoid blocking typing) ---
+    const snippetsById = useMemo(() => new Map(snippets.map((s) => [s.id, s])), [snippets]);
     const snippetIndex = useMemo(() => buildSnippetIndex(snippets), [snippets]);
     // Ref to access snippetIndex in effects without adding it as a dependency (prevents infinite loops)
     const snippetIndexRef = useRef(snippetIndex);
     snippetIndexRef.current = snippetIndex;
-    const [highlightState, setHighlightState] = useState<{ value: string; nodes: React.ReactNode[] } | null>(null);
+    const rehydrationSnippets = useMemo(() => {
+        if (!rehydrationItems || rehydrationItems.length === 0) return [];
+        if (!snippets || snippets.length === 0) return [];
+
+        const unique = new Map<string, PromptItem>();
+
+        rehydrationItems.forEach((item) => {
+            if (item?.type !== "block") return;
+            const sourceId = typeof item?.sourceId === "string" ? item.sourceId : "";
+            if (!sourceId) return;
+            const frozenContent = typeof item?.content === "string" ? item.content : "";
+            if (!frozenContent) return;
+
+            const liveSnippet = snippetsById.get(sourceId);
+            if (!liveSnippet || liveSnippet.type !== "block") return;
+
+            // Only highlight "stale" segments (frozen content differs from the live snippet content).
+            if (frozenContent === liveSnippet.content) return;
+
+            const key = `${sourceId}::${frozenContent}`;
+            if (unique.has(key)) return;
+
+            unique.set(key, {
+                id: `rehydrate-${sourceId}-${unique.size}`,
+                sourceId,
+                type: "block",
+                content: frozenContent,
+                label: liveSnippet.label || item.label,
+                color: liveSnippet.color || item.color,
+            });
+        });
+
+        return Array.from(unique.values());
+    }, [rehydrationItems, rehydrationKey, snippets, snippetsById]);
+
+    const rehydrationIndex = useMemo(() => buildSnippetIndex(rehydrationSnippets), [rehydrationSnippets]);
+    const rehydrationIndexRef = useRef(rehydrationIndex);
+    rehydrationIndexRef.current = rehydrationIndex;
+
+    const [highlightState, setHighlightState] = useState<{ value: string; nodes: React.ReactNode[]; matches: SnippetMatch[] } | null>(null);
     const highlightHandleRef = useRef<IdleHandle | null>(null);
     const highlightDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const highlightTokenRef = useRef(0);
@@ -500,6 +544,7 @@ export function PromptAutocompleteTextarea({
         const token = highlightTokenRef.current;
 
         const currentIndex = snippetIndexRef.current;
+        const currentRehydrationIndex = rehydrationIndexRef.current;
         if (highlightDebounceTimerRef.current) {
             clearTimeout(highlightDebounceTimerRef.current);
             highlightDebounceTimerRef.current = null;
@@ -508,7 +553,9 @@ export function PromptAutocompleteTextarea({
         cancelIdle(highlightHandleRef.current);
         highlightHandleRef.current = null;
 
-        if (!highlightSnippets || !localValue || localValue.length > MAX_HIGHLIGHT_LENGTH || currentIndex.entries.length === 0) {
+        const hasHighlightCandidates = currentIndex.entries.length > 0 || currentRehydrationIndex.entries.length > 0;
+
+        if (!highlightSnippets || !localValue || localValue.length > MAX_HIGHLIGHT_LENGTH || !hasHighlightCandidates) {
             // Only update state if it's not already null to prevent infinite loops
             setHighlightState((prev) => prev === null ? prev : null);
             return;
@@ -519,14 +566,36 @@ export function PromptAutocompleteTextarea({
             highlightHandleRef.current = scheduleIdle(() => {
                 if (token !== highlightTokenRef.current) return;
 
-                const matches = findSnippetMatches(valueToHighlight, snippetIndexRef.current, { maxMatches: MAX_HIGHLIGHT_MATCHES });
-                if (!matches || matches.length === 0) {
+                const rehydrationMatches = currentRehydrationIndex.entries.length > 0
+                    ? findSnippetMatches(valueToHighlight, currentRehydrationIndex, { maxMatches: MAX_HIGHLIGHT_MATCHES })
+                    : [];
+                if (rehydrationMatches === null) {
                     setHighlightState((prev) => prev === null ? prev : null);
                     highlightHandleRef.current = null;
                     return;
                 }
 
-                const selectedMatches = selectNonOverlappingMatches(matches);
+                const liveMatches = currentIndex.entries.length > 0
+                    ? findSnippetMatches(valueToHighlight, currentIndex, { maxMatches: MAX_HIGHLIGHT_MATCHES })
+                    : [];
+                if (liveMatches === null) {
+                    setHighlightState((prev) => prev === null ? prev : null);
+                    highlightHandleRef.current = null;
+                    return;
+                }
+
+                const mergedMatches: SnippetMatch[] = [
+                    ...(rehydrationMatches || []),
+                    ...(liveMatches || []).map((m) => ({ ...m, order: m.order + currentRehydrationIndex.entries.length })),
+                ];
+
+                if (mergedMatches.length === 0) {
+                    setHighlightState((prev) => prev === null ? prev : null);
+                    highlightHandleRef.current = null;
+                    return;
+                }
+
+                const selectedMatches = selectNonOverlappingMatches(mergedMatches);
                 if (selectedMatches.length === 0) {
                     setHighlightState((prev) => prev === null ? prev : null);
                     highlightHandleRef.current = null;
@@ -567,7 +636,7 @@ export function PromptAutocompleteTextarea({
                     nodes.push(valueToHighlight.slice(cursor));
                 }
 
-                setHighlightState({ value: valueToHighlight, nodes });
+                setHighlightState({ value: valueToHighlight, nodes, matches: selectedMatches });
                 highlightHandleRef.current = null;
             }, { timeout: HIGHLIGHT_IDLE_TIMEOUT_MS });
         }, HIGHLIGHT_DEBOUNCE_MS);
@@ -583,18 +652,123 @@ export function PromptAutocompleteTextarea({
         // Note: snippetIndex is included (via its entries.length check in body) so the effect
         // re-runs when snippets load on startup. Without this, highlighting won't work until
         // a snippet is added/removed after restart.
-    }, [localValue, highlightSnippets, snippetIndex, buildHighlightBgClasses]);
+    }, [localValue, highlightSnippets, snippetIndex, rehydrationIndex, buildHighlightBgClasses]);
 
 
     const canHighlight =
         Boolean(highlightSnippets) &&
         Boolean(localValue) &&
         localValue.length <= MAX_HIGHLIGHT_LENGTH &&
-        snippetIndex.entries.length > 0;
+        (snippetIndex.entries.length > 0 || rehydrationIndex.entries.length > 0);
     const showHighlightOverlay = Boolean(canHighlight && highlightState);
     const highlightedContent = showHighlightOverlay
         ? (highlightState?.value === localValue ? highlightState.nodes : [localValue])
         : null;
+
+    const getTextareaIndexFromPoint = useCallback((
+        textarea: HTMLTextAreaElement,
+        clientX: number,
+        clientY: number
+    ): number | null => {
+        if (typeof document === "undefined" || typeof window === "undefined") return null;
+
+        const rect = textarea.getBoundingClientRect();
+        if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) return null;
+
+        const style = window.getComputedStyle(textarea);
+        const mirror = document.createElement("div");
+
+        try {
+            mirror.style.position = "fixed";
+            mirror.style.left = `${rect.left}px`;
+            mirror.style.top = `${rect.top}px`;
+            mirror.style.width = `${rect.width}px`;
+            mirror.style.height = `${rect.height}px`;
+            mirror.style.overflow = "auto";
+            mirror.style.boxSizing = style.boxSizing;
+            mirror.style.border = style.border;
+            mirror.style.padding = style.padding;
+            mirror.style.font = style.font;
+            mirror.style.letterSpacing = style.letterSpacing;
+            mirror.style.lineHeight = style.lineHeight;
+            mirror.style.textTransform = style.textTransform;
+            // Match wrapping behavior of the textarea/highlight overlay.
+            mirror.style.whiteSpace = "pre-wrap";
+            mirror.style.wordBreak = "break-word";
+            mirror.style.overflowWrap = "break-word";
+            // Keep it in layout for hit-testing, but visually invisible.
+            mirror.style.opacity = "0";
+            mirror.style.pointerEvents = "auto";
+            mirror.style.userSelect = "none";
+            mirror.style.zIndex = "2147483647";
+
+            const mirrorText = `${textarea.value}\u200b`;
+            mirror.textContent = mirrorText;
+
+            document.body.appendChild(mirror);
+            mirror.scrollTop = textarea.scrollTop;
+            mirror.scrollLeft = textarea.scrollLeft;
+
+            let index: number | null = null;
+            const docAny = document as unknown as {
+                caretRangeFromPoint?: (x: number, y: number) => Range | null;
+                caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null;
+            };
+
+            if (typeof docAny.caretRangeFromPoint === "function") {
+                const range = docAny.caretRangeFromPoint(clientX, clientY);
+                if (range && mirror.contains(range.startContainer)) {
+                    const prefix = document.createRange();
+                    prefix.setStart(mirror, 0);
+                    prefix.setEnd(range.startContainer, range.startOffset);
+                    index = prefix.toString().length;
+                }
+            } else if (typeof docAny.caretPositionFromPoint === "function") {
+                const position = docAny.caretPositionFromPoint(clientX, clientY);
+                if (position && mirror.contains(position.offsetNode)) {
+                    const prefix = document.createRange();
+                    prefix.setStart(mirror, 0);
+                    prefix.setEnd(position.offsetNode, position.offset);
+                    index = prefix.toString().length;
+                }
+            }
+
+            if (index === null) return null;
+            return Math.min(index, textarea.value.length);
+        } finally {
+            mirror.remove();
+        }
+    }, []);
+
+    const [rehydrationMenu, setRehydrationMenu] = useState<{
+        x: number;
+        y: number;
+        snippetId: string;
+        snippetLabel: string;
+        start: number;
+        end: number;
+        liveContent: string;
+    } | null>(null);
+
+    useEffect(() => {
+        if (!rehydrationMenu) return;
+        const handleMouseDown = (event: MouseEvent) => {
+            const target = event.target as HTMLElement | null;
+            if (target?.closest?.('[data-rehydration-menu="true"]')) return;
+            setRehydrationMenu(null);
+        };
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === "Escape") {
+                setRehydrationMenu(null);
+            }
+        };
+        window.addEventListener("mousedown", handleMouseDown, true);
+        window.addEventListener("keydown", handleKeyDown);
+        return () => {
+            window.removeEventListener("mousedown", handleMouseDown, true);
+            window.removeEventListener("keydown", handleKeyDown);
+        };
+    }, [rehydrationMenu]);
 
     return (
         <div className="flex flex-col gap-1 w-full group/container">
@@ -713,6 +887,79 @@ export function PromptAutocompleteTextarea({
                         props.onSelect?.(e);
                     }}
                     onScroll={handleScroll}
+                    onContextMenu={(e) => {
+                        updateCursor();
+
+                        // Only override the native context menu when the user right-clicks
+                        // inside a "stale" rehydration match (old snippet text linked to a current snippet ID).
+                        const matches = highlightState?.value === localValue ? (highlightState?.matches || []) : [];
+                        const rehydrationMatches = matches.filter((m) => {
+                            const sourceId = (m.snippet as PromptItem | undefined)?.sourceId;
+                            if (!sourceId) return false;
+                            return true;
+                        });
+
+                        if (rehydrationMatches.length === 0) {
+                            props.onContextMenu?.(e);
+                            return;
+                        }
+
+                        const clickedIndex =
+                            getTextareaIndexFromPoint(e.currentTarget, e.clientX, e.clientY) ??
+                            e.currentTarget.selectionStart ??
+                            0;
+                        const selectionStart = e.currentTarget.selectionStart ?? clickedIndex;
+                        const selectionEnd = e.currentTarget.selectionEnd ?? selectionStart;
+
+                        const match =
+                            rehydrationMatches.find((m) => clickedIndex >= m.start && clickedIndex < m.end) ??
+                            (selectionStart !== selectionEnd
+                                ? rehydrationMatches.find((m) => selectionStart < m.end && selectionEnd > m.start)
+                                : undefined);
+
+                        if (!match) {
+                            props.onContextMenu?.(e);
+                            return;
+                        }
+
+                        const snippetId = (match.snippet as PromptItem).sourceId as string;
+                        const liveSnippet = snippetsById.get(snippetId);
+                        if (!liveSnippet) {
+                            props.onContextMenu?.(e);
+                            return;
+                        }
+
+                        const currentSegment = localValue.slice(match.start, match.end);
+                        if (!currentSegment || currentSegment !== match.snippet.content) {
+                            // Link broken (text changed) or stale render; fall back to native menu.
+                            props.onContextMenu?.(e);
+                            return;
+                        }
+
+                        if (currentSegment === liveSnippet.content) {
+                            // Already up-to-date; allow native menu and rely on live snippet highlighting.
+                            props.onContextMenu?.(e);
+                            return;
+                        }
+
+                        e.preventDefault();
+                        e.stopPropagation();
+
+                        const menuWidth = 256; // w-64
+                        const menuHeight = 64; // approx (1 header + 1 action)
+                        const safeX = Math.min(e.clientX, Math.max(0, window.innerWidth - menuWidth));
+                        const safeY = Math.min(e.clientY, Math.max(0, window.innerHeight - menuHeight));
+
+                        setRehydrationMenu({
+                            x: safeX,
+                            y: safeY,
+                            snippetId,
+                            snippetLabel: liveSnippet.label || "Snippet",
+                            start: match.start,
+                            end: match.end,
+                            liveContent: liveSnippet.content,
+                        });
+                    }}
                     className={cn(
                         "text-xs font-mono transition-all min-h-[150px] relative z-10",
                         isActive && "ring-2 ring-blue-400 border-blue-400",
@@ -771,6 +1018,49 @@ export function PromptAutocompleteTextarea({
                             )}
                         </button>
                     ))}
+                </div>,
+                document.body
+            )}
+
+            {rehydrationMenu && createPortal(
+                <div
+                    data-rehydration-menu="true"
+                    className="fixed z-[9999] bg-popover border border-border/60 rounded-md shadow-lg py-1 w-64 text-sm text-popover-foreground font-medium"
+                    style={{ top: rehydrationMenu.y, left: rehydrationMenu.x }}
+                >
+                    <div className="px-3 py-2 text-xs font-semibold text-muted-foreground">
+                        snippet: <span className="text-foreground">{rehydrationMenu.snippetLabel}</span>
+                    </div>
+                    <div className="h-px bg-border/50 my-1" />
+                    <button
+                        type="button"
+                        className="w-full px-3 py-2 text-left hover:bg-muted/50 cursor-pointer text-xs"
+                        onMouseDown={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                        }}
+                        onClick={() => {
+                            const { start, end, liveContent } = rehydrationMenu;
+                            const nextValue = localValue.slice(0, start) + liveContent + localValue.slice(end);
+                            const nextCursor = start + liveContent.length;
+
+                            intendedCursorRef.current = nextCursor;
+                            lastInputAtRef.current = Date.now();
+                            pendingExternalValueRef.current = null;
+
+                            setLocalValue(nextValue);
+                            setCursor(nextCursor);
+                            onValueChange(nextValue);
+                            setRehydrationMenu(null);
+
+                            queueMicrotask(() => {
+                                textareaRef.current?.focus();
+                                textareaRef.current?.setSelectionRange(nextCursor, nextCursor);
+                            });
+                        }}
+                    >
+                        update to latest
+                    </button>
                 </div>,
                 document.body
             )}
