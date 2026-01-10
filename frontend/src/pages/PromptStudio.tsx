@@ -1101,8 +1101,6 @@ export default function PromptStudio() {
 
   const handleUseInPipe = useCallback(({ workflowId, imagePath, galleryItem }: { workflowId: string; imagePath: string; galleryItem: GalleryItem }) => {
     flushPendingPersist();
-    // Choose the workflow
-    setSelectedWorkflowId(workflowId);
 
     // Prefer raw filesystem path, not API URL
     const rawPath = (() => {
@@ -1166,7 +1164,10 @@ export default function PromptStudio() {
       setSelectedProjectId(loadParams.project_id ? String(loadParams.project_id) : null);
     }
 
+    // FIX: Set pendingLoadParams BEFORE setSelectedWorkflowId so the workflow switch effect
+    // correctly skips loading old form data (guard at line ~807 checks pendingLoadParams)
     setPendingLoadParams({ ...loadParams, __isRegenerate: false });
+    setSelectedWorkflowId(workflowId);
   }, [flushPendingPersist, setPendingLoadParams, setPreviewMetadata, setPreviewPath, setSelectedProjectId, setSelectedWorkflowId]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1226,11 +1227,6 @@ export default function PromptStudio() {
       }
     };
 
-    // Set the workflow to match the original
-    if (workflowId) {
-      setSelectedWorkflowId(String(workflowId));
-    }
-
     // Set preview if we have an image path
     if (rawPath) {
       setPreviewPath(`/api/v1/gallery/image/path?path=${encodeURIComponent(rawPath)}`);
@@ -1242,12 +1238,18 @@ export default function PromptStudio() {
       });
     }
 
-    // Set pending load params with regenerate and seed flags
+    // FIX: Set pendingLoadParams BEFORE setSelectedWorkflowId so the workflow switch effect
+    // correctly skips loading old form data (guard at line ~807 checks pendingLoadParams)
     setPendingLoadParams({
       ...loadParams,
       __isRegenerate: true,
       __randomizeSeed: seedOption === 'random'
     });
+
+    // Set the workflow to match the original
+    if (workflowId) {
+      setSelectedWorkflowId(String(workflowId));
+    }
   }, [flushPendingPersist, setPendingLoadParams, setPreviewMetadata, setPreviewPath, setSelectedWorkflowId]);
 
 
