@@ -34,6 +34,8 @@ export default function Projects() {
     const [newProjectName, setNewProjectName] = useState("");
     const [isCreating, setIsCreating] = useState(false);
 
+    const [showArchived, setShowArchived] = useState(false);
+
     // Folder Management State
     const [managingProject, setManagingProject] = useState<Project | null>(null);
     const [newFolderName, setNewFolderName] = useState("");
@@ -44,7 +46,7 @@ export default function Projects() {
 
     const fetchProjects = async () => {
         try {
-            const data = await api.getProjects();
+            const data = await api.getProjects(showArchived);
             setProjects(data);
         } catch (e) {
             console.error("Failed to fetch projects:", e);
@@ -55,7 +57,7 @@ export default function Projects() {
 
     useEffect(() => {
         fetchProjects();
-    }, []);
+    }, [showArchived]);
 
     const handleCreateProject = async () => {
         if (!newProjectName.trim()) return;
@@ -85,6 +87,15 @@ export default function Projects() {
             fetchProjects();
         } catch (e) {
             console.error("Failed to archive project:", e);
+        }
+    };
+
+    const handleUnarchiveProject = async (projectId: number) => {
+        try {
+            await api.unarchiveProject(projectId);
+            fetchProjects();
+        } catch (e) {
+            console.error("Failed to unarchive project:", e);
         }
     };
 
@@ -146,8 +157,11 @@ export default function Projects() {
     };
 
     // Separate drafts from other projects
+    // Separate drafts from other projects
     const draftsProject = projects.find((p) => p.slug === "drafts");
-    const otherProjects = projects.filter((p) => p.slug !== "drafts");
+    const nonDraftProjects = projects.filter((p) => p.slug !== "drafts");
+    const activeProjects = nonDraftProjects.filter(p => !p.archived_at);
+    const archivedProjects = nonDraftProjects.filter(p => !!p.archived_at);
 
     return (
         <div className="p-4 space-y-4 h-full overflow-auto">
@@ -159,46 +173,57 @@ export default function Projects() {
                         organize your generations into projects
                     </p>
                 </div>
-                <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-                    <DialogTrigger asChild>
-                        <Button className="gap-2">
-                            <Plus size={16} />
-                            {labels.action.newProject}
-                        </Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                        <DialogHeader>
-                            <DialogTitle>{labels.action.newProject}</DialogTitle>
-                            <DialogDescription>
-                                create a new project to organize your generations
-                            </DialogDescription>
-                        </DialogHeader>
-                        <div className="py-4">
-                            <Input
-                                placeholder={labels.placeholder.projectName}
-                                value={newProjectName}
-                                onChange={(e) => setNewProjectName(e.target.value)}
-                                onKeyDown={(e) => {
-                                    if (e.key === "Enter") handleCreateProject();
-                                }}
-                            />
-                        </div>
-                        <DialogFooter>
-                            <Button
-                                variant="outline"
-                                onClick={() => setIsCreateOpen(false)}
-                            >
-                                cancel
+                <div className="flex items-center gap-4">
+                    <Button
+                        variant={showArchived ? "secondary" : "ghost"}
+                        onClick={() => setShowArchived(!showArchived)}
+                        className="gap-2"
+                        title={showArchived ? "Hide archived projects" : "Show archived projects"}
+                    >
+                        <Archive size={16} />
+                        {showArchived ? "hide archived" : "view archived"}
+                    </Button>
+                    <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+                        <DialogTrigger asChild>
+                            <Button className="gap-2">
+                                <Plus size={16} />
+                                {labels.action.newProject}
                             </Button>
-                            <Button
-                                onClick={handleCreateProject}
-                                disabled={!newProjectName.trim() || isCreating}
-                            >
-                                {isCreating ? "creating..." : "create"}
-                            </Button>
-                        </DialogFooter>
-                    </DialogContent>
-                </Dialog>
+                        </DialogTrigger>
+                        <DialogContent>
+                            <DialogHeader>
+                                <DialogTitle>{labels.action.newProject}</DialogTitle>
+                                <DialogDescription>
+                                    create a new project to organize your generations
+                                </DialogDescription>
+                            </DialogHeader>
+                            <div className="py-4">
+                                <Input
+                                    placeholder={labels.placeholder.projectName}
+                                    value={newProjectName}
+                                    onChange={(e) => setNewProjectName(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === "Enter") handleCreateProject();
+                                    }}
+                                />
+                            </div>
+                            <DialogFooter>
+                                <Button
+                                    variant="outline"
+                                    onClick={() => setIsCreateOpen(false)}
+                                >
+                                    cancel
+                                </Button>
+                                <Button
+                                    onClick={handleCreateProject}
+                                    disabled={!newProjectName.trim() || isCreating}
+                                >
+                                    {isCreating ? "creating..." : "create"}
+                                </Button>
+                            </DialogFooter>
+                        </DialogContent>
+                    </Dialog>
+                </div>
             </div>
 
             {/* Folder Management Dialog */}
@@ -350,82 +375,157 @@ export default function Projects() {
             )}
 
             {/* Projects grid */}
-            {otherProjects.length > 0 && (
+            {activeProjects.length > 0 && (
                 <div className="space-y-2">
                     <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider pl-1">
                         {labels.entity.projects}
                     </h2>
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                        {otherProjects.map((project) => (
-                            <Card
+                        {activeProjects.map((project) => (
+                            <ProjectCard
                                 key={project.id}
-                                className={cn(
-                                    "transition-all hover:border-primary/50 group relative"
-                                )}
-                            >
-                                <CardHeader className="pb-2 p-3">
-                                    <div className="flex items-start justify-between">
-                                        <div className="flex items-center gap-3">
-                                            <div className="p-2 rounded-lg bg-primary/10">
-                                                <FolderOpen size={20} className="text-primary" />
-                                            </div>
-                                            <div>
-                                                <CardTitle className="text-base">
-                                                    {project.name}
-                                                </CardTitle>
-                                                <CardDescription className="text-xs flex items-center gap-1">
-                                                    <Hash size={12} />
-                                                    {project.slug}
-                                                </CardDescription>
-                                            </div>
-                                        </div>
-
-                                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                className="h-8 w-8 text-muted-foreground hover:text-primary"
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    setManagingProject(project);
-                                                }}
-                                                title="manage folders"
-                                            >
-                                                <Settings size={14} />
-                                            </Button>
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    handleArchiveProject(project.id);
-                                                }}
-                                                title="archive project"
-                                            >
-                                                <Archive size={14} />
-                                            </Button>
-                                        </div>
-                                    </div>
-                                </CardHeader>
-                                <CardContent className="pt-0 p-3">
-                                    <Separator className="my-2" />
-                                    <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                                        <div className="flex items-center gap-1">
-                                            <ImageIcon size={12} />
-                                            {project.image_count || 0} images
-                                        </div>
-                                        <div className="flex items-center gap-1">
-                                            <Calendar size={12} />
-                                            active {formatDate(project.last_activity)}
-                                        </div>
-                                    </div>
-                                </CardContent>
-                            </Card>
+                                project={project}
+                                formatDate={formatDate}
+                                onManage={(p) => setManagingProject(p)}
+                                onArchive={handleArchiveProject}
+                            />
                         ))}
                     </div>
                 </div>
             )}
+
+            {/* Archived Projects grid */}
+            {showArchived && archivedProjects.length > 0 && (
+                <div className="space-y-2 pt-4 border-t">
+                    <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider pl-1 flex items-center gap-2">
+                        <Archive size={12} />
+                        archived projects
+                    </h2>
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 opacity-75">
+                        {archivedProjects.map((project) => (
+                            <ProjectCard
+                                key={project.id}
+                                project={project}
+                                formatDate={formatDate}
+                                onManage={(p) => setManagingProject(p)}
+                                onUnarchive={handleUnarchiveProject}
+                                isArchived
+                            />
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {showArchived && archivedProjects.length === 0 && (
+                <div className="text-center py-8 text-muted-foreground text-sm">
+                    no archived projects found
+                </div>
+            )}
         </div>
+    );
+}
+
+function ProjectCard({
+    project,
+    formatDate,
+    onManage,
+    onArchive,
+    onUnarchive,
+    isArchived = false
+}: {
+    project: Project,
+    formatDate: (d?: string | null) => string,
+    onManage: (p: Project) => void,
+    onArchive?: (id: number) => void,
+    onUnarchive?: (id: number) => void,
+    isArchived?: boolean
+}) {
+    return (
+        <Card
+            className={cn(
+                "transition-all hover:border-primary/50 group relative",
+                isArchived && "bg-muted/30 border-dashed"
+            )}
+        >
+            <CardHeader className="pb-2 p-3">
+                <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className={cn("p-2 rounded-lg", isArchived ? "bg-muted" : "bg-primary/10")}>
+                            <FolderOpen size={20} className={cn(isArchived ? "text-muted-foreground" : "text-primary")} />
+                        </div>
+                        <div>
+                            <CardTitle className="text-base">
+                                {project.name}
+                            </CardTitle>
+                            <CardDescription className="text-xs flex items-center gap-1">
+                                <Hash size={12} />
+                                {project.slug}
+                            </CardDescription>
+                        </div>
+                    </div>
+
+                    <div className="flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                        {!isArchived && (
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-muted-foreground hover:text-primary"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onManage(project);
+                                }}
+                                title="manage folders"
+                            >
+                                <Settings size={14} />
+                            </Button>
+                        )}
+
+                        {isArchived ? (
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-muted-foreground hover:text-green-600"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onUnarchive?.(project.id);
+                                }}
+                                title="restore project"
+                            >
+                                <Archive size={14} className="rotate-180" />
+                            </Button>
+                        ) : (
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onArchive?.(project.id);
+                                }}
+                                title="archive project"
+                            >
+                                <Archive size={14} />
+                            </Button>
+                        )}
+                    </div>
+                </div>
+            </CardHeader>
+            <CardContent className="pt-0 p-3">
+                <Separator className="my-2" />
+                <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                    <div className="flex items-center gap-1">
+                        <ImageIcon size={12} />
+                        {project.image_count || 0} images
+                    </div>
+                    <div className="flex items-center gap-1">
+                        <Calendar size={12} />
+                        {isArchived
+                            ? `curr: ${formatDate(project.archived_at)}`
+                            : `active ${formatDate(project.last_activity)}`
+                        }
+                    </div>
+                </div>
+            </CardContent>
+        </Card>
     );
 }
