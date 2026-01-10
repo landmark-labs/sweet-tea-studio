@@ -37,6 +37,9 @@ interface GenerationContextValue {
     // Delegation
     registerGenerateHandler: (handler: () => Promise<void>) => void;
     unregisterGenerateHandler: () => void;
+
+    // Connection status
+    isConnected: boolean;
 }
 
 const GenerationContext = createContext<GenerationContextValue | null>(null);
@@ -71,6 +74,7 @@ export function GenerationProvider({ children }: GenerationProviderProps) {
     const [projects, setProjects] = useState<Project[]>([]);
     const [formData, setFormData] = useState<Record<string, any>>({});
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isConnected, setIsConnected] = useState(false);
     const hasActiveJobs = useGenerationFeedStore(useCallback(state => state.hasActiveJobs, []));
     const isGenerating = isSubmitting || hasActiveJobs();
 
@@ -116,15 +120,35 @@ export function GenerationProvider({ children }: GenerationProviderProps) {
         }
     }, [selectedProjectId]);
 
-    // Load initial data
+    // Load initial data with retry logic
     useEffect(() => {
+        let isMounted = true;
+        let retryTimeout: NodeJS.Timeout;
+
         const loadData = async () => {
             try {
+                // We use these as a health check. If they fail, backend is likely not ready.
                 const [enginesRes, workflowsRes, projectsRes] = await Promise.allSettled([
                     api.getEngines(),
                     api.getWorkflows(),
                     api.getProjects(),
                 ]);
+
+                // Check for complete failure which implies backend down
+                const allFailed = enginesRes.status === "rejected" &&
+                    workflowsRes.status === "rejected" &&
+                    projectsRes.status === "rejected";
+
+                if (allFailed) {
+                    if (isMounted) {
+                        console.log("[GenerationContext] Backend not ready, retrying in 2s...");
+                        setIsConnected(false);
+                        retryTimeout = setTimeout(loadData, 2000);
+                    }
+                    return;
+                }
+
+                if (isMounted) setIsConnected(true);
 
                 if (enginesRes.status === "fulfilled") {
                     const enginesData = enginesRes.value;
@@ -142,11 +166,20 @@ export function GenerationProvider({ children }: GenerationProviderProps) {
                 }
             } catch (err) {
                 console.error("Failed to load generation context data", err);
+                if (isMounted) {
+                    retryTimeout = setTimeout(loadData, 2000);
+                }
             }
         };
+
         loadData();
+
+        return () => {
+            isMounted = false;
+            clearTimeout(retryTimeout);
+        };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, []); // Run once on mount, but recursively retry
 
     // Sync active jobs on mount to prevent stuck spinners
     useEffect(() => {
@@ -411,6 +444,7 @@ export function GenerationProvider({ children }: GenerationProviderProps) {
         canGenerate,
         registerGenerateHandler,
         unregisterGenerateHandler,
+        isConnected,
     } as GenerationContextValue; // Cast to include new methods without breaking interface yet if I don't update interface definition
 
 

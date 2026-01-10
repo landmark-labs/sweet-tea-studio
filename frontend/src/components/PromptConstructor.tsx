@@ -14,7 +14,7 @@ import { cn, stripDarkVariantClasses } from "@/lib/utils";
 import { useUndoRedo } from "@/lib/undoRedo";
 import { PromptAutocompleteTextarea } from "./PromptAutocompleteTextarea";
 import { VirtualGrid } from "@/components/VirtualGrid";
-import { PromptItem } from "@/lib/types";
+import { PromptItem, PromptRehydrationItemV1, PromptRehydrationSnapshotV1 } from "@/lib/types";
 import { logClientFrameLatency, logClientPerfSample } from "@/lib/clientDiagnostics";
 import { cancelIdle, scheduleIdle, type IdleHandle } from "@/lib/idleScheduler";
 import { buildSnippetIndex, findSnippetMatches, selectNonOverlappingMatches } from "@/lib/snippetMatcher";
@@ -32,6 +32,9 @@ interface PromptConstructorProps {
     snippets: PromptItem[];
     onUpdateSnippets: React.Dispatch<React.SetStateAction<PromptItem[]>>;
     externalValueSyncKey?: number;
+    onRehydrationSnapshot?: (snapshot: PromptRehydrationSnapshotV1) => void;
+    rehydrationSnapshot?: PromptRehydrationSnapshotV1 | null;
+    rehydrationKey?: number;
 }
 
 // --- Constants ---
@@ -63,7 +66,7 @@ export const COLORS = [
 
 // --- Sub-Components ---
 
-const SortableItem = React.memo(function SortableItem({ item, textIndex, onRemove, onUpdateContent, onEditTextSnippet, onTextFocusChange }: { item: PromptItem, textIndex?: number, onRemove: (id: string, e: React.MouseEvent) => void, onUpdateContent: (id: string, val: string) => void, onEditTextSnippet?: (item: PromptItem, textIndex?: number) => void, onTextFocusChange: (focused: boolean) => void }) {
+const SortableItem = React.memo(function SortableItem({ item, textIndex, onRemove, onUpdateContent, onEditTextSnippet, onTextFocusChange, onSetSnippetRehydrationMode }: { item: PromptItem, textIndex?: number, onRemove: (id: string, e: React.MouseEvent) => void, onUpdateContent: (id: string, val: string) => void, onEditTextSnippet?: (item: PromptItem, textIndex?: number) => void, onTextFocusChange: (focused: boolean) => void, onSetSnippetRehydrationMode?: (id: string, mode: "frozen" | "live") => void }) {
     const {
         attributes,
         listeners,
@@ -173,6 +176,12 @@ const SortableItem = React.memo(function SortableItem({ item, textIndex, onRemov
     }
 
     // Snippet Block
+    const showRehydrationControls = Boolean(item.sourceId && item.frozenContent !== undefined && onSetSnippetRehydrationMode);
+    const activeRehydrationMode: "frozen" | "live" =
+        (item.rehydrationMode === "live" || item.rehydrationMode === "frozen")
+            ? item.rehydrationMode
+            : (item.frozenContent !== undefined ? "frozen" : "live");
+
     return (
         <HoverCard openDelay={500}>
             <HoverCardTrigger asChild>
@@ -206,6 +215,30 @@ const SortableItem = React.memo(function SortableItem({ item, textIndex, onRemov
                         <p className="text-xs font-semibold text-foreground/80">{item.label || "Snippet"}</p>
                         <span className="text-[10px] font-mono text-muted-foreground">{item.content.length} chars</span>
                     </div>
+                    {showRehydrationControls && (
+                        <div className="flex items-center gap-2">
+                            <Button
+                                type="button"
+                                variant={activeRehydrationMode === "frozen" ? "default" : "outline"}
+                                className="h-6 px-2 text-[10px] font-semibold"
+                                onClick={() => onSetSnippetRehydrationMode?.(item.id, "frozen")}
+                                title="Use the exact snippet text from the saved generation"
+                            >
+                                {activeRehydrationMode === "frozen" && <Check size={12} className="-ml-0.5 mr-1" />}
+                                Saved
+                            </Button>
+                            <Button
+                                type="button"
+                                variant={activeRehydrationMode === "live" ? "default" : "outline"}
+                                className="h-6 px-2 text-[10px] font-semibold"
+                                onClick={() => onSetSnippetRehydrationMode?.(item.id, "live")}
+                                title="Substitute the current snippet text (prompt rehydration)"
+                            >
+                                {activeRehydrationMode === "live" && <Check size={12} className="-ml-0.5 mr-1" />}
+                                Rehydrate
+                            </Button>
+                        </div>
+                    )}
                     <ScrollArea className="h-32 rounded-lg border border-border/60 bg-muted/20">
                         <p className="p-3 text-[11px] leading-relaxed font-mono whitespace-pre-wrap text-foreground/80">
                             {item.content}
@@ -220,6 +253,7 @@ const SortableItem = React.memo(function SortableItem({ item, textIndex, onRemov
     return prevProps.item.id === nextProps.item.id &&
         prevProps.item.content === nextProps.item.content &&
         prevProps.item.label === nextProps.item.label &&
+        prevProps.item.rehydrationMode === nextProps.item.rehydrationMode &&
         prevProps.textIndex === nextProps.textIndex;
 });
 
@@ -508,7 +542,7 @@ const SortableLibrarySnippet = React.memo(function SortableLibrarySnippet({ snip
 
 // --- Main Component ---
 
-export const PromptConstructor = React.memo(function PromptConstructor({ schema, onUpdate, onUpdateMany, currentValues, targetField: controlledTarget, onTargetChange, onFinish, snippets: library, onUpdateSnippets: setLibrary, externalValueSyncKey }: PromptConstructorProps) {
+export const PromptConstructor = React.memo(function PromptConstructor({ schema, onUpdate, onUpdateMany, currentValues, targetField: controlledTarget, onTargetChange, onFinish, snippets: library, onUpdateSnippets: setLibrary, externalValueSyncKey, onRehydrationSnapshot, rehydrationSnapshot, rehydrationKey }: PromptConstructorProps) {
     // 1. Identify Target Fields
     const [internalTarget, setInternalTarget] = useState<string>("");
     const targetField = controlledTarget !== undefined ? controlledTarget : internalTarget;
@@ -547,6 +581,26 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
         }
         setFieldItems(prev => ({ ...prev, [target]: value }));
     }, []);
+
+    useEffect(() => {
+        if (!schema) return;
+        if (!onRehydrationSnapshot) return;
+
+        const fields: Record<string, PromptRehydrationItemV1[]> = {};
+        Object.entries(fieldItems).forEach(([fieldKey, fieldValue]) => {
+            if (!fieldValue || fieldValue.length === 0) return;
+            const snapshotItems: PromptRehydrationItemV1[] = fieldValue.map((item) => ({
+                type: item.type,
+                content: item.content,
+                sourceId: item.type === "block" ? item.sourceId : undefined,
+                label: item.type === "block" ? item.label : undefined,
+                color: item.type === "block" ? item.color : undefined,
+            }));
+            fields[fieldKey] = snapshotItems;
+        });
+
+        onRehydrationSnapshot({ version: 1, fields });
+    }, [fieldItems, onRehydrationSnapshot, schema]);
 
     const setItems = useCallback((
         newItems: PromptItem[] | ((prev: PromptItem[]) => PromptItem[]),
@@ -646,9 +700,14 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
     // Ref to access snippetIndex in effects without adding it as a dependency (prevents infinite loops)
     const snippetIndexRef = useRef(snippetIndex);
     snippetIndexRef.current = snippetIndex;
+    const libraryByIdRef = useRef<Map<string, PromptItem>>(new Map());
+    useLayoutEffect(() => {
+        libraryByIdRef.current = new Map(library.map((s) => [s.id, s]));
+    }, [library]);
     const prevLibraryRef = useRef<PromptItem[] | null>(null);
     const reconcileHandleRef = useRef<IdleHandle | null>(null);
     const reconcileTokenRef = useRef(0);
+    const lastAppliedRehydrationKeyRef = useRef<number | null>(null);
 
     const buildItemsFromValue = (
         value: string,
@@ -785,12 +844,66 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
 
         const nextFieldItems: Record<string, PromptItem[]> = {};
         const nextReconciled: Record<string, string> = {};
+        const shouldApplyRehydration = Boolean(
+            rehydrationSnapshot &&
+            typeof rehydrationKey === "number" &&
+            lastAppliedRehydrationKeyRef.current !== rehydrationKey
+        );
+        if (shouldApplyRehydration) {
+            lastAppliedRehydrationKeyRef.current = rehydrationKey ?? null;
+        }
 
         availableFields.forEach((fieldKey) => {
             const rawVal = (valuesRef.current as any)?.[fieldKey];
             const currentVal = typeof rawVal === "string" ? rawVal : (rawVal === null || rawVal === undefined ? "" : String(rawVal));
-            // Use ref to avoid adding snippetIndex to dependency array (prevents infinite loops)
-            nextFieldItems[fieldKey] = rebuildItemsForValue(currentVal, snippetIndexRef.current);
+
+            if (shouldApplyRehydration) {
+                const snapshotItems = (rehydrationSnapshot as any)?.fields?.[fieldKey] as PromptRehydrationItemV1[] | undefined;
+                if (Array.isArray(snapshotItems) && snapshotItems.length > 0) {
+                    const libraryById = libraryByIdRef.current;
+                    let textLabelCounter = 0;
+                    nextFieldItems[fieldKey] = snapshotItems.flatMap((snap, idx) => {
+                        const content = typeof snap?.content === "string" ? snap.content : "";
+                        if (snap?.type === "block" && typeof snap?.sourceId === "string" && snap.sourceId) {
+                            const librarySnippet = libraryById.get(snap.sourceId);
+                            if (!librarySnippet) {
+                                textLabelCounter += 1;
+                                return [{
+                                    id: `rehydrate-${fieldKey}-${idx}`,
+                                    type: "text" as const,
+                                    content,
+                                    label: snap?.label || `Text ${textLabelCounter}`,
+                                }];
+                            }
+                            return [{
+                                id: `rehydrate-${fieldKey}-${idx}`,
+                                type: "block" as const,
+                                sourceId: snap.sourceId,
+                                content,
+                                label: librarySnippet.label || snap?.label,
+                                color: librarySnippet.color || snap?.color,
+                                rehydrationMode: "frozen" as const,
+                                frozenContent: content,
+                            }];
+                        }
+
+                        if (!content.length) return [];
+                        textLabelCounter += 1;
+                        return [{
+                            id: `rehydrate-${fieldKey}-${idx}`,
+                            type: "text" as const,
+                            content,
+                            label: snap?.label || `Text ${textLabelCounter}`,
+                        }];
+                    });
+                } else {
+                    // Use ref to avoid adding snippetIndex to dependency array (prevents infinite loops)
+                    nextFieldItems[fieldKey] = rebuildItemsForValue(currentVal, snippetIndexRef.current);
+                }
+            } else {
+                // Use ref to avoid adding snippetIndex to dependency array (prevents infinite loops)
+                nextFieldItems[fieldKey] = rebuildItemsForValue(currentVal, snippetIndexRef.current);
+            }
             nextReconciled[fieldKey] = normalizePrompt(currentVal);
         });
 
@@ -816,7 +929,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
             syncingLibraryRef.current = false;
         }, 0);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [availableFields, externalValueSyncKey, schema, targetField]);
+    }, [availableFields, externalValueSyncKey, rehydrationKey, rehydrationSnapshot, schema, targetField]);
 
     // Sync Library: keep linked blocks + prompt text aligned when snippets change.
     // Important: reconciliation depends on `library`, so we must guard against it
@@ -900,16 +1013,18 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
                 const librarySnippet = libraryById.get(item.sourceId);
                 if (!librarySnippet) {
                     didChangeField = true;
-                    return { ...item, type: "text" as const, sourceId: undefined, label: item.label || "Text" };
+                    return { ...item, type: "text" as const, sourceId: undefined, rehydrationMode: undefined, frozenContent: undefined, label: item.label || "Text" };
                 }
 
                 const nextLabel = librarySnippet.label;
-                const nextContent = librarySnippet.content;
                 const nextColor = librarySnippet.color;
+                const isFrozen = item.rehydrationMode === "frozen";
+                const frozenContent = item.frozenContent ?? item.content;
+                const nextContent = isFrozen ? frozenContent : librarySnippet.content;
 
-                if (item.label !== nextLabel || item.content !== nextContent || item.color !== nextColor) {
+                if (item.label !== nextLabel || item.content !== nextContent || item.color !== nextColor || (isFrozen && item.frozenContent !== frozenContent)) {
                     didChangeField = true;
-                    return { ...item, label: nextLabel, content: nextContent, color: nextColor };
+                    return { ...item, label: nextLabel, content: nextContent, color: nextColor, frozenContent: isFrozen ? frozenContent : item.frozenContent };
                 }
 
                 return item;
@@ -1404,6 +1519,58 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
         }, "Text updated", false);
     }, [setItems]);
 
+    const handleSetSnippetRehydrationMode = useCallback((id: string, mode: "frozen" | "live") => {
+        trackSnippetAction(mode === "live" ? "rehydrate_snippet" : "restore_saved_snippet", { target_id: id });
+        setItems((prev) => {
+            const libraryById = libraryByIdRef.current;
+            let mutated = false;
+            const next = prev.map((item) => {
+                if (item.id !== id) return item;
+                if (item.type !== "block" || !item.sourceId) return item;
+
+                const frozenContent = item.frozenContent ?? item.content;
+
+                if (mode === "frozen") {
+                    if (item.rehydrationMode === "frozen" && item.content === frozenContent && item.frozenContent === frozenContent) {
+                        return item;
+                    }
+                    mutated = true;
+                    return { ...item, rehydrationMode: "frozen" as const, frozenContent, content: frozenContent };
+                }
+
+                const snippet = libraryById.get(item.sourceId);
+                if (!snippet) {
+                    if (item.rehydrationMode === "frozen" && item.content === frozenContent && item.frozenContent === frozenContent) {
+                        return item;
+                    }
+                    mutated = true;
+                    return { ...item, rehydrationMode: "frozen" as const, frozenContent, content: frozenContent };
+                }
+
+                if (
+                    item.rehydrationMode === "live" &&
+                    item.content === snippet.content &&
+                    item.label === snippet.label &&
+                    item.color === snippet.color &&
+                    item.frozenContent === frozenContent
+                ) {
+                    return item;
+                }
+
+                mutated = true;
+                return {
+                    ...item,
+                    rehydrationMode: "live" as const,
+                    frozenContent,
+                    content: snippet.content,
+                    label: snippet.label,
+                    color: snippet.color,
+                };
+            });
+            return mutated ? next : prev;
+        }, mode === "live" ? "Rehydrated snippet" : "Restored saved snippet");
+    }, [setItems, trackSnippetAction]);
+
     const handleRemoveItem = useCallback((id: string, e: React.MouseEvent) => {
         e.stopPropagation();
         e.preventDefault();
@@ -1575,6 +1742,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
                                                 onUpdateContent={handleUpdateItemContent}
                                                 onEditTextSnippet={item.type === 'text' ? editTextSnippet : undefined}
                                                 onTextFocusChange={setTextInputFocused}
+                                                onSetSnippetRehydrationMode={handleSetSnippetRehydrationMode}
                                             />
                                         );
                                     });

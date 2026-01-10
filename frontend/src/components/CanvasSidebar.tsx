@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { useGeneration } from "@/lib/GenerationContext";
 import { useCanvasStore } from "@/lib/stores/canvasStore";
 
 interface CanvasSidebarProps {
@@ -31,6 +32,7 @@ export function CanvasSidebar({ collapsed }: CanvasSidebarProps) {
   const renameCanvas = useCanvasStore((state) => state.renameCanvas);
   const deleteCanvas = useCanvasStore((state) => state.deleteCanvas);
   const getSuggestedName = useCanvasStore((state) => state.getSuggestedName);
+  const { isConnected } = useGeneration() || {};
 
   const [createOpen, setCreateOpen] = useState(false);
   const [createName, setCreateName] = useState("");
@@ -40,7 +42,7 @@ export function CanvasSidebar({ collapsed }: CanvasSidebarProps) {
 
   useEffect(() => {
     refreshCanvases();
-  }, [refreshCanvases]);
+  }, [refreshCanvases, isConnected]); // Retrieve whenever connection restores
 
   const handleOpenCanvas = useCallback(async (canvasId: number) => {
     await loadCanvas(canvasId);

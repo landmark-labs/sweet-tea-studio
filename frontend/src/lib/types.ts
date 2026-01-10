@@ -27,6 +27,27 @@ export interface PromptItem {
     content: string; // The actual prompt text
     label?: string; // For blocks, a short name
     color?: string; // For blocks
+    /**
+     * Prompt rehydration:
+     * - "frozen": keep the exact text used at generation time (default when loading old generations)
+     * - "live": substitute the current snippet content and continue syncing on snippet edits
+     */
+    rehydrationMode?: "frozen" | "live";
+    /** Snapshot of the original snippet content when a block is in frozen mode (lets the user toggle back). */
+    frozenContent?: string;
+}
+
+export interface PromptRehydrationItemV1 {
+    type: PromptItemType;
+    content: string;
+    sourceId?: string;
+    label?: string;
+    color?: string;
+}
+
+export interface PromptRehydrationSnapshotV1 {
+    version: 1;
+    fields: Record<string, PromptRehydrationItemV1[]>;
 }
 
 // ====================

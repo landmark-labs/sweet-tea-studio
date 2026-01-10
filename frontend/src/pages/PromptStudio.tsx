@@ -15,7 +15,7 @@ import { ImageViewer } from "@/components/ImageViewer";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { InstallStatusDialog, InstallStatus } from "@/components/InstallStatusDialog";
 import { PromptConstructor, COLORS } from "@/components/PromptConstructor";
-import { CanvasPayload, PromptItem } from "@/lib/types";
+import { CanvasPayload, PromptItem, type PromptRehydrationSnapshotV1, type PromptRehydrationItemV1 } from "@/lib/types";
 
 import { stripDarkVariantClasses } from "@/lib/utils";
 import { useUndoRedo } from "@/lib/undoRedo";
@@ -102,6 +102,53 @@ const normalizeParamsWithDefaults = (
     }
   });
   return normalized;
+};
+
+const filterPromptRehydrationSnapshot = (
+  snapshot: PromptRehydrationSnapshotV1 | null | undefined,
+  params: Record<string, unknown>,
+  library: PromptItem[]
+): PromptRehydrationSnapshotV1 | null => {
+  if (!snapshot || snapshot.version !== 1 || !snapshot.fields || typeof snapshot.fields !== "object") {
+    return null;
+  }
+
+  const fields: Record<string, PromptRehydrationItemV1[]> = {};
+  const libraryById = new Map(library.map((snippet) => [snippet.id, snippet]));
+
+  Object.entries(snapshot.fields).forEach(([fieldKey, items]) => {
+    if (typeof (params as any)?.[fieldKey] !== "string") return;
+    if (!Array.isArray(items) || items.length === 0) return;
+
+    // Only persist snippet links for blocks that currently match the live snippet content.
+    // If a block is showing historical ("frozen") content, treat it as plain text for this generation.
+    const normalized: PromptRehydrationItemV1[] = items.map((item) => {
+      if (item?.type !== "block" || typeof item?.sourceId !== "string" || !item.sourceId) {
+        return item;
+      }
+
+      const liveSnippet = libraryById.get(item.sourceId);
+      if (!liveSnippet || liveSnippet.type !== "block") {
+        return { type: "text", content: item.content };
+      }
+
+      if (item.content !== liveSnippet.content) {
+        return { type: "text", content: item.content };
+      }
+
+      return item;
+    });
+
+    const hasLiveLinkedSnippet = normalized.some(
+      (item) => item?.type === "block" && typeof item?.sourceId === "string" && item.sourceId.length > 0
+    );
+    if (!hasLiveLinkedSnippet) return;
+
+    fields[fieldKey] = normalized;
+  });
+
+  if (Object.keys(fields).length === 0) return null;
+  return { version: 1, fields };
 };
 
 export default function PromptStudio() {
@@ -237,6 +284,12 @@ export default function PromptStudio() {
     collapsed?: boolean;
   } | null>(null);
   const [canvasGallerySyncKey, setCanvasGallerySyncKey] = useState(0);
+  const promptRehydrationSnapshotRef = useRef<PromptRehydrationSnapshotV1 | null>(null);
+  const handlePromptRehydrationSnapshot = useCallback((snapshot: PromptRehydrationSnapshotV1) => {
+    promptRehydrationSnapshotRef.current = snapshot;
+  }, []);
+  const [activeRehydrationSnapshot, setActiveRehydrationSnapshot] = useState<PromptRehydrationSnapshotV1 | null>(null);
+  const [activeRehydrationKey, setActiveRehydrationKey] = useState(0);
 
   // Load snippets from backend on mount
   useEffect(() => {
@@ -1465,6 +1518,28 @@ export default function PromptStudio() {
 
       if (cancelled) return;
 
+      const rawRehydration = (jobParams as any)?.__st_prompt_rehydration as PromptRehydrationSnapshotV1 | undefined;
+      const rehydrationFields: Record<string, PromptRehydrationItemV1[]> = {};
+
+      if (rawRehydration && rawRehydration.version === 1 && rawRehydration.fields && typeof rawRehydration.fields === "object") {
+        const sourceFields = rawRehydration.fields as Record<string, PromptRehydrationItemV1[]>;
+        const mapField = (targetKey: string | null, sourceKey: string | null) => {
+          if (!targetKey) return;
+          const candidate = (sourceKey && sourceFields[sourceKey]) || sourceFields[targetKey];
+          if (Array.isArray(candidate) && candidate.length > 0) {
+            rehydrationFields[targetKey] = candidate;
+          }
+        };
+        mapField(positiveTarget, extracted.positiveFieldKey);
+        mapField(negativeTarget, extracted.negativeFieldKey);
+      }
+
+      const nextRehydrationSnapshot: PromptRehydrationSnapshotV1 | null =
+        Object.keys(rehydrationFields).length > 0 ? { version: 1, fields: rehydrationFields } : null;
+
+      setActiveRehydrationSnapshot(nextRehydrationSnapshot);
+      setActiveRehydrationKey((prev) => prev + 1);
+
       const normalizedParams = normalizeParamsWithDefaults(schema, baseParams);
 
       // STEP 6: Persist to localStorage so workflow init effect picks it up
@@ -2282,6 +2357,11 @@ export default function PromptStudio() {
         return acc;
       }, {} as Record<string, any>);
 
+      const rehydration = filterPromptRehydrationSnapshot(promptRehydrationSnapshotRef.current, cleanParams, library);
+      if (rehydration) {
+        cleanParams.__st_prompt_rehydration = rehydration;
+      }
+
       const job = await api.createJob(
         parseInt(selectedEngineId),
         parseInt(selectedWorkflowId),
@@ -2363,6 +2443,11 @@ export default function PromptStudio() {
           return acc;
         }, {} as Record<string, any>);
 
+        const rehydration = filterPromptRehydrationSnapshot(promptRehydrationSnapshotRef.current, cleanParams, library);
+        if (rehydration) {
+          cleanParams.__st_prompt_rehydration = rehydration;
+        }
+
         const job = await api.createJob(
           parseInt(selectedEngineId!),
           parseInt(selectedWorkflowId!),
@@ -2380,7 +2465,7 @@ export default function PromptStudio() {
     }
 
     console.log(`[Batch] All ${batchSize} jobs submitted. Pending queue: [${pendingJobIdsRef.current.join(', ')}]`);
-  }, [batchSize, handleGenerate, visibleSchema, selectedEngineId, selectedWorkflowId, selectedProjectId, generationTarget]);
+  }, [batchSize, handleGenerate, library, visibleSchema, selectedEngineId, selectedWorkflowId, selectedProjectId, generationTarget]);
 
   const handleBatchGenerateRef = useRef(handleBatchGenerate);
   handleBatchGenerateRef.current = handleBatchGenerate;
@@ -2572,6 +2657,9 @@ export default function PromptStudio() {
                   snippets={library}
                   onUpdateSnippets={setLibrary}
                   externalValueSyncKey={externalValueSyncKey}
+                  onRehydrationSnapshot={handlePromptRehydrationSnapshot}
+                  rehydrationSnapshot={activeRehydrationSnapshot}
+                  rehydrationKey={activeRehydrationKey}
                 />
               ) : (
                 <div className="p-4 text-xs text-muted-foreground">select a prompt pipe to use the constructor</div>
@@ -2600,6 +2688,20 @@ export default function PromptStudio() {
                   } else {
                     setSelectedProjectId(value);
                   }
+                  // FIX: Clear sidebar/gallery context to ensure Viewer switches to the new project
+                  // instead of showing stale images from the previous project's selected folder.
+                  setProjectGalleryImages([]);
+                  setPreviewPath(null);
+                  setPreviewMetadata(null);
+
+                  // Clear persistent sidebar context so completion handler doesn't sync old folder
+                  localStorage.removeItem("ds_project_gallery_project");
+                  localStorage.removeItem("ds_project_gallery_folder");
+
+                  // Clear visual sidebar selection
+                  setCanvasGallerySelection({ projectId: null, folder: null });
+                  setCanvasGallerySyncKey(prev => prev + 1);
+
                   setGalleryRefresh((prev) => prev + 1);
                 }}
               >
