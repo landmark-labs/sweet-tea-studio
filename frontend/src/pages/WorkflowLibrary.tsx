@@ -432,6 +432,7 @@ export default function WorkflowLibrary() {
     const [editName, setEditName] = useState("");
     const [nameError, setNameError] = useState("");
     const [isSaving, setIsSaving] = useState(false);
+    const [isSyncingSchema, setIsSyncingSchema] = useState(false);
 
     const generation = useGeneration();
 
@@ -709,6 +710,29 @@ export default function WorkflowLibrary() {
         }
     };
 
+    const handleSyncSchema = async () => {
+        if (!editingWorkflow) return;
+        setIsSyncingSchema(true);
+        setError(null);
+        try {
+            const updated = await api.syncWorkflowSchema(editingWorkflow.id);
+            setWorkflows(prev => prev.map(w => w.id === updated.id ? updated : w));
+            setEditingWorkflow(updated);
+
+            const edits = JSON.parse(JSON.stringify(updated.input_schema));
+            const orderedIds = getNodeDisplayOrder(updated.graph_json, edits);
+            edits.__node_order = orderedIds;
+            setSchemaEdits(edits);
+            setNodeOrder(orderedIds);
+
+            await generation?.refreshWorkflows();
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "Failed to sync schema");
+        } finally {
+            setIsSyncingSchema(false);
+        }
+    };
+
     useEffect(() => {
         if (!editingWorkflow || !schemaEdits) return;
         const desiredOrder = getNodeDisplayOrder(editingWorkflow.graph_json, schemaEdits);
@@ -819,15 +843,15 @@ export default function WorkflowLibrary() {
                     {/* Spacer to push buttons to bottom */}
                     <div className="flex-1" />
 
-                    {/* Action Buttons */}
-                    <div className="space-y-2 pt-4 border-t">
-                        <Dialog open={visibilityDialogOpen} onOpenChange={setVisibilityDialogOpen}>
-                            <DialogTrigger asChild>
-                                <Button variant="secondary" size="sm" className="w-full justify-start">
+                     {/* Action Buttons */}
+                     <div className="space-y-2 pt-4 border-t">
+                         <Dialog open={visibilityDialogOpen} onOpenChange={setVisibilityDialogOpen}>
+                             <DialogTrigger asChild>
+                                 <Button variant="secondary" size="sm" className="w-full justify-start">
                                     <GitBranch className="w-4 h-4 mr-2" />
                                     manage nodes
                                 </Button>
-                            </DialogTrigger>
+                             </DialogTrigger>
                             <DialogContent className="max-w-xl">
                                 <DialogHeader>
                                     <DialogTitle>Manage nodes</DialogTitle>
@@ -951,29 +975,41 @@ export default function WorkflowLibrary() {
                                     <Button variant="outline" onClick={() => setVisibilityDialogOpen(false)}>Close</Button>
                                 </DialogFooter>
                             </DialogContent>
-                        </Dialog>
+                         </Dialog>
 
-                        <div className="flex gap-2 pt-2">
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                className="flex-1"
-                                onClick={() => { setEditingWorkflow(null); setNodeOrder([]); }}
-                                disabled={isSaving}
-                            >
-                                Cancel
-                            </Button>
-                            <Button
-                                size="sm"
-                                className="flex-1"
-                                onClick={handleSaveSchema}
-                                disabled={Boolean(nameError) || isSaving}
-                            >
-                                <Save className="w-4 h-4 mr-1" /> {isSaving ? "Saving..." : "Save"}
-                            </Button>
-                        </div>
-                    </div>
-                </div>
+                         <Button
+                             variant="secondary"
+                             size="sm"
+                             className="w-full justify-start"
+                             onClick={handleSyncSchema}
+                             disabled={isSaving || isSyncingSchema}
+                             title="Backfill schema from graph + current ComfyUI object_info"
+                         >
+                             <RotateCw className="w-4 h-4 mr-2" />
+                             {isSyncingSchema ? "syncing schema..." : "sync schema"}
+                         </Button>
+ 
+                         <div className="flex gap-2 pt-2">
+                             <Button
+                                 variant="outline"
+                                 size="sm"
+                                 className="flex-1"
+                                 onClick={() => { setEditingWorkflow(null); setNodeOrder([]); }}
+                                 disabled={isSaving || isSyncingSchema}
+                             >
+                                 Cancel
+                             </Button>
+                             <Button
+                                 size="sm"
+                                 className="flex-1"
+                                 onClick={handleSaveSchema}
+                                 disabled={Boolean(nameError) || isSaving || isSyncingSchema}
+                             >
+                                 <Save className="w-4 h-4 mr-1" /> {isSaving ? "Saving..." : "Save"}
+                             </Button>
+                         </div>
+                     </div>
+                 </div>
 
 
                 {/* Right Content - Pipe Parameters */}

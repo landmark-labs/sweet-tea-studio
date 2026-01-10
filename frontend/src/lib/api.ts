@@ -518,6 +518,17 @@ export const api = {
         }
         return res.json();
     },
+
+    syncWorkflowSchema: async (workflowId: number): Promise<WorkflowTemplate> => {
+        const res = await fetch(`${API_BASE}/workflows/${workflowId}/sync_schema`, {
+            method: "POST",
+        });
+        if (!res.ok) {
+            const body = await res.json().catch(() => ({}));
+            throw new Error(body.detail || "Failed to sync workflow schema");
+        }
+        return res.json();
+    },
     exportWorkflow: async (workflowId: number): Promise<WorkflowExportBundle> => {
         const res = await fetch(`${API_BASE}/workflows/${workflowId}/export`);
         if (!res.ok) throw new Error("Failed to export workflow");

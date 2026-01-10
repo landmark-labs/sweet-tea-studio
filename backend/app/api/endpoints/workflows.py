@@ -2,6 +2,7 @@ import hashlib
 import json
 import logging
 import os
+from copy import deepcopy
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException
@@ -293,6 +294,166 @@ def generate_schema_from_graph(graph: Dict[str, Any], object_info: Dict[str, Any
     return schema
 
 
+def _sorted_node_ids(graph: Dict[str, Any]) -> List[str]:
+    return sorted(
+        graph.keys(),
+        key=lambda x: int(x) if str(x).isdigit() else x,
+    )
+
+
+def _schema_uses_node_id_keys(schema: Dict[str, Any]) -> bool:
+    # Heuristic: modern schemas use `Class#node_id.param` keys.
+    return any(isinstance(key, str) and "#" in key for key in schema.keys() if not str(key).startswith("__"))
+
+
+def _extract_input_name(schema_key: str, field_def: Dict[str, Any]) -> str:
+    mock_field = field_def.get("mock_field")
+    if isinstance(mock_field, str) and mock_field.strip():
+        return mock_field.strip()
+    return str(schema_key).split(".")[-1]
+
+
+def _compute_instance_prefixes(graph: Dict[str, Any]) -> Dict[str, str]:
+    """
+    Legacy key naming scheme (pre-#node_id keys):
+    - First instance: `ClassType`
+    - Subsequent: `ClassType_2`, `ClassType_3`, ...
+
+    Uses stable node-id ordering to match historical behavior.
+    """
+    prefixes: Dict[str, str] = {}
+    counts: Dict[str, int] = {}
+    for node_id in _sorted_node_ids(graph):
+        node = graph.get(node_id) or {}
+        if not isinstance(node, dict):
+            continue
+        class_type = node.get("class_type")
+        if not isinstance(class_type, str) or not class_type:
+            continue
+        counts[class_type] = counts.get(class_type, 0) + 1
+        instance = counts[class_type]
+        prefixes[str(node_id)] = class_type if instance == 1 else f"{class_type}_{instance}"
+    return prefixes
+
+
+def _sync_input_schema_with_graph(
+    existing_schema: Dict[str, Any],
+    graph: Dict[str, Any],
+    object_info: Dict[str, Any],
+) -> Dict[str, Any]:
+    """
+    Backfill missing widget inputs into an existing input_schema without breaking
+    existing keys (important for persisted UI state/localStorage).
+
+    - Adds missing fields (e.g. enum dropdowns) keyed consistently with the existing schema.
+    - If a field already exists but is missing `enum`, backfills it from ComfyUI object_info.
+    - Preserves existing titles/defaults/x_core/__hidden/etc.
+    """
+    existing_schema = deepcopy(existing_schema or {})
+    fresh_schema = generate_schema_from_graph(graph, object_info)
+
+    # Map existing fields by (node_id, input_name) so we can backfill by identity.
+    existing_key_by_node_and_input: Dict[tuple[str, str], str] = {}
+    existing_prefix_by_node_id: Dict[str, str] = {}
+    for key, value in existing_schema.items():
+        if str(key).startswith("__"):
+            continue
+        if not isinstance(value, dict):
+            continue
+        node_id = value.get("x_node_id")
+        if node_id is None:
+            continue
+        node_id_str = str(node_id)
+        input_name = _extract_input_name(str(key), value)
+        existing_key_by_node_and_input[(node_id_str, input_name)] = str(key)
+        if node_id_str not in existing_prefix_by_node_id:
+            existing_prefix_by_node_id[node_id_str] = str(key).rsplit(".", 1)[0]
+
+    uses_node_id_keys = _schema_uses_node_id_keys(existing_schema)
+    instance_prefix_by_node_id = _compute_instance_prefixes(graph)
+
+    # Backfill missing fields + missing enums.
+    for fresh_key, fresh_def in fresh_schema.items():
+        if str(fresh_key).startswith("__"):
+            continue
+        if not isinstance(fresh_def, dict):
+            continue
+        node_id = fresh_def.get("x_node_id")
+        if node_id is None:
+            continue
+        node_id_str = str(node_id)
+        input_name = _extract_input_name(str(fresh_key), fresh_def)
+        identity = (node_id_str, input_name)
+
+        existing_key = existing_key_by_node_and_input.get(identity)
+        if existing_key and existing_key in existing_schema:
+            # Only backfill enum-related metadata; preserve user edits.
+            existing_def = existing_schema.get(existing_key)
+            if isinstance(existing_def, dict):
+                if "enum" not in existing_def and isinstance(fresh_def.get("enum"), list):
+                    existing_def["enum"] = fresh_def["enum"]
+                # Some schemas store enums but not the current default; keep user's default.
+                existing_schema[existing_key] = existing_def
+            continue
+
+        # New field: choose a key compatible with the existing schema.
+        prefix = existing_prefix_by_node_id.get(node_id_str)
+        if not prefix:
+            class_type = fresh_def.get("x_class_type") or ""
+            if uses_node_id_keys:
+                prefix = f"{class_type}#{node_id_str}"
+            else:
+                prefix = instance_prefix_by_node_id.get(node_id_str) or str(class_type) or f"node_{node_id_str}"
+
+        new_key = f"{prefix}.{input_name}"
+        if new_key in existing_schema:
+            # Extremely defensive: don't clobber; skip if already present.
+            continue
+        existing_schema[new_key] = fresh_def
+
+    # Ensure __node_order is present and contains all nodes (preserve existing order when possible).
+    graph_node_ids = [str(nid) for nid in _sorted_node_ids(graph)]
+    stored_order = existing_schema.get("__node_order")
+    if isinstance(stored_order, list):
+        valid = [str(nid) for nid in stored_order if str(nid) in set(graph_node_ids)]
+        remaining = [nid for nid in graph_node_ids if nid not in set(valid)]
+        existing_schema["__node_order"] = valid + remaining
+    else:
+        existing_schema["__node_order"] = fresh_schema.get("__node_order", graph_node_ids)
+
+    # Add schema metadata if missing (non-breaking for the frontend).
+    if "__node_meta" not in existing_schema and "__node_meta" in fresh_schema:
+        existing_schema["__node_meta"] = fresh_schema["__node_meta"]
+
+    def _safe_int(value: Any) -> int:
+        try:
+            return int(value)
+        except Exception:
+            return 0
+
+    existing_schema["__schema_version"] = max(
+        _safe_int(existing_schema.get("__schema_version")),
+        _safe_int(fresh_schema.get("__schema_version")),
+        2,
+    )
+
+    return existing_schema
+
+
+def _build_node_mapping_from_schema(schema: Dict[str, Any]) -> Dict[str, Any]:
+    mapping: Dict[str, Any] = {}
+    for key, field_def in (schema or {}).items():
+        if str(key).startswith("__"):
+            continue
+        if not isinstance(field_def, dict) or "x_node_id" not in field_def:
+            continue
+        mapping[str(key)] = {
+            "node_id": str(field_def["x_node_id"]),
+            "field": f"inputs.{field_def.get('mock_field', str(key).split('.')[-1])}",
+        }
+    return mapping
+
+
 def ensure_node_order(workflow: WorkflowTemplate | WorkflowTemplateCreate):
     """Ensure __node_order exists in input_schema, generating it if missing."""
     if not workflow.input_schema or "__node_order" in workflow.input_schema:
@@ -575,6 +736,44 @@ def update_workflow(workflow_id: int, workflow_in: WorkflowTemplateCreate):
         workflow_data = workflow_in.dict(exclude_unset=True)
         for key, value in workflow_data.items():
             setattr(workflow, key, value)
+
+        session.add(workflow)
+        session.commit()
+        session.refresh(workflow)
+        return workflow
+
+
+@router.post("/{workflow_id}/sync_schema", response_model=WorkflowTemplate)
+def sync_workflow_schema(workflow_id: int):
+    """
+    Backfill/refresh a workflow's `input_schema` from its `graph_json` + current
+    ComfyUI `/object_info`, preserving existing field keys where possible.
+
+    This is especially useful after installing previously-missing nodes, or when
+    upgrading Sweet Tea Studio versions where enum widgets were not present in
+    older schemas.
+    """
+    with Session(db_engine) as session:
+        workflow = session.get(WorkflowTemplate, workflow_id)
+        if not workflow:
+            raise HTTPException(status_code=404, detail="Workflow not found")
+
+        engine = session.exec(select(Engine)).first()
+        if not engine:
+            raise HTTPException(status_code=400, detail="No active Engine found to validate workflow.")
+
+        client = ComfyClient(engine)
+        try:
+            object_info = client.get_object_info()
+        except Exception as e:
+            raise HTTPException(status_code=503, detail=f"Failed to connect to ComfyUI for schema sync: {str(e)}")
+
+        graph = workflow.graph_json or {}
+        if not isinstance(graph, dict):
+            raise HTTPException(status_code=400, detail="Workflow graph must be an object with node definitions")
+
+        workflow.input_schema = _sync_input_schema_with_graph(workflow.input_schema or {}, graph, object_info)
+        workflow.node_mapping = _build_node_mapping_from_schema(workflow.input_schema)
 
         session.add(workflow)
         session.commit()
