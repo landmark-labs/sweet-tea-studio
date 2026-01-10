@@ -278,7 +278,16 @@ def _merge_resync_extra_metadata(
 
     Returns (merged_metadata, changed).
     """
-    current = _coerce_json_dict(existing)
+    current_raw = _coerce_json_dict(existing)
+
+    # SQLAlchemy JSON columns do not reliably track in-place mutations to nested dicts.
+    # Work on a copy so callers can assign a new object when changes occur.
+    try:
+        import copy
+
+        current = copy.deepcopy(current_raw)
+    except Exception:
+        current = dict(current_raw) if isinstance(current_raw, dict) else {}
     changed = False
 
     prompt = None
@@ -300,16 +309,45 @@ def _merge_resync_extra_metadata(
     if not parameters and isinstance(current.get("params"), dict):
         parameters = current.get("params") or {}
 
+    existing_gen_params = current.get("generation_params") if isinstance(current.get("generation_params"), dict) else {}
+
+    # If we still don't have prompt strings, infer from parameter dicts (ComfyUI-style workflows).
+    if not prompt or not isinstance(prompt, str) or not prompt.strip() or not negative_prompt or not isinstance(negative_prompt, str) or not negative_prompt.strip():
+        inferred_pos, inferred_neg = _extract_prompts_from_param_dict(parameters or existing_gen_params)
+        if not prompt and inferred_pos:
+            prompt = inferred_pos
+        if not negative_prompt and inferred_neg:
+            negative_prompt = inferred_neg
+
+    prompt = prompt.strip() if isinstance(prompt, str) and prompt.strip() else None
+    negative_prompt = negative_prompt.strip() if isinstance(negative_prompt, str) and negative_prompt.strip() else None
+
     active_prompt = current.get("active_prompt")
     if not isinstance(active_prompt, dict):
-        current.update(_build_resync_extra_metadata(
-            prompt=prompt,
-            negative_prompt=negative_prompt,
-            parameters=parameters,
-            source=source,
-            mtime=mtime,
-            recovered=bool(current.get("recovered", True)),
-        ))
+        timestamp = mtime.isoformat()
+        active_prompt = {
+            "stage": 0,
+            "positive_text": prompt,
+            "negative_text": negative_prompt,
+            "timestamp": timestamp,
+            "source": source or "resync",
+        }
+        current["active_prompt"] = active_prompt
+
+        # Preserve any existing generation params; merge newly recovered keys in.
+        merged_params: Dict[str, Any] = dict(existing_gen_params or {})
+        if parameters:
+            for k, v in parameters.items():
+                merged_params.setdefault(k, v)
+        current["generation_params"] = merged_params
+
+        current["prompt_history"] = [active_prompt]
+        if current.get("recovered") is None:
+            current["recovered"] = True
+        if not current.get("recovered_source"):
+            current["recovered_source"] = source or "resync"
+        if not current.get("recovered_at"):
+            current["recovered_at"] = timestamp
         changed = True
         return current, changed
 
@@ -320,13 +358,39 @@ def _merge_resync_extra_metadata(
         active_prompt["negative_text"] = negative_prompt
         changed = True
 
-    if not isinstance(current.get("prompt_history"), list):
+    raw_history = current.get("prompt_history")
+    if not isinstance(raw_history, list):
         current["prompt_history"] = [active_prompt]
         changed = True
+    else:
+        history = [entry for entry in raw_history if isinstance(entry, dict)]
+        if history != raw_history:
+            current["prompt_history"] = history
+            changed = True
+        if not history:
+            current["prompt_history"] = [active_prompt]
+            changed = True
+        else:
+            stage0 = None
+            for entry in history:
+                if entry.get("stage") == 0:
+                    stage0 = entry
+                    break
+            if stage0:
+                if prompt and not stage0.get("positive_text"):
+                    stage0["positive_text"] = prompt
+                    changed = True
+                if negative_prompt and not stage0.get("negative_text"):
+                    stage0["negative_text"] = negative_prompt
+                    changed = True
 
     gen_params = current.get("generation_params")
     if not isinstance(gen_params, dict):
-        current["generation_params"] = parameters or {}
+        merged_params: Dict[str, Any] = dict(existing_gen_params or {})
+        if parameters:
+            for k, v in parameters.items():
+                merged_params.setdefault(k, v)
+        current["generation_params"] = merged_params
         changed = True
     elif parameters:
         for k, v in parameters.items():
@@ -550,6 +614,97 @@ def _extract_prompts_from_comment_blob(comment: Optional[str]) -> Dict[str, Any]
     # Fallback: treat whole remaining text as positive prompt
     result["prompt"] = rest_text.strip() or None
     return result
+
+
+def _extract_prompts_from_param_dict(params: Any) -> tuple[Optional[str], Optional[str]]:
+    """
+    Best-effort extraction of positive/negative prompts from a params dict.
+
+    Mirrors the frontend prompt heuristics so Gallery can still render prompts
+    when `active_prompt` was not populated at generation time.
+    """
+    if not isinstance(params, dict):
+        return None, None
+
+    def as_nonempty_string(value: Any) -> Optional[str]:
+        if isinstance(value, str):
+            stripped = value.strip()
+            if stripped:
+                return stripped
+        return None
+
+    entries: list[tuple[str, str]] = []
+    for key, value in params.items():
+        if not isinstance(key, str):
+            continue
+        s = as_nonempty_string(value)
+        if not s:
+            continue
+        entries.append((key, s))
+
+    if not entries:
+        return None, None
+
+    positive: Optional[str] = None
+    negative: Optional[str] = None
+
+    positive_keys = {"positive", "prompt", "text_positive", "text_g", "clip_l", "active_positive", "positive_prompt"}
+    negative_keys = {"negative", "text_negative", "negative_prompt", "clip_l_negative", "active_negative"}
+
+    # Pass 1: explicit keys + contains-positive/negative heuristics.
+    for key, value in entries:
+        lower_key = key.lower()
+
+        if lower_key in positive_keys or ("positive" in lower_key and "negative" not in lower_key):
+            if not positive or len(value) > len(positive):
+                positive = value
+
+        if lower_key in negative_keys or ("negative" in lower_key and "positive" not in lower_key):
+            if not negative or len(value) > len(negative):
+                negative = value
+
+    # Pass 2: ComfyUI patterns (CLIPTextEncode.text / 6.text / STRING_LITERAL.*).
+    if not positive or not negative:
+        clip_nodes: list[dict[str, str]] = []
+        for key, value in entries:
+            lower_key = key.lower()
+            is_clip_textencode = ("cliptextencode" in lower_key and ".text" in lower_key) or bool(
+                re.match(r"^\d+\.text$", key, flags=re.IGNORECASE)
+            )
+            is_string_literal = ("string_literal" in lower_key) or (".string" in lower_key and "lora" not in lower_key)
+
+            if not (is_clip_textencode or is_string_literal):
+                continue
+
+            node_match = re.match(r"^(\d+)\.|^([^.]+)\.", key)
+            node_id = node_match.group(1) if node_match and node_match.group(1) else (node_match.group(2) if node_match else key)
+            clip_nodes.append({"key": key, "value": value, "node_id": node_id})
+
+        def sort_key(node: dict[str, str]) -> tuple[int, str]:
+            node_id = node.get("node_id") or ""
+            try:
+                return (0, f"{int(node_id):010d}")
+            except Exception:
+                return (1, node_id)
+
+        clip_nodes.sort(key=sort_key)
+
+        if clip_nodes and not positive:
+            positive = clip_nodes[0]["value"]
+        if len(clip_nodes) >= 2 and not negative:
+            negative = clip_nodes[1]["value"]
+
+    # Pass 3: title-ish hints embedded in keys.
+    if not positive or not negative:
+        for key, value in entries:
+            if not positive and re.search(r"positive.*(prompt|text)", key, flags=re.IGNORECASE):
+                positive = value
+            if not negative and re.search(r"negative.*(prompt|text)", key, flags=re.IGNORECASE):
+                negative = value
+            if positive and negative:
+                break
+
+    return positive, negative
 
 
 def _build_search_block(
@@ -1067,7 +1222,16 @@ def read_gallery(
                 params = {}
 
         prompt_text = params.get("prompt") if isinstance(params, dict) else None
+        if not isinstance(prompt_text, str) or not prompt_text.strip():
+            prompt_text = None
+        else:
+            prompt_text = prompt_text.strip()
+
         negative_prompt = params.get("negative_prompt") if isinstance(params, dict) else None
+        if not isinstance(negative_prompt, str) or not negative_prompt.strip():
+            negative_prompt = None
+        else:
+            negative_prompt = negative_prompt.strip()
 
         metadata = img.extra_metadata if isinstance(img.extra_metadata, dict) else {}
         if isinstance(img.extra_metadata, str):
@@ -1091,6 +1255,34 @@ def read_gallery(
             if isinstance(active_prompt, dict):
                 prompt_text = active_prompt.get("positive_text", prompt_text)
                 negative_prompt = active_prompt.get("negative_text", negative_prompt)
+
+            if not isinstance(prompt_text, str) or not prompt_text.strip():
+                prompt_text = None
+            else:
+                prompt_text = prompt_text.strip()
+
+            if not isinstance(negative_prompt, str) or not negative_prompt.strip():
+                negative_prompt = None
+            else:
+                negative_prompt = negative_prompt.strip()
+
+            # If still missing, infer from stored generation params (ComfyUI workflows often store
+            # prompts under keys like CLIPTextEncode.text / CLIPTextEncode_2.text).
+            if not prompt_text or not negative_prompt:
+                gen_params = metadata.get("generation_params")
+                if isinstance(gen_params, dict):
+                    inferred_pos, inferred_neg = _extract_prompts_from_param_dict(gen_params)
+                    if not prompt_text and inferred_pos:
+                        prompt_text = inferred_pos
+                    if not negative_prompt and inferred_neg:
+                        negative_prompt = inferred_neg
+
+                # Final fallback: infer from job params too (supports non-standard key names).
+                inferred_pos, inferred_neg = _extract_prompts_from_param_dict(params)
+                if not prompt_text and inferred_pos:
+                    prompt_text = inferred_pos
+                if not negative_prompt and inferred_neg:
+                    negative_prompt = inferred_neg
 
         raw_tags = prompt.tags if prompt else []
         if isinstance(raw_tags, str):

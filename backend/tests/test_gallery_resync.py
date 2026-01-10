@@ -116,6 +116,71 @@ def test_resync_backfills_metadata_for_existing_rows(client, session, tmp_path):
         assert row.extra_metadata["generation_params"]["seed"] == 1
 
 
+def test_resync_persists_prompt_backfill_for_existing_metadata_dict(client, session, tmp_path):
+    comfy_root = tmp_path / "comfy4"
+    output_dir = comfy_root / "output"
+    sweet_tea_dir = comfy_root / "sweet_tea"
+    (sweet_tea_dir / "proj4" / "output").mkdir(parents=True, exist_ok=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    engine = Engine(
+        name="Local ComfyUI",
+        base_url="http://localhost:8188",
+        output_dir=str(output_dir),
+        input_dir=str(comfy_root / "input"),
+        is_active=True,
+    )
+    session.add(engine)
+    session.commit()
+    session.refresh(engine)
+
+    payload = {"positive_prompt": "a tiger", "negative_prompt": "no", "params": {"seed": 2}}
+    img_path = sweet_tea_dir / "proj4" / "output" / "existing-meta.png"
+    _write_noise_png(img_path, json.dumps(payload))
+
+    existing_meta = {
+        "active_prompt": {
+            "stage": 0,
+            "positive_text": None,
+            "negative_text": None,
+            "timestamp": "2026-01-01T00:00:00Z",
+            "source": "workflow",
+        },
+        "prompt_history": [
+            {
+                "stage": 0,
+                "positive_text": None,
+                "negative_text": None,
+                "timestamp": "2026-01-01T00:00:00Z",
+                "source": "workflow",
+            }
+        ],
+        "generation_params": {"CLIPTextEncode.text": "old", "CLIPTextEncode_2.text": "old"},
+    }
+
+    row = Image(
+        job_id=-1,
+        path=str(img_path),
+        filename=img_path.name,
+        format="png",
+        is_kept=True,
+        extra_metadata=existing_meta,
+    )
+    session.add(row)
+    session.commit()
+    session.refresh(row)
+
+    res = client.post("/api/v1/gallery/resync")
+    assert res.status_code == 200
+
+    with Session(session.get_bind()) as verify:
+        refreshed = verify.get(Image, row.id)
+        assert refreshed is not None
+        assert isinstance(refreshed.extra_metadata, dict)
+        assert refreshed.extra_metadata["active_prompt"]["positive_text"] == "a tiger"
+        assert refreshed.extra_metadata["active_prompt"]["negative_text"] == "no"
+
+
 def test_resync_skips_masks_folder(client, session, tmp_path):
     comfy_root = tmp_path / "comfy3"
     output_dir = comfy_root / "output"
