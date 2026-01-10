@@ -237,10 +237,37 @@ interface SortableLibrarySnippetProps {
 
 const normalizePrompt = (value: string) => {
     return value
-        .split(/\s*,\s*/g)
-        .map((entry) => entry.trim())
-        .filter(Boolean)
-        .join("|");
+        .trim()
+        .replace(/\s*,\s*/g, ",")
+        .replace(/\s+/g, " ");
+};
+
+const stripTrailingWrappers = (value: string) => value.trimEnd().replace(/[\s"'`)\]]+$/g, "");
+
+const isNaturalLanguageSnippet = (item: PromptItem) => {
+    const stripped = stripTrailingWrappers(item.content || "");
+    return /[.!?…]$/.test(stripped);
+};
+
+const getImplicitSeparator = (prev: PromptItem | undefined, next: PromptItem | undefined) => {
+    if (!prev || !next) return "";
+
+    if (isNaturalLanguageSnippet(prev) || isNaturalLanguageSnippet(next)) {
+        const hasBoundaryWhitespace = /\s$/.test(prev.content) || /^\s/.test(next.content);
+        return hasBoundaryWhitespace ? "" : " ";
+    }
+
+    return ", ";
+};
+
+const compileItemsToPrompt = (items: PromptItem[]) => {
+    if (!items.length) return "";
+    let compiled = items[0].content;
+    for (let i = 1; i < items.length; i += 1) {
+        compiled += getImplicitSeparator(items[i - 1], items[i]);
+        compiled += items[i].content;
+    }
+    return compiled;
 };
 
 const SortableLibrarySnippet = React.memo(function SortableLibrarySnippet({ snippet, isEditing, onStartLongPress, onCancelLongPress, onDoubleClick, onEdit, onDelete, onAddToCanvas }: SortableLibrarySnippetProps) {
@@ -645,7 +672,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
                 if (gap.endsWith(", ")) {
                     gap = gap.substring(0, gap.length - 2);
                 }
-                if (gap.length > 0) {
+                if (gap.trim().length > 0) {
                     nextItems.push({
                         id: `text-${cursor}`,
                         type: "text",
@@ -666,7 +693,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
             if (nextItems.length > 0 && tail.startsWith(", ")) {
                 tail = tail.substring(2);
             }
-            if (tail.length > 0) {
+            if (tail.trim().length > 0) {
                 nextItems.push({
                     id: `text-${cursor}`,
                     type: "text",
@@ -698,7 +725,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
                 if (gap.endsWith(", ")) {
                     gap = gap.substring(0, gap.length - 2);
                 }
-                if (gap.length > 0) {
+                if (gap.trim().length > 0) {
                     newItems.push({
                         id: `text-${cursor}`,
                         type: "text",
@@ -719,7 +746,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
             if (newItems.length > 0 && tail.startsWith(", ")) {
                 tail = tail.substring(2);
             }
-            if (tail.length > 0) {
+            if (tail.trim().length > 0) {
                 newItems.push({
                     id: `text-${cursor}`,
                     type: "text",
@@ -904,7 +931,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
                 continue;
             }
 
-            const compiled = synced.map(i => i.content).join(", ");
+            const compiled = compileItemsToPrompt(synced);
 
             if (compiled !== currentVal) {
                 valueUpdates[fieldKey] = compiled;
@@ -997,7 +1024,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
                         gap = gap.substring(0, gap.length - 2);
                     }
 
-                    if (gap.length > 0) {
+                    if (gap.trim().length > 0) {
                         newItems.push({
                             id: `text-${cursor}`,
                             type: 'text',
@@ -1019,7 +1046,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
                     tail = tail.substring(2);
                 }
 
-                if (tail.length > 0) {
+                if (tail.trim().length > 0) {
                     newItems.push({
                         id: `text-${cursor}`,
                         type: 'text',
@@ -1101,9 +1128,9 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
             return;
         }
 
-        // Only update parent if local change differs from parent value
-        // Use implicit ", " separator for cleaner linking
-        const compiled = items.map(i => i.content).join(", ");
+        // Only update parent if local change differs from parent value.
+        // Use implicit separators for cleaner linking (commas for tags, spaces for NL snippets).
+        const compiled = compileItemsToPrompt(items);
         const currentRaw = valuesRef.current[targetField];
         const currentVal = typeof currentRaw === "string" ? currentRaw : (currentRaw === null || currentRaw === undefined ? "" : String(currentRaw));
         const isInitialized = initializedFieldsRef.current.has(targetField);
@@ -1158,7 +1185,8 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
         const id = `text-${nextInstanceId()}`;
         const nextIndex = items.filter(i => i.type === 'text').length + 1;
         trackSnippetAction("add_text");
-        setItems([...items, { id, type: 'text', content: ", ", label: `Text ${nextIndex}` }]);
+        const defaultContent = items.some(isNaturalLanguageSnippet) ? "" : ", ";
+        setItems([...items, { id, type: 'text', content: defaultContent, label: `Text ${nextIndex}` }]);
     };
 
     const addSnippetToCanvas = (snippet: PromptItem) => {
@@ -1264,7 +1292,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
                 const hasLinkedBlocks = updatedItems.some(i => i.type === 'block' && i.sourceId === editingSnippetId);
                 if (hasLinkedBlocks) {
                     // Compile the new value
-                    const compiled = updatedItems.map(i => i.content).join(", ");
+                    const compiled = compileItemsToPrompt(updatedItems);
                     valueUpdates[fieldKey] = compiled;
                 }
             });
@@ -1536,7 +1564,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
                                 )}
                                 {(() => {
                                     let textCount = 0;
-                                    return items.map((item, idx) => {
+                                    return items.map((item) => {
                                         const textIndex = item.type === 'text' ? (textCount += 1) : undefined;
                                         return (
                                             <SortableItem
