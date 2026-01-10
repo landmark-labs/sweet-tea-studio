@@ -14,6 +14,7 @@ interface ImageViewerProps {
     images: ApiImage[];
     galleryItems?: GalleryItem[];  // Full items with per-image metadata
     metadata?: Record<string, unknown>;  // Fallback for legacy callers
+    onViewImagePath?: (rawPath: string) => void;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     workflows?: any[];
     onSelectWorkflow?: (workflowId: string, imagePath?: string) => void;
@@ -34,6 +35,7 @@ export const ImageViewer = React.memo(function ImageViewer({
     images,
     galleryItems,
     metadata,
+    onViewImagePath,
     workflows = [],
     onUseInPipe,
     onRegenerate,
@@ -161,6 +163,13 @@ export const ImageViewer = React.memo(function ImageViewer({
     }, [navigationMode, selectedIndex, currentImage, displayImages, extractRawPath]);
 
     const imagePath = currentImage?.path;
+
+    React.useEffect(() => {
+        if (!onViewImagePath || !imagePath) return;
+        const raw = extractRawPath(imagePath);
+        onViewImagePath(raw || imagePath);
+    }, [onViewImagePath, imagePath, extractRawPath]);
+
     const isVideo = isVideoFile(imagePath, currentImage?.filename);
     const canDrawMask = Boolean(imagePath) && !isVideo;
 

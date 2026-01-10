@@ -2,7 +2,7 @@ import { useEffect, useState, useRef, useMemo, useCallback, memo, startTransitio
 import { useAtomValue, useSetAtom, useStore } from "jotai";
 import { addProgressEntry, calculateProgressStats, mapStatusToGenerationState, formatDuration, type GenerationState, type ProgressHistoryEntry } from "@/lib/generationState";
 import { useLocation, useNavigate, useOutletContext } from "react-router-dom";
-import { api, Engine, WorkflowTemplate, GalleryItem, EngineHealth, Project, Image as ApiImage, FolderImage } from "@/lib/api";
+import { api, Engine, WorkflowTemplate, GalleryItem, EngineHealth, Project, Image as ApiImage, FolderImage, IMAGE_API_BASE } from "@/lib/api";
 import { extractPrompts, findPromptFieldsInSchema, findImageFieldsInSchema, findMediaFieldsInSchema } from "@/lib/promptUtils";
 import { DynamicForm } from "@/components/DynamicForm";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -30,6 +30,17 @@ import { useMediaTrayStore, type MediaTrayItem } from "@/lib/stores/mediaTraySto
 import { useStatusPollingStore } from "@/lib/stores/statusPollingStore";
 
 type PromptConstructorPanelProps = Omit<ComponentProps<typeof PromptConstructor>, "currentValues">;
+
+type PromptStudioViewerStateV1 = {
+  v: 1;
+  rawPath: string;
+  source: "recent" | "project_gallery" | "media_tray" | "output_folder";
+  projectId?: string | null;
+  folder?: string | null;
+  at: number;
+};
+
+const PROMPT_STUDIO_VIEWER_STATE_KEY = "ds_promptstudio_viewer_state_v1";
 
 const PromptConstructorPanel = memo(function PromptConstructorPanel(props: PromptConstructorPanelProps) {
   const currentValues = useAtomValue(formDataAtom) as Record<string, string>;
@@ -215,12 +226,65 @@ export default function PromptStudio() {
   // Selection State
   const [previewPath, setPreviewPath] = useState<string | null>(null);
   const [previewMetadata, setPreviewMetadata] = useState<any>(null);
+  const viewerContextRef = useRef<Pick<PromptStudioViewerStateV1, "source" | "projectId" | "folder">>({
+    source: "recent",
+    projectId: null,
+    folder: null,
+  });
+
+  const extractRawViewerPath = useCallback((pathStr?: string | null): string => {
+    if (!pathStr) return "";
+    if (pathStr.includes('/api/') && pathStr.includes('?path=')) {
+      try {
+        const url = new URL(pathStr, window.location.origin);
+        const pathParam = url.searchParams.get('path');
+        if (pathParam) return pathParam;
+      } catch {
+        // fall through
+      }
+    }
+    return pathStr;
+  }, []);
+
+  const buildViewerApiPath = useCallback((rawPath: string) => {
+    if (!rawPath) return "";
+    return `${IMAGE_API_BASE}/gallery/image/path?path=${encodeURIComponent(rawPath)}`;
+  }, []);
+
+  const persistViewerState = useCallback(
+    (rawPath: string, context?: Partial<Pick<PromptStudioViewerStateV1, "source" | "projectId" | "folder">>) => {
+      if (!rawPath) return;
+      if (context) {
+        viewerContextRef.current = { ...viewerContextRef.current, ...context };
+      }
+      const state: PromptStudioViewerStateV1 = {
+        v: 1,
+        rawPath,
+        source: viewerContextRef.current.source,
+        projectId: viewerContextRef.current.projectId,
+        folder: viewerContextRef.current.folder,
+        at: Date.now(),
+      };
+      try {
+        localStorage.setItem(PROMPT_STUDIO_VIEWER_STATE_KEY, JSON.stringify(state));
+      } catch { /* ignore */ }
+    },
+    []
+  );
   // Pending loadParams - holds the gallery item to inject until workflows are loaded
   const [pendingLoadParams, setPendingLoadParams] = useState<(GalleryItem & { __isRegenerate?: boolean; __randomizeSeed?: boolean }) | null>(null);
   const handlePreviewSelect = useCallback((path: string, metadata?: any) => {
     setPreviewPath(path);
     setPreviewMetadata(metadata ?? null);
   }, []);
+
+  // Persist viewer selection (restores ImageViewer after app restart)
+  useEffect(() => {
+    if (!previewPath) return;
+    const rawPath = extractRawViewerPath(previewPath);
+    if (!rawPath) return;
+    persistViewerState(rawPath);
+  }, [previewPath, extractRawViewerPath, persistViewerState]);
 
   // Form Data State (Jotai)
   const store = useStore();
@@ -258,6 +322,7 @@ export default function PromptStudio() {
   // Add a refresh key for gallery
   const [galleryRefresh, setGalleryRefresh] = useState(0);
   const [galleryImages, setGalleryImages] = useState<GalleryItem[]>([]);
+  const galleryRetryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   // Images from ProjectGallery - used for navigation when clicking from there
   const [projectGalleryImages, setProjectGalleryImages] = useState<FolderImage[]>([]);
   const [, setSelectedGalleryIds] = useState<Set<number>>(new Set());
@@ -360,6 +425,84 @@ export default function PromptStudio() {
     };
   }, []);
 
+  // Restore ImageViewer selection/context after app restart.
+  useEffect(() => {
+    let isMounted = true;
+    let retryTimeout: NodeJS.Timeout | null = null;
+
+    const restore = async () => {
+      const raw = localStorage.getItem(PROMPT_STUDIO_VIEWER_STATE_KEY);
+      if (!raw) return;
+
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        return;
+      }
+
+      const state = parsed as Partial<PromptStudioViewerStateV1> | null;
+      if (!state || state.v !== 1 || typeof state.rawPath !== "string" || state.rawPath.length === 0) {
+        return;
+      }
+
+      const source: PromptStudioViewerStateV1["source"] =
+        state.source === "project_gallery" || state.source === "media_tray" || state.source === "output_folder"
+          ? state.source
+          : "recent";
+
+      const projectId = typeof state.projectId === "string" && state.projectId.length > 0 ? state.projectId : null;
+      const folder = typeof state.folder === "string" && state.folder.length > 0 ? state.folder : null;
+
+      viewerContextRef.current = { source, projectId, folder };
+      setPreviewPath((prev) => prev || buildViewerApiPath(state.rawPath as string));
+      setPreviewMetadata(null);
+
+      if (!isMounted) return;
+
+      if (source === "media_tray") {
+        const items = useMediaTrayStore.getState().items;
+        if (items.length > 0) {
+          setProjectGalleryImages(items.map((item) => ({
+            path: item.path,
+            filename: item.filename,
+            mtime: new Date(item.addedAt).toISOString(),
+          })));
+        }
+        return;
+      }
+
+      if ((source === "project_gallery" || source === "output_folder") && projectId && folder) {
+        const projectIdNum = parseInt(projectId, 10);
+        if (!Number.isFinite(projectIdNum)) return;
+
+        setCanvasGallerySelection({ projectId: String(projectIdNum), folder });
+        setCanvasGallerySyncKey((prev) => prev + 1);
+
+        const loadFolderImages = async (attempt: number) => {
+          if (!isMounted) return;
+          try {
+            const images = await api.getProjectFolderImages(projectIdNum, folder);
+            if (!isMounted) return;
+            setProjectGalleryImages(images);
+          } catch (e) {
+            if (!isMounted) return;
+            if (attempt >= 5) return;
+            retryTimeout = setTimeout(() => void loadFolderImages(attempt + 1), 2000);
+          }
+        };
+
+        void loadFolderImages(0);
+      }
+    };
+
+    void restore();
+    return () => {
+      isMounted = false;
+      if (retryTimeout) clearTimeout(retryTimeout);
+    };
+  }, [buildViewerApiPath]);
+
   // Save snippets to backend when library changes (debounced)
   useEffect(() => {
     if (!snippetsLoaded) return; // Don't save until initial load complete
@@ -409,10 +552,34 @@ export default function PromptStudio() {
         includeThumbnails: false,
       });
       setGalleryImages(images);
+      if (galleryRetryTimeoutRef.current) {
+        clearTimeout(galleryRetryTimeoutRef.current);
+        galleryRetryTimeoutRef.current = null;
+      }
     } catch (e) {
       console.error("Failed to load gallery", e);
+      if (!galleryRetryTimeoutRef.current) {
+        galleryRetryTimeoutRef.current = setTimeout(() => {
+          galleryRetryTimeoutRef.current = null;
+          void loadGalleryRef.current();
+        }, 2000);
+      }
     }
   }, [galleryScopeAll, selectedProjectId]);
+
+  const loadGalleryRef = useRef(loadGallery);
+  useEffect(() => {
+    loadGalleryRef.current = loadGallery;
+  }, [loadGallery]);
+
+  useEffect(() => {
+    return () => {
+      if (galleryRetryTimeoutRef.current) {
+        clearTimeout(galleryRetryTimeoutRef.current);
+        galleryRetryTimeoutRef.current = null;
+      }
+    };
+  }, []);
 
   // Initial load and refresh
   useEffect(() => {
@@ -1998,11 +2165,24 @@ export default function PromptStudio() {
             }
 
             if (!outputProjectId) {
+              viewerContextRef.current = { source: "recent", projectId: null, folder: null };
               setProjectGalleryImages([]);
               return;
             }
 
             const folderName = outputDir || "output";
+            viewerContextRef.current = {
+              source: "output_folder",
+              projectId: String(outputProjectId),
+              folder: folderName,
+            };
+            if (completedPath) {
+              persistViewerState(completedPath, {
+                source: "output_folder",
+                projectId: String(outputProjectId),
+                folder: folderName,
+              });
+            }
             try {
               const folderImages = await api.getProjectFolderImages(outputProjectId, folderName);
               if (completedPath && folderImages.length > 0) {
@@ -2015,6 +2195,7 @@ export default function PromptStudio() {
               setProjectGalleryImages(folderImages);
             } catch (e) {
               console.warn("Failed to sync viewer output context:", e);
+              viewerContextRef.current = { source: "recent", projectId: null, folder: null };
               setProjectGalleryImages([]);
             }
           };
@@ -2587,12 +2768,15 @@ export default function PromptStudio() {
   };
 
   const handleGallerySelect = useCallback((item: GalleryItem) => {
-    handlePreviewSelect(item.image.path, {
+    // Viewer is now showing an image from the recent gallery list
+    viewerContextRef.current = { source: "recent", projectId: null, folder: null };
+    const rawPath = extractRawViewerPath(item.image.path);
+    handlePreviewSelect(buildViewerApiPath(rawPath), {
       prompt: item.prompt,
       created_at: item.created_at,
       job_params: item.job_params
     });
-  }, [handlePreviewSelect]);
+  }, [handlePreviewSelect, extractRawViewerPath, buildViewerApiPath]);
 
   const handleWorkflowSelect = useCallback(async (workflowId: string, fromImagePath?: string) => {
     if (fromImagePath) {
@@ -2658,13 +2842,21 @@ export default function PromptStudio() {
   }, []);
 
   const handleProjectGallerySelectImage = useCallback((imagePath: string, pgImages: FolderImage[]) => {
-    setPreviewPath(`/api/v1/gallery/image/path?path=${encodeURIComponent(imagePath)}`);
+    const projectId = localStorage.getItem("ds_project_gallery_project");
+    const folder = localStorage.getItem("ds_project_gallery_folder");
+    viewerContextRef.current = {
+      source: "project_gallery",
+      projectId: projectId && projectId.length > 0 ? projectId : null,
+      folder: folder && folder.length > 0 ? folder : null,
+    };
+    setPreviewPath(buildViewerApiPath(extractRawViewerPath(imagePath)));
     setProjectGalleryImages(pgImages);
     setPreviewMetadata(null);
-  }, []);
+  }, [buildViewerApiPath, extractRawViewerPath]);
 
   const handleMediaTrayShowInViewer = useCallback((path: string, trayItems: MediaTrayItem[]) => {
-    setPreviewPath(`/api/v1/gallery/image/path?path=${encodeURIComponent(path)}`);
+    viewerContextRef.current = { source: "media_tray", projectId: null, folder: null };
+    setPreviewPath(buildViewerApiPath(extractRawViewerPath(path)));
     setProjectGalleryImages(
       trayItems.map((item) => ({
         path: item.path,
@@ -2673,7 +2865,7 @@ export default function PromptStudio() {
       }))
     );
     setPreviewMetadata(null);
-  }, []);
+  }, [buildViewerApiPath, extractRawViewerPath]);
 
   if (isBootLoading) {
     return (
@@ -2767,6 +2959,7 @@ export default function PromptStudio() {
                     setSelectedProjectId(value);
                   }
                   // Reset navigation context (arrow keys) but keep current preview visible
+                  viewerContextRef.current = { source: "recent", projectId: null, folder: null };
                   setProjectGalleryImages([]);
 
                   setGalleryRefresh((prev) => prev + 1);
@@ -3001,6 +3194,7 @@ export default function PromptStudio() {
             galleryItems={galleryImages}
             metadata={previewMetadata}
             selectedImagePath={previewPath || undefined}
+            onViewImagePath={persistViewerState}
             workflows={workflows}
             onSelectWorkflow={handleWorkflowSelect}
             onUseInPipe={handleUseInPipe}
