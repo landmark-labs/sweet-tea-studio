@@ -143,6 +143,8 @@ def _extract_metadata_from_file(file_path: str) -> Optional[Dict[str, Any]]:
                         result["prompt"] = parsed.get("prompt")
                     if parsed.get("negative_prompt"):
                         result["negative_prompt"] = parsed.get("negative_prompt")
+                    if parsed.get("parameters"):
+                        result["parameters"].update(parsed.get("parameters"))
                     if result["prompt"] or result["negative_prompt"]:
                         result["source"] = "jpeg_comment"
             except Exception:
@@ -219,7 +221,7 @@ def _extract_metadata_from_file(file_path: str) -> Optional[Dict[str, Any]]:
     
     return None
 
-def _extract_prompts_from_comment_blob(comment: Optional[str]) -> Dict[str, Optional[str]]:
+def _extract_prompts_from_comment_blob(comment: Optional[str]) -> Dict[str, Any]:
     """
     Attempt to pull positive/negative prompts from a JPEG comment/XPComment blob.
     """
@@ -238,15 +240,44 @@ def _extract_prompts_from_comment_blob(comment: Optional[str]) -> Dict[str, Opti
         pass
 
     # Heuristic split on "Negative prompt:"
-    lower = comment.lower()
-    if "negative prompt:" in lower:
-        parts = comment.split("Negative prompt:", 1)
-        result["prompt"] = parts[0].strip() or None
-        result["negative_prompt"] = parts[1].strip() if len(parts) > 1 else None
-        return result
+    # Also look for parameters line (usually at the end, starting with Steps: or Size:)
+    
+    rest_text = comment
+    params_dict = {}
+    
+    # Try to find parameters line at the end
+    lines = comment.strip().split('\n')
+    if len(lines) > 0:
+        last_line = lines[-1].strip()
+        # Common A1111/ComfyUI text format markers
+        if last_line.startswith("Steps:") or last_line.startswith("Size:") or "Sampler:" in last_line:
+            # Parse parameters
+            try:
+                # Naive split by comma might fail if values contain commas, but it's a good start for this format
+                # A better regex structure would be needed for complex cases
+                items = [x.strip() for x in last_line.split(',')]
+                for item in items:
+                    if ':' in item:
+                        k, v = item.split(':', 1)
+                        params_dict[k.strip()] = v.strip()
+                
+                # Remove the params line from text
+                rest_text = '\n'.join(lines[:-1]).strip()
+                result["parameters"] = params_dict
+            except Exception:
+                pass
 
-    # Fallback: treat whole comment as positive prompt
-    result["prompt"] = comment.strip() or None
+    lower = rest_text.lower()
+    if "negative prompt:" in lower:
+        # standard "Negative prompt:" label
+        parts = re.split(r"Negative prompt:", rest_text, flags=re.IGNORECASE, maxsplit=1)
+        if len(parts) == 2:
+            result["prompt"] = parts[0].strip() or None
+            result["negative_prompt"] = parts[1].strip() or None
+            return result
+            
+    # Fallback: treat whole remaining text as positive prompt
+    result["prompt"] = rest_text.strip() or None
     return result
 
 
