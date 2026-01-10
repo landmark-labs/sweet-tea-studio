@@ -20,7 +20,7 @@ const navItems = [
 ];
 import { PerformanceHUD } from "@/components/PerformanceHUD";
 import { StatusBar } from "@/components/StatusBar";
-import { ConnectionBanner } from "@/components/ConnectionBanner";
+
 import { ComfyUIControl } from "@/components/ComfyUIControl";
 import { DraggablePanel } from "@/components/ui/draggable-panel";
 import { GenerationFeed } from "@/components/GenerationFeed";
@@ -237,7 +237,7 @@ export default function Layout() {
           </div>
         </div>
       </main>
-      <ConnectionBanner />
+
       <PerformanceHUD visible={perfHudOpen} onClose={() => setPerfHudOpen(false)} />
 
       {/* Global Floating Panels */}

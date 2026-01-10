@@ -191,30 +191,45 @@ export function ComfyUIControl() {
 
     const isTransitioning = state === "starting" || state === "stopping";
     const isConnected = state === "connected";
+    const isStopped = state === "stopped";
 
     const statusColor = {
         connected: "bg-green-500",
         starting: "bg-yellow-500 animate-pulse",
         stopping: "bg-yellow-500 animate-pulse",
-        stopped: "bg-red-500",
+        stopped: "bg-red-500 animate-pulse",
     }[state];
 
     const statusText = {
         connected: "Running",
         starting: "Starting...",
         stopping: "Stopping...",
-        stopped: "Stopped",
+        stopped: "Not Running",
     }[state];
 
+    // Container styling - more prominent when stopped
+    const containerClass = cn(
+        "flex items-center gap-1.5 px-2 py-1 rounded-lg border transition-all",
+        isStopped
+            ? "bg-amber-500/20 border-amber-500/50 ring-1 ring-amber-500/30"
+            : "bg-muted/40 border-border/60"
+    );
+
     return (
-        <div className="flex items-center gap-1.5 px-2 py-1 bg-muted/40 rounded-lg border border-border/60">
+        <div className={containerClass}>
             {/* Status indicator */}
             <div className="flex items-center gap-1.5">
                 <div className={cn("w-2 h-2 rounded-full", statusColor)} />
-                <span className="text-[10px] font-semibold text-foreground/80 uppercase tracking-wide">
+                <span className={cn(
+                    "text-[10px] font-semibold uppercase tracking-wide",
+                    isStopped ? "text-amber-600 dark:text-amber-400" : "text-foreground/80"
+                )}>
                     ComfyUI
                 </span>
-                <span className="text-[9px] text-muted-foreground">
+                <span className={cn(
+                    "text-[9px]",
+                    isStopped ? "text-amber-600/80 dark:text-amber-400/80 font-medium" : "text-muted-foreground"
+                )}>
                     {statusText}
                 </span>
             </div>

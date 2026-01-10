@@ -27,6 +27,7 @@ import { logClientEventThrottled } from "@/lib/clientDiagnostics";
 import { formDataAtom, setFormDataAtom } from "@/lib/atoms/formAtoms";
 import { useCanvasStore } from "@/lib/stores/canvasStore";
 import { useMediaTrayStore, type MediaTrayItem } from "@/lib/stores/mediaTrayStore";
+import { useStatusPollingStore } from "@/lib/stores/statusPollingStore";
 
 type PromptConstructorPanelProps = Omit<ComponentProps<typeof PromptConstructor>, "currentValues">;
 
@@ -2108,53 +2109,75 @@ export default function PromptStudio() {
     }
   }, [contextProjects]);
 
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        // Only fetch data that GenerationContext doesn't provide or hasn't loaded yet
-        const needsWorkflows = !contextWorkflows || contextWorkflows.length === 0;
-        const needsProjects = !contextProjects || contextProjects.length === 0;
+  const registerOnReconnect = useStatusPollingStore(useCallback(state => state.registerOnReconnect, []));
 
-        const [enginesRes, workflowsRes, projectsRes] = await Promise.allSettled([
-          api.getEngines(),
-          needsWorkflows ? api.getWorkflows() : Promise.resolve([]),
-          needsProjects ? api.getProjects() : Promise.resolve([]),
-        ]);
+  const loadData = useCallback(async (isReconnect = false) => {
+    try {
+      if (!isReconnect) setIsLoading(true);
 
-        if (enginesRes.status === "fulfilled") {
-          const enginesData = enginesRes.value;
-          setEngines(enginesData);
-          if (!selectedEngineId && enginesData.length > 0) setSelectedEngineId(String(enginesData[0].id));
-        } else {
-          console.error("Failed to load engines", enginesRes.reason);
-        }
+      // On reconnect, we force reload workflows/engines as they might have changed or be available now
+      // For initial load, we respect context data
+      const needsWorkflows = isReconnect || (!contextWorkflows || contextWorkflows.length === 0);
+      const needsProjects = !isReconnect && (!contextProjects || contextProjects.length === 0); // Projects less likely to change on restart
 
-        if (needsWorkflows && workflowsRes.status === "fulfilled") {
-          const workflowsData = workflowsRes.value;
-          if (workflowsData.length > 0) {
-            setWorkflows(workflowsData);
-            if (!selectedWorkflowId && workflowsData.length > 0) setSelectedWorkflowId(String(workflowsData[0].id));
-          }
-        } else if (needsWorkflows && workflowsRes.status === "rejected") {
-          console.error("Failed to load workflows", workflowsRes.reason);
-        }
+      const [enginesRes, workflowsRes, projectsRes] = await Promise.allSettled([
+        api.getEngines(),
+        needsWorkflows ? api.getWorkflows() : Promise.resolve([]),
+        needsProjects ? api.getProjects() : Promise.resolve([]),
+      ]);
 
-        if (needsProjects && projectsRes.status === "fulfilled") {
-          const projectsData = projectsRes.value;
-          if (projectsData.length > 0) {
-            setProjects(projectsData);
-          }
-        } else if (needsProjects && projectsRes.status === "rejected") {
-          console.warn("Failed to load projects", projectsRes.reason);
-        }
-
-      } catch (err) {
-        console.error("Critical error loading data", err);
-        setError(err instanceof Error ? err.message : "Failed to load data");
-      } finally {
-        setIsLoading(false);
+      if (enginesRes.status === "fulfilled") {
+        const enginesData = enginesRes.value;
+        setEngines(enginesData);
+        if (!selectedEngineId && enginesData.length > 0) setSelectedEngineId(String(enginesData[0].id));
+      } else {
+        console.error("Failed to load engines", enginesRes.reason);
       }
-    };
+
+      if (needsWorkflows && workflowsRes.status === "fulfilled") {
+        const workflowsData = workflowsRes.value;
+        if (workflowsData.length > 0) {
+          setWorkflows(workflowsData);
+          if (!selectedWorkflowId && workflowsData.length > 0) setSelectedWorkflowId(String(workflowsData[0].id));
+        }
+      } else if (needsWorkflows && workflowsRes.status === "rejected") {
+        console.error("Failed to load workflows", workflowsRes.reason);
+      }
+
+      if (needsProjects && projectsRes.status === "fulfilled") {
+        const projectsData = projectsRes.value;
+        if (projectsData.length > 0) {
+          setProjects(projectsData);
+        }
+      } else if (needsProjects && projectsRes.status === "rejected") {
+        console.warn("Failed to load projects", projectsRes.reason);
+      }
+
+      if (isReconnect) {
+        console.log("Data refreshed after engine reconnection");
+      }
+
+    } catch (err) {
+      console.error("Critical error loading data", err);
+      if (!isReconnect) setError(err instanceof Error ? err.message : "Failed to load data");
+    } finally {
+      if (!isReconnect) setIsLoading(false);
+    }
+  }, [contextWorkflows, contextProjects, selectedEngineId, selectedWorkflowId]);
+
+  // Initial load
+  useEffect(() => {
+    loadData(false);
+  }, [loadData]);
+
+  // Register reconnection callback
+  useEffect(() => {
+    return registerOnReconnect(() => {
+      loadData(true);
+    });
+  }, [registerOnReconnect, loadData]);
+  // Health Polling
+  useEffect(() => {
     const pollHealth = async () => {
       try {
         const status = await api.getEngineHealth();
@@ -2164,21 +2187,16 @@ export default function PromptStudio() {
       }
     };
 
-    loadData();
     pollHealth();
     healthIntervalRef.current = setInterval(pollHealth, 2500);
 
     return () => {
-      if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current);
-        pollIntervalRef.current = null;
-      }
       if (healthIntervalRef.current) {
         clearInterval(healthIntervalRef.current);
         healthIntervalRef.current = null;
       }
     };
-  }, [contextWorkflows, contextProjects]);
+  }, []);
 
 
   const handleReboot = async () => {

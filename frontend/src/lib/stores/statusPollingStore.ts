@@ -55,10 +55,18 @@ interface StatusPollingState {
     startPolling: () => void;
     stopPolling: () => void;
     fetchStatus: () => Promise<void>;
+
+    // Reconnection callbacks - called when engine transitions disconnected -> connected
+    registerOnReconnect: (callback: () => void) => () => void;
 }
 
 let pollingInterval: NodeJS.Timeout | null = null;
 const POLL_INTERVAL_MS = 5000;
+
+// Track previous connection state to detect reconnections
+let wasConnected: boolean | null = null;
+// Callbacks to invoke on reconnection
+const reconnectCallbacks = new Set<() => void>();
 
 export const useStatusPollingStore = create<StatusPollingState>()((set, get) => ({
     status: null,
@@ -71,6 +79,17 @@ export const useStatusPollingStore = create<StatusPollingState>()((set, get) => 
             const res = await fetch(`${getApiBase()}/monitoring/status/summary`);
             if (res.ok) {
                 const data = await res.json();
+                const isConnected = data?.engine?.is_connected ?? false;
+
+                // Detect reconnection: was disconnected, now connected
+                if (wasConnected === false && isConnected === true) {
+                    console.log("[StatusPolling] Engine reconnected, triggering callbacks...");
+                    reconnectCallbacks.forEach(cb => {
+                        try { cb(); } catch (e) { console.error("[StatusPolling] Reconnect callback error:", e); }
+                    });
+                }
+                wasConnected = isConnected;
+
                 set({
                     status: data,
                     lastFetchedAt: Date.now(),
@@ -112,6 +131,14 @@ export const useStatusPollingStore = create<StatusPollingState>()((set, get) => 
             pollingInterval = null;
         }
         set({ isPolling: false });
+    },
+
+    registerOnReconnect: (callback: () => void) => {
+        reconnectCallbacks.add(callback);
+        // Return unsubscribe function
+        return () => {
+            reconnectCallbacks.delete(callback);
+        };
     },
 }));
 
