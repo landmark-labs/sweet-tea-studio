@@ -41,6 +41,7 @@ type PromptStudioViewerStateV1 = {
 };
 
 const PROMPT_STUDIO_VIEWER_STATE_KEY = "ds_promptstudio_viewer_state_v1";
+const PROMPT_STUDIO_REHYDRATION_SNAPSHOT_KEY = "ds_promptstudio_rehydration_snapshot_v1";
 
 const PromptConstructorPanel = memo(function PromptConstructorPanel(props: PromptConstructorPanelProps) {
   const currentValues = useAtomValue(formDataAtom) as Record<string, string>;
@@ -362,6 +363,25 @@ export default function PromptStudio() {
   const [activeRehydrationSnapshot, setActiveRehydrationSnapshot] = useState<PromptRehydrationSnapshotV1 | null>(null);
   const [activeRehydrationKey, setActiveRehydrationKey] = useState(0);
 
+  // Persist rehydration snapshot to localStorage for page refresh/navigation
+  useEffect(() => {
+    if (!activeRehydrationSnapshot) {
+      try {
+        localStorage.removeItem(PROMPT_STUDIO_REHYDRATION_SNAPSHOT_KEY);
+      } catch { /* ignore */ }
+      return;
+    }
+
+    try {
+      localStorage.setItem(
+        PROMPT_STUDIO_REHYDRATION_SNAPSHOT_KEY,
+        JSON.stringify(activeRehydrationSnapshot)
+      );
+    } catch (e) {
+      console.warn("Failed to persist rehydration snapshot", e);
+    }
+  }, [activeRehydrationSnapshot]);
+
   // Load snippets from backend on mount
   useEffect(() => {
     let isMounted = true;
@@ -431,6 +451,20 @@ export default function PromptStudio() {
     let retryTimeout: NodeJS.Timeout | null = null;
 
     const restore = async () => {
+      // Restore rehydration snapshot from localStorage
+      try {
+        const savedSnapshot = localStorage.getItem(PROMPT_STUDIO_REHYDRATION_SNAPSHOT_KEY);
+        if (savedSnapshot) {
+          const parsed = JSON.parse(savedSnapshot);
+          if (parsed && parsed.version === 1) {
+            setActiveRehydrationSnapshot(parsed);
+            setActiveRehydrationKey((prev) => prev + 1);
+          }
+        }
+      } catch (e) {
+        console.warn("Failed to restore rehydration snapshot", e);
+      }
+
       const raw = localStorage.getItem(PROMPT_STUDIO_VIEWER_STATE_KEY);
       if (!raw) return;
 
