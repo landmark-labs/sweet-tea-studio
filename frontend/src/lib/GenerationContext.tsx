@@ -75,17 +75,8 @@ export function GenerationProvider({ children }: GenerationProviderProps) {
     const [formData, setFormData] = useState<Record<string, any>>({});
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isConnected, setIsConnected] = useState(false);
-    // Subscribe to generationFeed directly to ensure re-renders when job status changes
-    // Previously we subscribed to hasActiveJobs function which never changed reference
-    const generationFeed = useGenerationFeedStore(useCallback(state => state.generationFeed, []));
-    const hasActiveJobs = generationFeed.some(item =>
-        item.status === 'queued' ||
-        item.status === 'processing' ||
-        item.status === 'running' ||
-        item.status === 'saving' ||
-        item.status === 'initiating'
-    );
-    const isGenerating = isSubmitting || hasActiveJobs;
+    const hasActiveJobs = useGenerationFeedStore(useCallback(state => state.hasActiveJobs, []));
+    const isGenerating = isSubmitting || hasActiveJobs();
 
     const applyWorkflows = useCallback((items: WorkflowTemplate[]) => {
         setWorkflows(items);

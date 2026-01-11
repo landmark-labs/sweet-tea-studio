@@ -738,11 +738,7 @@ export default function PromptStudio() {
   }, [previewPath, extractRawViewerPath, buildViewerApiPath]);
 
   // useOutletContext to get panel states from Layout
-  const { feedOpen, paletteOpen, setPaletteOpen } = useOutletContext<{
-    feedOpen: boolean;
-    paletteOpen: boolean;
-    setPaletteOpen: (open: boolean) => void;
-  }>();
+  const { feedOpen, libraryOpen } = useOutletContext<{ feedOpen: boolean, libraryOpen: boolean }>();
 
   // Install State
   const [installOpen, setInstallOpen] = useState(false);
@@ -3254,9 +3250,6 @@ export default function PromptStudio() {
               externalValueSyncKey={externalValueSyncKey}
               promptRehydrationSnapshot={activeRehydrationSnapshot}
               promptRehydrationKey={activeRehydrationKey}
-              workflowId={selectedWorkflowId}
-              paletteOpen={paletteOpen}
-              onPaletteClose={() => setPaletteOpen(false)}
             />
           )}
         </div>

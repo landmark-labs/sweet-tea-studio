@@ -31,27 +31,27 @@ export function PromptLibraryQuickPanel({
   if (!open) return null;
 
   return (
-      <div className="w-80 pointer-events-auto">
+      <div className="w-96 pointer-events-auto">
         <Card className="shadow-xl border border-blue-100 bg-blue-50/95 dark:border-border dark:bg-surface/95 ring-1 ring-black/5 dark:ring-white/5 backdrop-blur">
-        <div className="flex items-center justify-between px-2 py-1.5 border-b border-blue-100/80 bg-blue-50/60 dark:border-border/70 dark:bg-surface-raised/70 cursor-move">
-          <div className="font-semibold text-foreground text-xs">prompt library</div>
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onClose}>
-            <X className="w-3.5 h-3.5" />
+        <div className="flex items-center justify-between px-4 py-2 border-b border-blue-100/80 bg-blue-50/60 dark:border-border/70 dark:bg-surface-raised/70 cursor-move">
+          <div className="font-semibold text-foreground text-sm">prompt library</div>
+          <Button variant="ghost" size="sm" className="h-7" onClick={onClose}>
+            <X className="w-4 h-4" />
           </Button>
         </div>
 
-        <div className="p-2 space-y-2">
+        <div className="p-4 space-y-3">
           <div className="flex gap-2">
             <div className="relative flex-1">
-              <Search className="absolute left-2 top-2 h-4 w-4 text-muted-foreground" />
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
                 value={searchValue}
                 onChange={(e) => onSearchChange(e.target.value)}
                 placeholder="Search or filter prompts"
-                className="pl-8 h-8 text-xs"
+                className="pl-9"
               />
             </div>
-            <Button size="sm" variant="outline" className="h-8 text-xs px-2" onClick={onSearchSubmit}>
+            <Button size="sm" variant="outline" onClick={onSearchSubmit}>
               Go
             </Button>
           </div>
@@ -59,7 +59,7 @@ export function PromptLibraryQuickPanel({
           {error && <div className="text-xs text-destructive">{error}</div>}
           {loading && <div className="text-xs text-muted-foreground">Loading prompt library...</div>}
 
-          <ScrollArea className="h-56 pr-2">
+          <ScrollArea className="h-64 pr-2">
             <div className="space-y-2">
               {prompts.length === 0 && !loading && (
                 <div className="text-xs text-muted-foreground">No prompts found. Save one from the form to start.</div>
@@ -73,7 +73,7 @@ export function PromptLibraryQuickPanel({
                 return (
                   <div
                     key={key}
-                    className="p-1.5 border border-border/60 rounded-md bg-surface-raised/70 hover:bg-surface-overlay/60 transition-colors cursor-pointer"
+                    className="p-2 border border-border/60 rounded-md bg-surface-raised/70 hover:bg-surface-overlay/60 transition-colors cursor-pointer"
                     onClick={() => onApply(prompt)}
                   >
                     <div className="flex items-center justify-between mb-1">
