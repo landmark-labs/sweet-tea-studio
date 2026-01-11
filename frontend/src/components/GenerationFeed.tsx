@@ -8,7 +8,7 @@ import { formatDuration, formatSpeed, type GenerationState } from "@/lib/generat
 
 type PreviewOrientation = "portrait" | "landscape" | "square";
 
-const FEED_PREVIEW_RULER = "18rem"; // Tailwind h-72
+const FEED_PREVIEW_RULER = "14rem"; // Tailwind h-56
 const FEED_LONG_SIDE = 1280;
 const FEED_SHORT_SIDE = 720;
 const FEED_SQUARE_SIDE = 1024;
@@ -57,9 +57,10 @@ interface GenerationFeedProps {
   onSelectPreview?: (item: GenerationFeedItem & { selectedPath?: string }) => void;
   onGenerate?: () => void;
   isGenerating?: boolean;
+  embedded?: boolean;
 }
 
-export const GenerationFeed = React.memo(function GenerationFeed({ items, onSelectPreview, onGenerate, isGenerating }: GenerationFeedProps) {
+export const GenerationFeed = React.memo(function GenerationFeed({ items, onSelectPreview, onGenerate, isGenerating, embedded = false }: GenerationFeedProps) {
   const activeItem = items[0];
   const [previewOrientation, setPreviewOrientation] = React.useState<PreviewOrientation>("portrait");
   const previewOrientationByJobId = React.useRef<Record<number, PreviewOrientation>>({});
@@ -99,6 +100,126 @@ export const GenerationFeed = React.memo(function GenerationFeed({ items, onSele
   const isRunning = activeItem?.status === 'running' || activeItem?.status === 'processing';
   const hasStats = activeItem && (activeItem.elapsedMs || activeItem.iterationsPerSecond);
 
+  if (embedded) {
+    return (
+      <div className="w-full pointer-events-auto">
+        {activeItem ? (
+          <div className="space-y-2">
+            {/* Preview Image */}
+            {activeItem.previewBlob ? (
+              <div
+                className="relative rounded overflow-hidden bg-surface-raised/70 border border-border/60 mx-auto"
+                style={previewBoxStyle}
+              >
+                <img src={activeItem.previewBlob} alt="Live Preview" className="w-full h-full object-contain" />
+                {isRunning && (
+                  <div className="absolute top-2 right-2 px-1.5 py-0.5 bg-black/50 text-white text-[10px] rounded backdrop-blur font-medium">
+                    live
+                  </div>
+                )}
+              </div>
+            ) : (activeItem.previewPaths?.[0] || activeItem.previewPath) ? (
+              <div
+                className="relative w-full h-56 rounded overflow-hidden bg-surface-raised/70 border border-border/60 cursor-pointer hover:bg-surface-overlay/60 transition-colors"
+                onClick={() => {
+                  const path = activeItem.previewPaths?.[0] || activeItem.previewPath;
+                  if (path) onSelectPreview?.({ ...activeItem, selectedPath: path });
+                }}
+              >
+                <div className="w-full h-full flex flex-col items-center justify-center text-xs text-muted-foreground">
+                  <span className="font-semibold">ready</span>
+                  <span className="text-[10px]">click to view</span>
+                </div>
+              </div>
+            ) : (
+              <div className="w-full h-56 rounded bg-surface-raised/70 border border-border/60" />
+            )}
+
+            {/* Progress */}
+            <div className="space-y-1">
+              <div className="flex justify-between text-[10px] text-foreground/80 tracking-wider font-semibold">
+                <span className="lowercase">
+                  {activeItem.status}
+                  <span className="text-muted-foreground font-medium"> • #{activeItem.jobId}</span>
+                </span>
+                <span className="text-foreground">{Math.round(activeItem.progress)}%</span>
+              </div>
+              <Progress value={activeItem.progress} className="h-1" />
+
+              {/* Stats row - only show when running or has data */}
+              {(isRunning || hasStats) && (
+                <div className="flex justify-between text-[9px] text-muted-foreground pt-0.5">
+                  <span>
+                    {activeItem.elapsedMs ? formatDuration(activeItem.elapsedMs) : ""}
+                    {activeItem.currentStep && activeItem.totalSteps ? ` • ${activeItem.currentStep}/${activeItem.totalSteps}` : ""}
+                  </span>
+                  <span className="flex gap-2">
+                    {activeItem.iterationsPerSecond ? formatSpeed(activeItem.iterationsPerSecond) : ""}
+                    {activeItem.estimatedRemainingMs && activeItem.estimatedRemainingMs > 0 ? (
+                      <span>~{formatDuration(activeItem.estimatedRemainingMs)}</span>
+                    ) : null}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Buttons */}
+            <div className="space-y-1.5">
+              {onGenerate && (
+                <Button
+                  size="sm"
+                  variant="default"
+                  className="h-7 w-full text-xs gap-1.5"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (onGenerate) onGenerate();
+                  }}
+                >
+                  {isGenerating ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : (
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                  )}
+                  {isGenerating ? 'generating...' : 'generate'}
+                </Button>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="p-2 flex flex-col items-center justify-center text-center space-y-2 text-muted-foreground">
+            <div className="w-7 h-7 rounded-full bg-muted/30 flex items-center justify-center mb-1">
+              <div className="w-2 h-2 rounded-full bg-muted-foreground/40" />
+            </div>
+            <div className="text-xs font-medium text-muted-foreground">ready to generate</div>
+            <div className="text-[10px]">waiting for job...</div>
+            {onGenerate && (
+              <Button
+                size="sm"
+                variant="default"
+                className="h-7 text-xs gap-1.5 mt-1"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (onGenerate) onGenerate();
+                }}
+              >
+                {isGenerating ? (
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                ) : (
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                )}
+                {isGenerating ? 'generating...' : 'generate'}
+              </Button>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
       <div className="w-full h-full pointer-events-auto">
         {activeItem ? (
@@ -131,7 +252,7 @@ export const GenerationFeed = React.memo(function GenerationFeed({ items, onSele
               </div>
             ) : (activeItem.previewPaths?.[0] || activeItem.previewPath) ? (
               <div
-                className="relative w-full h-72 rounded overflow-hidden bg-surface-raised/70 border border-border/60 cursor-pointer hover:bg-surface-overlay/60 transition-colors"
+                className="relative w-full h-56 rounded overflow-hidden bg-surface-raised/70 border border-border/60 cursor-pointer hover:bg-surface-overlay/60 transition-colors"
                 onClick={() => {
                   const path = activeItem.previewPaths?.[0] || activeItem.previewPath;
                   if (path) onSelectPreview?.({ ...activeItem, selectedPath: path });
@@ -143,7 +264,7 @@ export const GenerationFeed = React.memo(function GenerationFeed({ items, onSele
                 </div>
               </div>
             ) : (
-              <div className="w-full h-72 rounded bg-surface-raised/70 border border-border/60" />
+              <div className="w-full h-56 rounded bg-surface-raised/70 border border-border/60" />
             )}
 
             {/* Progress */}
@@ -197,8 +318,8 @@ export const GenerationFeed = React.memo(function GenerationFeed({ items, onSele
           </div>
         </div>
       ) : (
-        <div className="shadow-lg border border-border/80 bg-card/95 ring-1 ring-black/5 dark:ring-white/5 backdrop-blur overflow-hidden rounded-lg" style={{ width: '384px', height: '100%', display: 'flex', flexDirection: 'column' }}>
-          <div className="flex-1 p-4 flex flex-col items-center justify-center text-center space-y-2 text-muted-foreground">
+        <div className="shadow-lg border border-border/80 bg-card/95 ring-1 ring-black/5 dark:ring-white/5 backdrop-blur overflow-hidden rounded-lg" style={{ width: '320px', height: '100%', display: 'flex', flexDirection: 'column' }}>
+          <div className="flex-1 p-3 flex flex-col items-center justify-center text-center space-y-2 text-muted-foreground">
             <div className="w-8 h-8 rounded-full bg-muted/30 flex items-center justify-center mb-1">
               <div className="w-2 h-2 rounded-full bg-muted-foreground/40" />
             </div>
