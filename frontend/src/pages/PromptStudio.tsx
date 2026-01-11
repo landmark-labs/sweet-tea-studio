@@ -42,6 +42,64 @@ type PromptStudioViewerStateV1 = {
 
 const PROMPT_STUDIO_VIEWER_STATE_KEY = "ds_promptstudio_viewer_state_v1";
 
+type PromptStudioRehydrationStateV1 = {
+  v: 1;
+  workflowId: string;
+  snapshot: PromptRehydrationSnapshotV1 | null;
+  at: number;
+};
+
+const PROMPT_STUDIO_REHYDRATION_STATE_KEY_PREFIX = "ds_promptstudio_rehydration_state_v1_";
+
+const buildPromptStudioRehydrationStateKey = (workflowId: string) =>
+  `${PROMPT_STUDIO_REHYDRATION_STATE_KEY_PREFIX}${workflowId}`;
+
+const isPromptRehydrationSnapshotV1 = (value: unknown): value is PromptRehydrationSnapshotV1 => {
+  if (!value || typeof value !== "object") return false;
+  const snapshot = value as Partial<PromptRehydrationSnapshotV1>;
+  if (snapshot.version !== 1) return false;
+  if (!snapshot.fields || typeof snapshot.fields !== "object") return false;
+  return true;
+};
+
+const readPromptStudioRehydrationSnapshot = (workflowId: string): PromptRehydrationSnapshotV1 | null => {
+  if (typeof window === "undefined") return null;
+  if (!workflowId) return null;
+  try {
+    const raw = localStorage.getItem(buildPromptStudioRehydrationStateKey(workflowId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<PromptStudioRehydrationStateV1> | null;
+    if (!parsed || parsed.v !== 1) return null;
+
+    const snapshot = parsed.snapshot;
+    if (snapshot === null) return null;
+    return isPromptRehydrationSnapshotV1(snapshot) ? snapshot : null;
+  } catch {
+    return null;
+  }
+};
+
+const persistPromptStudioRehydrationSnapshot = (workflowId: string, snapshot: PromptRehydrationSnapshotV1 | null) => {
+  if (typeof window === "undefined") return;
+  if (!workflowId) return;
+  const key = buildPromptStudioRehydrationStateKey(workflowId);
+  try {
+    if (!snapshot) {
+      localStorage.removeItem(key);
+      return;
+    }
+    const state: PromptStudioRehydrationStateV1 = {
+      v: 1,
+      workflowId,
+      snapshot,
+      at: Date.now(),
+    };
+    localStorage.setItem(key, JSON.stringify(state));
+  } catch {
+    // ignore
+  }
+};
+
 const PromptConstructorPanel = memo(function PromptConstructorPanel(props: PromptConstructorPanelProps) {
   const currentValues = useAtomValue(formDataAtom) as Record<string, string>;
   return <PromptConstructor {...props} currentValues={currentValues} />;
@@ -361,6 +419,20 @@ export default function PromptStudio() {
   }, []);
   const [activeRehydrationSnapshot, setActiveRehydrationSnapshot] = useState<PromptRehydrationSnapshotV1 | null>(null);
   const [activeRehydrationKey, setActiveRehydrationKey] = useState(0);
+  const restoredRehydrationWorkflowIdRef = useRef<string | null>(null);
+
+  // Restore stale snippet ("prompt rehydration") context across page reloads / remounts.
+  useEffect(() => {
+    if (!selectedWorkflowId) return;
+    if (pendingLoadParams) return;
+
+    if (restoredRehydrationWorkflowIdRef.current === selectedWorkflowId) return;
+    restoredRehydrationWorkflowIdRef.current = selectedWorkflowId;
+
+    const restored = readPromptStudioRehydrationSnapshot(selectedWorkflowId);
+    setActiveRehydrationSnapshot(restored);
+    setActiveRehydrationKey((prev) => prev + 1);
+  }, [selectedWorkflowId, pendingLoadParams]);
 
   // Load snippets from backend on mount
   useEffect(() => {
@@ -925,6 +997,10 @@ export default function PromptStudio() {
     if (payload.prompt_rehydration_snapshot !== undefined) {
       setActiveRehydrationSnapshot(payload.prompt_rehydration_snapshot);
       setActiveRehydrationKey((prev) => prev + 1);
+      if (workflowId) {
+        persistPromptStudioRehydrationSnapshot(String(workflowId), payload.prompt_rehydration_snapshot);
+        restoredRehydrationWorkflowIdRef.current = String(workflowId);
+      }
     }
   }, [applyCanvasFormData, setSelectedEngineId, setSelectedProjectId, setGenerationTarget, setLibrary, setSelectedWorkflowId, workflows]);
 
@@ -1749,6 +1825,8 @@ export default function PromptStudio() {
 
       setActiveRehydrationSnapshot(nextRehydrationSnapshot);
       setActiveRehydrationKey((prev) => prev + 1);
+      persistPromptStudioRehydrationSnapshot(targetWorkflowId, nextRehydrationSnapshot);
+      restoredRehydrationWorkflowIdRef.current = targetWorkflowId;
 
       const normalizedParams = normalizeParamsWithDefaults(schema, baseParams);
 
