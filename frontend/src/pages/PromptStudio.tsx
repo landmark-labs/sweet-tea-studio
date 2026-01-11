@@ -358,8 +358,6 @@ export default function PromptStudio() {
   const promptRehydrationSnapshotRef = useRef<PromptRehydrationSnapshotV1 | null>(null);
   const handlePromptRehydrationSnapshot = useCallback((snapshot: PromptRehydrationSnapshotV1) => {
     promptRehydrationSnapshotRef.current = snapshot;
-    // Sync to state so it's included in canvas saves (manual or on page unload)
-    setActiveRehydrationSnapshot(snapshot);
   }, []);
   const [activeRehydrationSnapshot, setActiveRehydrationSnapshot] = useState<PromptRehydrationSnapshotV1 | null>(null);
   const [activeRehydrationKey, setActiveRehydrationKey] = useState(0);
