@@ -824,8 +824,9 @@ export default function PromptStudio() {
         collapsed: galleryCollapsed,
       },
       media_tray: useMediaTrayStore.getState().items.map(({ path, filename, kind }) => ({ path, filename, kind })),
+      prompt_rehydration_snapshot: activeRehydrationSnapshot,
     };
-  }, [store, selectedEngineId, selectedWorkflowId, selectedProjectId, projects, generationTarget, library]);
+  }, [store, selectedEngineId, selectedWorkflowId, selectedProjectId, projects, generationTarget, library, activeRehydrationSnapshot]);
 
   const normalizeCanvasFormData = useCallback((workflowId: string, rawData: Record<string, unknown>) => {
     const workflow = workflows.find((w) => String(w.id) === String(workflowId));
@@ -918,6 +919,12 @@ export default function PromptStudio() {
       if (workflowExists) {
         applyCanvasFormData(String(workflowId), rawData);
       }
+    }
+
+    // Restore prompt rehydration snapshot
+    if (payload.prompt_rehydration_snapshot !== undefined) {
+      setActiveRehydrationSnapshot(payload.prompt_rehydration_snapshot);
+      setActiveRehydrationKey((prev) => prev + 1);
     }
   }, [applyCanvasFormData, setSelectedEngineId, setSelectedProjectId, setGenerationTarget, setLibrary, setSelectedWorkflowId, workflows]);
 
