@@ -37,6 +37,7 @@ export default function Layout() {
 
   // Persisted Panel States
   const [feedOpen, setFeedOpen] = useState(() => localStorage.getItem("ds_feed_open") !== "false");
+  const [paletteOpen, setPaletteOpen] = useState(() => localStorage.getItem("ds_palette_open") === "true");
   const [libraryOpen, setLibraryOpen] = useState(() => localStorage.getItem("ds_library_open") !== "false");
   const [perfHudOpen, setPerfHudOpen] = useState(() => localStorage.getItem("ds_perf_hud_open") === "true");
 
@@ -50,6 +51,7 @@ export default function Layout() {
       clearPreviewBlobs();
     }
   }, [feedOpen, clearPreviewBlobs]);
+  useEffect(() => localStorage.setItem("ds_palette_open", String(paletteOpen)), [paletteOpen]);
   useEffect(() => localStorage.setItem("ds_library_open", String(libraryOpen)), [libraryOpen]);
   useEffect(() => localStorage.setItem("ds_perf_hud_open", String(perfHudOpen)), [perfHudOpen]);
   useEffect(() => {
@@ -193,6 +195,19 @@ export default function Layout() {
                   size="sm"
                   className={cn(
                     "text-xs transition-colors",
+                    paletteOpen
+                      ? "bg-primary text-primary-foreground hover:bg-primary/90 border-primary"
+                      : "text-muted-foreground bg-muted/40 hover:bg-muted/60 border-border"
+                  )}
+                  onClick={() => setPaletteOpen(!paletteOpen)}
+                >
+                  palette
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className={cn(
+                    "text-xs transition-colors",
                     feedOpen
                       ? "bg-primary text-primary-foreground hover:bg-primary/90 border-primary"
                       : "text-muted-foreground bg-muted/40 hover:bg-muted/60 border-border"
@@ -233,7 +248,7 @@ export default function Layout() {
             </div>
           </div>
           <div className="flex-1 overflow-hidden relative">
-            <Outlet context={{ feedOpen, setFeedOpen, libraryOpen, setLibraryOpen }} />
+            <Outlet context={{ feedOpen, setFeedOpen, paletteOpen, setPaletteOpen, libraryOpen, setLibraryOpen }} />
           </div>
         </div>
       </main>
@@ -261,27 +276,30 @@ function GlobalFloatingPanels({ feedOpen, libraryOpen, onFeedClose, onLibraryClo
       <DraggablePanel
         persistenceKey="ds_feed_pos"
         defaultPosition={{ x: 20, y: 100 }}
-        className={`z-40 ${feedOpen ? "" : "hidden"}`}
+        className={`z-40 ${feedOpen ? "" : "hidden"} w-80`}
       >
-        <div className="bg-card rounded-lg shadow-xl border border-border/80 ring-1 ring-black/5 dark:ring-white/5 overflow-hidden" style={{ maxWidth: '90vw' }}>
-          <div className="p-2 bg-muted/30 border-b border-border/60 text-xs font-semibold cursor-move flex items-center justify-between">
+        <div className="shadow-xl border border-blue-100 bg-blue-50/95 dark:border-border dark:bg-surface/95 ring-1 ring-black/5 dark:ring-white/5 backdrop-blur overflow-hidden rounded-lg text-[11px] text-foreground">
+          <div className="px-2 py-1.5 border-b border-blue-100/80 bg-blue-50/60 dark:border-border/70 dark:bg-surface-raised/70 text-xs font-semibold cursor-move flex items-center justify-between">
             <span>generation feed</span>
             <button
               onClick={onFeedClose}
               className="p-0.5 rounded hover:bg-muted/60 text-muted-foreground hover:text-foreground"
               aria-label="Close generation feed"
             >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
           </div>
-          <GenerationFeed
-            items={generationFeed}
-            onSelectPreview={() => { }}
-            onGenerate={generation?.handleGenerate}
-            isGenerating={generation?.isGenerating}
-          />
+          <div className="p-2">
+            <GenerationFeed
+              embedded
+              items={generationFeed}
+              onSelectPreview={() => { }}
+              onGenerate={generation?.handleGenerate}
+              isGenerating={generation?.isGenerating}
+            />
+          </div>
         </div>
       </DraggablePanel>
 
@@ -289,19 +307,17 @@ function GlobalFloatingPanels({ feedOpen, libraryOpen, onFeedClose, onLibraryClo
       <DraggablePanel
         persistenceKey="ds_library_pos"
         defaultPosition={{ x: 100, y: 100 }}
-        className={`z-50 ${libraryOpen ? "" : "hidden"}`}
+        className={`z-50 ${libraryOpen ? "" : "hidden"} w-80`}
       >
-        <div className="h-[600px] w-[400px]">
-          <PromptLibraryQuickPanel
-            open={libraryOpen}
-            prompts={prompts}
-            onApply={generation?.applyPrompt || (() => { })}
-            onSearchChange={setPromptSearch}
-            onSearchSubmit={generation?.loadPromptLibrary || (() => { })}
-            searchValue={promptSearch}
-            onClose={onLibraryClose}
-          />
-        </div>
+        <PromptLibraryQuickPanel
+          open={libraryOpen}
+          prompts={prompts}
+          onApply={generation?.applyPrompt || (() => { })}
+          onSearchChange={setPromptSearch}
+          onSearchSubmit={generation?.loadPromptLibrary || (() => { })}
+          searchValue={promptSearch}
+          onClose={onLibraryClose}
+        />
       </DraggablePanel>
     </>
   );
