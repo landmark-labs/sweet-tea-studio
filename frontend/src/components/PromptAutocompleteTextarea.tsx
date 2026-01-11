@@ -618,7 +618,7 @@ export function PromptAutocompleteTextarea({
                             className={cn(
                                 bgClasses,
                                 "rounded-sm opacity-80",
-                                isRehydrationMatch && "ring-1 ring-black/40 dark:ring-white ring-inset underline decoration-dashed decoration-black/60 dark:decoration-white underline-offset-2",
+                                isRehydrationMatch && "ring-2 ring-black/40 dark:ring-white ring-inset underline decoration-dashed decoration-black/60 dark:decoration-white underline-offset-2",
                                 // Dark mode: keep highlights bright and vibrant, render text in black
                                 // for maximum readability contrast. The textarea text above will be
                                 // made transparent so this black text shows through.
