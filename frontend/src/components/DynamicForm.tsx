@@ -1628,16 +1628,15 @@ export const DynamicForm = React.memo(function DynamicForm({
 
         const grouped = Array.from(groupMap.values()).sort(compareGroups);
 
+        // Use schema key order to preserve the original field order within each node
+        // This matches how fields appear in the configurator
+        const schemaKeyOrder = Object.keys(schema);
+
         grouped.forEach((group) => {
             group.keys.sort((a, b) => {
-                const placementA = groups.placements[a];
-                const placementB = groups.placements[b];
-                const orderA = Number.isFinite(placementA?.order) ? placementA.order : 999;
-                const orderB = Number.isFinite(placementB?.order) ? placementB.order : 999;
-                if (orderA !== orderB) return orderA - orderB;
-                const titleA = String(schema[a]?.title || a);
-                const titleB = String(schema[b]?.title || b);
-                return titleA.localeCompare(titleB);
+                const indexA = schemaKeyOrder.indexOf(a);
+                const indexB = schemaKeyOrder.indexOf(b);
+                return indexA - indexB;
             });
         });
 
