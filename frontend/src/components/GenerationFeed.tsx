@@ -137,7 +137,7 @@ export const GenerationFeed = React.memo(function GenerationFeed({ items, onSele
 
             {/* Progress */}
             <div className="space-y-1">
-              <div className="flex justify-between text-[10px] text-foreground/80 tracking-wider font-semibold">
+              <div className="flex justify-between text-[9px] text-foreground/80 tracking-wider font-semibold">
                 <span className="lowercase">
                   {activeItem.status}
                   <span className="text-muted-foreground font-medium"> • #{activeItem.jobId}</span>
@@ -221,8 +221,8 @@ export const GenerationFeed = React.memo(function GenerationFeed({ items, onSele
   }
 
   return (
-      <div className="w-full h-full pointer-events-auto">
-        {activeItem ? (
+    <div className="w-full h-full pointer-events-auto">
+      {activeItem ? (
         <div className="shadow-xl border border-blue-100 bg-blue-50/95 dark:border-border dark:bg-surface/95 ring-1 ring-black/5 dark:ring-white/5 backdrop-blur overflow-hidden rounded-lg">
           {/* Header */}
           <div className="flex items-center justify-between px-3 py-2 border-b border-blue-100/80 bg-blue-50/60 dark:border-border/70 dark:bg-surface-raised/70">
@@ -269,7 +269,7 @@ export const GenerationFeed = React.memo(function GenerationFeed({ items, onSele
 
             {/* Progress */}
             <div className="space-y-1">
-              <div className="flex justify-between text-[10px] text-foreground/80 tracking-wider font-semibold">
+              <div className="flex justify-between text-[9px] text-foreground/80 tracking-wider font-semibold">
                 <span className="lowercase">{activeItem.status}</span>
                 <span className="text-foreground">{Math.round(activeItem.progress)}%</span>
               </div>
