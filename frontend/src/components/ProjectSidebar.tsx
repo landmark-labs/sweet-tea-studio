@@ -57,7 +57,7 @@ export function ProjectSidebar({
   return (
     <div
       className={cn(
-        "relative border-r bg-slate-50 transition-all duration-300 flex flex-col",
+        "relative border-r bg-card transition-all duration-300 flex flex-col",
         collapsed ? "w-12" : "w-64",
         className
       )}
@@ -65,14 +65,14 @@ export function ProjectSidebar({
       <Button
         variant="ghost"
         size="icon"
-        className="absolute -right-3 top-4 h-6 w-6 rounded-full border bg-white shadow-sm z-10"
+        className="absolute -right-3 top-4 h-6 w-6 rounded-full border bg-background shadow-sm z-10"
         onClick={() => setCollapsed(!collapsed)}
       >
         {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
       </Button>
 
       <div className="p-2 flex items-center justify-between border-b h-14">
-        {!collapsed && <span className="font-semibold text-slate-700">projects</span>}
+        {!collapsed && <span className="font-semibold text-foreground">projects</span>}
       </div>
 
       <ScrollArea className="flex-1">
@@ -94,7 +94,7 @@ export function ProjectSidebar({
               onClick={() => onSelectProject(draftsProject.id)}
               title="drafts"
             >
-              <FolderOpen className={cn("h-4 w-4 mr-2", selectedProjectId === draftsProject.id ? "text-blue-600" : "text-slate-500")} />
+              <FolderOpen className={cn("h-4 w-4 mr-2", selectedProjectId === draftsProject.id ? "text-blue-600" : "text-muted-foreground")} />
               {!collapsed && <span className="truncate">drafts</span>}
             </Button>
           )}
@@ -107,7 +107,7 @@ export function ProjectSidebar({
                 onClick={() => onSelectProject(project.id)}
                 title={project.name}
               >
-                <Folder className={cn("h-4 w-4 mr-2", selectedProjectId === project.id ? "text-blue-600" : "text-slate-500")} />
+                <Folder className={cn("h-4 w-4 mr-2", selectedProjectId === project.id ? "text-blue-600" : "text-muted-foreground")} />
                 {!collapsed && <span className="truncate">{project.name}</span>}
               </Button>
               {/* Subfolders shown under selected project */}
@@ -118,8 +118,8 @@ export function ProjectSidebar({
                     className={cn(
                       "w-full text-left px-2 py-1 rounded text-xs transition flex items-center gap-1.5",
                       !selectedFolder
-                        ? "bg-blue-100 text-blue-700 font-medium"
-                        : "text-slate-600 hover:bg-slate-100"
+                        ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium"
+                        : "text-muted-foreground hover:bg-muted"
                     )}
                   >
                     <Layers className="h-3 w-3" />
@@ -132,8 +132,8 @@ export function ProjectSidebar({
                       className={cn(
                         "w-full text-left px-2 py-1 rounded text-xs transition flex items-center gap-1.5 truncate",
                         selectedFolder === folder
-                          ? "bg-blue-100 text-blue-700 font-medium"
-                          : "text-slate-600 hover:bg-slate-100"
+                          ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium"
+                          : "text-muted-foreground hover:bg-muted"
                       )}
                       title={folder}
                     >
