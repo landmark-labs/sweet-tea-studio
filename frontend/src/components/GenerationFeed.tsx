@@ -8,7 +8,7 @@ import { formatDuration, formatSpeed, type GenerationState } from "@/lib/generat
 
 type PreviewOrientation = "portrait" | "landscape" | "square";
 
-const FEED_PREVIEW_RULER = "14rem"; // Tailwind h-56
+const FEED_PREVIEW_RULER = "14.4rem"; // 80% of previous 18rem
 const FEED_LONG_SIDE = 1280;
 const FEED_SHORT_SIDE = 720;
 const FEED_SQUARE_SIDE = 1024;

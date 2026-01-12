@@ -17,6 +17,7 @@ import type { PromptItem, PromptRehydrationSnapshotV1, PromptRehydrationItemV1 }
 import { formDataAtom, formFieldAtom, setFormDataAtom } from "@/lib/atoms/formAtoms";
 import { formatFloatDisplay } from "@/lib/formatters";
 import { ChevronDown, ChevronUp, Palette, Pin, X } from "lucide-react";
+import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger, ContextMenuSeparator, ContextMenuLabel } from "@/components/ui/context-menu";
 
 type FormSection = "inputs" | "prompts" | "loras" | "nodes";
 
@@ -61,6 +62,7 @@ interface FieldRendererProps {
     paletteSelected?: boolean;
     onPaletteToggle?: () => void;
     endAction?: React.ReactNode;
+    variant?: "default" | "palette";
 }
 
 const BYPASS_PLACEHOLDER_KEY = "__sts_bypass_placeholder__";
@@ -97,6 +99,14 @@ const resolveNodeTitle = (field: Record<string, unknown>, fallback = "Configurat
     if (classType) return classType;
 
     return title || fallback;
+};
+
+const resolveParamTitle = (fieldKey: string, field: Record<string, unknown>) => {
+    const raw = String(field.title || fieldKey).trim();
+    const match = raw.match(/^(.*?)\s*\(([^)]+)\)\s*$/);
+    if (!match) return raw;
+    const base = (match[1] || "").trim();
+    return base || raw;
 };
 
 const isMediaUploadField = (fieldKey: string, field: Record<string, unknown>) => {
@@ -138,9 +148,23 @@ const FieldRenderer = React.memo(function FieldRenderer({
     paletteSelected = false,
     onPaletteToggle,
     endAction,
+    variant = "default",
 }: FieldRendererProps) {
     const value = useAtomValue(formFieldAtom(fieldKey));
     const isMediaUpload = isMediaUploadField(fieldKey, field);
+    const isPaletteVariant = variant === "palette";
+    const fieldTitle = resolveParamTitle(fieldKey, field);
+
+    const labelClassName = cn(
+        isPaletteVariant ? "text-[9px] font-semibold text-violet-700 dark:text-foreground/90" : "text-xs text-foreground/80",
+        isActive && (isPaletteVariant ? "text-violet-800 dark:text-foreground" : "text-blue-600 dark:text-primary font-semibold")
+    );
+
+    const controlClassName = cn(
+        "flex-1 min-w-0",
+        isPaletteVariant ? "h-6 text-[10px] bg-white/80 dark:bg-surface border-violet-200/60 dark:border-yellow-400" : "h-7 text-xs",
+        isActive && "ring-1 ring-violet-400 border-violet-400 dark:ring-blue-400 dark:border-blue-400"
+    );
 
     const paletteButton = showPaletteToggle && onPaletteToggle ? (
         <button
@@ -167,7 +191,7 @@ const FieldRenderer = React.memo(function FieldRenderer({
         if (!endAction) return content;
         const placeAtTop = isMediaUpload || field.widget === "textarea";
         return (
-            <div className="relative pr-7">
+            <div className={cn("relative", isPaletteVariant ? "pr-5" : "pr-7")}>
                 {content}
                 <div
                     className={cn(
@@ -189,13 +213,13 @@ const FieldRenderer = React.memo(function FieldRenderer({
                 {!hideLabel && (
                     <div className="flex items-center gap-2">
                         {paletteButton}
-                        <Label>{field.title || fieldKey}</Label>
+                        <Label className={labelClassName}>{fieldTitle}</Label>
                     </div>
                 )}
                 {hideLabel && paletteButton && (
                     <div className="flex items-center gap-2">
                         {paletteButton}
-                        <span className="text-[10px] text-muted-foreground">{field.title || fieldKey}</span>
+                        <span className={cn("text-[10px] text-muted-foreground", isPaletteVariant && "text-violet-600 dark:text-foreground/80")}>{fieldTitle}</span>
                     </div>
                 )}
                 <ImageUpload
@@ -223,9 +247,9 @@ const FieldRenderer = React.memo(function FieldRenderer({
                         {paletteButton}
                         <Label
                             htmlFor={fieldKey}
-                            className={cn(isActive && "text-blue-600 dark:text-primary font-semibold")}
+                            className={labelClassName}
                         >
-                            {field.title || fieldKey}
+                            {fieldTitle}
                         </Label>
                     </div>
                 )}
@@ -255,7 +279,7 @@ const FieldRenderer = React.memo(function FieldRenderer({
                         placeholder=""
                         rows={6}
                         className={cn(
-                            "text-xs font-mono transition-all min-h-[150px]",
+                            isPaletteVariant ? "text-[10px] font-mono transition-all min-h-[110px]" : "text-xs font-mono transition-all min-h-[150px]",
                             isActive && "ring-2 ring-blue-400 border-blue-400 bg-blue-50/20 dark:ring-ring dark:border-ring dark:bg-primary/10"
                         )}
                     />
@@ -266,21 +290,21 @@ const FieldRenderer = React.memo(function FieldRenderer({
 
     if (field.widget === "toggle") {
         return wrapWithEndAction(
-            <div className="flex items-center justify-between py-2">
+            <div className={cn("flex items-center justify-between", isPaletteVariant ? "py-1" : "py-2")}>
                 <div className="flex items-center gap-2 min-w-0">
                     {paletteButton}
                     <Label
                         htmlFor={fieldKey}
                         className={cn(
-                            "text-xs text-foreground/80 truncate",
-                            isActive && "text-blue-600 dark:text-primary font-semibold"
+                            "truncate",
+                            labelClassName
                         )}
                     >
-                        {field.title || fieldKey}
+                        {fieldTitle}
                     </Label>
                 </div>
                 <div className="flex items-center gap-2">
-                    <span className="text-[10px] text-foreground/70 uppercase">{value ? "Bypassed" : "Active"}</span>
+                    <span className={cn("text-[10px] uppercase", isPaletteVariant ? "text-violet-600/80 dark:text-foreground/70" : "text-foreground/70")}>{value ? "Bypassed" : "Active"}</span>
                     <Switch
                         checked={!!value}
                         onCheckedChange={(c) => onToggleChange(fieldKey, Boolean(c))}
@@ -297,17 +321,11 @@ const FieldRenderer = React.memo(function FieldRenderer({
     const currentVal = isNumberType ? formatFloatDisplay(rawVal) : rawVal;
 
     return wrapWithEndAction(
-        <div className="flex items-center gap-2 py-0.5">
-            <div className="flex items-center justify-end gap-1.5 w-28 flex-shrink-0 min-w-0">
+        <div className={cn("flex items-center", isPaletteVariant ? "py-0 gap-1" : "py-0.5 gap-2")}>
+            <div className={cn("flex items-center gap-1 flex-shrink-0 min-w-0", isPaletteVariant ? "justify-start w-8" : "justify-end w-28")}>
                 {paletteButton}
-                <Label
-                    htmlFor={fieldKey}
-                    className={cn(
-                        "text-xs text-foreground/80 text-right truncate",
-                        isActive && "text-blue-600 dark:text-primary font-semibold"
-                    )}
-                >
-                    {field.title || fieldKey}
+                <Label htmlFor={fieldKey} className={cn(isPaletteVariant ? "text-left" : "text-right", "truncate", labelClassName)}>
+                    {fieldTitle}
                 </Label>
             </div>
             {field.enum || dynamicOptions[fieldKey] ? (
@@ -325,7 +343,7 @@ const FieldRenderer = React.memo(function FieldRenderer({
                             }}
                             onOpenChange={onMenuOpen}
                         >
-                            <SelectTrigger id={fieldKey} className={cn("h-7 text-xs flex-1 min-w-0 overflow-hidden", isActive && "ring-1 ring-blue-400 border-blue-400")}>
+                            <SelectTrigger id={fieldKey} className={cn(controlClassName, "overflow-hidden")}>
                                 <span className="truncate block w-full text-left">
                                     {currentVal || "Select..."}
                                 </span>
@@ -370,7 +388,7 @@ const FieldRenderer = React.memo(function FieldRenderer({
                     }}
                     onFocus={() => onFieldFocus?.(fieldKey)}
                     placeholder=""
-                    className={cn("h-7 text-xs flex-1", isActive && "ring-1 ring-blue-400 border-blue-400")}
+                    className={controlClassName}
                     step={field.step || (field.type === "integer" ? 1 : 0.01)}
                     min={field.minimum}
                     max={field.maximum}
@@ -789,6 +807,7 @@ interface DynamicFormProps {
     workflowId?: string;
     paletteOpen?: boolean;
     onPaletteClose?: () => void;
+    paletteSyncKey?: number;
 }
 
 export const DynamicForm = React.memo(function DynamicForm({
@@ -811,6 +830,7 @@ export const DynamicForm = React.memo(function DynamicForm({
     workflowId,
     paletteOpen = false,
     onPaletteClose,
+    paletteSyncKey = 0,
 }: DynamicFormProps) {
     const [dynamicOptions, setDynamicOptions] = useState<Record<string, string[]>>({});
     const store = useStore();
@@ -1272,22 +1292,27 @@ export const DynamicForm = React.memo(function DynamicForm({
     }, [workflowId]);
 
     const [paletteKeys, setPaletteKeys] = useState<string[]>([]);
+    const [paletteHydrated, setPaletteHydrated] = useState(false);
     const paletteKeySet = useMemo(() => new Set(paletteKeys), [paletteKeys]);
 
     useEffect(() => {
+        setPaletteHydrated(false);
         if (!paletteStorageKey) {
             setPaletteKeys([]);
+            setPaletteHydrated(true);
             return;
         }
         try {
             const raw = localStorage.getItem(paletteStorageKey);
             if (!raw) {
                 setPaletteKeys([]);
+                setPaletteHydrated(true);
                 return;
             }
             const parsed = JSON.parse(raw);
             if (!Array.isArray(parsed)) {
                 setPaletteKeys([]);
+                setPaletteHydrated(true);
                 return;
             }
             const next = parsed.filter((entry) => typeof entry === "string") as string[];
@@ -1295,25 +1320,33 @@ export const DynamicForm = React.memo(function DynamicForm({
         } catch (err) {
             console.warn("[palette] Failed to load palette contents", err);
             setPaletteKeys([]);
+        } finally {
+            setPaletteHydrated(true);
         }
-    }, [paletteStorageKey]);
+    }, [paletteStorageKey, paletteSyncKey]);
 
     useEffect(() => {
-        if (!schema) return;
+        if (!schema || !paletteHydrated) return;
+        if (Object.keys(schema).length === 0) return;
         setPaletteKeys((current) => current.filter((key) => key in schema));
-    }, [schema]);
+    }, [paletteHydrated, schema]);
 
     useEffect(() => {
-        if (!paletteStorageKey) return;
+        if (!paletteStorageKey || !paletteHydrated) return;
         localStorage.setItem(paletteStorageKey, JSON.stringify(paletteKeys));
-    }, [paletteKeys, paletteStorageKey]);
+    }, [paletteHydrated, paletteKeys, paletteStorageKey]);
 
     const togglePaletteKey = useCallback((key: string) => {
         setPaletteKeys((current) => {
-            if (current.includes(key)) return current.filter((entry) => entry !== key);
-            return [...current, key];
+            const next = current.includes(key)
+                ? current.filter((entry) => entry !== key)
+                : [...current, key];
+            if (paletteStorageKey && paletteHydrated) {
+                localStorage.setItem(paletteStorageKey, JSON.stringify(next));
+            }
+            return next;
         });
-    }, []);
+    }, [paletteHydrated, paletteStorageKey]);
 
     const togglePaletteKeys = useCallback((keys: string[]) => {
         if (keys.length === 0) return;
@@ -1322,7 +1355,11 @@ export const DynamicForm = React.memo(function DynamicForm({
             const allSelected = keys.every((key) => currentSet.has(key));
             if (allSelected) {
                 const removeSet = new Set(keys);
-                return current.filter((key) => !removeSet.has(key));
+                const next = current.filter((key) => !removeSet.has(key));
+                if (paletteStorageKey && paletteHydrated) {
+                    localStorage.setItem(paletteStorageKey, JSON.stringify(next));
+                }
+                return next;
             }
             const next = [...current];
             keys.forEach((key) => {
@@ -1330,15 +1367,24 @@ export const DynamicForm = React.memo(function DynamicForm({
                 currentSet.add(key);
                 next.push(key);
             });
+            if (paletteStorageKey && paletteHydrated) {
+                localStorage.setItem(paletteStorageKey, JSON.stringify(next));
+            }
             return next;
         });
-    }, []);
+    }, [paletteHydrated, paletteStorageKey]);
 
     const removePaletteKeys = useCallback((keys: string[]) => {
         if (keys.length === 0) return;
         const removeSet = new Set(keys);
-        setPaletteKeys((current) => current.filter((key) => !removeSet.has(key)));
-    }, []);
+        setPaletteKeys((current) => {
+            const next = current.filter((key) => !removeSet.has(key));
+            if (paletteStorageKey && paletteHydrated) {
+                localStorage.setItem(paletteStorageKey, JSON.stringify(next));
+            }
+            return next;
+        });
+    }, [paletteHydrated, paletteStorageKey]);
 
     const [activeStackId, setActiveStackId] = useState<string | null>(null);
     const hoverOpenTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -1608,13 +1654,15 @@ export const DynamicForm = React.memo(function DynamicForm({
                     defaultPosition={{ x: 140, y: 100 }}
                     className="z-50"
                 >
-                    <div className="shadow-xl border border-border/80 bg-card/95 ring-1 ring-black/5 dark:ring-white/5 backdrop-blur overflow-hidden rounded-lg w-80 max-w-[320px] text-[11px] text-foreground">
-                        <div className="flex items-center justify-between px-2 py-1.5 border-b border-border/70 bg-surface-raised/70 cursor-move">
-                            <div className="flex items-center gap-2 text-xs font-semibold text-foreground">
-                                <Palette className="w-3 h-3 text-primary" />
-                                palette
+                    <div className="shadow-2xl border border-violet-200/60 bg-gradient-to-br from-white via-violet-50/30 to-fuchsia-50/40 dark:border-blue-500 dark:bg-surface/95 dark:from-surface dark:via-surface dark:to-surface ring-1 ring-violet-200/30 dark:ring-blue-500/30 backdrop-blur-md overflow-hidden rounded-xl w-80 max-w-[320px] text-[11px] text-foreground transition-shadow hover:shadow-violet-200/40">
+                        <div className="flex items-center justify-between px-3 py-2 border-b border-violet-100/50 bg-gradient-to-r from-violet-100/40 via-fuchsia-100/30 to-violet-100/40 dark:border-border/70 dark:bg-surface-raised/70 dark:from-surface-raised/70 dark:via-surface-raised/70 dark:to-surface-raised/70 cursor-move">
+                            <div className="flex items-center gap-2">
+                                <div className="p-1 rounded-md bg-gradient-to-br from-violet-500 to-fuchsia-500 shadow-sm">
+                                    <Palette className="w-3 h-3 text-white" />
+                                </div>
+                                <span className="text-xs font-semibold bg-gradient-to-r from-violet-600 to-fuchsia-600 bg-clip-text text-transparent dark:text-foreground">palette</span>
                                 {paletteKeys.length > 0 && (
-                                    <span className="text-[9px] text-muted-foreground font-medium">
+                                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-600 font-semibold dark:bg-muted dark:text-muted-foreground">
                                         {paletteKeys.length}
                                     </span>
                                 )}
@@ -1624,7 +1672,7 @@ export const DynamicForm = React.memo(function DynamicForm({
                                     <button
                                         type="button"
                                         onClick={onPaletteClose}
-                                        className="p-0.5 rounded hover:bg-muted/40 text-muted-foreground hover:text-foreground"
+                                        className="p-1 rounded-md hover:bg-violet-100/60 text-violet-400 hover:text-violet-600 transition-colors dark:hover:bg-muted/40 dark:text-muted-foreground dark:hover:text-foreground"
                                         aria-label="Close palette"
                                         title="Close palette"
                                     >
@@ -1634,66 +1682,91 @@ export const DynamicForm = React.memo(function DynamicForm({
                             </div>
                         </div>
 
-                        <div className="p-2 space-y-2 max-h-[85vh] overflow-y-auto">
+                        <div className="p-2 max-h-[85vh] overflow-y-auto">
                             {paletteGroups.length === 0 ? (
-                                <div className="text-[10px] text-muted-foreground">
+                                <div className="text-[10px] text-violet-500/80 dark:text-muted-foreground text-center py-4 px-2">
+                                    <div className="mb-2 opacity-60">✨</div>
                                     Add parameters using the palette icon next to a parameter label.
                                 </div>
                             ) : (
-                                paletteGroups.map((group) => (
-                                    <div key={group.id} className="border border-border/60 rounded-md bg-surface-raised/50 overflow-hidden">
-                                        <div className="flex items-center justify-between px-2 py-1 bg-muted/20 border-b border-border/60">
-                                            <div className="min-w-0">
-                                                <div className="text-[9px] uppercase tracking-wide text-muted-foreground font-semibold truncate">
-                                                    {group.title}
+                                <div className="columns-2 gap-1.5">
+                                    {paletteGroups.map((group) => (
+                                        <ContextMenu key={group.id}>
+                                            <ContextMenuTrigger asChild>
+                                                <div
+                                                    title={group.title}
+                                                    className="break-inside-avoid mb-1.5 border border-violet-200/50 hover:border-violet-300/70 dark:border-blue-500/70 dark:hover:border-blue-400 rounded-lg bg-gradient-to-br from-white to-violet-50/50 dark:from-surface-raised/50 dark:to-surface-raised/50 shadow-sm hover:shadow-md transition-all duration-200 cursor-default"
+                                                >
+                                                    <div className="p-1.5 space-y-0.5">
+                                                        {group.keys.map((key) => {
+                                                            const field = schema[key];
+                                                            const fieldTitle = resolveParamTitle(key, field);
+                                                            return (
+                                                                <ContextMenu key={key}>
+                                                                    <ContextMenuTrigger asChild>
+                                                                        <div title={fieldTitle}>
+                                                                            <FieldRenderer
+                                                                                variant="palette"
+                                                                                fieldKey={key}
+                                                                                field={field}
+                                                                                isActive={key === activeField}
+                                                                                isPromptField={groups.prompts.includes(key)}
+                                                                                dynamicOptions={dynamicOptions}
+                                                                                onFieldFocus={onFieldFocus}
+                                                                                onFieldBlur={onFieldBlur}
+                                                                                onValueChange={handleChange}
+                                                                                onToggleChange={handleToggleChange}
+                                                                                snippets={snippets}
+                                                                                rehydrationItems={(promptRehydrationSnapshot?.fields?.[key] as PromptRehydrationItemV1[] | undefined)}
+                                                                                rehydrationKey={promptRehydrationKey}
+                                                                                engineId={engineId}
+                                                                                projectSlug={projectSlug}
+                                                                                destinationFolder={destinationFolder}
+                                                                                externalValueSyncKey={externalValueSyncKey}
+                                                                            />
+                                                                        </div>
+                                                                    </ContextMenuTrigger>
+                                                                    <ContextMenuContent className="min-w-[160px]">
+                                                                        <ContextMenuLabel className="text-[10px] text-muted-foreground truncate max-w-[180px]">
+                                                                            {fieldTitle} • {group.title}
+                                                                        </ContextMenuLabel>
+                                                                        <ContextMenuSeparator />
+                                                                        <ContextMenuItem
+                                                                            onSelect={() => togglePaletteKey(key)}
+                                                                            className="text-xs cursor-pointer"
+                                                                        >
+                                                                            Remove parameter
+                                                                        </ContextMenuItem>
+                                                                        {group.keys.length > 1 && (
+                                                                            <ContextMenuItem
+                                                                                onSelect={() => removePaletteKeys(group.keys)}
+                                                                                className="text-xs cursor-pointer"
+                                                                            >
+                                                                                Remove all from {group.title}
+                                                                            </ContextMenuItem>
+                                                                        )}
+                                                                    </ContextMenuContent>
+                                                                </ContextMenu>
+                                                            );
+                                                        })}
+                                                    </div>
                                                 </div>
-                                            </div>
-                                            <button
-                                                type="button"
-                                                className="p-0.5 rounded hover:bg-muted/40 text-muted-foreground hover:text-foreground"
-                                                title="Remove node from palette"
-                                                aria-label="Remove node from palette"
-                                                onClick={() => removePaletteKeys(group.keys)}
-                                            >
-                                                <X className="w-3 h-3" />
-                                            </button>
-                                        </div>
-                                        <div className="p-2 space-y-2">
-                                            {group.keys.map((key) => (
-                                                <FieldRenderer
-                                                    key={key}
-                                                    fieldKey={key}
-                                                    field={schema[key]}
-                                                    isActive={key === activeField}
-                                                    isPromptField={groups.prompts.includes(key)}
-                                                    dynamicOptions={dynamicOptions}
-                                                    onFieldFocus={onFieldFocus}
-                                                    onFieldBlur={onFieldBlur}
-                                                    onValueChange={handleChange}
-                                                    onToggleChange={handleToggleChange}
-                                                    snippets={snippets}
-                                                    rehydrationItems={(promptRehydrationSnapshot?.fields?.[key] as PromptRehydrationItemV1[] | undefined)}
-                                                    rehydrationKey={promptRehydrationKey}
-                                                    engineId={engineId}
-                                                    projectSlug={projectSlug}
-                                                    destinationFolder={destinationFolder}
-                                                    externalValueSyncKey={externalValueSyncKey}
-                                                    endAction={(
-                                                        <button
-                                                            type="button"
-                                                            className="p-0.5 rounded hover:bg-muted/40 text-muted-foreground hover:text-foreground"
-                                                            title="Remove from palette"
-                                                            aria-label="Remove from palette"
-                                                            onClick={() => togglePaletteKey(key)}
-                                                        >
-                                                            <X className="w-3 h-3" />
-                                                        </button>
-                                                    )}
-                                                />
-                                            ))}
-                                        </div>
-                                    </div>
-                                ))
+                                            </ContextMenuTrigger>
+                                            <ContextMenuContent className="min-w-[160px]">
+                                                <ContextMenuLabel className="text-[10px] text-muted-foreground">
+                                                    {group.title}
+                                                </ContextMenuLabel>
+                                                <ContextMenuSeparator />
+                                                <ContextMenuItem
+                                                    onSelect={() => removePaletteKeys(group.keys)}
+                                                    className="text-xs cursor-pointer"
+                                                >
+                                                    Remove all {group.keys.length} parameters
+                                                </ContextMenuItem>
+                                            </ContextMenuContent>
+                                        </ContextMenu>
+                                    ))}
+                                </div>
                             )}
                         </div>
                     </div>
@@ -1742,10 +1815,10 @@ export const DynamicForm = React.memo(function DynamicForm({
                             const nonMediaKeys = contentKeys.filter((key) => !isMediaUploadField(key, schema[key]));
                             const promptKeys = contentKeys.filter((key) => promptKeySet.has(key));
                             const nonPromptKeys = contentKeys.filter((key) => !promptKeySet.has(key));
-                             const hasPromptField = promptKeys.length > 0;
-                             const hasMediaField = mediaKeys.length > 0;
-                             const isOpen = activeStackId === stackId;
-                             const allOnPalette = contentKeys.length > 0 && contentKeys.every((key) => paletteKeySet.has(key));
+                            const hasPromptField = promptKeys.length > 0;
+                            const hasMediaField = mediaKeys.length > 0;
+                            const isOpen = activeStackId === stackId;
+                            const allOnPalette = contentKeys.length > 0 && contentKeys.every((key) => paletteKeySet.has(key));
 
                             if (hasPromptField) {
                                 const promptStateId = `core:${group.id}`;
@@ -1783,23 +1856,23 @@ export const DynamicForm = React.memo(function DynamicForm({
                             }
 
                             return (
-                                 <NodeStackRow
-                                     key={group.id}
-                                     group={group}
-                                     stackId={stackId}
-                                     isOpen={isOpen}
-                                     allOnPalette={allOnPalette}
-                                     onHoverOpen={() => requestOpenNode(stackId)}
-                                     onFocusOpen={() => requestOpenNode(stackId, true)}
-                                     onHoverClose={() => requestCloseNode(stackId)}
-                                     onHoldOpen={holdNodeOpen}
-                                     onCloseImmediate={() => closeNodeImmediate(stackId)}
-                                     onTogglePaletteAll={() => togglePaletteKeys(contentKeys)}
-                                     renderField={renderField}
-                                     onToggleChange={handleToggleChange}
-                                 />
-                             );
-                         })}
+                                <NodeStackRow
+                                    key={group.id}
+                                    group={group}
+                                    stackId={stackId}
+                                    isOpen={isOpen}
+                                    allOnPalette={allOnPalette}
+                                    onHoverOpen={() => requestOpenNode(stackId)}
+                                    onFocusOpen={() => requestOpenNode(stackId, true)}
+                                    onHoverClose={() => requestCloseNode(stackId)}
+                                    onHoldOpen={holdNodeOpen}
+                                    onCloseImmediate={() => closeNodeImmediate(stackId)}
+                                    onTogglePaletteAll={() => togglePaletteKeys(contentKeys)}
+                                    renderField={renderField}
+                                    onToggleChange={handleToggleChange}
+                                />
+                            );
+                        })}
                     </div>
                 )}
             </div>
@@ -1834,12 +1907,12 @@ export const DynamicForm = React.memo(function DynamicForm({
 
                             const mediaKeys = contentKeys.filter((key) => isMediaUploadField(key, schema[key]));
                             const nonMediaKeys = contentKeys.filter((key) => !isMediaUploadField(key, schema[key]));
-                             const promptKeys = contentKeys.filter((key) => promptKeySet.has(key));
-                             const nonPromptKeys = contentKeys.filter((key) => !promptKeySet.has(key));
-                             const hasPromptField = promptKeys.length > 0;
-                             const hasMediaField = mediaKeys.length > 0;
-                             const isOpen = activeStackId === stackId;
-                             const allOnPalette = contentKeys.length > 0 && contentKeys.every((key) => paletteKeySet.has(key));
+                            const promptKeys = contentKeys.filter((key) => promptKeySet.has(key));
+                            const nonPromptKeys = contentKeys.filter((key) => !promptKeySet.has(key));
+                            const hasPromptField = promptKeys.length > 0;
+                            const hasMediaField = mediaKeys.length > 0;
+                            const isOpen = activeStackId === stackId;
+                            const allOnPalette = contentKeys.length > 0 && contentKeys.every((key) => paletteKeySet.has(key));
 
                             if (hasPromptField) {
                                 const promptStateId = `expanded:${group.id}`;
@@ -1876,24 +1949,24 @@ export const DynamicForm = React.memo(function DynamicForm({
                                 );
                             }
 
-                             return (
-                                 <NodeStackRow
-                                     key={group.id}
-                                     group={group}
-                                     stackId={stackId}
-                                     isOpen={isOpen}
-                                     allOnPalette={allOnPalette}
-                                     onHoverOpen={() => requestOpenNode(stackId)}
-                                     onFocusOpen={() => requestOpenNode(stackId, true)}
-                                     onHoverClose={() => requestCloseNode(stackId)}
-                                     onHoldOpen={holdNodeOpen}
-                                     onCloseImmediate={() => closeNodeImmediate(stackId)}
-                                     onTogglePaletteAll={() => togglePaletteKeys(contentKeys)}
-                                     renderField={renderField}
-                                     onToggleChange={handleToggleChange}
-                                 />
-                             );
-                         })}
+                            return (
+                                <NodeStackRow
+                                    key={group.id}
+                                    group={group}
+                                    stackId={stackId}
+                                    isOpen={isOpen}
+                                    allOnPalette={allOnPalette}
+                                    onHoverOpen={() => requestOpenNode(stackId)}
+                                    onFocusOpen={() => requestOpenNode(stackId, true)}
+                                    onHoverClose={() => requestCloseNode(stackId)}
+                                    onHoldOpen={holdNodeOpen}
+                                    onCloseImmediate={() => closeNodeImmediate(stackId)}
+                                    onTogglePaletteAll={() => togglePaletteKeys(contentKeys)}
+                                    renderField={renderField}
+                                    onToggleChange={handleToggleChange}
+                                />
+                            );
+                        })}
                     </div>
                 ))}
             </div>

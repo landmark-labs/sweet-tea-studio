@@ -349,6 +349,7 @@ export default function PromptStudio() {
   const setFormData = useSetAtom(setFormDataAtom);
   const [focusedField, setFocusedField] = useState<string>("");
   const [externalValueSyncKey, setExternalValueSyncKey] = useState(0);
+  const [paletteSyncKey, setPaletteSyncKey] = useState(0);
   const selectedWorkflowIdRef = useRef<string | null>(selectedWorkflowId);
   useEffect(() => {
     selectedWorkflowIdRef.current = selectedWorkflowId || null;
@@ -885,6 +886,41 @@ export default function PromptStudio() {
     const galleryFolder = localStorage.getItem("ds_project_gallery_folder") || "";
     const galleryCollapsed = localStorage.getItem("ds_project_gallery_collapsed") === "true";
 
+    const pipePalettes: Record<string, string[]> = {};
+    workflows.forEach((workflow) => {
+      const workflowKey = String(workflow.id);
+      try {
+        const raw = localStorage.getItem(`ds_pipe_palette_${workflowKey}`);
+        if (!raw) {
+          pipePalettes[workflowKey] = [];
+          return;
+        }
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) {
+          pipePalettes[workflowKey] = [];
+          return;
+        }
+        const sanitized = parsed.filter((entry) => typeof entry === "string") as string[];
+        pipePalettes[workflowKey] = Array.from(new Set(sanitized));
+      } catch {
+        pipePalettes[workflowKey] = [];
+      }
+    });
+    if (selectedWorkflowId && !(selectedWorkflowId in pipePalettes)) {
+      try {
+        const raw = localStorage.getItem(`ds_pipe_palette_${selectedWorkflowId}`);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            const sanitized = parsed.filter((entry) => typeof entry === "string") as string[];
+            pipePalettes[selectedWorkflowId] = Array.from(new Set(sanitized));
+          }
+        }
+      } catch {
+        pipePalettes[selectedWorkflowId] = [];
+      }
+    }
+
     return {
       selected_engine_id: selectedEngineId || null,
       selected_workflow_id: selectedWorkflowId || null,
@@ -894,6 +930,7 @@ export default function PromptStudio() {
       generation_target: generationTarget || null,
       form_data: formData,
       snippets: library,
+      pipe_palettes: pipePalettes,
       project_gallery: {
         project_id: galleryProjectId || null,
         folder: galleryFolder || null,
@@ -902,7 +939,7 @@ export default function PromptStudio() {
       media_tray: useMediaTrayStore.getState().items.map(({ path, filename, kind }) => ({ path, filename, kind })),
       prompt_rehydration_snapshot: activeRehydrationSnapshot,
     };
-  }, [store, selectedEngineId, selectedWorkflowId, selectedProjectId, projects, generationTarget, library, activeRehydrationSnapshot]);
+  }, [store, selectedEngineId, selectedWorkflowId, selectedProjectId, projects, generationTarget, library, activeRehydrationSnapshot, workflows]);
 
   const normalizeCanvasFormData = useCallback((workflowId: string, rawData: Record<string, unknown>) => {
     const workflow = workflows.find((w) => String(w.id) === String(workflowId));
@@ -976,6 +1013,19 @@ export default function PromptStudio() {
         const itemsToAdd = [...payload.media_tray].reverse();
         addItems(itemsToAdd);
       }
+    }
+
+    if (payload.pipe_palettes) {
+      Object.entries(payload.pipe_palettes).forEach(([workflowKey, rawKeys]) => {
+        if (!Array.isArray(rawKeys)) return;
+        const sanitized = rawKeys.filter((entry) => typeof entry === "string") as string[];
+        try {
+          localStorage.setItem(`ds_pipe_palette_${workflowKey}`, JSON.stringify(Array.from(new Set(sanitized))));
+        } catch (e) {
+          console.warn("Failed to persist palette contents", e);
+        }
+      });
+      setPaletteSyncKey((prev) => prev + 1);
     }
 
     const workflowId = payload.selected_workflow_id || selectedWorkflowIdRef.current;
@@ -3257,6 +3307,7 @@ export default function PromptStudio() {
               workflowId={selectedWorkflowId}
               paletteOpen={paletteOpen}
               onPaletteClose={() => setPaletteOpen(false)}
+              paletteSyncKey={paletteSyncKey}
             />
           )}
         </div>

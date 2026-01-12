@@ -349,6 +349,7 @@ export interface CanvasPayload {
         kind: "image" | "video";
     }>;
     prompt_rehydration_snapshot?: PromptRehydrationSnapshotV1 | null;
+    pipe_palettes?: Record<string, string[]>;
 }
 
 

@@ -276,7 +276,7 @@ function GlobalFloatingPanels({ feedOpen, libraryOpen, onFeedClose, onLibraryClo
       <DraggablePanel
         persistenceKey="ds_feed_pos"
         defaultPosition={{ x: 20, y: 100 }}
-        className={`z-40 ${feedOpen ? "" : "hidden"} w-80`}
+        className={`z-40 ${feedOpen ? "" : "hidden"}`}
       >
         <div className="shadow-xl border border-blue-100 bg-blue-50/95 dark:border-border dark:bg-surface/95 ring-1 ring-black/5 dark:ring-white/5 backdrop-blur overflow-hidden rounded-lg text-[11px] text-foreground">
           <div className="px-2 py-1.5 border-b border-blue-100/80 bg-blue-50/60 dark:border-border/70 dark:bg-surface-raised/70 text-xs font-semibold cursor-move flex items-center justify-between">
