@@ -342,6 +342,93 @@ def delete_project_folder(
     return ProjectRead(**project.dict(), image_count=count or 0, last_activity=project.updated_at)
 
 
+@router.delete("/{project_id}/folders/{folder_name}/trash")
+def empty_folder_trash(
+    project_id: int,
+    folder_name: str,
+    session: Session = Depends(get_session)
+):
+    """
+    Permanently delete all files in the .trash subfolder for a project folder.
+    
+    This cannot be undone. All files in the trash folder will be permanently removed.
+    """
+    import shutil
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    project = session.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Resolve folder path using same logic as other folder operations
+    active_engine = session.exec(select(Engine).where(Engine.is_active == True)).first()
+    folder_path = None
+    
+    if active_engine:
+        if folder_name == "output":
+            # Output folder: /ComfyUI/sweet_tea/<project>/output/
+            if active_engine.output_dir:
+                folder_path = settings.get_project_output_dir_in_comfy(
+                    active_engine.output_dir, project.slug
+                )
+        else:
+            # Input/masks/custom folders: /ComfyUI/input/<project>/<folder>/
+            if active_engine.input_dir:
+                folder_path = settings.get_project_input_dir_in_comfy(
+                    active_engine.input_dir, project.slug
+                ) / folder_name
+        
+        # Fallback to legacy sweet_tea structure if new path doesn't exist
+        if folder_path and not folder_path.exists() and active_engine.output_dir:
+            legacy_path = settings.get_project_dir_in_comfy(
+                active_engine.output_dir, project.slug
+            ) / folder_name
+            if legacy_path.exists():
+                folder_path = legacy_path
+    
+    # Final fallback to local storage
+    if not folder_path or not folder_path.exists():
+        local_path = settings.get_project_dir(project.slug) / folder_name
+        if local_path.exists():
+            folder_path = local_path
+    
+    if not folder_path or not folder_path.exists():
+        raise HTTPException(status_code=404, detail=f"Folder '{folder_name}' not found")
+    
+    # Find .trash subfolder
+    trash_path = folder_path / ".trash"
+    
+    if not trash_path.exists():
+        return {"deleted": 0, "message": "No trash folder exists"}
+    
+    # Count and delete all items in trash
+    deleted_count = 0
+    errors = []
+    
+    try:
+        for item in trash_path.iterdir():
+            try:
+                if item.is_file():
+                    item.unlink()
+                    deleted_count += 1
+                elif item.is_dir():
+                    shutil.rmtree(item)
+                    deleted_count += 1
+            except Exception as e:
+                logger.error(f"Failed to delete {item}: {e}")
+                errors.append(str(item.name))
+    except Exception as e:
+        logger.error(f"Failed to iterate trash folder: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to empty trash: {str(e)}")
+    
+    if errors:
+        return {"deleted": deleted_count, "errors": errors}
+    
+    return {"deleted": deleted_count}
+
+
+
 @router.patch("/{project_id}", response_model=ProjectRead)
 def update_project(
     project_id: int,

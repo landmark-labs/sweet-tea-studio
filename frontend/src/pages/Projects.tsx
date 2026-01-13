@@ -41,6 +41,7 @@ export default function Projects() {
     const [newFolderName, setNewFolderName] = useState("");
     const [isAddingFolder, setIsAddingFolder] = useState(false);
     const [isDeletingFolder, setIsDeletingFolder] = useState<string | null>(null);
+    const [isEmptyingTrash, setIsEmptyingTrash] = useState<string | null>(null);
 
     const reservedFolders = new Set(["input", "output", "masks"]);
 
@@ -247,35 +248,64 @@ export default function Projects() {
                                                 <FolderOpen size={14} />
                                                 <span>{folder}</span>
                                             </div>
-                                            {!reservedFolders.has(folder) && (
+                                            <div className="flex items-center gap-1">
                                                 <Button
                                                     variant="ghost"
                                                     size="icon"
-                                                    className="h-6 w-6 text-slate-400 hover:text-red-500"
+                                                    className="h-6 w-6 text-slate-400 hover:text-orange-500"
                                                     onClick={async () => {
                                                         if (!managingProject) return;
-                                                        if (!confirm(`Delete folder "${folder}"? This only works if the folder is empty.`)) return;
-                                                        setIsDeletingFolder(folder);
+                                                        if (!confirm(`Permanently delete all items in the trash for "${folder}"? This cannot be undone.`)) return;
+                                                        setIsEmptyingTrash(folder);
                                                         try {
-                                                            const updated = await api.deleteProjectFolder(managingProject.id, folder);
-                                                            setProjects(prev => prev.map(p => p.id === updated.id ? updated : p));
-                                                            setManagingProject(updated);
-                                                            if (generation?.refreshProjects) {
-                                                                generation.refreshProjects();
+                                                            const result = await api.emptyFolderTrash(managingProject.id, folder);
+                                                            if (result.deleted > 0) {
+                                                                alert(`Deleted ${result.deleted} item(s) from trash`);
+                                                            } else {
+                                                                alert("Trash is already empty");
                                                             }
                                                         } catch (e) {
-                                                            console.error("Failed to delete folder:", e);
-                                                            alert((e as any).message || "Failed to delete folder");
+                                                            console.error("Failed to empty trash:", e);
+                                                            alert((e as any).message || "Failed to empty trash");
                                                         } finally {
-                                                            setIsDeletingFolder(null);
+                                                            setIsEmptyingTrash(null);
                                                         }
                                                     }}
-                                                    disabled={isDeletingFolder === folder}
-                                                    title="Delete empty folder"
+                                                    disabled={isEmptyingTrash === folder}
+                                                    title="Empty trash"
                                                 >
                                                     <Trash2 size={12} />
                                                 </Button>
-                                            )}
+                                                {!reservedFolders.has(folder) && (
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="h-6 w-6 text-slate-400 hover:text-red-500"
+                                                        onClick={async () => {
+                                                            if (!managingProject) return;
+                                                            if (!confirm(`Delete folder "${folder}"? This only works if the folder is empty.`)) return;
+                                                            setIsDeletingFolder(folder);
+                                                            try {
+                                                                const updated = await api.deleteProjectFolder(managingProject.id, folder);
+                                                                setProjects(prev => prev.map(p => p.id === updated.id ? updated : p));
+                                                                setManagingProject(updated);
+                                                                if (generation?.refreshProjects) {
+                                                                    generation.refreshProjects();
+                                                                }
+                                                            } catch (e) {
+                                                                console.error("Failed to delete folder:", e);
+                                                                alert((e as any).message || "Failed to delete folder");
+                                                            } finally {
+                                                                setIsDeletingFolder(null);
+                                                            }
+                                                        }}
+                                                        disabled={isDeletingFolder === folder}
+                                                        title="Delete folder"
+                                                    >
+                                                        <Trash2 size={12} className="text-red-400" />
+                                                    </Button>
+                                                )}
+                                            </div>
                                         </div>
                                     ))}
                                 </div>

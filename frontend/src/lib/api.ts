@@ -936,6 +936,17 @@ export const api = {
         return res.json();
     },
 
+    emptyFolderTrash: async (projectId: number, folderName: string): Promise<{ deleted: number; errors?: string[] }> => {
+        const res = await fetch(`${API_BASE}/projects/${projectId}/folders/${encodeURIComponent(folderName)}/trash`, {
+            method: "DELETE",
+        });
+        if (!res.ok) {
+            const errorData = await res.json().catch(() => ({}));
+            throw new Error(errorData.detail || "Failed to empty trash");
+        }
+        return res.json();
+    },
+
     archiveProject: async (projectId: number): Promise<Project> => {
         const res = await fetch(`${API_BASE}/projects/${projectId}/archive`, {
             method: "POST",
