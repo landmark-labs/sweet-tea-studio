@@ -595,7 +595,7 @@ export function PromptAutocompleteTextarea({
                     return;
                 }
 
-                const selectedMatches = selectNonOverlappingMatches(mergedMatches);
+                const selectedMatches = selectNonOverlappingMatches(mergedMatches, { preferLongest: true });
                 if (selectedMatches.length === 0) {
                     setHighlightState((prev) => prev === null ? prev : null);
                     highlightHandleRef.current = null;
