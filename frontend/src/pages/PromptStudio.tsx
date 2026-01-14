@@ -2309,8 +2309,8 @@ export default function PromptStudio() {
             created_at: new Date().toISOString(),
             job_params: params
           });
-          // Clear previewPath so ImageViewer doesn't try to align to it
-          setPreviewPath(null);
+          // Lock the viewer to the newly generated image to avoid jumping to an unrelated gallery item.
+          setPreviewPath(buildViewerApiPath(imagePath));
 
           // Sync viewer navigation list to the job's output destination when applicable.
           // This keeps ProjectGallery browsing state independent and avoids full resets on pipe/project changes.
