@@ -1863,6 +1863,41 @@ export default function PromptStudio() {
 
       if (rawRehydration && rawRehydration.version === 1 && rawRehydration.fields && typeof rawRehydration.fields === "object") {
         const sourceFields = rawRehydration.fields as Record<string, PromptRehydrationItemV1[]>;
+        const normalizePromptValue = (value: string) =>
+          value.trim().replace(/\s*,\s*/g, ",").replace(/\s+/g, " ");
+        const resolveSourceKey = (
+          promptValue: string | null,
+          extractedKey: string | null,
+          targetKey: string | null
+        ) => {
+          if (extractedKey && sourceFields[extractedKey]) return extractedKey;
+          if (targetKey && sourceFields[targetKey]) return targetKey;
+          if (promptValue) {
+            const normalizedPrompt = normalizePromptValue(promptValue);
+            const match = Object.keys(sourceFields).find((key) => {
+              const candidate = jobParams[key];
+              return typeof candidate === "string" && normalizePromptValue(candidate) === normalizedPrompt;
+            });
+            if (match) return match;
+          }
+          return null;
+        };
+
+        let positiveSourceKey = resolveSourceKey(
+          typeof positivePrompt === "string" ? positivePrompt : null,
+          extracted.positiveFieldKey,
+          positiveTarget
+        );
+        let negativeSourceKey = resolveSourceKey(
+          typeof negativePrompt === "string" ? negativePrompt : null,
+          extracted.negativeFieldKey,
+          negativeTarget
+        );
+
+        if (positiveSourceKey && negativeSourceKey && positiveSourceKey === negativeSourceKey) {
+          const fallback = Object.keys(sourceFields).find((key) => key !== positiveSourceKey);
+          if (fallback) negativeSourceKey = fallback;
+        }
         const mapField = (targetKey: string | null, sourceKey: string | null) => {
           if (!targetKey) return;
           const candidate = (sourceKey && sourceFields[sourceKey]) || sourceFields[targetKey];
@@ -1870,8 +1905,8 @@ export default function PromptStudio() {
             rehydrationFields[targetKey] = candidate;
           }
         };
-        mapField(positiveTarget, extracted.positiveFieldKey);
-        mapField(negativeTarget, extracted.negativeFieldKey);
+        mapField(positiveTarget, positiveSourceKey);
+        mapField(negativeTarget, negativeSourceKey);
       }
 
       const nextRehydrationSnapshot: PromptRehydrationSnapshotV1 | null =

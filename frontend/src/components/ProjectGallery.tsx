@@ -849,20 +849,46 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
                                         <button
                                             key={w.id}
                                             className="w-full px-3 py-1.5 text-left text-xs hover:bg-muted/50 truncate cursor-pointer"
-                                            onClick={() => {
-                                                const galleryItem: GalleryItem = {
-                                                    image: { id: -1, job_id: -1, path: contextMenu.image.path, filename: contextMenu.image.filename, created_at: '' },
-                                                    job_params: {},
-                                                    prompt_history: [],
-                                                    workflow_template_id: w.id,
-                                                    created_at: '',
-                                                };
-                                                onUseInPipe({
-                                                    workflowId: String(w.id),
-                                                    imagePath: contextMenu.image.path,
-                                                    galleryItem,
-                                                });
-                                                setContextMenu(null);
+                                            onClick={async () => {
+                                                try {
+                                                    const metadata = await api.getImageMetadata(contextMenu.image.path);
+                                                    const galleryItem: GalleryItem = {
+                                                        image: { id: -1, job_id: -1, path: contextMenu.image.path, filename: contextMenu.image.filename, created_at: '' },
+                                                        job_params: {
+                                                            ...metadata.parameters,
+                                                            prompt: metadata.prompt,
+                                                            positive: metadata.prompt,
+                                                            negative_prompt: metadata.negative_prompt,
+                                                            negative: metadata.negative_prompt,
+                                                        },
+                                                        prompt: metadata.prompt || undefined,
+                                                        negative_prompt: metadata.negative_prompt || undefined,
+                                                        prompt_history: [],
+                                                        workflow_template_id: w.id,
+                                                        created_at: '',
+                                                    };
+                                                    onUseInPipe({
+                                                        workflowId: String(w.id),
+                                                        imagePath: contextMenu.image.path,
+                                                        galleryItem,
+                                                    });
+                                                } catch (e) {
+                                                    console.error("Failed to fetch metadata:", e);
+                                                    const galleryItem: GalleryItem = {
+                                                        image: { id: -1, job_id: -1, path: contextMenu.image.path, filename: contextMenu.image.filename, created_at: '' },
+                                                        job_params: {},
+                                                        prompt_history: [],
+                                                        workflow_template_id: w.id,
+                                                        created_at: '',
+                                                    };
+                                                    onUseInPipe({
+                                                        workflowId: String(w.id),
+                                                        imagePath: contextMenu.image.path,
+                                                        galleryItem,
+                                                    });
+                                                } finally {
+                                                    setContextMenu(null);
+                                                }
                                             }}
                                         >
                                             {w.name}
