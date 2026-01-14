@@ -16,6 +16,7 @@ class Project(ProjectBase, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
     archived_at: Optional[datetime] = None
+    display_order: int = Field(default=0)
 
 
 class ProjectCreate(SQLModel):
@@ -30,5 +31,6 @@ class ProjectRead(ProjectBase):
     created_at: datetime
     updated_at: datetime
     archived_at: Optional[datetime]
+    display_order: int = 0
     image_count: int = 0
     last_activity: Optional[datetime] = None

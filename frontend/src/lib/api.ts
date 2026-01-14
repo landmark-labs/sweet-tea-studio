@@ -237,6 +237,7 @@ export interface Project {
     created_at: string;
     updated_at: string;
     archived_at: string | null;
+    display_order: number;
     config_json: { folders?: string[] } | null;
     image_count: number;
     last_activity: string | null;
@@ -960,6 +961,26 @@ export const api = {
             method: "POST",
         });
         if (!res.ok) throw new Error("Failed to unarchive project");
+        return res.json();
+    },
+
+    reorderProjects: async (order: { id: number; display_order: number }[]): Promise<{ ok: boolean; updated: number }> => {
+        const res = await fetch(`${API_BASE}/projects/reorder`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(order),
+        });
+        if (!res.ok) throw new Error("Failed to reorder projects");
+        return res.json();
+    },
+
+    reorderProjectFolders: async (projectId: number, folders: string[]): Promise<{ ok: boolean }> => {
+        const res = await fetch(`${API_BASE}/projects/${projectId}/folders/reorder`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ folders }),
+        });
+        if (!res.ok) throw new Error("Failed to reorder folders");
         return res.json();
     },
 

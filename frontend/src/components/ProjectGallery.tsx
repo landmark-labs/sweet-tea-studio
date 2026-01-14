@@ -158,7 +158,7 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
     });
     const [images, setImages] = useState<FolderImage[]>([]);
     const [isLoading, setIsLoading] = useState(false);
-    const [contextMenu, setContextMenu] = useState<{ x: number; y: number; image: FolderImage } | null>(null);
+    const [contextMenu, setContextMenu] = useState<{ x: number; y: number; image: FolderImage; submenuFlipUp: boolean } | null>(null);
     const [maskEditorOpen, setMaskEditorOpen] = useState(false);
     const [maskEditorSourcePath, setMaskEditorSourcePath] = useState<string>("");
     const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set());
@@ -454,7 +454,7 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
     const handleContextMenu = useCallback((e: React.MouseEvent, image: FolderImage) => {
         e.preventDefault();
         const menuWidth = 160; // Approximate menu width
-        const menuHeight = 200; // Approximate menu height with submenus
+        const menuHeight = 280; // Approximate menu height (increased to account for all items + submenus)
 
         let x = e.clientX;
         let y = e.clientY;
@@ -464,12 +464,20 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
             x = window.innerWidth - menuWidth - 8;
         }
 
-        // Flip up if would overflow bottom edge
-        if (y + menuHeight > window.innerHeight) {
-            y = window.innerHeight - menuHeight - 8;
+        // Ensure minimum x position
+        if (x < 8) {
+            x = 8;
         }
 
-        setContextMenu({ x, y, image });
+        // Flip up if would overflow bottom edge
+        if (y + menuHeight > window.innerHeight) {
+            y = Math.max(8, window.innerHeight - menuHeight - 8);
+        }
+
+        // Check if we need to flip submenus upward (when near bottom of viewport)
+        const submenuFlipUp = e.clientY > window.innerHeight - 200;
+
+        setContextMenu({ x, y, image, submenuFlipUp });
     }, []);
 
     const handleDownload = async () => {
@@ -743,7 +751,7 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
                                 <span className="flex items-center gap-2"><RotateCcw className="h-3 w-3" /> regenerate</span>
                                 <span className="text-[10px]">▶</span>
                             </div>
-                            <div className="absolute right-full top-0 pr-1 hidden group-hover:block">
+                            <div className={`absolute right-full ${contextMenu.submenuFlipUp ? 'bottom-0' : 'top-0'} pr-1 hidden group-hover:block`}>
                                 <div className="bg-popover border border-border/60 rounded-md shadow-lg py-1 w-36">
                                     <button
                                         className="w-full px-3 py-1.5 text-left text-xs hover:bg-muted/50 cursor-pointer"
@@ -835,7 +843,7 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
                                 <span className="flex items-center gap-2">use in pipe</span>
                                 <span className="text-[10px]">▶</span>
                             </div>
-                            <div className="absolute right-full top-0 pr-1 hidden group-hover:block">
+                            <div className={`absolute right-full ${contextMenu.submenuFlipUp ? 'bottom-0' : 'top-0'} pr-1 hidden group-hover:block`}>
                                 <div className="bg-popover border border-border/60 rounded-md shadow-lg py-1 w-40 max-h-48 overflow-y-auto">
                                     {useInPipeWorkflows.map((w: any) => (
                                         <button

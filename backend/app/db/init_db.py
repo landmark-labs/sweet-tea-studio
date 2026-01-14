@@ -55,6 +55,10 @@ def init_db():
     from app.db.migrations.add_display_order_to_workflows import migrate as migrate_display_order
     migrate_display_order()
     
+    # Add display_order column to projects
+    from app.db.migrations.add_display_order_to_projects import migrate as migrate_project_display_order
+    migrate_project_display_order()
+    
     # Backfill __node_order for existing workflows
     from app.db.migrations.backfill_node_order import migrate as migrate_node_order
     migrate_node_order()

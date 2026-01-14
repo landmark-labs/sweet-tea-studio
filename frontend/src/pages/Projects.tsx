@@ -1,4 +1,7 @@
 import { useEffect, useState } from "react";
+import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
+import { SortableContext, arrayMove, useSortable, rectSortingStrategy } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { labels } from "@/ui/labels";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -158,11 +161,64 @@ export default function Projects() {
     };
 
     // Separate drafts from other projects
-    // Separate drafts from other projects
     const draftsProject = projects.find((p) => p.slug === "drafts");
     const nonDraftProjects = projects.filter((p) => p.slug !== "drafts");
     const activeProjects = nonDraftProjects.filter(p => !p.archived_at);
     const archivedProjects = nonDraftProjects.filter(p => !!p.archived_at);
+
+    // Drag-and-drop sensors
+    const sensors = useSensors(
+        useSensor(PointerSensor, {
+            activationConstraint: { distance: 8 },
+        })
+    );
+
+    // Project IDs for sortable context
+    const activeProjectIds = activeProjects.map(p => p.id);
+
+    // Handle project drag end - works on activeProjects only (non-draft, non-archived)
+    const handleProjectDragEnd = async (event: any) => {
+        const { active, over } = event;
+        if (!over || active.id === over.id) return;
+
+        // Work with current projects state directly
+        setProjects(currentProjects => {
+            const drafts = currentProjects.find(p => p.slug === "drafts");
+            const nonDraft = currentProjects.filter(p => p.slug !== "drafts");
+            const active_ = nonDraft.filter(p => !p.archived_at);
+            const archived = nonDraft.filter(p => !!p.archived_at);
+
+            const oldIndex = active_.findIndex(p => p.id === active.id);
+            const newIndex = active_.findIndex(p => p.id === over.id);
+            if (oldIndex === -1 || newIndex === -1) return currentProjects;
+
+            const reordered = arrayMove(active_, oldIndex, newIndex);
+
+            // Update display_order
+            const reorderedWithOrder = reordered.map((p, idx) => ({
+                ...p,
+                display_order: idx
+            }));
+
+            // Persist to backend
+            const orderUpdate = reorderedWithOrder.map(p => ({
+                id: p.id,
+                display_order: p.display_order
+            }));
+            api.reorderProjects(orderUpdate)
+                .then(() => generation?.refreshProjects?.())
+                .catch(err => {
+                    console.error("Failed to persist project order:", err);
+                    fetchProjects();
+                });
+
+            return [
+                ...(drafts ? [drafts] : []),
+                ...reorderedWithOrder,
+                ...archived,
+            ];
+        });
+    };
 
     return (
         <div className="p-4 space-y-4 h-full overflow-auto">
@@ -410,17 +466,25 @@ export default function Projects() {
                     <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider pl-1">
                         {labels.entity.projects}
                     </h2>
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                        {activeProjects.map((project) => (
-                            <ProjectCard
-                                key={project.id}
-                                project={project}
-                                formatDate={formatDate}
-                                onManage={(p) => setManagingProject(p)}
-                                onArchive={handleArchiveProject}
-                            />
-                        ))}
-                    </div>
+                    <DndContext
+                        sensors={sensors}
+                        collisionDetection={closestCenter}
+                        onDragEnd={handleProjectDragEnd}
+                    >
+                        <SortableContext items={activeProjectIds} strategy={rectSortingStrategy}>
+                            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                                {activeProjects.map((project) => (
+                                    <SortableProjectCard
+                                        key={project.id}
+                                        project={project}
+                                        formatDate={formatDate}
+                                        onManage={(p) => setManagingProject(p)}
+                                        onArchive={handleArchiveProject}
+                                    />
+                                ))}
+                            </div>
+                        </SortableContext>
+                    </DndContext>
                 </div>
             )}
 
@@ -451,6 +515,35 @@ export default function Projects() {
                     no archived projects found
                 </div>
             )}
+        </div>
+    );
+}
+
+interface SortableProjectCardProps {
+    project: Project;
+    formatDate: (d?: string | null) => string;
+    onManage: (p: Project) => void;
+    onArchive?: (id: number) => void;
+}
+
+function SortableProjectCard({ project, formatDate, onManage, onArchive }: SortableProjectCardProps) {
+    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: project.id });
+
+    const style = {
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.5 : 1,
+        zIndex: isDragging ? 1000 : undefined,
+    };
+
+    return (
+        <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
+            <ProjectCard
+                project={project}
+                formatDate={formatDate}
+                onManage={onManage}
+                onArchive={onArchive}
+            />
         </div>
     );
 }

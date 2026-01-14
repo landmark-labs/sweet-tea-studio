@@ -54,7 +54,7 @@ def list_projects(
     if not include_archived:
         query = query.where(Project.archived_at == None)
     
-    projects = session.exec(query.order_by(Project.created_at.desc())).all()
+    projects = session.exec(query.order_by(Project.display_order, Project.id)).all()
     
     # 2. Fetch Stats
     # We'll do this in Python for simplicity/compat for now, 
@@ -96,6 +96,27 @@ def list_projects(
         )
         
     return project_reads
+
+
+class ProjectReorderItem(SQLModel):
+    """Schema for reordering a single project."""
+    id: int
+    display_order: int
+
+
+@router.patch("/reorder")
+def reorder_projects(
+    items: List[ProjectReorderItem],
+    session: Session = Depends(get_session)
+):
+    """Bulk update display_order for multiple projects."""
+    for item in items:
+        project = session.get(Project, item.id)
+        if project:
+            project.display_order = item.display_order
+            session.add(project)
+    session.commit()
+    return {"ok": True, "updated": len(items)}
 
 
 @router.get("/{project_id}", response_model=ProjectRead)
@@ -484,6 +505,32 @@ def unarchive_project(project_id: int, session: Session = Depends(get_session)):
     session.commit()
     session.refresh(project)
     return project
+
+
+
+class FolderReorderRequest(SQLModel):
+    """Schema for reordering project folders."""
+    folders: List[str]
+
+
+@router.patch("/{project_id}/folders/reorder")
+def reorder_project_folders(
+    project_id: int,
+    req: FolderReorderRequest,
+    session: Session = Depends(get_session)
+):
+    """Update folder order in project config_json."""
+    project = session.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    config = project.config_json or {"folders": ["input", "output", "masks"]}
+    config["folders"] = req.folders
+    project.config_json = config
+    project.updated_at = datetime.utcnow()
+    session.add(project)
+    session.commit()
+    return {"ok": True}
 
 
 @router.post("/{project_id}/convert-runs")
