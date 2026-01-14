@@ -47,9 +47,35 @@ export const ImageViewer = React.memo(function ImageViewer({
     const [copyState, setCopyState] = React.useState<{ positive: boolean; negative: boolean }>({ positive: false, negative: false });
     const [selectedIndex, setSelectedIndex] = React.useState<number>(0);
     const [contextMenu, setContextMenu] = React.useState<{ x: number, y: number } | null>(null);
+    const [contextSubmenu, setContextSubmenu] = React.useState<"regenerate" | "useInPipe" | null>(null);
     const containerRef = React.useRef<HTMLDivElement>(null);
     const [maskEditorOpen, setMaskEditorOpen] = React.useState(false);
     const [maskEditorSourcePath, setMaskEditorSourcePath] = React.useState<string>("");
+    const submenuCloseTimerRef = React.useRef<number | null>(null);
+
+    const clearSubmenuCloseTimer = React.useCallback(() => {
+        if (submenuCloseTimerRef.current) {
+            window.clearTimeout(submenuCloseTimerRef.current);
+            submenuCloseTimerRef.current = null;
+        }
+    }, []);
+
+    const scheduleSubmenuClose = React.useCallback(() => {
+        clearSubmenuCloseTimer();
+        submenuCloseTimerRef.current = window.setTimeout(() => {
+            setContextSubmenu(null);
+            submenuCloseTimerRef.current = null;
+        }, 250);
+    }, [clearSubmenuCloseTimer]);
+
+    const handleSubmenuEnter = React.useCallback((menu: "regenerate" | "useInPipe") => {
+        clearSubmenuCloseTimer();
+        setContextSubmenu(menu);
+    }, [clearSubmenuCloseTimer]);
+
+    const handleSubmenuLeave = React.useCallback(() => {
+        scheduleSubmenuClose();
+    }, [scheduleSubmenuClose]);
 
     const addToMediaTray = useMediaTrayStore(React.useCallback((state) => state.addItems, []));
 
@@ -397,6 +423,13 @@ export const ImageViewer = React.memo(function ImageViewer({
         window.addEventListener("click", handleClick);
         return () => window.removeEventListener("click", handleClick);
     }, []);
+
+    React.useEffect(() => {
+        if (!contextMenu) {
+            clearSubmenuCloseTimer();
+            setContextSubmenu(null);
+        }
+    }, [contextMenu, clearSubmenuCloseTimer]);
 
     // Lightbox State
     const [lightboxOpen, setLightboxOpen] = React.useState(false);
@@ -765,12 +798,20 @@ export const ImageViewer = React.memo(function ImageViewer({
                         <div className="h-px bg-border/50 my-1" />
 
                         {onRegenerate && (
-                            <div className="relative group">
+                            <div
+                                className="relative"
+                                onMouseEnter={() => handleSubmenuEnter("regenerate")}
+                                onMouseLeave={handleSubmenuLeave}
+                            >
                                 <div className="px-3 py-2 hover:bg-muted/50 cursor-pointer flex items-center justify-between">
                                     <span className="flex items-center gap-2"><RotateCcw size={14} /> regenerate</span>
                                     <span className="text-xs">▶</span>
                                 </div>
-                                <div className="absolute left-full top-0 pl-2 -ml-1 hidden group-hover:block">
+                                <div
+                                    className={`absolute left-full top-0 pl-2 -ml-1 ${contextSubmenu === "regenerate" ? "block" : "hidden"}`}
+                                    onMouseEnter={() => handleSubmenuEnter("regenerate")}
+                                    onMouseLeave={handleSubmenuLeave}
+                                >
                                     <div className="bg-popover border border-border/60 rounded-md shadow-lg py-1 w-40">
                                         <div
                                             className="px-3 py-2 hover:bg-muted/50 cursor-pointer text-xs"
@@ -796,13 +837,21 @@ export const ImageViewer = React.memo(function ImageViewer({
                         )}
 
                         {imageWorkflows.length > 0 && (
-                            <div className="relative group">
+                            <div
+                                className="relative"
+                                onMouseEnter={() => handleSubmenuEnter("useInPipe")}
+                                onMouseLeave={handleSubmenuLeave}
+                            >
                                 <div className="px-3 py-2 hover:bg-muted/50 cursor-pointer flex items-center justify-between">
                                     <span className="flex items-center gap-2">use in pipe</span>
                                     <span className="text-xs">▶</span>
                                 </div>
                                 {/* pl-2 + -ml-1 creates an invisible hover bridge to the right for horizontal submenus */}
-                                <div className="absolute left-full top-0 pl-2 -ml-1 hidden group-hover:block">
+                                <div
+                                    className={`absolute left-full top-0 pl-2 -ml-1 ${contextSubmenu === "useInPipe" ? "block" : "hidden"}`}
+                                    onMouseEnter={() => handleSubmenuEnter("useInPipe")}
+                                    onMouseLeave={handleSubmenuLeave}
+                                >
                                     <div className="bg-popover border border-border/60 rounded-md shadow-lg py-1 w-48 max-h-64 overflow-y-auto">
                                         {imageWorkflows.map(w => (
                                             <div

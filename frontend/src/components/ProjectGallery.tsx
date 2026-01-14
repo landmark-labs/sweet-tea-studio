@@ -159,11 +159,13 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
     const [images, setImages] = useState<FolderImage[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; image: FolderImage; submenuFlipUp: boolean } | null>(null);
+    const [contextSubmenu, setContextSubmenu] = useState<"regenerate" | "useInPipe" | null>(null);
     const [maskEditorOpen, setMaskEditorOpen] = useState(false);
     const [maskEditorSourcePath, setMaskEditorSourcePath] = useState<string>("");
     const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set());
     const lastSelectedPath = useRef<string | null>(null);
     const imagesRef = useRef<FolderImage[]>([]);
+    const submenuCloseTimerRef = useRef<number | null>(null);
     // Track previous project to avoid resetting folder on transient empty states
     const prevProjectIdRef = useRef<string>(selectedProjectId);
 
@@ -171,6 +173,29 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
     imagesRef.current = images;
 
     const addToMediaTray = useMediaTrayStore(useCallback((state) => state.addItems, []));
+    const clearSubmenuCloseTimer = useCallback(() => {
+        if (submenuCloseTimerRef.current) {
+            window.clearTimeout(submenuCloseTimerRef.current);
+            submenuCloseTimerRef.current = null;
+        }
+    }, []);
+
+    const scheduleSubmenuClose = useCallback(() => {
+        clearSubmenuCloseTimer();
+        submenuCloseTimerRef.current = window.setTimeout(() => {
+            setContextSubmenu(null);
+            submenuCloseTimerRef.current = null;
+        }, 250);
+    }, [clearSubmenuCloseTimer]);
+
+    const handleSubmenuEnter = useCallback((menu: "regenerate" | "useInPipe") => {
+        clearSubmenuCloseTimer();
+        setContextSubmenu(menu);
+    }, [clearSubmenuCloseTimer]);
+
+    const handleSubmenuLeave = useCallback(() => {
+        scheduleSubmenuClose();
+    }, [scheduleSubmenuClose]);
 
     const useInPipeWorkflows = useMemo(() => {
         if (!onUseInPipe || workflows.length === 0) return [];
@@ -477,8 +502,10 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
         // Check if we need to flip submenus upward (when near bottom of viewport)
         const submenuFlipUp = e.clientY > window.innerHeight - 200;
 
+        clearSubmenuCloseTimer();
+        setContextSubmenu(null);
         setContextMenu({ x, y, image, submenuFlipUp });
-    }, []);
+    }, [clearSubmenuCloseTimer]);
 
     const handleDownload = async () => {
         if (!contextMenu) return;
@@ -564,6 +591,13 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
         window.addEventListener("click", close);
         return () => window.removeEventListener("click", close);
     }, [contextMenu]);
+
+    useEffect(() => {
+        if (!contextMenu) {
+            clearSubmenuCloseTimer();
+            setContextSubmenu(null);
+        }
+    }, [contextMenu, clearSubmenuCloseTimer]);
 
     if (collapsed) {
         return (
@@ -746,12 +780,20 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
 
                     {/* Regenerate with submenu */}
                     {onRegenerate && (
-                        <div className="relative group">
+                        <div
+                            className="relative"
+                            onMouseEnter={() => handleSubmenuEnter("regenerate")}
+                            onMouseLeave={handleSubmenuLeave}
+                        >
                             <div className="w-full px-3 py-1.5 text-left text-xs hover:bg-muted/50 flex items-center justify-between cursor-pointer">
                                 <span className="flex items-center gap-2"><RotateCcw className="h-3 w-3" /> regenerate</span>
                                 <span className="text-[10px]">▶</span>
                             </div>
-                            <div className={`absolute right-full ${contextMenu.submenuFlipUp ? 'bottom-0' : 'top-0'} pr-1 hidden group-hover:block`}>
+                            <div
+                                className={`absolute right-full ${contextMenu.submenuFlipUp ? 'bottom-0' : 'top-0'} pr-1 ${contextSubmenu === "regenerate" ? "block" : "hidden"}`}
+                                onMouseEnter={() => handleSubmenuEnter("regenerate")}
+                                onMouseLeave={handleSubmenuLeave}
+                            >
                                 <div className="bg-popover border border-border/60 rounded-md shadow-lg py-1 w-36">
                                     <button
                                         className="w-full px-3 py-1.5 text-left text-xs hover:bg-muted/50 cursor-pointer"
@@ -838,12 +880,20 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
 
                     {/* Use in pipe with workflow submenu */}
                     {onUseInPipe && useInPipeWorkflows.length > 0 && (
-                        <div className="relative group">
+                        <div
+                            className="relative"
+                            onMouseEnter={() => handleSubmenuEnter("useInPipe")}
+                            onMouseLeave={handleSubmenuLeave}
+                        >
                             <div className="w-full px-3 py-1.5 text-left text-xs hover:bg-muted/50 flex items-center justify-between cursor-pointer">
                                 <span className="flex items-center gap-2">use in pipe</span>
                                 <span className="text-[10px]">▶</span>
                             </div>
-                            <div className={`absolute right-full ${contextMenu.submenuFlipUp ? 'bottom-0' : 'top-0'} pr-1 hidden group-hover:block`}>
+                            <div
+                                className={`absolute right-full ${contextMenu.submenuFlipUp ? 'bottom-0' : 'top-0'} pr-1 ${contextSubmenu === "useInPipe" ? "block" : "hidden"}`}
+                                onMouseEnter={() => handleSubmenuEnter("useInPipe")}
+                                onMouseLeave={handleSubmenuLeave}
+                            >
                                 <div className="bg-popover border border-border/60 rounded-md shadow-lg py-1 w-40 max-h-48 overflow-y-auto">
                                     {useInPipeWorkflows.map((w: any) => (
                                         <button
