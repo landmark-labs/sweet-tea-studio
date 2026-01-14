@@ -411,19 +411,14 @@ def empty_folder_trash(
     folder_path = None
     
     if active_engine:
-        if folder_name == "output":
-            # Output folder: /ComfyUI/sweet_tea/<project>/output/
-            if active_engine.output_dir:
-                folder_path = settings.get_project_output_dir_in_comfy(
-                    active_engine.output_dir, project.slug
-                )
-        else:
-            # Input/masks/custom folders: /ComfyUI/input/<project>/<folder>/
-            if active_engine.input_dir:
-                folder_path = settings.get_project_input_dir_in_comfy(
-                    active_engine.input_dir, project.slug
-                ) / folder_name
-        
+                # All folders (including output) live in /ComfyUI/input/<project>/<folder>/
+        if active_engine.input_dir:
+            folder_path = settings.get_project_input_dir_in_comfy(
+                active_engine.input_dir, project.slug
+            ) / folder_name
+
+
+
         # Fallback to legacy sweet_tea structure if new path doesn't exist
         if folder_path and not folder_path.exists() and active_engine.output_dir:
             legacy_path = settings.get_project_dir_in_comfy(
@@ -675,18 +670,12 @@ def list_project_folder_images(
     folder_path = None
     
     if active_engine:
-        if folder_name == "output":
-            # Output folder: /ComfyUI/sweet_tea/<project>/output/
-            if active_engine.output_dir:
-                folder_path = settings.get_project_output_dir_in_comfy(
-                    active_engine.output_dir, project.slug
-                )
-        else:
-            # Input/masks/custom folders: /ComfyUI/input/<project>/<folder>/
-            if active_engine.input_dir:
-                folder_path = settings.get_project_input_dir_in_comfy(
-                    active_engine.input_dir, project.slug
-                ) / folder_name
+        # All folders (including output) live in /ComfyUI/input/<project>/<folder>/
+        # after the output directory consolidation
+        if active_engine.input_dir:
+            folder_path = settings.get_project_input_dir_in_comfy(
+                active_engine.input_dir, project.slug
+            ) / folder_name
             
         # Fallback to legacy sweet_tea structure if new path doesn't exist
         if folder_path and not folder_path.exists() and active_engine.output_dir:
@@ -807,16 +796,12 @@ def delete_folder_images(
     folder_path = None
     
     if active_engine:
-        if folder_name == "output":
-            if active_engine.output_dir:
-                folder_path = settings.get_project_output_dir_in_comfy(
-                    active_engine.output_dir, project.slug
-                )
-        else:
-            if active_engine.input_dir:
-                folder_path = settings.get_project_input_dir_in_comfy(
-                    active_engine.input_dir, project.slug
-                ) / folder_name
+        # All folders (including output) live in /ComfyUI/input/<project>/<folder>/
+        # after the output directory consolidation
+        if active_engine.input_dir:
+            folder_path = settings.get_project_input_dir_in_comfy(
+                active_engine.input_dir, project.slug
+            ) / folder_name
                 
         if folder_path and not folder_path.exists() and active_engine.output_dir:
             legacy_path = settings.get_project_dir_in_comfy(
