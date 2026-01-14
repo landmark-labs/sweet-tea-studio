@@ -708,7 +708,7 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
                     onClick={(e) => e.stopPropagation()}
                 >
                     <button
-                        className="w-full px-3 py-1.5 text-left text-xs hover:bg-muted/50 flex items-center gap-2"
+                        className="w-full px-3 py-1.5 text-left text-xs hover:bg-muted/50 flex items-center gap-2 cursor-pointer"
                         onClick={handleDownload}
                     >
                         <Download className="h-3 w-3" />
@@ -716,7 +716,7 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
                     </button>
 
                     <button
-                        className="w-full px-3 py-1.5 text-left text-xs hover:bg-muted/50 flex items-center gap-2"
+                        className="w-full px-3 py-1.5 text-left text-xs hover:bg-muted/50 flex items-center gap-2 cursor-pointer"
                         onClick={() => {
                             addToMediaTray({ path: contextMenu.image.path, filename: contextMenu.image.filename });
                             setContextMenu(null);
@@ -728,7 +728,7 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
 
                     {!isVideoFile(contextMenu.image.path, contextMenu.image.filename) && (
                         <button
-                            className="w-full px-3 py-1.5 text-left text-xs hover:bg-muted/50 flex items-center gap-2"
+                            className="w-full px-3 py-1.5 text-left text-xs hover:bg-muted/50 flex items-center gap-2 cursor-pointer"
                             onClick={() => openMaskEditorForImage(contextMenu.image)}
                         >
                             <PenTool className="h-3 w-3" />
@@ -746,7 +746,7 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
                             <div className="absolute right-full top-0 pr-1 hidden group-hover:block">
                                 <div className="bg-popover border border-border/60 rounded-md shadow-lg py-1 w-36">
                                     <button
-                                        className="w-full px-3 py-1.5 text-left text-xs hover:bg-muted/50"
+                                        className="w-full px-3 py-1.5 text-left text-xs hover:bg-muted/50 cursor-pointer"
                                         onClick={async () => {
                                             // Fetch metadata from image to get workflow_template_id and job_params
                                             try {
@@ -785,7 +785,7 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
                                         same seed
                                     </button>
                                     <button
-                                        className="w-full px-3 py-1.5 text-left text-xs hover:bg-muted/50"
+                                        className="w-full px-3 py-1.5 text-left text-xs hover:bg-muted/50 cursor-pointer"
                                         onClick={async () => {
                                             // Fetch metadata from image to get workflow_template_id and job_params
                                             try {
@@ -830,44 +830,44 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
 
                     {/* Use in pipe with workflow submenu */}
                     {onUseInPipe && useInPipeWorkflows.length > 0 && (
-                            <div className="relative group">
-                                <div className="w-full px-3 py-1.5 text-left text-xs hover:bg-muted/50 flex items-center justify-between cursor-pointer">
-                                    <span className="flex items-center gap-2">use in pipe</span>
-                                    <span className="text-[10px]">▶</span>
-                                </div>
-                                <div className="absolute right-full top-0 pr-1 hidden group-hover:block">
-                                    <div className="bg-popover border border-border/60 rounded-md shadow-lg py-1 w-40 max-h-48 overflow-y-auto">
-                                        {useInPipeWorkflows.map((w: any) => (
-                                            <button
-                                                key={w.id}
-                                                className="w-full px-3 py-1.5 text-left text-xs hover:bg-muted/50 truncate"
-                                                onClick={() => {
-                                                    const galleryItem: GalleryItem = {
-                                                        image: { id: -1, job_id: -1, path: contextMenu.image.path, filename: contextMenu.image.filename, created_at: '' },
-                                                        job_params: {},
-                                                        prompt_history: [],
-                                                        workflow_template_id: w.id,
-                                                        created_at: '',
-                                                    };
-                                                    onUseInPipe({
-                                                        workflowId: String(w.id),
-                                                        imagePath: contextMenu.image.path,
-                                                        galleryItem,
-                                                    });
-                                                    setContextMenu(null);
-                                                }}
-                                            >
-                                                {w.name}
-                                            </button>
-                                        ))}
-                                    </div>
+                        <div className="relative group">
+                            <div className="w-full px-3 py-1.5 text-left text-xs hover:bg-muted/50 flex items-center justify-between cursor-pointer">
+                                <span className="flex items-center gap-2">use in pipe</span>
+                                <span className="text-[10px]">▶</span>
+                            </div>
+                            <div className="absolute right-full top-0 pr-1 hidden group-hover:block">
+                                <div className="bg-popover border border-border/60 rounded-md shadow-lg py-1 w-40 max-h-48 overflow-y-auto">
+                                    {useInPipeWorkflows.map((w: any) => (
+                                        <button
+                                            key={w.id}
+                                            className="w-full px-3 py-1.5 text-left text-xs hover:bg-muted/50 truncate cursor-pointer"
+                                            onClick={() => {
+                                                const galleryItem: GalleryItem = {
+                                                    image: { id: -1, job_id: -1, path: contextMenu.image.path, filename: contextMenu.image.filename, created_at: '' },
+                                                    job_params: {},
+                                                    prompt_history: [],
+                                                    workflow_template_id: w.id,
+                                                    created_at: '',
+                                                };
+                                                onUseInPipe({
+                                                    workflowId: String(w.id),
+                                                    imagePath: contextMenu.image.path,
+                                                    galleryItem,
+                                                });
+                                                setContextMenu(null);
+                                            }}
+                                        >
+                                            {w.name}
+                                        </button>
+                                    ))}
                                 </div>
                             </div>
-                        )}
+                        </div>
+                    )}
 
                     <div className="h-px bg-border/50 my-1" />
                     <button
-                        className="w-full px-3 py-1.5 text-left text-xs text-destructive hover:bg-destructive/10 flex items-center gap-2"
+                        className="w-full px-3 py-1.5 text-left text-xs text-destructive hover:bg-destructive/10 flex items-center gap-2 cursor-pointer"
                         onClick={handleDelete}
                     >
                         <Trash2 className="h-3 w-3" />
