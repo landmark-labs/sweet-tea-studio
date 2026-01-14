@@ -32,6 +32,7 @@ def init_db():
         label=f"profile.db ({settings.database_path})",
         backups_dir=backups_dir,
         recovery_dir=recovery_dir,
+        portable_snapshot_path=settings.portable_db_path if settings.PORTABLE_DB_ENABLED else None,
     )
     ensure_sqlite_database_or_raise(
         settings.meta_dir / "tags.db",

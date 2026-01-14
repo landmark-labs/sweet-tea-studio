@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import shutil
 import sqlite3
 import subprocess
@@ -121,6 +122,88 @@ def create_rolling_backup(
     return BackupResult(created=True, path=dest)
 
 
+def create_portable_snapshot(
+    source_db: Path,
+    dest_db: Path,
+    *,
+    timeout_s: float = 5.0,
+) -> None:
+    """
+    Create a single-file snapshot suitable for portable copies.
+
+    Uses SQLite's backup API and forces DELETE journaling on the snapshot so
+    it can be copied without -wal/-shm sidecars.
+    """
+
+    if not source_db.exists():
+        return
+
+    dest_db.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = _ensure_unique_path(dest_db.with_suffix(dest_db.suffix + ".tmp"))
+
+    try:
+        _backup_via_sqlite_api(source_db, tmp_path, timeout_s=timeout_s)
+        _set_portable_pragmas(tmp_path, timeout_s=timeout_s)
+        _remove_sqlite_sidecars(tmp_path)
+
+        # Atomically replace the portable snapshot.
+        os.replace(tmp_path, dest_db)
+        _remove_sqlite_sidecars(dest_db)
+    finally:
+        if tmp_path.exists():
+            try:
+                tmp_path.unlink()
+            except OSError:
+                pass
+        _remove_sqlite_sidecars(tmp_path)
+
+
+def _set_portable_pragmas(db_path: Path, *, timeout_s: float = 5.0) -> None:
+    with sqlite3.connect(str(db_path), timeout=timeout_s) as conn:
+        conn.execute("PRAGMA journal_mode=DELETE;")
+        conn.execute("PRAGMA synchronous=FULL;")
+
+
+def _remove_sqlite_sidecars(db_path: Path) -> None:
+    for path in _sqlite_related_paths(db_path):
+        if path == db_path or not path.exists():
+            continue
+        try:
+            path.unlink()
+        except OSError:
+            pass
+
+
+def _recover_from_portable_snapshot(
+    original: Path,
+    snapshot: Path,
+    *,
+    label: str,
+    recovery_dir: Path,
+    timeout_s: float,
+) -> bool:
+    if not snapshot.exists():
+        return False
+
+    snapshot_status = quick_check_path(snapshot, timeout_s=timeout_s)
+    if snapshot_status not in (None, "ok"):
+        print(f"[DB] Portable snapshot failed quick_check: {snapshot_status}")
+        return False
+
+    recovery_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    recovered_path = recovery_dir / f"{original.stem}.portable-{timestamp}{original.suffix}"
+    recovered_path = _ensure_unique_path(recovered_path)
+
+    shutil.copy2(str(snapshot), str(recovered_path))
+    _assert_recovered_db_ok(recovered_path, label=label, timeout_s=timeout_s)
+
+    broken = _swap_recovered_database_into_place(original, recovered_path)
+    print(f"[DB] Preserved original at {broken}")
+    print(f"[DB] Restored {label} from portable snapshot at {snapshot}")
+    return True
+
+
 def ensure_sqlite_database_or_raise(
     db_path: Path,
     *,
@@ -132,6 +215,7 @@ def ensure_sqlite_database_or_raise(
     backup_keep: int = 20,
     backup_min_interval: timedelta = timedelta(hours=24),
     timeout_s: float = 5.0,
+    portable_snapshot_path: Optional[Path] = None,
 ) -> None:
     """
     Ensure an on-disk SQLite DB is usable.
@@ -170,6 +254,26 @@ def ensure_sqlite_database_or_raise(
         raise RuntimeError(f"[DB] {label} failed integrity check: {quick_check_error}")
 
     print(f"[DB] {label} failed integrity check; attempting recovery (original will be preserved).")
+
+    if portable_snapshot_path:
+        try:
+            if _recover_from_portable_snapshot(
+                db_path,
+                portable_snapshot_path,
+                label=label,
+                recovery_dir=recovery_dir,
+                timeout_s=timeout_s,
+            ):
+                create_rolling_backup(
+                    db_path,
+                    backups_dir=backups_dir,
+                    keep=backup_keep,
+                    min_interval=timedelta(seconds=0),
+                    timeout_s=timeout_s,
+                )
+                return
+        except Exception as exc:
+            print(f"[DB] Portable snapshot recovery failed: {exc}")
 
     try:
         recovered = recover_sqlite_database(

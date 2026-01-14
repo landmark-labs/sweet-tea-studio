@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     # Get these from: https://rule34.xxx/index.php?page=account&s=options
     RULE34_USER_ID: Optional[str] = None
     RULE34_API_KEY: Optional[str] = None
+
+    # Portable snapshot for profile.db (crash-resilient copy).
+    PORTABLE_DB_ENABLED: bool = True
+    PORTABLE_DB_DEBOUNCE_SECONDS: int = 60
     
     # BACKEND_CORS_ORIGINS is a JSON-formatted list of origins
     # e.g: '["http://localhost", "http://localhost:4200", "http://localhost:3000"]'
@@ -80,6 +84,11 @@ class Settings(BaseSettings):
     def database_path(self) -> Path:
         """Path to the portfolio SQLite database."""
         return self.meta_dir / "profile.db"
+
+    @property
+    def portable_db_path(self) -> Path:
+        """Path to the portable snapshot of profile.db."""
+        return self.meta_dir / "profile.portable.db"
 
     def ensure_dirs(self) -> None:
         """Create all required directories if they don't exist."""

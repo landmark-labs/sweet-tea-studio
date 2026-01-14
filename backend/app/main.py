@@ -19,6 +19,8 @@ register_gallery_error_handlers(app)
 @app.on_event("startup")
 async def on_startup():
     init_db()
+    from app.db.portable_snapshot import start_portable_snapshot_service
+    start_portable_snapshot_service()
     start_tag_cache_refresh_background()  # Populate tags.db for autocomplete
     manager.loop = asyncio.get_running_loop()
     await watchdog.start()
@@ -34,6 +36,12 @@ async def on_startup():
 
 @app.on_event("shutdown")
 async def on_shutdown():
+    try:
+        from app.db.portable_snapshot import stop_portable_snapshot_service
+        stop_portable_snapshot_service()
+    except Exception as exc:
+        print(f"[Shutdown] Portable snapshot shutdown skipped: {exc}")
+
     # 1. Dispose SQLAlchemy engines to release their locks on the files
     try:
         from app.db.engine import dispose_all_engines
