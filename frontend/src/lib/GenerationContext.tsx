@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, useCallback, useRef, Re
 import { api, WorkflowTemplate, Project, PromptLibraryItem } from "@/lib/api";
 import { useGenerationFeedStore, usePromptLibraryStore } from "@/lib/stores/promptDataStore";
 import { stripSchemaMeta } from "@/lib/schema";
+import { loadPipeParams, savePipeParams } from "@/lib/persistedState";
 
 interface GenerationContextValue {
     // Selection state
@@ -255,33 +256,36 @@ export function GenerationProvider({ children }: GenerationProviderProps) {
         const workflow = workflows.find(w => String(w.id) === selectedWorkflowId);
         if (!workflow) return;
 
-        const schema = stripSchemaMeta(workflow.input_schema || {});
-        let initialData: Record<string, any> = {};
+        let cancelled = false;
+        const loadInitialData = async () => {
+            const schema = stripSchemaMeta(workflow.input_schema || {});
+            let initialData: Record<string, any> = {};
 
-        // Set defaults from schema
-        Object.keys(schema).forEach(k => {
-            if (schema[k].default !== undefined) initialData[k] = schema[k].default;
-        });
+            // Set defaults from schema
+            Object.keys(schema).forEach(k => {
+                if (schema[k].default !== undefined) initialData[k] = schema[k].default;
+            });
 
-        // Load persisted values
-        try {
-            const key = `ds_pipe_params_${selectedWorkflowId}`;
-            const saved = localStorage.getItem(key);
-            if (saved) {
-                initialData = { ...initialData, ...JSON.parse(saved) };
+            const stored = await loadPipeParams(selectedWorkflowId);
+            if (stored) {
+                initialData = { ...initialData, ...stored };
             }
-        } catch (e) { /* ignore */ }
+            if (!cancelled) {
+                setFormData(initialData);
+            }
+        };
 
-        setFormData(initialData);
-    }, [selectedWorkflowId, workflows]);
+        void loadInitialData();
+        return () => { cancelled = true; };
+    }, [selectedWorkflowId, workflows, loadPipeParams]);
 
     // Persist form data
     const persistFormData = useCallback((data: Record<string, any>) => {
         setFormData(data);
         if (selectedWorkflowId) {
-            localStorage.setItem(`ds_pipe_params_${selectedWorkflowId}`, JSON.stringify(data));
+            void savePipeParams(selectedWorkflowId, data);
         }
-    }, [selectedWorkflowId]);
+    }, [selectedWorkflowId, savePipeParams]);
 
     // Load prompt library
     const loadPromptLibrary = useCallback(async () => {

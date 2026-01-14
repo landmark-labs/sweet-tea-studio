@@ -62,6 +62,7 @@ interface StatusPollingState {
 
 let pollingInterval: NodeJS.Timeout | null = null;
 const POLL_INTERVAL_MS = 5000;
+let isFetching = false;
 
 // Track previous connection state to detect reconnections
 let wasConnected: boolean | null = null;
@@ -75,6 +76,11 @@ export const useStatusPollingStore = create<StatusPollingState>()((set, get) => 
     error: null,
 
     fetchStatus: async () => {
+        if (isFetching) return;
+        if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+            return;
+        }
+        isFetching = true;
         try {
             const res = await fetch(`${getApiBase()}/monitoring/status/summary`);
             if (res.ok) {
@@ -89,12 +95,15 @@ export const useStatusPollingStore = create<StatusPollingState>()((set, get) => 
                     });
                 }
                 wasConnected = isConnected;
-
-                set({
-                    status: data,
-                    lastFetchedAt: Date.now(),
-                    error: null
-                });
+                const prev = get().status;
+                const hasChanged = !prev || JSON.stringify(prev) !== JSON.stringify(data);
+                if (hasChanged || get().error) {
+                    set({
+                        status: data,
+                        lastFetchedAt: Date.now(),
+                        error: null
+                    });
+                }
             } else {
                 set({ error: `HTTP ${res.status}` });
             }
@@ -109,6 +118,8 @@ export const useStatusPollingStore = create<StatusPollingState>()((set, get) => 
                     models: { state: "error", detail: "unknown", missing_models: 0 },
                 }
             });
+        } finally {
+            isFetching = false;
         }
     },
 
@@ -119,7 +130,10 @@ export const useStatusPollingStore = create<StatusPollingState>()((set, get) => 
         state.fetchStatus(); // Initial fetch
 
         pollingInterval = setInterval(() => {
-            get().fetchStatus();
+            if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+                return;
+            }
+            void get().fetchStatus();
         }, POLL_INTERVAL_MS);
 
         set({ isPolling: true });

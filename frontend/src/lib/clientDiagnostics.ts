@@ -196,7 +196,13 @@ export function initClientDiagnostics() {
 
   flushTimer = window.setInterval(() => {
     heartbeat();
-    flush();
+    if (typeof window !== "undefined" && typeof window.requestIdleCallback === "function") {
+      window.requestIdleCallback(() => {
+        void flush();
+      }, { timeout: 2000 });
+    } else {
+      void flush();
+    }
   }, FLUSH_INTERVAL_MS);
 
   logClientEvent("init", {

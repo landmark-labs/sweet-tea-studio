@@ -6,6 +6,7 @@ import { Trash2, Search, LayoutTemplate, Sparkles, Copy, Loader2, Wand2 } from "
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { usePromptLibraryStore } from "@/lib/stores/promptDataStore";
+import { savePipeParams } from "@/lib/persistedState";
 
 export default function PromptLibrary() {
     const { prompts, searchQuery, setSearchQuery, setPrompts, shouldRefetch, lastWorkflowId, lastQuery } = usePromptLibraryStore();
@@ -217,10 +218,9 @@ export default function PromptLibrary() {
                         : null;
 
                     const handleCopyToConfigurator = () => {
-                        // Store the prompt params in localStorage for the configurator to pick up
+                        // Store the prompt params for the configurator to pick up
                         if (prompt.job_params && prompt.workflow_template_id) {
-                            const key = `ds_pipe_params_${prompt.workflow_template_id}`;
-                            localStorage.setItem(key, JSON.stringify(prompt.job_params));
+                            void savePipeParams(String(prompt.workflow_template_id), prompt.job_params as Record<string, unknown>);
                             localStorage.setItem("ds_selected_workflow", String(prompt.workflow_template_id));
                             alert("Prompt copied to configurator! Navigate to Generation page to use it.");
                         }

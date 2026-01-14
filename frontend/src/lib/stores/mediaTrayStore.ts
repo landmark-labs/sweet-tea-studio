@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { isVideoFile } from "@/lib/media";
+import { createDeferredStorage } from "@/lib/deferredStorage";
 
 export type MediaTrayItem = {
   path: string;
@@ -27,6 +28,8 @@ interface MediaTrayStoreState {
   clearAll: () => void;
   reorderByPath: (activePath: string, overPath: string) => void;
 }
+
+const MAX_MEDIA_TRAY_ITEMS = 200;
 
 const normalizePath = (value: string) => {
   if (!value) return "";
@@ -64,7 +67,7 @@ const dedupePrepend = (existing: MediaTrayItem[], next: MediaTrayItem[]) => {
     seen.add(item.path);
     prepended.push(item);
   }
-  return [...prepended, ...existing];
+  return [...prepended, ...existing].slice(0, MAX_MEDIA_TRAY_ITEMS);
 };
 
 const moveItem = (items: MediaTrayItem[], fromIndex: number, toIndex: number) => {
@@ -114,7 +117,7 @@ export const useMediaTrayStore = create<MediaTrayStoreState>()(
     }),
     {
       name: "ds_media_tray",
-      storage: createJSONStorage(() => localStorage),
+      storage: createJSONStorage(() => createDeferredStorage(localStorage, { flushIntervalMs: 1500, maxPending: 5 })),
       partialize: (state) => ({
         collapsed: state.collapsed,
         items: state.items,

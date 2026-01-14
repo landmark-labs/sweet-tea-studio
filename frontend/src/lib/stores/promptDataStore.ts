@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { GenerationFeedItem } from "@/components/GenerationFeed";
 import { PromptLibraryItem } from "@/lib/api";
+import { createDeferredStorage } from "@/lib/deferredStorage";
 
 export const PROMPT_LIBRARY_STALE_MS = 5 * 60 * 1000;
 const PROGRESS_UPDATE_STEP = 2; // minimum percent change before persisting progress
@@ -175,7 +176,7 @@ export const useGenerationFeedStore = create<GenerationFeedState>()(
     }),
     {
       name: "ds_generation_feed",
-      storage: createJSONStorage(() => localStorage),
+      storage: createJSONStorage(() => createDeferredStorage(localStorage, { flushIntervalMs: 1000, maxPending: 8 })),
       partialize: (state) => ({
         generationFeed: state.generationFeed.map(({ previewBlob, ...rest }) => rest),
       }),

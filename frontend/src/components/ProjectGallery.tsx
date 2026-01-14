@@ -44,6 +44,18 @@ const buildThumbnailUrl = (path: string, mtime?: string, maxPx: number = THUMBNA
     return `${IMAGE_API_BASE}/gallery/image/path/thumbnail?${params.toString()}`;
 };
 
+const computeImageSignature = (items: FolderImage[]) => {
+    let hash = 2166136261;
+    for (const item of items) {
+        const token = `${item.path}|${item.mtime}`;
+        for (let i = 0; i < token.length; i += 1) {
+            hash ^= token.charCodeAt(i);
+            hash = Math.imul(hash, 16777619);
+        }
+    }
+    return `${items.length}:${hash >>> 0}`;
+};
+
 // Memoized gallery item - only re-renders when its specific props change
 interface GalleryItemCellProps {
     image: FolderImage;
@@ -165,6 +177,7 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
     const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set());
     const lastSelectedPath = useRef<string | null>(null);
     const imagesRef = useRef<FolderImage[]>([]);
+    const lastSignatureRef = useRef<string | null>(null);
     const submenuCloseTimerRef = useRef<number | null>(null);
     // Track previous project to avoid resetting folder on transient empty states
     const prevProjectIdRef = useRef<string>(selectedProjectId);
@@ -286,6 +299,7 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
     useEffect(() => {
         let mounted = true;
         let timeoutId: NodeJS.Timeout;
+        lastSignatureRef.current = null;
 
         const loadImages = async (showLoading = true) => {
             if (!selectedProjectId || !selectedFolder) {
@@ -299,10 +313,20 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
                     parseInt(selectedProjectId),
                     selectedFolder
                 );
-                if (mounted) setImages(data);
+                if (mounted) {
+                    const nextSignature = computeImageSignature(data);
+                    if (!showLoading && lastSignatureRef.current === nextSignature) {
+                        return;
+                    }
+                    lastSignatureRef.current = nextSignature;
+                    setImages(data);
+                }
             } catch (e) {
                 console.error("Failed to load folder images", e);
-                if (mounted) setImages([]);
+                if (mounted) {
+                    lastSignatureRef.current = null;
+                    setImages([]);
+                }
             } finally {
                 if (mounted && showLoading) setIsLoading(false);
             }

@@ -24,6 +24,7 @@ import { MediaTray } from "@/components/MediaTray";
 import { useGenerationFeedStore, usePromptLibraryStore } from "@/lib/stores/promptDataStore";
 import { useGeneration } from "@/lib/GenerationContext";
 import { logClientEventThrottled } from "@/lib/clientDiagnostics";
+import { deletePipeParams, loadPipeParams, loadPromptRehydrationSnapshot, savePipeParams, savePromptRehydrationSnapshot } from "@/lib/persistedState";
 import { formDataAtom, setFormDataAtom } from "@/lib/atoms/formAtoms";
 import { useCanvasStore } from "@/lib/stores/canvasStore";
 import { useMediaTrayStore, type MediaTrayItem } from "@/lib/stores/mediaTrayStore";
@@ -49,11 +50,6 @@ type PromptStudioRehydrationStateV1 = {
   at: number;
 };
 
-const PROMPT_STUDIO_REHYDRATION_STATE_KEY_PREFIX = "ds_promptstudio_rehydration_state_v1_";
-
-const buildPromptStudioRehydrationStateKey = (workflowId: string) =>
-  `${PROMPT_STUDIO_REHYDRATION_STATE_KEY_PREFIX}${workflowId}`;
-
 const isPromptRehydrationSnapshotV1 = (value: unknown): value is PromptRehydrationSnapshotV1 => {
   if (!value || typeof value !== "object") return false;
   const snapshot = value as Partial<PromptRehydrationSnapshotV1>;
@@ -62,15 +58,13 @@ const isPromptRehydrationSnapshotV1 = (value: unknown): value is PromptRehydrati
   return true;
 };
 
-const readPromptStudioRehydrationSnapshot = (workflowId: string): PromptRehydrationSnapshotV1 | null => {
-  if (typeof window === "undefined") return null;
+const readPromptStudioRehydrationSnapshot = async (workflowId: string): Promise<PromptRehydrationSnapshotV1 | null> => {
   if (!workflowId) return null;
   try {
-    const raw = localStorage.getItem(buildPromptStudioRehydrationStateKey(workflowId));
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<PromptStudioRehydrationStateV1> | null;
+    const raw = await loadPromptRehydrationSnapshot(workflowId);
+    if (!raw || typeof raw !== "object") return null;
+    const parsed = raw as Partial<PromptStudioRehydrationStateV1> | null;
     if (!parsed || parsed.v !== 1) return null;
-
     const snapshot = parsed.snapshot;
     if (snapshot === null) return null;
     return isPromptRehydrationSnapshotV1(snapshot) ? snapshot : null;
@@ -80,24 +74,18 @@ const readPromptStudioRehydrationSnapshot = (workflowId: string): PromptRehydrat
 };
 
 const persistPromptStudioRehydrationSnapshot = (workflowId: string, snapshot: PromptRehydrationSnapshotV1 | null) => {
-  if (typeof window === "undefined") return;
   if (!workflowId) return;
-  const key = buildPromptStudioRehydrationStateKey(workflowId);
-  try {
-    if (!snapshot) {
-      localStorage.removeItem(key);
-      return;
-    }
-    const state: PromptStudioRehydrationStateV1 = {
-      v: 1,
-      workflowId,
-      snapshot,
-      at: Date.now(),
-    };
-    localStorage.setItem(key, JSON.stringify(state));
-  } catch {
-    // ignore
+  if (!snapshot) {
+    void savePromptRehydrationSnapshot(workflowId, null);
+    return;
   }
+  const state: PromptStudioRehydrationStateV1 = {
+    v: 1,
+    workflowId,
+    snapshot,
+    at: Date.now(),
+  };
+  void savePromptRehydrationSnapshot(workflowId, state);
 };
 
 const PromptConstructorPanel = memo(function PromptConstructorPanel(props: PromptConstructorPanelProps) {
@@ -407,6 +395,22 @@ export default function PromptStudio() {
   const persistHandleRef = useRef<{ id: number | NodeJS.Timeout; type: "idle" | "timeout" } | null>(null);
   const pendingPersistRef = useRef<{ workflowId: string; data: any } | null>(null);
   const workflowParamsCacheRef = useRef<Record<string, Record<string, unknown>>>({});
+  const persistPipeParams = useCallback((workflowId: string, data: Record<string, unknown>) => {
+    if (!workflowId) return;
+    workflowParamsCacheRef.current[workflowId] = data;
+    void savePipeParams(workflowId, data);
+  }, [savePipeParams]);
+  const loadCachedPipeParams = useCallback(async (workflowId: string) => {
+    if (!workflowId) return null;
+    const cached = workflowParamsCacheRef.current[workflowId];
+    if (cached) return cached;
+    const stored = await loadPipeParams(workflowId);
+    if (stored) {
+      workflowParamsCacheRef.current[workflowId] = stored;
+      return stored;
+    }
+    return null;
+  }, [loadPipeParams]);
   const pendingCanvasPayloadRef = useRef<CanvasPayload | null>(null);
   const [canvasGallerySelection, setCanvasGallerySelection] = useState<{
     projectId?: string | null;
@@ -430,9 +434,17 @@ export default function PromptStudio() {
     if (restoredRehydrationWorkflowIdRef.current === selectedWorkflowId) return;
     restoredRehydrationWorkflowIdRef.current = selectedWorkflowId;
 
-    const restored = readPromptStudioRehydrationSnapshot(selectedWorkflowId);
-    setActiveRehydrationSnapshot(restored);
-    setActiveRehydrationKey((prev) => prev + 1);
+    let cancelled = false;
+    const loadSnapshot = async () => {
+      const restored = await readPromptStudioRehydrationSnapshot(selectedWorkflowId);
+      if (cancelled) return;
+      setActiveRehydrationSnapshot(restored);
+      setActiveRehydrationKey((prev) => prev + 1);
+    };
+    void loadSnapshot();
+    return () => {
+      cancelled = true;
+    };
   }, [selectedWorkflowId, pendingLoadParams]);
 
   // Load snippets from backend on mount
@@ -952,16 +964,11 @@ export default function PromptStudio() {
 
   const applyCanvasFormData = useCallback((workflowId: string, rawData: Record<string, unknown>) => {
     const normalized = normalizeCanvasFormData(workflowId, rawData);
-    try {
-      localStorage.setItem(`ds_pipe_params_${workflowId}`, JSON.stringify(normalized));
-    } catch (e) {
-      console.warn("Failed to persist canvas form data", e);
-    }
-    workflowParamsCacheRef.current[workflowId] = normalized;
+    persistPipeParams(workflowId, normalized);
     initializedWorkflowsRef.current.add(workflowId);
     setFormData(normalized);
     setExternalValueSyncKey((prev) => prev + 1);
-  }, [normalizeCanvasFormData, setFormData, setExternalValueSyncKey]);
+  }, [normalizeCanvasFormData, persistPipeParams, setFormData, setExternalValueSyncKey]);
 
   const applyCanvasPayload = useCallback((payload: CanvasPayload) => {
     if (!payload) return;
@@ -1034,12 +1041,7 @@ export default function PromptStudio() {
       const workflowExists = workflows.some((w) => String(w.id) === String(workflowId));
       if (!workflowExists) {
         pendingCanvasPayloadRef.current = payload;
-        try {
-          localStorage.setItem(`ds_pipe_params_${workflowId}`, JSON.stringify(rawData));
-        } catch (e) {
-          console.warn("Failed to store canvas params for pending workflow", e);
-        }
-        workflowParamsCacheRef.current[String(workflowId)] = rawData;
+        persistPipeParams(String(workflowId), rawData);
       }
       setSelectedWorkflowId(String(workflowId));
       if (workflowExists) {
@@ -1056,7 +1058,7 @@ export default function PromptStudio() {
         restoredRehydrationWorkflowIdRef.current = String(workflowId);
       }
     }
-  }, [applyCanvasFormData, setSelectedEngineId, setSelectedProjectId, setGenerationTarget, setLibrary, setSelectedWorkflowId, workflows]);
+  }, [applyCanvasFormData, setSelectedEngineId, setSelectedProjectId, setGenerationTarget, setLibrary, setSelectedWorkflowId, workflows, persistPipeParams]);
 
   useEffect(() => {
     registerCanvasSnapshotProvider(buildCanvasPayload);
@@ -1115,18 +1117,13 @@ export default function PromptStudio() {
     previousWorkflowIdRef.current = workflowKey;
 
     // CRITICAL: Flush any pending persist for the OLD pipe BEFORE loading new pipe data.
-    // Without this, the old form data could get saved to the new pipe's localStorage key
+    // Without this, the old form data could get saved to the new pipe's persisted key
     // because persistForm uses selectedWorkflowId which has already changed.
     // NOTE: We inline this logic rather than calling flushPendingPersist() because
     // that function is declared later and creates a hoisting issue.
     if (isWorkflowSwitch && pendingPersistRef.current) {
       const pending = pendingPersistRef.current;
-      try {
-        localStorage.setItem(`ds_pipe_params_${pending.workflowId}`, JSON.stringify(pending.data));
-        workflowParamsCacheRef.current[pending.workflowId] = pending.data;
-      } catch (e) {
-        console.warn("Failed to persist form data", e);
-      }
+      persistPipeParams(pending.workflowId, pending.data);
       pendingPersistRef.current = null;
       if (persistHandleRef.current) {
         const handle = persistHandleRef.current;
@@ -1141,7 +1138,7 @@ export default function PromptStudio() {
 
     // IMPORTANT: If we have pendingLoadParams, let that effect handle the form data
     // to avoid race conditions where this effect overwrites the merged params with
-    // stale localStorage data. This fixes sampler/scheduler/upscale slippage.
+    // stale persisted data. This fixes sampler/scheduler/upscale slippage.
     if (pendingLoadParams) {
       console.log("[WorkflowInit] Skipping - pendingLoadParams will handle form data");
       return;
@@ -1167,19 +1164,24 @@ export default function PromptStudio() {
       return;
     }
 
-    let initialData: Record<string, unknown> = buildSchemaDefaults(schema);
-    try {
-      const saved = localStorage.getItem(`ds_pipe_params_${workflowKey}`);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        initialData = { ...initialData, ...parsed };
+    let cancelled = false;
+    const loadInitialData = async () => {
+      let initialData: Record<string, unknown> = buildSchemaDefaults(schema);
+      const stored = await loadCachedPipeParams(workflowKey);
+      if (stored) {
+        initialData = { ...initialData, ...stored };
       }
-    } catch (e) { /* ignore */ }
-    const normalized = normalizeParamsWithDefaults(schema, initialData);
-    setFormData(normalized);
-    workflowParamsCacheRef.current[workflowKey] = normalized;
-    initializedWorkflowsRef.current.add(workflowKey);
-  }, [selectedWorkflow, visibleSchema, setFormData, store, pendingLoadParams]);
+      if (cancelled) return;
+      const normalized = normalizeParamsWithDefaults(schema, initialData);
+      setFormData(normalized);
+      workflowParamsCacheRef.current[workflowKey] = normalized;
+      initializedWorkflowsRef.current.add(workflowKey);
+    };
+    void loadInitialData();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedWorkflow, visibleSchema, setFormData, store, pendingLoadParams, loadCachedPipeParams, persistPipeParams]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { registerStateChange } = useUndoRedo();
@@ -1187,12 +1189,7 @@ export default function PromptStudio() {
   const flushPendingPersist = useCallback(() => {
     const pending = pendingPersistRef.current;
     if (!pending) return;
-    try {
-      localStorage.setItem(`ds_pipe_params_${pending.workflowId}`, JSON.stringify(pending.data));
-      workflowParamsCacheRef.current[pending.workflowId] = pending.data;
-    } catch (e) {
-      console.warn("Failed to persist form data", e);
-    }
+    persistPipeParams(pending.workflowId, pending.data);
     pendingPersistRef.current = null;
     if (persistHandleRef.current) {
       const handle = persistHandleRef.current;
@@ -1203,7 +1200,7 @@ export default function PromptStudio() {
       }
       persistHandleRef.current = null;
     }
-  }, []);
+  }, [persistPipeParams]);
 
   const persistForm = useCallback((data: any) => {
     const currentData = store.get(formDataAtom) || {};
@@ -1235,11 +1232,7 @@ export default function PromptStudio() {
       const persistNow = () => {
         const pending = pendingPersistRef.current;
         if (!pending) return;
-        try {
-          localStorage.setItem(`ds_pipe_params_${pending.workflowId}`, JSON.stringify(pending.data));
-        } catch (e) {
-          console.warn("Failed to persist form data", e);
-        }
+        persistPipeParams(pending.workflowId, pending.data);
         pendingPersistRef.current = null;
         persistHandleRef.current = null;
       };
@@ -1251,7 +1244,7 @@ export default function PromptStudio() {
         persistHandleRef.current = { id, type: "timeout" };
       }
     }
-  }, [selectedWorkflowId, setFormData, store]);
+  }, [selectedWorkflowId, setFormData, store, persistPipeParams]);
 
   useEffect(() => {
     return () => {
@@ -1270,12 +1263,9 @@ export default function PromptStudio() {
       flushPendingPersist();
       const workflowId = selectedWorkflowIdRef.current;
       if (workflowId) {
-        try {
-          const latest = store.get(formDataAtom);
-          localStorage.setItem(`ds_pipe_params_${workflowId}`, JSON.stringify(latest));
-          workflowParamsCacheRef.current[workflowId] = latest;
-        } catch (e) {
-          console.warn("Failed to persist form data on unload", e);
+        const latest = store.get(formDataAtom);
+        if (latest) {
+          persistPipeParams(workflowId, latest as Record<string, unknown>);
         }
       }
     };
@@ -1289,7 +1279,7 @@ export default function PromptStudio() {
       window.removeEventListener("beforeunload", handleBeforeUnload);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [store, flushPendingPersist]);
+  }, [store, flushPendingPersist, persistPipeParams]);
 
   const pendingHistoryRef = useRef<{ prev: any; next: any; category: "text" | "structure"; skip: boolean } | null>(null);
   const historyTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -1414,7 +1404,7 @@ export default function PromptStudio() {
     });
 
     // Clear persistence
-    localStorage.removeItem(`ds_pipe_params_${selectedWorkflow.id}`);
+    void deletePipeParams(String(selectedWorkflow.id));
 
     // Update state 
     persistForm(defaults);
@@ -1658,31 +1648,19 @@ export default function PromptStudio() {
       const jobParams = (loadParams.job_params || {}) as Record<string, unknown>;
       const jobParamsFiltered = filterParamsForSchema(schema, jobParams);
 
-      const readStoredParams = () => {
+      const readStoredParams = async () => {
         // For use-in-pipe (not regenerate), we want the TARGET workflow's stored params.
         // DON'T use formDataAtom even if targetWorkflowId === selectedWorkflowId because:
         // - handleUseInPipe sets selectedWorkflowId BEFORE pendingLoadParams
         // - So by now formDataAtom still contains the OLD pipe's values
-        // - We need to read from localStorage to get the TARGET pipe's saved values
-        const cached = workflowParamsCacheRef.current[targetWorkflowId];
-        if (cached) return cached;
-        try {
-          const saved = localStorage.getItem(`ds_pipe_params_${targetWorkflowId}`);
-          if (saved) {
-            const parsed = JSON.parse(saved);
-            workflowParamsCacheRef.current[targetWorkflowId] = parsed;
-            return parsed;
-          }
-        } catch (e) {
-          console.warn("Failed to parse stored params", e);
-        }
-        return {};
+        const cached = await loadCachedPipeParams(targetWorkflowId);
+        return cached || {};
       };
 
       // STEP 2: Merge defaults with stored params (use-in-pipe) or job params (regenerate)
       const storedParams = loadParams.__isRegenerate
         ? {}
-        : filterParamsForSchema(schema, readStoredParams());
+        : filterParamsForSchema(schema, await readStoredParams());
       const baseParams: Record<string, unknown> = loadParams.__isRegenerate
         ? { ...targetDefaults, ...jobParamsFiltered }
         : { ...targetDefaults, ...storedParams };
@@ -1919,13 +1897,8 @@ export default function PromptStudio() {
 
       const normalizedParams = normalizeParamsWithDefaults(schema, baseParams);
 
-      // STEP 6: Persist to localStorage so workflow init effect picks it up
-      try {
-        localStorage.setItem(`ds_pipe_params_${targetWorkflowId}`, JSON.stringify(normalizedParams));
-        workflowParamsCacheRef.current[targetWorkflowId] = normalizedParams;
-      } catch (e) {
-        console.warn("Failed to persist loadParams", e);
-      }
+      // STEP 6: Persist so workflow init effect picks it up
+      persistPipeParams(targetWorkflowId, normalizedParams);
 
       // STEP 7: Update form state directly  
       setFormData(normalizedParams);
@@ -1939,7 +1912,7 @@ export default function PromptStudio() {
     processLoadParams();
     return () => { cancelled = true; };
 
-  }, [pendingLoadParams, workflows, selectedWorkflowId]);
+  }, [pendingLoadParams, workflows, selectedWorkflowId, loadCachedPipeParams, persistPipeParams]);
 
   // Effect 3: Process pending image injection after workflow loads
   useEffect(() => {
@@ -1964,12 +1937,9 @@ export default function PromptStudio() {
           const currentFormData = store.get(formDataAtom) || {};
           const newFormData = { ...currentFormData, [imageField]: relativePath };
           setFormData(newFormData);
-          try {
-            localStorage.setItem(`ds_pipe_params_${selectedWorkflowId}`, JSON.stringify(newFormData));
-            if (selectedWorkflowId) {
-              workflowParamsCacheRef.current[selectedWorkflowId] = newFormData;
-            }
-          } catch (e) { /* ignore */ }
+          if (selectedWorkflowId) {
+            persistPipeParams(selectedWorkflowId, newFormData);
+          }
           return;
         }
 
@@ -1992,13 +1962,10 @@ export default function PromptStudio() {
         const newFormData = { ...currentFormData, [imageField]: result.filename };
         setFormData(newFormData);
 
-        // Also persist to localStorage
-        try {
-          localStorage.setItem(`ds_pipe_params_${selectedWorkflowId}`, JSON.stringify(newFormData));
-          if (selectedWorkflowId) {
-            workflowParamsCacheRef.current[selectedWorkflowId] = newFormData;
-          }
-        } catch (e) { /* ignore */ }
+        // Also persist to the async store
+        if (selectedWorkflowId) {
+          persistPipeParams(selectedWorkflowId, newFormData);
+        }
 
       } catch (err) {
         console.error("Failed to process pending image inject:", err);
@@ -2718,13 +2685,10 @@ export default function PromptStudio() {
     if (!data || Object.keys(data).length === 0) {
       console.warn("[Generation] Form data is empty, loading saved/defaults before generating");
       let initialData: Record<string, unknown> = buildSchemaDefaults(schema);
-      try {
-        const saved = localStorage.getItem(`ds_pipe_params_${selectedWorkflowId}`);
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          initialData = { ...initialData, ...parsed };
-        }
-      } catch (e) { /* ignore */ }
+      const stored = await loadCachedPipeParams(selectedWorkflowId);
+      if (stored) {
+        initialData = { ...initialData, ...stored };
+      }
       effectiveData = normalizeParamsWithDefaults(schema, initialData);
       // Also update the atom so subsequent renders have the data
       setFormData(effectiveData);
@@ -2967,12 +2931,10 @@ export default function PromptStudio() {
           const imageFieldKey = imageFields[0];
 
           if (imageFieldKey) {
-            // Use the standardized persistence key to ensure this image selection survives reloads
-            const key = `ds_pipe_params_${workflowId}`;
-            const currentStored = JSON.parse(localStorage.getItem(key) || "{}");
+            // Use persisted state to ensure this image selection survives reloads
+            const currentStored = (await loadCachedPipeParams(workflowId)) || {};
             const newData = { ...currentStored, [imageFieldKey]: uploaded.filename };
-            localStorage.setItem(key, JSON.stringify(newData));
-            workflowParamsCacheRef.current[workflowId] = newData;
+            persistPipeParams(workflowId, newData);
           }
         }
       } catch (e) {
@@ -2984,7 +2946,7 @@ export default function PromptStudio() {
     }
 
     setSelectedWorkflowId(workflowId);
-  }, [selectedEngineId, setSelectedWorkflowId, workflows]);
+  }, [selectedEngineId, setSelectedWorkflowId, workflows, loadCachedPipeParams, persistPipeParams]);
 
   const handlePromptFinish = useCallback(() => setFocusedField(""), []);
 

@@ -6,7 +6,10 @@ from fastapi import APIRouter, HTTPException, Depends
 from sqlmodel import Session, select, SQLModel
 from typing import List, Optional
 from datetime import datetime
+from collections import OrderedDict
+import os
 import re
+import threading
 
 from sqlalchemy import func
 from app.db.engine import engine
@@ -18,6 +21,27 @@ from app.core.config import settings
 
 
 router = APIRouter()
+
+_DIMENSION_CACHE_MAX = int(os.getenv("STS_IMAGE_DIM_CACHE_MAX", "2000"))
+_image_dim_cache: "OrderedDict[str, tuple[float, Optional[int], Optional[int]]]" = OrderedDict()
+_image_dim_cache_lock = threading.Lock()
+
+
+def _get_cached_dimensions(path: str, mtime: float) -> tuple[Optional[int], Optional[int], bool]:
+    with _image_dim_cache_lock:
+        entry = _image_dim_cache.get(path)
+        if entry and entry[0] == mtime:
+            _image_dim_cache.move_to_end(path)
+            return entry[1], entry[2], True
+    return None, None, False
+
+
+def _set_cached_dimensions(path: str, mtime: float, width: Optional[int], height: Optional[int]) -> None:
+    with _image_dim_cache_lock:
+        _image_dim_cache[path] = (mtime, width, height)
+        _image_dim_cache.move_to_end(path)
+        while len(_image_dim_cache) > _DIMENSION_CACHE_MAX:
+            _image_dim_cache.popitem(last=False)
 
 
 def get_session():
@@ -714,14 +738,19 @@ def list_project_folder_images(
                         continue
                     stat = entry.stat()
                     
-                    # Try to read image dimensions
+                    # Try to read image dimensions (cached by mtime to avoid repeated opens)
                     width, height = None, None
-                    try:
-                        if ext in image_extensions:
-                            with PILImage.open(entry.path) as img:
-                                width, height = img.size
-                    except Exception:
-                        pass  # Dimensions will remain None
+                    if ext in image_extensions:
+                        cached_width, cached_height, cached = _get_cached_dimensions(entry.path, stat.st_mtime)
+                        if cached:
+                            width, height = cached_width, cached_height
+                        else:
+                            try:
+                                with PILImage.open(entry.path) as img:
+                                    width, height = img.size
+                            except Exception:
+                                pass  # Dimensions will remain None
+                            _set_cached_dimensions(entry.path, stat.st_mtime, width, height)
                     
                     images.append({
                         "path": entry.path,
