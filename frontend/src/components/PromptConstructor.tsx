@@ -882,8 +882,9 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
                                 content,
                                 label: librarySnippet.label || snap?.label,
                                 color: librarySnippet.color || snap?.color,
-                                rehydrationMode: "frozen" as const,
-                                frozenContent: content,
+                                ...(content !== librarySnippet.content
+                                    ? { rehydrationMode: "frozen" as const, frozenContent: content }
+                                    : {}),
                             }];
                         }
 
