@@ -127,6 +127,7 @@ export default function Gallery() {
     const [nextSkip, setNextSkip] = useState(0);
     const [gridResetKey, setGridResetKey] = useState(0);
     const [moveDialogOpen, setMoveDialogOpen] = useState(false);
+    const [moveTargetIds, setMoveTargetIds] = useState<number[]>([]);
 
     const searchRef = useRef(search);
     const selectedProjectIdRef = useRef(selectedProjectId);
@@ -648,7 +649,7 @@ export default function Gallery() {
                                             download
                                         </button>
                                         <div className="h-4 w-px bg-blue-200 flex-shrink-0" />
-                                        <button onClick={() => setMoveDialogOpen(true)} className="hover:underline text-blue-600 flex items-center gap-1">
+                                        <button onClick={() => { setMoveTargetIds(Array.from(selectedIds)); setMoveDialogOpen(true); }} className="hover:underline text-blue-600 flex items-center gap-1">
                                             <FolderInput className="w-3 h-3" />
                                             move
                                         </button>
@@ -882,6 +883,7 @@ export default function Gallery() {
                                         <ContextMenuItem onSelect={() => handleDownload(item)}>download</ContextMenuItem>
                                         <ContextMenuItem onSelect={() => handleRegenerate(item)}>regenerate</ContextMenuItem>
                                         <ContextMenuItem onSelect={() => addToMediaTray({ path: item.image.path, filename: item.image.filename })}>add to media tray</ContextMenuItem>
+                                        <ContextMenuItem onSelect={() => { setMoveTargetIds([item.image.id]); setMoveDialogOpen(true); }}>move</ContextMenuItem>
                                         <ContextMenuSeparator />
                                         <ContextMenuItem className="text-red-600" onSelect={() => handleDelete(item.image.id)}>delete</ContextMenuItem>
                                     </ContextMenuContent>
@@ -1026,7 +1028,7 @@ export default function Gallery() {
             <MoveImagesDialog
                 open={moveDialogOpen}
                 onOpenChange={setMoveDialogOpen}
-                selectedImageIds={Array.from(selectedIds)}
+                selectedImageIds={moveTargetIds}
                 projects={projects}
                 currentProjectId={selectedProjectId}
                 onMoveComplete={() => {
