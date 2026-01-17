@@ -4,6 +4,7 @@ from app.db.database import get_session
 from app.models.engine import Engine
 from app.models.project import Project
 from app.core.config import settings
+from app.services.media_paths import infer_project_slug_from_path, get_project_roots
 import mimetypes
 import os
 from typing import Optional
@@ -67,40 +68,8 @@ def _validate_upload(filename: str, mime_type: str) -> None:
 
 
 def _infer_project_slug_from_path(path: Path, engine: Optional[Engine]) -> Optional[str]:
-    """
-    Attempt to infer a Sweet Tea project slug from an absolute file path.
-
-    Supports both:
-    - /ComfyUI/input/<project>/...
-    - /ComfyUI/sweet_tea/<project>/...
-
-    Falls back to local Sweet Tea storage: <ROOT_DIR>/projects/<project>/...
-    """
-    if engine and engine.input_dir:
-        try:
-            rel = path.relative_to(Path(engine.input_dir))
-            if len(rel.parts) >= 2:
-                return rel.parts[0]
-        except ValueError:
-            pass
-
-    if engine and engine.output_dir:
-        try:
-            sweet_tea_dir = settings.get_sweet_tea_dir_from_engine_path(engine.output_dir)
-            rel = path.relative_to(sweet_tea_dir)
-            if len(rel.parts) >= 2:
-                return rel.parts[0]
-        except ValueError:
-            pass
-
-    try:
-        rel = path.relative_to(settings.projects_dir)
-        if len(rel.parts) >= 2:
-            return rel.parts[0]
-    except ValueError:
-        pass
-
-    return None
+    engines = [engine] if engine else []
+    return infer_project_slug_from_path(path, engines)
 
 
 def _ensure_unique_path(target_dir: Path, filename: str) -> Path:
@@ -355,7 +324,7 @@ def get_file_tree(
     """
     Get file tree for input/output directories.
     
-    If project_id is provided, returns the project folder inside ComfyUI/sweet_tea/ as root.
+    If project_id is provided, returns the project folder roots (input + legacy output if present).
     Otherwise, returns the engine's input/output directories.
     """
     # Get the engine first
@@ -372,32 +341,50 @@ def get_file_tree(
     if not engine:
         raise HTTPException(status_code=404, detail="No engine configuration found")
 
-    # If project_id is provided, return project folder as root
+    # If project_id is provided, return project folder roots.
     if project_id and not path:
         project = session.get(Project, project_id)
-        if project and engine.output_dir:
-            project_dir = settings.get_project_dir_in_comfy(engine.output_dir, project.slug)
-            
-            # Ensure directories exist
-            if not project_dir.exists():
-                settings.ensure_sweet_tea_project_dirs(
-                    engine.output_dir,
-                    project.slug,
-                    subfolders=project.config_json.get("folders", ["input", "output", "masks"]) if project.config_json else ["input", "output", "masks"]
-                )
-            
-            # Return project subfolders as roots
+        if project:
             folders = project.config_json.get("folders", ["input", "output", "masks"]) if project.config_json else ["input", "output", "masks"]
-            return [
-                {
-                    "name": folder,
-                    "type": "directory",
-                    "path": str(project_dir / folder),
-                    "is_root": True
-                }
-                for folder in folders
-                if (project_dir / folder).exists()
-            ]
+            roots = get_project_roots(engine=engine, project_slug=project.slug)
+            if not roots:
+                return []
+
+            input_root = Path(engine.input_dir) / project.slug if engine and engine.input_dir else None
+            legacy_root = settings.get_project_dir_in_comfy(engine.output_dir, project.slug) if engine and engine.output_dir else None
+            local_root = settings.get_project_dir(project.slug)
+
+            if len(roots) == 1:
+                root_dir = roots[0]
+                return [
+                    {
+                        "name": folder,
+                        "type": "directory",
+                        "path": str(root_dir / folder),
+                        "is_root": True,
+                    }
+                    for folder in folders
+                    if (root_dir / folder).exists()
+                ]
+
+            labeled_roots = []
+            for root_dir in roots:
+                label = "project"
+                if input_root and root_dir == input_root:
+                    label = "project (input)"
+                elif legacy_root and root_dir == legacy_root:
+                    label = "project (legacy output)"
+                elif root_dir == local_root:
+                    label = "project (local)"
+                labeled_roots.append(
+                    {
+                        "name": label,
+                        "type": "directory",
+                        "path": str(root_dir),
+                        "is_root": True,
+                    }
+                )
+            return labeled_roots
 
     # Default behavior: engine input/output directories
     base_dirs = []

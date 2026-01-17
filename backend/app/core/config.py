@@ -142,7 +142,7 @@ class Settings(BaseSettings):
     def get_project_output_dir_in_comfy(self, engine_output_dir: str, project_slug: str) -> Path:
         """
         Get the project's output folder inside ComfyUI/sweet_tea/<project>/output.
-        This is where generated images are saved.
+        Legacy output location for generated images (pre-output-consolidation).
         """
         return self.get_project_dir_in_comfy(engine_output_dir, project_slug) / "output"
 
@@ -155,8 +155,8 @@ class Settings(BaseSettings):
     ) -> dict:
         """
         Create project directories in the NEW structure:
-        - Input folders: /ComfyUI/input/<project>/<subfolder>/ (for LoadImage access)
-        - Output folder: /ComfyUI/sweet_tea/<project>/output/ (for generated images)
+        - Input folders: /ComfyUI/input/<project>/<subfolder>/ (for LoadImage + managed outputs)
+        - Legacy output folder: /ComfyUI/sweet_tea/<project>/output/ (for backwards compatibility)
         
         Returns dict with 'input_dir' and 'output_dir' paths.
         """

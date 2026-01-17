@@ -11,13 +11,18 @@ import os
 import re
 import threading
 
-from sqlalchemy import func
 from app.db.engine import engine
 from app.models.project import Project, ProjectCreate, ProjectRead
 from app.models.job import Job
 from app.models.image import Image
 from app.models.engine import Engine
 from app.core.config import settings
+from app.services.media_paths import (
+    build_project_path_index,
+    get_project_folder_paths,
+    normalize_fs_path,
+)
+from app.services.media_sync import maybe_resync_media_index
 
 
 router = APIRouter()
@@ -62,6 +67,73 @@ def slugify(text: str) -> str:
     return text or "untitled"
 
 
+def _collect_project_image_stats(session: Session, projects: List[Project]) -> dict[int, dict[str, Optional[datetime] | int]]:
+    if not projects:
+        return {}
+
+    engines = session.exec(select(Engine)).all()
+    path_index = build_project_path_index(engines=engines, projects=projects)
+
+    stats: dict[int, dict[str, Optional[datetime] | int]] = {
+        int(p.id): {"count": 0, "last": None} for p in projects if p.id is not None
+    }
+
+    needs_commit = False
+    rows = session.exec(
+        select(Image, Job)
+        .join(Job, Image.job_id == Job.id, isouter=True)
+        .where(Image.is_deleted == False)
+    ).all()
+
+    now = datetime.utcnow()
+    for img, job in rows:
+        if not img or img.id is None:
+            continue
+
+        file_exists = img.file_exists
+        if file_exists is None:
+            if img.path and isinstance(img.path, str):
+                file_exists = os.path.exists(img.path)
+            else:
+                file_exists = False
+            img.file_exists = file_exists
+            if not file_exists:
+                img.is_deleted = True
+                img.deleted_at = now
+            session.add(img)
+            needs_commit = True
+
+        if not file_exists or img.is_deleted:
+            continue
+
+        project_id = None
+        path_project_id = path_index.match_project_id(img.path) if img.path else None
+        if path_project_id is not None:
+            project_id = path_project_id
+        elif not path_index.roots:
+            if job and job.project_id is not None:
+                project_id = job.project_id
+
+        if project_id is None or project_id not in stats:
+            continue
+
+        stats_entry = stats[project_id]
+        stats_entry["count"] = int(stats_entry.get("count") or 0) + 1
+
+        candidate = job.created_at if job and job.created_at else img.created_at
+        last = stats_entry.get("last")
+        if last is None or (candidate and candidate > last):
+            stats_entry["last"] = candidate
+
+    if needs_commit:
+        try:
+            session.commit()
+        except Exception:
+            session.rollback()
+
+    return stats
+
+
 @router.get("", response_model=List[ProjectRead])
 def list_projects(
     include_archived: bool = False,
@@ -73,6 +145,8 @@ def list_projects(
     By default, excludes archived projects. Set include_archived=true to see all.
     The 'drafts' project is always included as the default project.
     """
+    maybe_resync_media_index(session)
+
     # 1. Fetch Projects
     query = select(Project)
     if not include_archived:
@@ -80,28 +154,7 @@ def list_projects(
     
     projects = session.exec(query.order_by(Project.display_order, Project.id)).all()
     
-    # 2. Fetch Stats
-    # We'll do this in Python for simplicity/compat for now, 
-    # though SQL group_by would be more performant for huge datasets.
-    # Given the likely scale, this is acceptable and cleaner to read.
-    
-    # Count images per project (via Job)
-    # Project -> Job -> Image
-    # Or just count jobs? Creating a job is activity.
-    # User asked for "number of images".
-    
-    # Let's get image counts grouped by project_id
-    # SELECT job.project_id, COUNT(image.id) FROM image JOIN job ON image.job_id = job.id GROUP BY job.project_id
-    
-    stats_query = (
-        select(Job.project_id, func.count(Image.id), func.max(Job.created_at))
-        .join(Image, Job.id == Image.job_id)
-        .where(Image.is_deleted == False)  # Exclude soft-deleted
-        .group_by(Job.project_id)
-    )
-    results = session.exec(stats_query).all()
-    
-    stats_map = {row[0]: {"count": row[1], "last": row[2]} for row in results if row[0] is not None}
+    stats_map = _collect_project_image_stats(session, projects)
     
     # 3. Merge
     project_reads = []
@@ -146,26 +199,19 @@ def reorder_projects(
 @router.get("/{project_id}", response_model=ProjectRead)
 def get_project(project_id: int, session: Session = Depends(get_session)):
     """Get a specific project by ID."""
+    maybe_resync_media_index(session)
     project = session.get(Project, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
         
-    # Stats
-    count = session.exec(
-        select(func.count(Image.id))
-        .join(Job, Image.job_id == Job.id)
-        .where(Job.project_id == project_id)
-        .where(Image.is_deleted == False)  # Exclude soft-deleted
-    ).one()
-    
-    last = session.exec(
-        select(func.max(Job.created_at))
-        .where(Job.project_id == project_id)
-    ).one()
+    stats_map = _collect_project_image_stats(session, [project])
+    stats = stats_map.get(project.id, {"count": 0, "last": None})
+    count = stats.get("count") or 0
+    last = stats.get("last")
     
     return ProjectRead(
         **project.dict(),
-        image_count=count or 0,
+        image_count=count,
         last_activity=last or project.updated_at
     )
 
@@ -179,7 +225,7 @@ def create_project(data: ProjectCreate, session: Session = Depends(get_session))
     
     Directory structure:
     - Input folders (input, masks, custom): /ComfyUI/input/<project>/
-    - Output folder: /ComfyUI/sweet_tea/<project>/output/
+    - Output folder: /ComfyUI/input/<project>/output/ (legacy outputs may exist in /ComfyUI/sweet_tea/<project>/output/)
     """
     # Generate slug if not provided
     slug = data.slug if data.slug else slugify(data.name)
@@ -295,19 +341,12 @@ def add_project_folder(
     else:
         settings.ensure_project_dirs(project.slug, subfolders=[folder_name])
     
-    # Return with empty stats as we just modified it (or could refetch stats)
-    # Refetching stats logic reused to keep consistency
-    count = session.exec(
-        select(func.count(Image.id))
-        .join(Job, Image.job_id == Job.id)
-        .where(Job.project_id == project_id)
-        .where(Image.is_deleted == False)  # Exclude soft-deleted
-    ).one()
-    
+    stats_map = _collect_project_image_stats(session, [project])
+    stats = stats_map.get(project.id, {"count": 0, "last": None})
     return ProjectRead(
-        **project.dict(), 
-        image_count=count or 0, 
-        last_activity=project.updated_at
+        **project.dict(),
+        image_count=stats.get("count") or 0,
+        last_activity=stats.get("last") or project.updated_at,
     )
 
 
@@ -377,14 +416,13 @@ def delete_project_folder(
     session.commit()
     session.refresh(project)
     
-    count = session.exec(
-        select(func.count(Image.id))
-        .join(Job, Image.job_id == Job.id)
-        .where(Job.project_id == project_id)
-        .where(Image.is_deleted == False)
-    ).one()
-    
-    return ProjectRead(**project.dict(), image_count=count or 0, last_activity=project.updated_at)
+    stats_map = _collect_project_image_stats(session, [project])
+    stats = stats_map.get(project.id, {"count": 0, "last": None})
+    return ProjectRead(
+        **project.dict(),
+        image_count=stats.get("count") or 0,
+        last_activity=stats.get("last") or project.updated_at,
+    )
 
 
 @router.delete("/{project_id}/folders/{folder_name}/trash")
@@ -406,65 +444,45 @@ def empty_folder_trash(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
-    # Resolve folder path using same logic as other folder operations
+    # Resolve folder paths using the shared logic (input + legacy + local)
     active_engine = session.exec(select(Engine).where(Engine.is_active == True)).first()
-    folder_path = None
-    
-    if active_engine:
-                # All folders (including output) live in /ComfyUI/input/<project>/<folder>/
-        if active_engine.input_dir:
-            folder_path = settings.get_project_input_dir_in_comfy(
-                active_engine.input_dir, project.slug
-            ) / folder_name
+    folder_paths = get_project_folder_paths(
+        engine=active_engine,
+        project_slug=project.slug,
+        folder_name=folder_name,
+    )
 
-
-
-        # Fallback to legacy sweet_tea structure if new path doesn't exist
-        if folder_path and not folder_path.exists() and active_engine.output_dir:
-            legacy_path = settings.get_project_dir_in_comfy(
-                active_engine.output_dir, project.slug
-            ) / folder_name
-            if legacy_path.exists():
-                folder_path = legacy_path
-    
-    # Final fallback to local storage
-    if not folder_path or not folder_path.exists():
-        local_path = settings.get_project_dir(project.slug) / folder_name
-        if local_path.exists():
-            folder_path = local_path
-    
-    if not folder_path or not folder_path.exists():
+    if not folder_paths:
         raise HTTPException(status_code=404, detail=f"Folder '{folder_name}' not found")
-    
-    # Find .trash subfolder
-    trash_path = folder_path / ".trash"
-    
-    if not trash_path.exists():
-        return {"deleted": 0, "message": "No trash folder exists"}
-    
-    # Count and delete all items in trash
+
     deleted_count = 0
     errors = []
-    
-    try:
-        for item in trash_path.iterdir():
-            try:
-                if item.is_file():
-                    item.unlink()
-                    deleted_count += 1
-                elif item.is_dir():
-                    shutil.rmtree(item)
-                    deleted_count += 1
-            except Exception as e:
-                logger.error(f"Failed to delete {item}: {e}")
-                errors.append(str(item.name))
-    except Exception as e:
-        logger.error(f"Failed to iterate trash folder: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to empty trash: {str(e)}")
-    
+
+    for folder_path in folder_paths:
+        trash_path = folder_path / ".trash"
+        if not trash_path.exists():
+            continue
+
+        try:
+            for item in trash_path.iterdir():
+                try:
+                    if item.is_file():
+                        item.unlink()
+                        deleted_count += 1
+                    elif item.is_dir():
+                        shutil.rmtree(item)
+                        deleted_count += 1
+                except Exception as e:
+                    logger.error(f"Failed to delete {item}: {e}")
+                    errors.append(str(item.name))
+        except Exception as e:
+            logger.error(f"Failed to iterate trash folder: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to empty trash: {str(e)}")
+
+    if deleted_count == 0 and not errors:
+        return {"deleted": 0, "message": "No trash folder exists"}
     if errors:
         return {"deleted": deleted_count, "errors": errors}
-    
     return {"deleted": deleted_count}
 
 
@@ -665,31 +683,13 @@ def list_project_folder_images(
     if folder_name not in folders and not (project.slug == "drafts" and folder_name == "output"):
         raise HTTPException(status_code=404, detail=f"Folder '{folder_name}' not found in project")
     
-    # Resolve path based on folder type and engine configuration
+    # Resolve folder paths based on engine configuration (input + legacy output + local fallback)
     active_engine = session.exec(select(Engine).where(Engine.is_active == True)).first()
-    folder_path = None
-    
-    if active_engine:
-        # All folders (including output) live in /ComfyUI/input/<project>/<folder>/
-        # after the output directory consolidation
-        if active_engine.input_dir:
-            folder_path = settings.get_project_input_dir_in_comfy(
-                active_engine.input_dir, project.slug
-            ) / folder_name
-            
-        # Fallback to legacy sweet_tea structure if new path doesn't exist
-        if folder_path and not folder_path.exists() and active_engine.output_dir:
-            legacy_path = settings.get_project_dir_in_comfy(
-                active_engine.output_dir, project.slug
-            ) / folder_name
-            if legacy_path.exists():
-                folder_path = legacy_path
-    
-    # Final fallback to local storage
-    if not folder_path or not folder_path.exists():
-        local_path = settings.get_project_dir(project.slug) / folder_name
-        if local_path.exists():
-            folder_path = local_path
+    folder_paths = get_project_folder_paths(
+        engine=active_engine,
+        project_slug=project.slug,
+        folder_name=folder_name,
+    )
     
     # Debug: log path resolution
     import logging
@@ -698,9 +698,9 @@ def list_project_folder_images(
     logger.info(f"[ProjectGallery] active_engine={active_engine.name if active_engine else 'None'}")
     if active_engine:
         logger.info(f"[ProjectGallery] input_dir='{active_engine.input_dir}', output_dir='{active_engine.output_dir}'")
-    logger.info(f"[ProjectGallery] folder_path={folder_path}, exists={folder_path.exists() if folder_path else False}")
-    
-    if not folder_path or not folder_path.exists():
+    logger.info(f"[ProjectGallery] folder_paths={[str(p) for p in folder_paths]}")
+
+    if not folder_paths:
         return []
     
     # Supported media extensions
@@ -708,46 +708,50 @@ def list_project_folder_images(
     video_extensions = {".mp4", ".webm", ".mov", ".mkv", ".avi", ".m4v", ".mpg", ".mpeg"}
     
     # Get paths of soft-deleted images to exclude from results
-    deleted_paths = set(
-        row[0] for row in session.exec(
-            select(Image.path).where(Image.is_deleted == True)
-        ).all() if row
-    )
+    deleted_paths = set()
+    for row in session.exec(select(Image.path).where(Image.is_deleted == True)).all():
+        if not row:
+            continue
+        path_value = row[0]
+        if not path_value:
+            continue
+        deleted_paths.add(normalize_fs_path(str(path_value)))
     
     images = []
     try:
         from PIL import Image as PILImage
         
-        for entry in os.scandir(folder_path):
-            if entry.is_file():
-                ext = os.path.splitext(entry.name)[1].lower()
-                if ext in image_extensions or ext in video_extensions:
-                    # Skip soft-deleted images
-                    if entry.path in deleted_paths:
-                        continue
-                    stat = entry.stat()
-                    
-                    # Try to read image dimensions (cached by mtime to avoid repeated opens)
-                    width, height = None, None
-                    if ext in image_extensions:
-                        cached_width, cached_height, cached = _get_cached_dimensions(entry.path, stat.st_mtime)
-                        if cached:
-                            width, height = cached_width, cached_height
-                        else:
-                            try:
-                                with PILImage.open(entry.path) as img:
-                                    width, height = img.size
-                            except Exception:
-                                pass  # Dimensions will remain None
-                            _set_cached_dimensions(entry.path, stat.st_mtime, width, height)
-                    
-                    images.append({
-                        "path": entry.path,
-                        "filename": entry.name,
-                        "mtime": dt.fromtimestamp(stat.st_mtime).isoformat(),
-                        "width": width,
-                        "height": height
-                    })
+        for folder_path in folder_paths:
+            for entry in os.scandir(folder_path):
+                if entry.is_file():
+                    ext = os.path.splitext(entry.name)[1].lower()
+                    if ext in image_extensions or ext in video_extensions:
+                        # Skip soft-deleted images (normalize to handle path case/slash drift)
+                        if normalize_fs_path(entry.path) in deleted_paths:
+                            continue
+                        stat = entry.stat()
+
+                        # Try to read image dimensions (cached by mtime to avoid repeated opens)
+                        width, height = None, None
+                        if ext in image_extensions:
+                            cached_width, cached_height, cached = _get_cached_dimensions(entry.path, stat.st_mtime)
+                            if cached:
+                                width, height = cached_width, cached_height
+                            else:
+                                try:
+                                    with PILImage.open(entry.path) as img:
+                                        width, height = img.size
+                                except Exception:
+                                    pass  # Dimensions will remain None
+                                _set_cached_dimensions(entry.path, stat.st_mtime, width, height)
+
+                        images.append({
+                            "path": entry.path,
+                            "filename": entry.name,
+                            "mtime": dt.fromtimestamp(stat.st_mtime).isoformat(),
+                            "width": width,
+                            "height": height
+                        })
     except Exception as e:
         print(f"Error scanning folder {folder_path}: {e}")
         return []
@@ -791,41 +795,36 @@ def delete_folder_images(
     if folder_name not in folders and not (project.slug == "drafts" and folder_name == "output"):
         raise HTTPException(status_code=404, detail=f"Folder '{folder_name}' not found in project")
     
-    # Resolve folder path for validation
+    # Resolve folder paths for validation
     active_engine = session.exec(select(Engine).where(Engine.is_active == True)).first()
-    folder_path = None
-    
-    if active_engine:
-        # All folders (including output) live in /ComfyUI/input/<project>/<folder>/
-        # after the output directory consolidation
-        if active_engine.input_dir:
-            folder_path = settings.get_project_input_dir_in_comfy(
-                active_engine.input_dir, project.slug
-            ) / folder_name
-                
-        if folder_path and not folder_path.exists() and active_engine.output_dir:
-            legacy_path = settings.get_project_dir_in_comfy(
-                active_engine.output_dir, project.slug
-            ) / folder_name
-            if legacy_path.exists():
-                folder_path = legacy_path
-    
-    if not folder_path or not folder_path.exists():
-        local_path = settings.get_project_dir(project.slug) / folder_name
-        if local_path.exists():
-            folder_path = local_path
+    folder_paths = get_project_folder_paths(
+        engine=active_engine,
+        project_slug=project.slug,
+        folder_name=folder_name,
+    )
+    if not folder_paths:
+        raise HTTPException(status_code=404, detail=f"Folder '{folder_name}' not found")
     
     deleted = 0
     errors = []
     soft_deleted_count = 0
     
+    folder_abses = [normalize_fs_path(os.path.abspath(str(path))) for path in folder_paths]
+
+    def _is_within_allowed_folder(abs_path: str) -> bool:
+        normalized = normalize_fs_path(abs_path)
+        for root in folder_abses:
+            if not root:
+                continue
+            if normalized == root or normalized.startswith(root + os.sep):
+                return True
+        return False
+
     for path in req.paths:
         # Security: validate path is within the expected folder
         try:
             abs_path = os.path.abspath(path)
-            folder_abs = os.path.abspath(str(folder_path)) if folder_path else None
-            
-            if folder_abs and abs_path.startswith(folder_abs):
+            if _is_within_allowed_folder(abs_path):
                 if os.path.exists(abs_path):
                     os.remove(abs_path)
                     deleted += 1

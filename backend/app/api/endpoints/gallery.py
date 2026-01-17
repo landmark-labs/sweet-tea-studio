@@ -33,6 +33,8 @@ from app.models.prompt import Prompt
 from app.models.workflow import WorkflowTemplate
 from app.core.config import settings
 from app.services.gallery_search import build_search_text_from_image, update_gallery_fts
+from app.services.media_paths import build_project_path_index
+from app.services.media_sync import maybe_resync_media_index
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -1077,6 +1079,7 @@ def read_gallery(
     unassigned_only: bool = Query(False, description="Return only images with no project assignment"),
     session: Session = Depends(get_session),
 ):
+    maybe_resync_media_index(session)
     # When limit is None, fetch all; when searching or folder filtering, fetch more to allow scoring/filtering
     fetch_limit = None
     if limit is not None:
@@ -1109,7 +1112,7 @@ def read_gallery(
         stmt = stmt.where(Image.collection_id == collection_id)
 
     if project_id is not None:
-        stmt = stmt.where(Job.project_id == project_id)
+        stmt = stmt.where(or_(Job.project_id == project_id, Job.project_id == None))
     elif unassigned_only:
         stmt = stmt.where(Job.project_id == None)
 
@@ -1179,6 +1182,10 @@ def read_gallery(
             ),
         )
         raise HTTPException(status_code=500, detail="Unable to fetch gallery items")
+
+    engines = session.exec(select(Engine)).all()
+    projects = session.exec(select(Project)).all()
+    path_index = build_project_path_index(engines=engines, projects=projects)
 
     scored_items: List[tuple[float, GalleryItem]] = []
     missing_ids: List[int] = []
@@ -1314,6 +1321,22 @@ def read_gallery(
         else:
             score = 1.0
 
+        job_project_id = job.project_id if job else None
+        path_project_id = path_index.match_project_id(img.path) if img.path else None
+        if path_project_id is not None:
+            resolved_project_id = path_project_id
+        elif not path_index.roots:
+            resolved_project_id = job_project_id
+        else:
+            resolved_project_id = None
+
+        if project_id is not None:
+            if resolved_project_id != project_id:
+                continue
+        elif unassigned_only:
+            if resolved_project_id is not None:
+                continue
+
         image_payload: Dict[str, Any] = {
             "id": img.id,
             "job_id": img.job_id,
@@ -1362,7 +1385,7 @@ def read_gallery(
             prompt_name=prompt.name if prompt else None,
             engine_id=job.engine_id if job else None,
             collection_id=img.collection_id,
-            project_id=job.project_id if job else None,
+            project_id=resolved_project_id,
         )
         scored_items.append((score, item))
 
@@ -1828,23 +1851,43 @@ def cleanup_images(req: CleanupRequest, session: Session = Depends(get_session))
     IMPORTANT: If project_id or folder is specified, cleanup is SCOPED to only those images.
     This prevents accidental deletion of images from unrelated projects.
     """
-    # Start with base query - must join with Job to filter by project_id
+    # Start with base query - keep job join so orphaned images can be path-matched.
+    query = (
+        select(Image, Job)
+        .join(Job, Image.job_id == Job.id, isouter=True)
+        .where(Image.is_kept == False)
+        .where(Image.is_deleted == False)
+    )
+
+    path_index = None
     if req.project_id is not None:
-        query = (
-            select(Image)
-            .join(Job, Image.job_id == Job.id, isouter=True)
-            .where(Image.is_kept == False)
-            .where(Image.is_deleted == False)
-            .where(Job.project_id == req.project_id)
-        )
-    else:
-        query = select(Image).where(Image.is_kept == False).where(Image.is_deleted == False)
+        query = query.where(or_(Job.project_id == req.project_id, Job.project_id == None))
+        project = session.get(Project, req.project_id)
+        if project:
+            engines = session.exec(select(Engine)).all()
+            path_index = build_project_path_index(engines=engines, projects=[project])
     
     if req.job_id:
         query = query.where(Image.job_id == req.job_id)
 
-    # Execute query and filter by folder in Python (folder is path-based, not DB column)
-    images_to_delete = session.exec(query).all()
+    # Execute query and filter by folder/project in Python (path-based, not DB column)
+    rows = session.exec(query).all()
+    images_to_delete: List[Image] = []
+    for img, job in rows:
+        if req.project_id is None:
+            images_to_delete.append(img)
+            continue
+
+        path_project_id = path_index.match_project_id(img.path) if path_index and img.path else None
+        if path_project_id is not None:
+            resolved_project_id = path_project_id
+        elif not path_index or not path_index.roots:
+            resolved_project_id = job.project_id if job else None
+        else:
+            resolved_project_id = None
+
+        if resolved_project_id == req.project_id:
+            images_to_delete.append(img)
     
     # If folder is specified, further filter images by exact parent folder match
     if req.folder:
