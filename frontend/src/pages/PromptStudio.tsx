@@ -704,6 +704,11 @@ export default function PromptStudio() {
     // We just need to refresh the gallery in this case
     const validIds = Array.from(idsToDelete).filter(id => id > 0);
     const hadPathBasedDelete = Array.from(idsToDelete).some(id => id <= 0);
+    const deletedPathsFromIds = validIds.length > 0
+      ? galleryImages.filter(item => validIds.includes(item.image.id)).map(item => item.image.path)
+      : [];
+    const deletedPaths = path ? [path, ...deletedPathsFromIds] : deletedPathsFromIds;
+    const deletedSet = new Set(deletedPaths.map((value) => normalizePathForCompare(value)));
 
     // If we have a specific path (from ImageViewer), remove it from ProjectGalleryImages immediately
     if (path) {
@@ -711,6 +716,30 @@ export default function PromptStudio() {
       setProjectGalleryImages(prev => prev.filter(img => normalizePathForCompare(img.path) !== normalizedPath));
       // Also remove from main gallery list if present (optimistic)
       setGalleryImages(prev => prev.filter(item => normalizePathForCompare(item.image.path) !== normalizedPath));
+    }
+
+    if (deletedSet.size > 0 && previewPath) {
+      const previewRawPath = extractRawViewerPath(previewPath);
+      const previewNormalized = normalizePathForCompare(previewRawPath);
+      if (previewNormalized && deletedSet.has(previewNormalized)) {
+        const remainingViewerImages = viewerImages.filter(
+          (img) => !deletedSet.has(normalizePathForCompare(img.path))
+        );
+        if (remainingViewerImages.length > 0) {
+          const currentIdx = viewerImages.findIndex(
+            (img) => normalizePathForCompare(img.path) === previewNormalized
+          );
+          const nextIdx = currentIdx >= 0
+            ? Math.min(currentIdx, remainingViewerImages.length - 1)
+            : 0;
+          const nextImage = remainingViewerImages[nextIdx];
+          setPreviewPath(buildViewerApiPath(extractRawViewerPath(nextImage.path)));
+          setPreviewMetadata(null);
+        } else {
+          setPreviewPath(null);
+          setPreviewMetadata(null);
+        }
+      }
     }
 
     try {
@@ -747,7 +776,15 @@ export default function PromptStudio() {
       console.error("Failed to delete images", e);
       loadGallery(); // Revert on error
     }
-  }, [loadGallery, normalizePathForCompare]);
+  }, [
+    buildViewerApiPath,
+    extractRawViewerPath,
+    galleryImages,
+    loadGallery,
+    normalizePathForCompare,
+    previewPath,
+    viewerImages,
+  ]);
 
   // Handle bulk delete from ProjectGallery - update viewer if showing a deleted image
   const handleProjectGalleryBulkDelete = useCallback((deletedPaths: string[], remainingImages: FolderImage[]) => {
