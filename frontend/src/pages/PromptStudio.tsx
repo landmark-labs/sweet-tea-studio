@@ -277,6 +277,24 @@ export default function PromptStudio() {
     projectId: null,
     folder: null,
   });
+  const [viewerSource, setViewerSource] = useState<PromptStudioViewerStateV1["source"]>("recent");
+  const setViewerContext = useCallback(
+    (context: Pick<PromptStudioViewerStateV1, "source" | "projectId" | "folder">) => {
+      viewerContextRef.current = context;
+      setViewerSource(context.source);
+    },
+    [setViewerSource]
+  );
+  const updateViewerContext = useCallback(
+    (context: Partial<Pick<PromptStudioViewerStateV1, "source" | "projectId" | "folder">>) => {
+      if (!context) return;
+      viewerContextRef.current = { ...viewerContextRef.current, ...context };
+      if (context.source) {
+        setViewerSource(context.source);
+      }
+    },
+    [setViewerSource]
+  );
 
   const extractRawViewerPath = useCallback((pathStr?: string | null): string => {
     if (!pathStr) return "";
@@ -297,11 +315,17 @@ export default function PromptStudio() {
     return `${IMAGE_API_BASE}/gallery/image/path?path=${encodeURIComponent(rawPath)}`;
   }, []);
 
+  const normalizePathForCompare = useCallback((pathStr?: string | null): string => {
+    const rawPath = extractRawViewerPath(pathStr);
+    if (!rawPath) return "";
+    return rawPath.replace(/\\/g, "/").toLowerCase();
+  }, [extractRawViewerPath]);
+
   const persistViewerState = useCallback(
     (rawPath: string, context?: Partial<Pick<PromptStudioViewerStateV1, "source" | "projectId" | "folder">>) => {
       if (!rawPath) return;
       if (context) {
-        viewerContextRef.current = { ...viewerContextRef.current, ...context };
+        updateViewerContext(context);
       }
       const state: PromptStudioViewerStateV1 = {
         v: 1,
@@ -315,7 +339,7 @@ export default function PromptStudio() {
         localStorage.setItem(PROMPT_STUDIO_VIEWER_STATE_KEY, JSON.stringify(state));
       } catch { /* ignore */ }
     },
-    []
+    [updateViewerContext]
   );
   // Pending loadParams - holds the gallery item to inject until workflows are loaded
   const [pendingLoadParams, setPendingLoadParams] = useState<(GalleryItem & { __isRegenerate?: boolean; __randomizeSeed?: boolean }) | null>(null);
@@ -539,7 +563,7 @@ export default function PromptStudio() {
       const projectId = typeof state.projectId === "string" && state.projectId.length > 0 ? state.projectId : null;
       const folder = typeof state.folder === "string" && state.folder.length > 0 ? state.folder : null;
 
-      viewerContextRef.current = { source, projectId, folder };
+      setViewerContext({ source, projectId, folder });
       setPreviewPath((prev) => prev || buildViewerApiPath(state.rawPath as string));
       setPreviewMetadata(null);
 
@@ -586,7 +610,7 @@ export default function PromptStudio() {
       isMounted = false;
       if (retryTimeout) clearTimeout(retryTimeout);
     };
-  }, [buildViewerApiPath]);
+  }, [buildViewerApiPath, setViewerContext]);
 
   // Save snippets to backend when library changes (debounced)
   useEffect(() => {
@@ -683,9 +707,10 @@ export default function PromptStudio() {
 
     // If we have a specific path (from ImageViewer), remove it from ProjectGalleryImages immediately
     if (path) {
-      setProjectGalleryImages(prev => prev.filter(img => img.path !== path));
+      const normalizedPath = normalizePathForCompare(path);
+      setProjectGalleryImages(prev => prev.filter(img => normalizePathForCompare(img.path) !== normalizedPath));
       // Also remove from main gallery list if present (optimistic)
-      setGalleryImages(prev => prev.filter(item => item.image.path !== path));
+      setGalleryImages(prev => prev.filter(item => normalizePathForCompare(item.image.path) !== normalizedPath));
     }
 
     try {
@@ -722,18 +747,21 @@ export default function PromptStudio() {
       console.error("Failed to delete images", e);
       loadGallery(); // Revert on error
     }
-  }, [loadGallery]);
+  }, [loadGallery, normalizePathForCompare]);
 
   // Handle bulk delete from ProjectGallery - update viewer if showing a deleted image
   const handleProjectGalleryBulkDelete = useCallback((deletedPaths: string[], remainingImages: FolderImage[]) => {
     // Update the projectGalleryImages used for navigation
     setProjectGalleryImages(remainingImages);
+    const deletedSet = new Set(deletedPaths.map((p) => normalizePathForCompare(p)));
+    if (deletedSet.size > 0) {
+      setGalleryImages(prev => prev.filter(item => !deletedSet.has(normalizePathForCompare(item.image.path))));
+    }
 
     // Check if the currently previewed image was deleted
     if (previewPath) {
       const rawPath = extractRawViewerPath(previewPath);
-
-      const wasDeleted = deletedPaths.some(p => p === rawPath);
+      const wasDeleted = deletedSet.has(normalizePathForCompare(rawPath));
       if (wasDeleted) {
         // Navigate to the next available image or clear preview
         if (remainingImages.length > 0) {
@@ -748,7 +776,14 @@ export default function PromptStudio() {
         }
       }
     }
-  }, [previewPath, extractRawViewerPath, buildViewerApiPath]);
+  }, [previewPath, extractRawViewerPath, buildViewerApiPath, normalizePathForCompare]);
+
+  const handleProjectGalleryImagesUpdate = useCallback((payload: { projectId: string | null; folder: string | null; images: FolderImage[] }) => {
+    if (viewerSource !== "project_gallery" && viewerSource !== "output_folder") return;
+    const context = viewerContextRef.current;
+    if (context.projectId !== payload.projectId || context.folder !== payload.folder) return;
+    setProjectGalleryImages(payload.images);
+  }, [viewerSource]);
 
   // useOutletContext to get panel states from Layout
   const { feedOpen, paletteOpen, setPaletteOpen } = useOutletContext<{
@@ -2303,17 +2338,17 @@ export default function PromptStudio() {
             }
 
             if (!outputProjectId) {
-              viewerContextRef.current = { source: "recent", projectId: null, folder: null };
+              setViewerContext({ source: "recent", projectId: null, folder: null });
               setProjectGalleryImages([]);
               return;
             }
 
             const folderName = outputDir || "output";
-            viewerContextRef.current = {
+            setViewerContext({
               source: "output_folder",
               projectId: String(outputProjectId),
               folder: folderName,
-            };
+            });
             if (completedPath) {
               persistViewerState(completedPath, {
                 source: "output_folder",
@@ -2333,7 +2368,7 @@ export default function PromptStudio() {
               setProjectGalleryImages(folderImages);
             } catch (e) {
               console.warn("Failed to sync viewer output context:", e);
-              viewerContextRef.current = { source: "recent", projectId: null, folder: null };
+              setViewerContext({ source: "recent", projectId: null, folder: null });
               setProjectGalleryImages([]);
             }
           };
@@ -2904,14 +2939,14 @@ export default function PromptStudio() {
 
   const handleGallerySelect = useCallback((item: GalleryItem) => {
     // Viewer is now showing an image from the recent gallery list
-    viewerContextRef.current = { source: "recent", projectId: null, folder: null };
+    setViewerContext({ source: "recent", projectId: null, folder: null });
     const rawPath = extractRawViewerPath(item.image.path);
     handlePreviewSelect(buildViewerApiPath(rawPath), {
       prompt: item.prompt,
       created_at: item.created_at,
       job_params: item.job_params
     });
-  }, [handlePreviewSelect, extractRawViewerPath, buildViewerApiPath]);
+  }, [handlePreviewSelect, extractRawViewerPath, buildViewerApiPath, setViewerContext]);
 
   const handleWorkflowSelect = useCallback(async (workflowId: string, fromImagePath?: string) => {
     if (fromImagePath) {
@@ -2964,9 +2999,12 @@ export default function PromptStudio() {
     return galleryImages.map((gi) => gi.image);
   }, [galleryImages]);
 
-  const viewerImages = projectGalleryImages.length > 0
-    ? viewerImagesFromProjectGallery
-    : viewerImagesFromRecentGallery;
+  const viewerImages = useMemo<ApiImage[]>(() => {
+    if (viewerSource === "project_gallery" || viewerSource === "media_tray" || viewerSource === "output_folder") {
+      return viewerImagesFromProjectGallery;
+    }
+    return viewerImagesFromRecentGallery;
+  }, [viewerSource, viewerImagesFromProjectGallery, viewerImagesFromRecentGallery]);
 
   const handleViewerImageUpdate = useCallback((updated: ApiImage) => {
     setGalleryImages((prev) =>
@@ -2977,18 +3015,18 @@ export default function PromptStudio() {
   const handleProjectGallerySelectImage = useCallback((imagePath: string, pgImages: FolderImage[]) => {
     const projectId = localStorage.getItem("ds_project_gallery_project");
     const folder = localStorage.getItem("ds_project_gallery_folder");
-    viewerContextRef.current = {
+    setViewerContext({
       source: "project_gallery",
       projectId: projectId && projectId.length > 0 ? projectId : null,
       folder: folder && folder.length > 0 ? folder : null,
-    };
+    });
     setPreviewPath(buildViewerApiPath(extractRawViewerPath(imagePath)));
     setProjectGalleryImages(pgImages);
     setPreviewMetadata(null);
-  }, [buildViewerApiPath, extractRawViewerPath]);
+  }, [buildViewerApiPath, extractRawViewerPath, setViewerContext]);
 
   const handleMediaTrayShowInViewer = useCallback((path: string, trayItems: MediaTrayItem[]) => {
-    viewerContextRef.current = { source: "media_tray", projectId: null, folder: null };
+    setViewerContext({ source: "media_tray", projectId: null, folder: null });
     setPreviewPath(buildViewerApiPath(extractRawViewerPath(path)));
     setProjectGalleryImages(
       trayItems.map((item) => ({
@@ -2998,7 +3036,7 @@ export default function PromptStudio() {
       }))
     );
     setPreviewMetadata(null);
-  }, [buildViewerApiPath, extractRawViewerPath]);
+  }, [buildViewerApiPath, extractRawViewerPath, setViewerContext]);
 
   if (isBootLoading) {
     return (
@@ -3092,7 +3130,7 @@ export default function PromptStudio() {
                     setSelectedProjectId(value);
                   }
                   // Reset navigation context (arrow keys) but keep current preview visible
-                  viewerContextRef.current = { source: "recent", projectId: null, folder: null };
+                  setViewerContext({ source: "recent", projectId: null, folder: null });
                   setProjectGalleryImages([]);
 
                   setGalleryRefresh((prev) => prev + 1);
@@ -3354,6 +3392,7 @@ export default function PromptStudio() {
         externalSelection={canvasGallerySelection || undefined}
         externalSelectionKey={canvasGallerySyncKey}
         onSelectImage={handleProjectGallerySelectImage}
+        onImagesUpdate={handleProjectGalleryImagesUpdate}
         onBulkDelete={handleProjectGalleryBulkDelete}
       />
 

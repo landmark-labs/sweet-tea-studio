@@ -15,6 +15,7 @@ interface ProjectGalleryProps {
     projects: Project[];
     className?: string;
     onSelectImage?: (imagePath: string, images: FolderImage[]) => void;
+    onImagesUpdate?: (payload: { projectId: string | null; folder: string | null; images: FolderImage[] }) => void;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     workflows?: any[];
     onRegenerate?: (item: any, seedOption: 'same' | 'random') => void;
@@ -154,7 +155,18 @@ const GalleryItemCell = React.memo(function GalleryItemCell({
         prevProps.isSelected === nextProps.isSelected;
 });
 
-export const ProjectGallery = React.memo(function ProjectGallery({ projects, className, onSelectImage, workflows = [], onRegenerate, onUseInPipe, onBulkDelete, externalSelection, externalSelectionKey }: ProjectGalleryProps) {
+export const ProjectGallery = React.memo(function ProjectGallery({
+    projects,
+    className,
+    onSelectImage,
+    onImagesUpdate,
+    workflows = [],
+    onRegenerate,
+    onUseInPipe,
+    onBulkDelete,
+    externalSelection,
+    externalSelectionKey,
+}: ProjectGalleryProps) {
     // Panel state - persisted
     const [collapsed, setCollapsed] = useState(() => {
         const saved = localStorage.getItem("ds_project_gallery_collapsed");
@@ -303,7 +315,14 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
 
         const loadImages = async (showLoading = true) => {
             if (!selectedProjectId || !selectedFolder) {
-                if (mounted) setImages([]);
+                if (mounted) {
+                    setImages([]);
+                    onImagesUpdate?.({
+                        projectId: selectedProjectId || null,
+                        folder: selectedFolder || null,
+                        images: [],
+                    });
+                }
                 return;
             }
 
@@ -320,12 +339,22 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
                     }
                     lastSignatureRef.current = nextSignature;
                     setImages(data);
+                    onImagesUpdate?.({
+                        projectId: selectedProjectId || null,
+                        folder: selectedFolder || null,
+                        images: data,
+                    });
                 }
             } catch (e) {
                 console.error("Failed to load folder images", e);
                 if (mounted) {
                     lastSignatureRef.current = null;
                     setImages([]);
+                    onImagesUpdate?.({
+                        projectId: selectedProjectId || null,
+                        folder: selectedFolder || null,
+                        images: [],
+                    });
                 }
             } finally {
                 if (mounted && showLoading) setIsLoading(false);
@@ -355,7 +384,7 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
             mounted = false;
             clearTimeout(timeoutId);
         };
-    }, [selectedProjectId, selectedFolder, collapsed]);
+    }, [selectedProjectId, selectedFolder, collapsed, onImagesUpdate]);
 
     // Reset folder when project changes
     useEffect(() => {
@@ -480,6 +509,11 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
             // Use the captured Set for filtering to ensure we remove exactly the deleted paths
             const remainingImages = imagesRef.current.filter(img => !pathsToDelete.has(img.path));
             setImages(remainingImages);
+            onImagesUpdate?.({
+                projectId: selectedProjectId || null,
+                folder: selectedFolder || null,
+                images: remainingImages,
+            });
             // Notify parent so ImageViewer can update if showing a deleted image
             onBulkDelete?.(Array.from(pathsToDelete), remainingImages);
         } catch (e) {
@@ -596,6 +630,11 @@ export const ProjectGallery = React.memo(function ProjectGallery({ projects, cla
             await api.deleteFolderImages(parseInt(selectedProjectId), selectedFolder, [image.path]);
             const newImages = images.filter(img => img.path !== image.path);
             setImages(newImages);
+            onImagesUpdate?.({
+                projectId: selectedProjectId || null,
+                folder: selectedFolder || null,
+                images: newImages,
+            });
 
             // Navigate to next image after deletion
             if (nextImage && onSelectImage) {

@@ -65,6 +65,15 @@ Behavior:
 
 The Project Gallery is filesystem-driven, so it always reflects what is on disk for that project folder.
 
+## Image Viewer (Prompt Studio)
+
+The ImageViewer's navigation list is intentionally source-scoped to prevent stale or mismatched navigation:
+- `recent` source uses the main gallery list.
+- `project_gallery` / `output_folder` sources use the current project folder list.
+- `media_tray` uses the tray-derived list.
+
+When deletes occur, the viewer list and recent gallery list are updated immediately using normalized path comparisons so deleted files cannot be paged to after removal. ProjectGallery polling also notifies the viewer list for the active project/folder so the UI stays in sync without requiring a navigation refresh.
+
 ## Projects Page Counts
 
 API: `GET /projects`
