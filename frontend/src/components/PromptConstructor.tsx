@@ -879,15 +879,11 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
                                 id: `rehydrate-${fieldKey}-${idx}`,
                                 type: "block" as const,
                                 sourceId: snap.sourceId,
-                                content: librarySnippet.content,
+                                content,
                                 label: librarySnippet.label || snap?.label,
                                 color: librarySnippet.color || snap?.color,
-                                // Only freeze if content differs from the live snippet.
-                                // If content matches, omit frozen mode so the block tracks
-                                // future snippet updates normally.
-                                ...(content !== librarySnippet.content
-                                    ? { rehydrationMode: "frozen" as const, frozenContent: content }
-                                    : {}),
+                                rehydrationMode: "frozen" as const,
+                                frozenContent: content,
                             }];
                         }
 
