@@ -718,15 +718,25 @@ export default function PromptStudio() {
       setGalleryImages(prev => prev.filter(item => normalizePathForCompare(item.image.path) !== normalizedPath));
     }
 
+    const viewerImagesForDelete = (viewerSource === "project_gallery" || viewerSource === "media_tray" || viewerSource === "output_folder")
+      ? projectGalleryImages.map((fi) => ({
+        id: -1,
+        job_id: -1,
+        path: fi.path,
+        filename: fi.filename,
+        created_at: "",
+      }))
+      : galleryImages.map((gi) => gi.image);
+
     if (deletedSet.size > 0 && previewPath) {
       const previewRawPath = extractRawViewerPath(previewPath);
       const previewNormalized = normalizePathForCompare(previewRawPath);
       if (previewNormalized && deletedSet.has(previewNormalized)) {
-        const remainingViewerImages = viewerImages.filter(
+        const remainingViewerImages = viewerImagesForDelete.filter(
           (img) => !deletedSet.has(normalizePathForCompare(img.path))
         );
         if (remainingViewerImages.length > 0) {
-          const currentIdx = viewerImages.findIndex(
+          const currentIdx = viewerImagesForDelete.findIndex(
             (img) => normalizePathForCompare(img.path) === previewNormalized
           );
           const nextIdx = currentIdx >= 0
@@ -783,7 +793,8 @@ export default function PromptStudio() {
     loadGallery,
     normalizePathForCompare,
     previewPath,
-    viewerImages,
+    projectGalleryImages,
+    viewerSource,
   ]);
 
   // Handle bulk delete from ProjectGallery - update viewer if showing a deleted image
