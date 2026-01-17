@@ -193,9 +193,13 @@ export const ProjectGallery = React.memo(function ProjectGallery({
     const submenuCloseTimerRef = useRef<number | null>(null);
     // Track previous project to avoid resetting folder on transient empty states
     const prevProjectIdRef = useRef<string>(selectedProjectId);
+    const onImagesUpdateRef = useRef<ProjectGalleryProps["onImagesUpdate"]>(onImagesUpdate);
 
     // Keep imagesRef in sync with images state for stable callbacks
     imagesRef.current = images;
+    useEffect(() => {
+        onImagesUpdateRef.current = onImagesUpdate;
+    }, [onImagesUpdate]);
 
     const addToMediaTray = useMediaTrayStore(useCallback((state) => state.addItems, []));
     const clearSubmenuCloseTimer = useCallback(() => {
@@ -317,7 +321,7 @@ export const ProjectGallery = React.memo(function ProjectGallery({
             if (!selectedProjectId || !selectedFolder) {
                 if (mounted) {
                     setImages([]);
-                    onImagesUpdate?.({
+                    onImagesUpdateRef.current?.({
                         projectId: selectedProjectId || null,
                         folder: selectedFolder || null,
                         images: [],
@@ -339,7 +343,7 @@ export const ProjectGallery = React.memo(function ProjectGallery({
                     }
                     lastSignatureRef.current = nextSignature;
                     setImages(data);
-                    onImagesUpdate?.({
+                    onImagesUpdateRef.current?.({
                         projectId: selectedProjectId || null,
                         folder: selectedFolder || null,
                         images: data,
@@ -350,7 +354,7 @@ export const ProjectGallery = React.memo(function ProjectGallery({
                 if (mounted) {
                     lastSignatureRef.current = null;
                     setImages([]);
-                    onImagesUpdate?.({
+                    onImagesUpdateRef.current?.({
                         projectId: selectedProjectId || null,
                         folder: selectedFolder || null,
                         images: [],
@@ -384,7 +388,7 @@ export const ProjectGallery = React.memo(function ProjectGallery({
             mounted = false;
             clearTimeout(timeoutId);
         };
-    }, [selectedProjectId, selectedFolder, collapsed, onImagesUpdate]);
+    }, [selectedProjectId, selectedFolder, collapsed]);
 
     // Reset folder when project changes
     useEffect(() => {
@@ -509,7 +513,7 @@ export const ProjectGallery = React.memo(function ProjectGallery({
             // Use the captured Set for filtering to ensure we remove exactly the deleted paths
             const remainingImages = imagesRef.current.filter(img => !pathsToDelete.has(img.path));
             setImages(remainingImages);
-            onImagesUpdate?.({
+            onImagesUpdateRef.current?.({
                 projectId: selectedProjectId || null,
                 folder: selectedFolder || null,
                 images: remainingImages,
@@ -630,7 +634,7 @@ export const ProjectGallery = React.memo(function ProjectGallery({
             await api.deleteFolderImages(parseInt(selectedProjectId), selectedFolder, [image.path]);
             const newImages = images.filter(img => img.path !== image.path);
             setImages(newImages);
-            onImagesUpdate?.({
+            onImagesUpdateRef.current?.({
                 projectId: selectedProjectId || null,
                 folder: selectedFolder || null,
                 images: newImages,
