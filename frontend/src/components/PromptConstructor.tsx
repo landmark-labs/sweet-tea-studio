@@ -39,30 +39,90 @@ interface PromptConstructorProps {
 
 // --- Constants ---
 
+// Expanded color palette with 56 unique colors to avoid repetition.
+// Contains original Tailwind colors, extended shades, and HSL-based custom colors.
 export const COLORS = [
-    "bg-stone-100 border-stone-300 text-stone-900",
-    "bg-indigo-100 border-indigo-300 text-indigo-900",
-    "bg-emerald-100 border-emerald-300 text-emerald-900",
+    // Original palette (22 colors) - 100-level backgrounds
     "bg-red-100 border-red-300 text-red-900",
-    "bg-cyan-100 border-cyan-300 text-cyan-900",
-    "bg-amber-200 border-amber-400 text-amber-900", // Darkened for contrast vs bg-amber-50
-    "bg-fuchsia-100 border-fuchsia-300 text-fuchsia-900",
-    "bg-lime-100 border-lime-300 text-lime-900",
-    "bg-violet-100 border-violet-300 text-violet-900",
     "bg-orange-100 border-orange-300 text-orange-900",
-    "bg-teal-100 border-teal-300 text-teal-900",
-    "bg-rose-100 border-rose-300 text-rose-900",
-    "bg-blue-100 border-blue-300 text-blue-900",
-    "bg-yellow-200 border-yellow-400 text-yellow-900", // Darkened for contrast vs bg-amber-50
-    "bg-purple-100 border-purple-300 text-purple-900",
+    "bg-amber-200 border-amber-400 text-amber-900",
+    "bg-yellow-200 border-yellow-400 text-yellow-900",
+    "bg-lime-100 border-lime-300 text-lime-900",
     "bg-green-100 border-green-300 text-green-900",
+    "bg-emerald-100 border-emerald-300 text-emerald-900",
+    "bg-teal-100 border-teal-300 text-teal-900",
+    "bg-cyan-100 border-cyan-300 text-cyan-900",
     "bg-sky-100 border-sky-300 text-sky-900",
+    "bg-blue-100 border-blue-300 text-blue-900",
+    "bg-indigo-100 border-indigo-300 text-indigo-900",
+    "bg-violet-100 border-violet-300 text-violet-900",
+    "bg-purple-100 border-purple-300 text-purple-900",
+    "bg-fuchsia-100 border-fuchsia-300 text-fuchsia-900",
     "bg-pink-100 border-pink-300 text-pink-900",
+    "bg-rose-100 border-rose-300 text-rose-900",
+    "bg-stone-100 border-stone-300 text-stone-900",
     "bg-slate-100 border-slate-300 text-slate-900",
     "bg-zinc-100 border-zinc-300 text-zinc-900",
     "bg-gray-100 border-gray-300 text-gray-900",
     "bg-neutral-100 border-neutral-300 text-neutral-900",
+
+    // Extended palette (22 colors) - 200-level backgrounds for visual distinction
+    "bg-red-200 border-red-400 text-red-900",
+    "bg-orange-200 border-orange-400 text-orange-900",
+    "bg-lime-200 border-lime-400 text-lime-900",
+    "bg-green-200 border-green-400 text-green-900",
+    "bg-emerald-200 border-emerald-400 text-emerald-900",
+    "bg-teal-200 border-teal-400 text-teal-900",
+    "bg-cyan-200 border-cyan-400 text-cyan-900",
+    "bg-sky-200 border-sky-400 text-sky-900",
+    "bg-blue-200 border-blue-400 text-blue-900",
+    "bg-indigo-200 border-indigo-400 text-indigo-900",
+    "bg-violet-200 border-violet-400 text-violet-900",
+    "bg-purple-200 border-purple-400 text-purple-900",
+    "bg-fuchsia-200 border-fuchsia-400 text-fuchsia-900",
+    "bg-pink-200 border-pink-400 text-pink-900",
+    "bg-rose-200 border-rose-400 text-rose-900",
+    "bg-stone-200 border-stone-400 text-stone-900",
+    "bg-slate-200 border-slate-400 text-slate-900",
+    "bg-zinc-200 border-zinc-400 text-zinc-900",
+    "bg-gray-200 border-gray-400 text-gray-900",
+    "bg-neutral-200 border-neutral-400 text-neutral-900",
+    "bg-amber-100 border-amber-300 text-amber-900",
+    "bg-yellow-100 border-yellow-300 text-yellow-900",
+
+    // HSL-based custom colors (12 colors) - unique hues for additional variety
+    "bg-[hsl(15,85%,92%)] border-[hsl(15,70%,65%)] text-[hsl(15,50%,25%)]",   // coral
+    "bg-[hsl(45,90%,88%)] border-[hsl(45,80%,55%)] text-[hsl(45,60%,25%)]",   // gold
+    "bg-[hsl(75,70%,88%)] border-[hsl(75,55%,55%)] text-[hsl(75,45%,25%)]",   // chartreuse
+    "bg-[hsl(165,65%,88%)] border-[hsl(165,50%,50%)] text-[hsl(165,45%,25%)]", // mint
+    "bg-[hsl(195,80%,90%)] border-[hsl(195,65%,55%)] text-[hsl(195,50%,25%)]", // azure
+    "bg-[hsl(225,75%,92%)] border-[hsl(225,60%,60%)] text-[hsl(225,50%,25%)]", // periwinkle
+    "bg-[hsl(285,65%,92%)] border-[hsl(285,50%,60%)] text-[hsl(285,45%,25%)]", // lavender
+    "bg-[hsl(315,70%,92%)] border-[hsl(315,55%,60%)] text-[hsl(315,45%,25%)]", // orchid
+    "bg-[hsl(345,75%,92%)] border-[hsl(345,60%,60%)] text-[hsl(345,50%,25%)]", // salmon
+    "bg-[hsl(30,80%,90%)] border-[hsl(30,65%,55%)] text-[hsl(30,50%,25%)]",    // peach
+    "bg-[hsl(135,60%,88%)] border-[hsl(135,45%,50%)] text-[hsl(135,40%,25%)]", // sage
+    "bg-[hsl(255,70%,92%)] border-[hsl(255,55%,60%)] text-[hsl(255,45%,25%)]", // iris
 ];
+
+/**
+ * Get the next available color for a new snippet.
+ * Prefers unused colors to avoid visual collision, falls back to cycling when all used.
+ */
+export const getNextSnippetColor = (existingSnippets: PromptItem[]): string => {
+    const usedColors = new Set(existingSnippets.map(s => s.color).filter(Boolean));
+
+    // Find first unused color
+    for (const color of COLORS) {
+        if (!usedColors.has(color)) {
+            return color;
+        }
+    }
+
+    // All colors used - cycle from beginning based on count
+    return COLORS[existingSnippets.length % COLORS.length];
+};
+
 
 // --- Sub-Components ---
 
@@ -1400,7 +1460,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
                 type: 'block',
                 label: snippetTitle,
                 content: snippetContent,
-                color: COLORS[library.length % COLORS.length]
+                color: getNextSnippetColor(library)
             };
 
             setLibrary([...library, newSnippet]);

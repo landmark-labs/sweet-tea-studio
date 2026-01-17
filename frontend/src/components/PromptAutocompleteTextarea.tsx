@@ -967,8 +967,8 @@ export function PromptAutocompleteTextarea({
                         isActive && "ring-2 ring-blue-400 border-blue-400",
                         highlightSnippets ? "bg-transparent focus:bg-transparent" : "",
                         highlightSnippets && isActive && "bg-blue-50/10", // slight tint if active but transparent
-                        // Dark mode with highlighting: make text transparent so backdrop text shows through
-                        showHighlightOverlay && "dark:text-transparent dark:caret-slate-300",
+                        // Dark mode caret visibility: black when on light snippet highlights, white otherwise
+                        showHighlightOverlay ? "dark:text-transparent dark:caret-black" : "dark:caret-white",
                         className,
                         // Ensure padding matches overlay
                         !className?.includes("p-") && "p-3"
