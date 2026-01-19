@@ -667,6 +667,12 @@ export function PromptAutocompleteTextarea({
         ? (highlightState?.value === localValue ? highlightState.nodes : [localValue])
         : null;
 
+    // Determine if cursor is within a highlighted snippet (for dynamic caret color in dark mode)
+    const isCursorInHighlight = useMemo(() => {
+        if (!showHighlightOverlay || !highlightState?.matches) return false;
+        return highlightState.matches.some((m) => cursor >= m.start && cursor <= m.end);
+    }, [showHighlightOverlay, highlightState, cursor]);
+
     const getTextareaIndexFromPoint = useCallback((
         textarea: HTMLTextAreaElement,
         clientX: number,
@@ -967,8 +973,10 @@ export function PromptAutocompleteTextarea({
                         isActive && "ring-2 ring-blue-400 border-blue-400",
                         highlightSnippets ? "bg-transparent focus:bg-transparent" : "",
                         highlightSnippets && isActive && "bg-blue-50/10", // slight tint if active but transparent
-                        // Dark mode caret visibility: black when on light snippet highlights, white otherwise
-                        showHighlightOverlay ? "dark:text-transparent dark:caret-black" : "dark:caret-white",
+                        // Dark mode caret visibility: black when cursor is on light snippet highlights, white otherwise
+                        showHighlightOverlay
+                            ? (isCursorInHighlight ? "dark:text-transparent dark:caret-black" : "dark:text-transparent dark:caret-white")
+                            : "dark:caret-white",
                         className,
                         // Ensure padding matches overlay
                         !className?.includes("p-") && "p-3"
