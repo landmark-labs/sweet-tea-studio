@@ -32,6 +32,12 @@ const GRID_PADDING = 8;
 const MIN_COLUMN_WIDTH = 260;
 const MAX_COLUMN_COUNT = 4;
 
+// Larger thumbnails for Gallery (512px) vs ProjectGallery sidebar (256px) due to bigger cards
+const GALLERY_THUMBNAIL_PX = 512;
+
+const buildThumbnailUrl = (imageId: number, maxPx: number = GALLERY_THUMBNAIL_PX) =>
+    `${IMAGE_API_BASE}/gallery/image/${imageId}/thumbnail?max_px=${maxPx}`;
+
 // Hover-to-play video thumbnail component
 // Uses isHovering prop from parent to control playback (overlay blocks direct mouse events)
 function VideoThumbnail({ src, className, isHovering }: { src: string; className?: string; isHovering?: boolean }) {
@@ -86,13 +92,13 @@ function GalleryCardContent({ item, isSelected, handleImageError }: GalleryCardC
 
             {isVideo ? (
                 <VideoThumbnail
-                    src={`${IMAGE_API_BASE}/gallery/image/${item.image.id}`}
+                    src={buildThumbnailUrl(item.image.id)}
                     className="w-full h-full object-contain transition-transform group-hover:scale-105"
                     isHovering={isHovering}
                 />
             ) : (
                 <img
-                    src={`${IMAGE_API_BASE}/gallery/image/${item.image.id}`}
+                    src={buildThumbnailUrl(item.image.id)}
                     alt={item.image.filename}
                     className="w-full h-full object-contain transition-transform group-hover:scale-105"
                     loading="lazy"
