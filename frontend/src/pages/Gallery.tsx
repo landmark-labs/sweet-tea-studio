@@ -87,14 +87,14 @@ function GalleryCardContent({ item, isSelected, handleImageError }: GalleryCardC
             {isVideo ? (
                 <VideoThumbnail
                     src={`${IMAGE_API_BASE}/gallery/image/${item.image.id}`}
-                    className="w-full h-full object-cover object-top transition-transform group-hover:scale-105"
+                    className="w-full h-full object-contain transition-transform group-hover:scale-105"
                     isHovering={isHovering}
                 />
             ) : (
                 <img
                     src={`${IMAGE_API_BASE}/gallery/image/${item.image.id}`}
                     alt={item.image.filename}
-                    className="w-full h-full object-cover object-top transition-transform group-hover:scale-105"
+                    className="w-full h-full object-contain transition-transform group-hover:scale-105"
                     loading="lazy"
                     decoding="async"
                     onError={handleImageError}
