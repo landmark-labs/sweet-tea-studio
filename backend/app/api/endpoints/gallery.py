@@ -8,8 +8,11 @@ import re
 import shutil
 import subprocess
 import sys
+import threading
+import time
 import zipfile
 from datetime import datetime
+from collections import OrderedDict
 from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -780,9 +783,54 @@ THUMBNAIL_MIN_PX = 64
 THUMBNAIL_MAX_PX = 1024
 THUMBNAIL_DEFAULT_PX = 256
 
+_RESOLVE_CACHE_MAX = int(os.getenv("STS_MEDIA_PATH_CACHE_MAX", "2048"))
+_RESOLVE_CACHE_TTL_S = int(os.getenv("STS_MEDIA_PATH_CACHE_TTL_S", "300"))
+_resolve_path_cache: "OrderedDict[str, tuple[float, Optional[str]]]" = OrderedDict()
+_resolve_path_cache_lock = threading.Lock()
+
+
+def _resolve_cache_get(path: str) -> tuple[bool, Optional[str]]:
+    if _RESOLVE_CACHE_TTL_S <= 0:
+        return False, None
+    key = _normalize_fs_path(path)
+    if not key:
+        return False, None
+    now = time.time()
+    with _resolve_path_cache_lock:
+        entry = _resolve_path_cache.get(key)
+        if not entry:
+            return False, None
+        cached_at, cached_value = entry
+        if now - cached_at > _RESOLVE_CACHE_TTL_S:
+            _resolve_path_cache.pop(key, None)
+            return False, None
+        _resolve_path_cache.move_to_end(key)
+        return True, cached_value
+
+
+def _resolve_cache_set(path: str, resolved: Optional[str]) -> None:
+    if _RESOLVE_CACHE_TTL_S <= 0 or _RESOLVE_CACHE_MAX <= 0:
+        return
+    key = _normalize_fs_path(path)
+    if not key:
+        return
+    with _resolve_path_cache_lock:
+        _resolve_path_cache[key] = (time.time(), resolved)
+        _resolve_path_cache.move_to_end(key)
+        while len(_resolve_path_cache) > _RESOLVE_CACHE_MAX:
+            _resolve_path_cache.popitem(last=False)
+
 
 def _resolve_media_path(path: str, session: Session) -> Optional[str]:
+    cache_hit, cached = _resolve_cache_get(path)
+    if cache_hit:
+        if cached and os.path.exists(cached):
+            return cached
+        if cached is None:
+            return None
+
     if os.path.exists(path):
+        _resolve_cache_set(path, path)
         return path
 
     normalized = path.replace("\\", "/")
@@ -856,6 +904,7 @@ def _resolve_media_path(path: str, session: Session) -> Optional[str]:
                 continue
             for candidate in candidate_paths_for_base(base):
                 if os.path.exists(candidate):
+                    _resolve_cache_set(path, candidate)
                     return candidate
 
     # Final fallback: allow environment-configured ComfyUI locations even if engine rows
@@ -869,8 +918,10 @@ def _resolve_media_path(path: str, session: Session) -> Optional[str]:
             continue
         for candidate in candidate_paths_for_base(str(base)):
             if os.path.exists(candidate):
+                _resolve_cache_set(path, candidate)
                 return candidate
 
+    _resolve_cache_set(path, None)
     return None
 
 
@@ -906,6 +957,51 @@ def _thumbnail_cache_dir() -> Path:
     cache_dir = settings.meta_dir / "thumbnails"
     cache_dir.mkdir(parents=True, exist_ok=True)
     return cache_dir
+
+
+def _purge_thumbnail_cache_for_path(path: str) -> int:
+    """
+    Remove all cached thumbnails for a given source image path.
+    
+    Thumbnails are keyed by SHA1 of "{path}:{mtime}:{size}:{max_px}:{type}".
+    Since we don't know all possible max_px variants, we generate cache keys
+    for common sizes and delete matching files.
+    
+    Returns the number of cache files deleted.
+    """
+    cache_dir = _thumbnail_cache_dir()
+    deleted = 0
+    
+    # Try to get file stats for accurate cache key matching
+    try:
+        stat = os.stat(path)
+        mtime_ns = stat.st_mtime_ns
+        size = stat.st_size
+    except OSError:
+        # File already deleted, use fallback key format
+        mtime_ns = None
+        size = None
+    
+    # Common thumbnail sizes used by Gallery (512) and ProjectGallery (256)
+    for max_px in [64, 128, 256, 512, 1024]:
+        for media_type in ["image", "video"]:
+            if mtime_ns is not None and size is not None:
+                cache_key = f"{path}:{mtime_ns}:{size}:{max_px}:{media_type}"
+            else:
+                # Fallback key format when file is already deleted
+                cache_key = f"{path}:{max_px}:{media_type}"
+            
+            cache_name = hashlib.sha1(cache_key.encode("utf-8")).hexdigest()
+            cache_path = cache_dir / f"{cache_name}.jpg"
+            
+            try:
+                if cache_path.exists():
+                    cache_path.unlink()
+                    deleted += 1
+            except OSError:
+                pass
+    
+    return deleted
 
 
 def _build_placeholder_svg(label: str, size_px: int) -> bytes:
@@ -1485,6 +1581,9 @@ def _bulk_soft_delete(image_ids: List[int], session: Session) -> BulkDeleteResul
         # Move files to .trash folder (best-effort)
         try:
             if image.path and isinstance(image.path, str) and os.path.exists(image.path):
+                # Purge any cached thumbnails for this image before deletion
+                _purge_thumbnail_cache_for_path(image.path)
+                
                 original_path = Path(image.path)
                 trash_dir = original_path.parent / ".trash"
                 trash_dir.mkdir(exist_ok=True)
@@ -2416,11 +2515,33 @@ def serve_thumbnail_by_path(
     return Response(content=thumb_bytes, media_type="image/jpeg", headers=headers)
 
 
+@router.get("/image/{image_id}/thumbnail")
+def serve_thumbnail_by_id(
+    image_id: int,
+    max_px: int = Query(THUMBNAIL_DEFAULT_PX, ge=THUMBNAIL_MIN_PX, le=THUMBNAIL_MAX_PX),
+    session: Session = Depends(get_session),
+):
+    """
+    Serve a thumbnail for an image by its database ID.
+    Uses the same caching mechanism as path-based thumbnails.
+    """
+    image = session.get(Image, image_id)
+    if not image or image.is_deleted:
+        raise HTTPException(status_code=404, detail="Image not found")
+    
+    if not image.path or not os.path.exists(image.path):
+        raise HTTPException(status_code=404, detail="Image file not found")
+    
+    # Delegate to the path-based logic
+    return serve_thumbnail_by_path(image.path, max_px, session)
+
+
 @router.get("/image/path")
 def serve_image_by_path(path: str, session: Session = Depends(get_session)):
     actual_path = _resolve_media_path(path, session)
     if actual_path and os.path.exists(actual_path):
-        return FileResponse(actual_path, media_type=_guess_media_type(actual_path))
+        headers = {"Cache-Control": "public, max-age=300"}
+        return FileResponse(actual_path, media_type=_guess_media_type(actual_path), headers=headers)
 
     logger.warning("Serve Path: Missing file", extra={"path": path})
     raise HTTPException(status_code=404, detail=f"File not found: {path}")
@@ -2458,6 +2579,9 @@ def delete_image_by_path(req: DeleteByPathRequest, session: Session = Depends(ge
     
     # Delete the file from disk
     try:
+        # Purge any cached thumbnails for this image before deletion
+        _purge_thumbnail_cache_for_path(actual_path)
+        
         os.remove(actual_path)
         # Also delete associated .json metadata file if it exists
         json_path = os.path.splitext(actual_path)[0] + ".json"

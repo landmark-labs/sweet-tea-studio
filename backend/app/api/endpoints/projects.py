@@ -2,7 +2,7 @@
 Projects API endpoints.
 Manages project creation, listing, and run organization.
 """
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
 from sqlmodel import Session, select, SQLModel
 from typing import List, Optional
 from datetime import datetime
@@ -10,6 +10,7 @@ from collections import OrderedDict
 import os
 import re
 import threading
+import time
 
 from app.db.engine import engine
 from app.models.project import Project, ProjectCreate, ProjectRead
@@ -30,6 +31,38 @@ router = APIRouter()
 _DIMENSION_CACHE_MAX = int(os.getenv("STS_IMAGE_DIM_CACHE_MAX", "2000"))
 _image_dim_cache: "OrderedDict[str, tuple[float, Optional[int], Optional[int]]]" = OrderedDict()
 _image_dim_cache_lock = threading.Lock()
+
+_FOLDER_IMAGE_CACHE_MAX = int(os.getenv("STS_PROJECT_FOLDER_CACHE_MAX", "32"))
+_FOLDER_IMAGE_CACHE_TTL_S = float(os.getenv("STS_PROJECT_FOLDER_CACHE_TTL_S", "2.5"))
+_folder_image_cache: "OrderedDict[str, tuple[float, str, List[dict]]]" = OrderedDict()
+_folder_image_cache_lock = threading.Lock()
+
+
+def _folder_cache_get(cache_key: str, signature: str) -> Optional[List[dict]]:
+    if _FOLDER_IMAGE_CACHE_TTL_S <= 0:
+        return None
+    now = time.time()
+    with _folder_image_cache_lock:
+        entry = _folder_image_cache.get(cache_key)
+        if not entry:
+            return None
+        cached_at, cached_signature, cached_images = entry
+        if cached_signature != signature:
+            return None
+        if now - cached_at > _FOLDER_IMAGE_CACHE_TTL_S:
+            return None
+        _folder_image_cache.move_to_end(cache_key)
+        return cached_images
+
+
+def _folder_cache_set(cache_key: str, signature: str, images: List[dict]) -> None:
+    if _FOLDER_IMAGE_CACHE_TTL_S <= 0 or _FOLDER_IMAGE_CACHE_MAX <= 0:
+        return
+    with _folder_image_cache_lock:
+        _folder_image_cache[cache_key] = (time.time(), signature, images)
+        _folder_image_cache.move_to_end(cache_key)
+        while len(_folder_image_cache) > _FOLDER_IMAGE_CACHE_MAX:
+            _folder_image_cache.popitem(last=False)
 
 
 def _get_cached_dimensions(path: str, mtime: float) -> tuple[Optional[int], Optional[int], bool]:
@@ -658,6 +691,8 @@ class FolderImage(SQLModel):
 def list_project_folder_images(
     project_id: int,
     folder_name: str,
+    include_dimensions: bool = Query(True),
+    dimensions_source: str = Query("auto"),
     session: Session = Depends(get_session)
 ):
     """
@@ -702,6 +737,32 @@ def list_project_folder_images(
 
     if not folder_paths:
         return []
+
+    dimensions_source = (dimensions_source or "auto").lower()
+    if dimensions_source not in {"auto", "db", "file"}:
+        dimensions_source = "auto"
+
+    cache_key_parts = [
+        str(project_id),
+        folder_name,
+        "dims" if include_dimensions else "nodims",
+        dimensions_source,
+    ]
+    signature_parts = []
+    for path in folder_paths:
+        norm_path = normalize_fs_path(str(path))
+        cache_key_parts.append(norm_path)
+        try:
+            stat = path.stat()
+            signature_parts.append(f"{norm_path}:{stat.st_mtime_ns}")
+        except Exception:
+            signature_parts.append(f"{norm_path}:missing")
+
+    cache_key = "|".join(cache_key_parts)
+    signature = "|".join(signature_parts)
+    cached = _folder_cache_get(cache_key, signature)
+    if cached is not None:
+        return cached
     
     # Supported media extensions
     image_extensions = {".png", ".jpg", ".jpeg", ".webp"}
@@ -718,8 +779,12 @@ def list_project_folder_images(
         deleted_paths.add(normalize_fs_path(str(path_value)))
     
     images = []
+    entry_records: List[tuple[dict, str, float]] = []
     try:
-        from PIL import Image as PILImage
+        use_file_dims = include_dimensions and dimensions_source in {"auto", "file"}
+        PILImage = None
+        if use_file_dims:
+            from PIL import Image as PILImage  # type: ignore
         
         for folder_path in folder_paths:
             for entry in os.scandir(folder_path):
@@ -730,35 +795,62 @@ def list_project_folder_images(
                         if normalize_fs_path(entry.path) in deleted_paths:
                             continue
                         stat = entry.stat()
-
-                        # Try to read image dimensions (cached by mtime to avoid repeated opens)
-                        width, height = None, None
-                        if ext in image_extensions:
-                            cached_width, cached_height, cached = _get_cached_dimensions(entry.path, stat.st_mtime)
-                            if cached:
-                                width, height = cached_width, cached_height
-                            else:
-                                try:
-                                    with PILImage.open(entry.path) as img:
-                                        width, height = img.size
-                                except Exception:
-                                    pass  # Dimensions will remain None
-                                _set_cached_dimensions(entry.path, stat.st_mtime, width, height)
-
-                        images.append({
+                        record = {
                             "path": entry.path,
                             "filename": entry.name,
                             "mtime": dt.fromtimestamp(stat.st_mtime).isoformat(),
-                            "width": width,
-                            "height": height
-                        })
+                            "width": None,
+                            "height": None,
+                        }
+                        entry_records.append((record, ext, stat.st_mtime))
+                        images.append(record)
     except Exception as e:
         print(f"Error scanning folder {folder_path}: {e}")
         return []
+
+    if include_dimensions and images:
+        path_to_dims: dict[str, tuple[Optional[int], Optional[int]]] = {}
+        paths = [record["path"] for record in images]
+        chunk_size = 900
+        for i in range(0, len(paths), chunk_size):
+            chunk = paths[i:i + chunk_size]
+            rows = session.exec(
+                select(Image.path, Image.width, Image.height).where(Image.path.in_(chunk))
+            ).all()
+            for row in rows:
+                try:
+                    img_path, width, height = row
+                except Exception:
+                    continue
+                if img_path:
+                    path_to_dims[str(img_path)] = (width, height)
+
+        for record, ext, stat_mtime in entry_records:
+            dims = path_to_dims.get(record["path"])
+            if dims:
+                width, height = dims
+                if width is not None and height is not None:
+                    record["width"] = width
+                    record["height"] = height
+
+            if record["width"] is None and include_dimensions and dimensions_source in {"auto", "file"} and PILImage is not None:
+                if ext in image_extensions:
+                    cached_width, cached_height, cached = _get_cached_dimensions(record["path"], stat_mtime)
+                    if cached:
+                        record["width"] = cached_width
+                        record["height"] = cached_height
+                    else:
+                        try:
+                            with PILImage.open(record["path"]) as img:
+                                record["width"], record["height"] = img.size
+                        except Exception:
+                            pass
+                        _set_cached_dimensions(record["path"], stat_mtime, record["width"], record["height"])
     
     # Sort by modification time, newest first
     images.sort(key=lambda x: x["mtime"], reverse=True)
-    
+    _folder_cache_set(cache_key, signature, images)
+
     return images
 
 

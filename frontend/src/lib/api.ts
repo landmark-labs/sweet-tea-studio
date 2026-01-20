@@ -1117,8 +1117,21 @@ export const api = {
     },
 
     // --- Project Folder Images ---
-    getProjectFolderImages: async (projectId: number, folderName: string): Promise<FolderImage[]> => {
-        const res = await fetch(`${API_BASE}/projects/${projectId}/folders/${encodeURIComponent(folderName)}/images`);
+    getProjectFolderImages: async (
+        projectId: number,
+        folderName: string,
+        options?: { includeDimensions?: boolean; dimensionsSource?: "auto" | "db" | "file" }
+    ): Promise<FolderImage[]> => {
+        const params = new URLSearchParams();
+        if (options?.includeDimensions === false) {
+            params.append("include_dimensions", "false");
+        }
+        if (options?.dimensionsSource) {
+            params.append("dimensions_source", options.dimensionsSource);
+        }
+        const qs = params.toString();
+        const url = `${API_BASE}/projects/${projectId}/folders/${encodeURIComponent(folderName)}/images${qs ? `?${qs}` : ""}`;
+        const res = await fetch(url);
         if (!res.ok) throw new Error("Failed to fetch folder images");
         return res.json();
     },

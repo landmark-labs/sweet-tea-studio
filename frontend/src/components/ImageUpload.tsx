@@ -168,7 +168,7 @@ export function ImageUpload({
     useEffect(() => {
         if (selectedProjectId && selectedFolder) {
             setIsLoadingProjectImages(true);
-            api.getProjectFolderImages(selectedProjectId, selectedFolder)
+            api.getProjectFolderImages(selectedProjectId, selectedFolder, { includeDimensions: false })
                 .then(images => {
                     // Sort by mtime desc (newest first)
                     const sorted = images.sort((a, b) =>
@@ -188,7 +188,7 @@ export function ImageUpload({
             // Fetch images from each folder and merge
             Promise.all(
                 folders.map(folder =>
-                    api.getProjectFolderImages(selectedProjectId, folder).catch(() => [])
+                    api.getProjectFolderImages(selectedProjectId, folder, { includeDimensions: false }).catch(() => [])
                 )
             ).then(results => {
                 // Flatten and dedupe by path

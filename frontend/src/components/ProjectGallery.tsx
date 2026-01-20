@@ -334,7 +334,8 @@ export const ProjectGallery = React.memo(function ProjectGallery({
             try {
                 const data = await api.getProjectFolderImages(
                     parseInt(selectedProjectId),
-                    selectedFolder
+                    selectedFolder,
+                    { includeDimensions: true, dimensionsSource: "auto" }
                 );
                 if (mounted) {
                     const nextSignature = computeImageSignature(data);

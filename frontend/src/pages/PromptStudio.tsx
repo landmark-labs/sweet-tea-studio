@@ -591,7 +591,7 @@ export default function PromptStudio() {
         const loadFolderImages = async (attempt: number) => {
           if (!isMounted) return;
           try {
-            const images = await api.getProjectFolderImages(projectIdNum, folder);
+            const images = await api.getProjectFolderImages(projectIdNum, folder, { includeDimensions: false });
             if (!isMounted) return;
             setProjectGalleryImages(images);
           } catch (e) {
@@ -2405,7 +2405,7 @@ export default function PromptStudio() {
               });
             }
             try {
-              const folderImages = await api.getProjectFolderImages(outputProjectId, folderName);
+              const folderImages = await api.getProjectFolderImages(outputProjectId, folderName, { includeDimensions: false });
               if (completedPath && folderImages.length > 0) {
                 const completedIndex = folderImages.findIndex(img => img.path === completedPath);
                 if (completedIndex > 0) {
