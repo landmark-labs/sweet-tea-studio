@@ -35,6 +35,7 @@ from app.models.project import Project
 from app.models.prompt import Prompt
 from app.models.workflow import WorkflowTemplate
 from app.core.config import settings
+from app.services import app_settings
 from app.services.gallery_search import build_search_text_from_image, update_gallery_fts
 from app.services.media_paths import build_project_path_index
 from app.services.media_sync import maybe_resync_media_index
@@ -782,15 +783,65 @@ def _guess_media_type(path: str) -> str:
 THUMBNAIL_MIN_PX = 64
 THUMBNAIL_MAX_PX = 1024
 THUMBNAIL_DEFAULT_PX = 256
-
-_RESOLVE_CACHE_MAX = int(os.getenv("STS_MEDIA_PATH_CACHE_MAX", "2048"))
-_RESOLVE_CACHE_TTL_S = int(os.getenv("STS_MEDIA_PATH_CACHE_TTL_S", "300"))
+_THUMB_CACHE_DEFAULT_MAX_FILES = 10000
+_THUMB_CACHE_DEFAULT_MAX_MB = 1024
+_THUMB_CACHE_DEFAULT_MAX_AGE_DAYS = 30
+_THUMB_CACHE_DEFAULT_PRUNE_INTERVAL_S = 600
+_MEDIA_PATH_CACHE_DEFAULT_MAX = 2048
+_MEDIA_PATH_CACHE_DEFAULT_TTL_S = 300
 _resolve_path_cache: "OrderedDict[str, tuple[float, Optional[str]]]" = OrderedDict()
 _resolve_path_cache_lock = threading.Lock()
+_thumb_cache_prune_lock = threading.Lock()
+_thumb_cache_prune_last = 0.0
+
+
+def _get_setting_int(key: str, fallback: int) -> int:
+    value = app_settings.get_setting_typed(key, fallback)
+    if value is None:
+        return fallback
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return fallback
+
+
+def _get_setting_float(key: str, fallback: float) -> float:
+    value = app_settings.get_setting_typed(key, fallback)
+    if value is None:
+        return fallback
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return fallback
+
+
+def _get_thumb_cache_max_files() -> int:
+    return max(0, _get_setting_int("thumb_cache_max_files", _THUMB_CACHE_DEFAULT_MAX_FILES))
+
+
+def _get_thumb_cache_max_mb() -> int:
+    return max(0, _get_setting_int("thumb_cache_max_mb", _THUMB_CACHE_DEFAULT_MAX_MB))
+
+
+def _get_thumb_cache_max_age_days() -> int:
+    return max(0, _get_setting_int("thumb_cache_max_age_days", _THUMB_CACHE_DEFAULT_MAX_AGE_DAYS))
+
+
+def _get_thumb_cache_prune_interval_s() -> float:
+    return max(0.0, _get_setting_float("thumb_cache_prune_interval_s", _THUMB_CACHE_DEFAULT_PRUNE_INTERVAL_S))
+
+
+def _get_media_path_cache_max() -> int:
+    return max(0, _get_setting_int("media_path_cache_max", _MEDIA_PATH_CACHE_DEFAULT_MAX))
+
+
+def _get_media_path_cache_ttl_s() -> float:
+    return max(0.0, _get_setting_float("media_path_cache_ttl_s", _MEDIA_PATH_CACHE_DEFAULT_TTL_S))
 
 
 def _resolve_cache_get(path: str) -> tuple[bool, Optional[str]]:
-    if _RESOLVE_CACHE_TTL_S <= 0:
+    ttl_s = _get_media_path_cache_ttl_s()
+    if ttl_s <= 0:
         return False, None
     key = _normalize_fs_path(path)
     if not key:
@@ -801,7 +852,7 @@ def _resolve_cache_get(path: str) -> tuple[bool, Optional[str]]:
         if not entry:
             return False, None
         cached_at, cached_value = entry
-        if now - cached_at > _RESOLVE_CACHE_TTL_S:
+        if now - cached_at > ttl_s:
             _resolve_path_cache.pop(key, None)
             return False, None
         _resolve_path_cache.move_to_end(key)
@@ -809,7 +860,9 @@ def _resolve_cache_get(path: str) -> tuple[bool, Optional[str]]:
 
 
 def _resolve_cache_set(path: str, resolved: Optional[str]) -> None:
-    if _RESOLVE_CACHE_TTL_S <= 0 or _RESOLVE_CACHE_MAX <= 0:
+    ttl_s = _get_media_path_cache_ttl_s()
+    max_entries = _get_media_path_cache_max()
+    if ttl_s <= 0 or max_entries <= 0:
         return
     key = _normalize_fs_path(path)
     if not key:
@@ -817,7 +870,7 @@ def _resolve_cache_set(path: str, resolved: Optional[str]) -> None:
     with _resolve_path_cache_lock:
         _resolve_path_cache[key] = (time.time(), resolved)
         _resolve_path_cache.move_to_end(key)
-        while len(_resolve_path_cache) > _RESOLVE_CACHE_MAX:
+        while len(_resolve_path_cache) > max_entries:
             _resolve_path_cache.popitem(last=False)
 
 
@@ -957,6 +1010,68 @@ def _thumbnail_cache_dir() -> Path:
     cache_dir = settings.meta_dir / "thumbnails"
     cache_dir.mkdir(parents=True, exist_ok=True)
     return cache_dir
+
+
+def _maybe_prune_thumbnail_cache() -> None:
+    global _thumb_cache_prune_last
+    max_files = _get_thumb_cache_max_files()
+    max_mb = _get_thumb_cache_max_mb()
+    max_age_days = _get_thumb_cache_max_age_days()
+    prune_interval_s = _get_thumb_cache_prune_interval_s()
+
+    if max_files <= 0 and max_mb <= 0 and max_age_days <= 0:
+        return
+
+    now = time.time()
+    if now - _thumb_cache_prune_last < prune_interval_s:
+        return
+
+    with _thumb_cache_prune_lock:
+        if now - _thumb_cache_prune_last < prune_interval_s:
+            return
+        _thumb_cache_prune_last = now
+
+    cache_dir = _thumbnail_cache_dir()
+    try:
+        entries: list[tuple[float, int, Path]] = []
+        total_bytes = 0
+        cutoff = None
+        if max_age_days > 0:
+            cutoff = now - (max_age_days * 86400)
+
+        for entry in cache_dir.iterdir():
+            if not entry.is_file():
+                continue
+            try:
+                stat = entry.stat()
+            except OSError:
+                continue
+            total_bytes += stat.st_size
+            if cutoff and stat.st_mtime < cutoff:
+                try:
+                    entry.unlink()
+                except OSError:
+                    pass
+                continue
+            entries.append((stat.st_mtime, stat.st_size, entry))
+
+        max_bytes = max_mb * 1024 * 1024 if max_mb > 0 else 0
+        max_files_limit = max_files if max_files > 0 else 0
+
+        if (max_files_limit and len(entries) > max_files_limit) or (max_bytes and total_bytes > max_bytes):
+            entries.sort(key=lambda item: item[0])  # oldest first
+            remaining = len(entries)
+            for _mtime, size, path in entries:
+                if max_files_limit and remaining <= max_files_limit and (not max_bytes or total_bytes <= max_bytes):
+                    break
+                try:
+                    path.unlink()
+                except OSError:
+                    continue
+                total_bytes = max(0, total_bytes - size)
+                remaining -= 1
+    except Exception as exc:
+        logger.debug("Failed to prune thumbnail cache", extra={"error": str(exc)})
 
 
 def _purge_thumbnail_cache_for_path(path: str) -> int:
@@ -2479,6 +2594,7 @@ def serve_thumbnail_by_path(
         cache_key = f"{actual_path}:{max_px}:{'video' if is_video else 'image'}"
 
     cache_dir = _thumbnail_cache_dir()
+    _maybe_prune_thumbnail_cache()
     cache_name = hashlib.sha1(cache_key.encode("utf-8")).hexdigest()
     cache_path = cache_dir / f"{cache_name}.jpg"
 

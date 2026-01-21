@@ -19,6 +19,7 @@ from app.models.job import Job
 from app.models.image import Image
 from app.models.engine import Engine
 from app.core.config import settings
+from app.services import app_settings
 from app.services.media_paths import (
     build_project_path_index,
     get_project_folder_paths,
@@ -29,18 +30,48 @@ from app.services.media_sync import maybe_resync_media_index
 
 router = APIRouter()
 
-_DIMENSION_CACHE_MAX = int(os.getenv("STS_IMAGE_DIM_CACHE_MAX", "2000"))
 _image_dim_cache: "OrderedDict[str, tuple[float, Optional[int], Optional[int]]]" = OrderedDict()
 _image_dim_cache_lock = threading.Lock()
 
-_FOLDER_IMAGE_CACHE_MAX = int(os.getenv("STS_PROJECT_FOLDER_CACHE_MAX", "32"))
-_FOLDER_IMAGE_CACHE_TTL_S = float(os.getenv("STS_PROJECT_FOLDER_CACHE_TTL_S", "2.5"))
 _folder_image_cache: "OrderedDict[str, tuple[float, str, List[dict]]]" = OrderedDict()
 _folder_image_cache_lock = threading.Lock()
 
 
+def _get_setting_int(key: str, fallback: int) -> int:
+    value = app_settings.get_setting_typed(key, fallback)
+    if value is None:
+        return fallback
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return fallback
+
+
+def _get_setting_float(key: str, fallback: float) -> float:
+    value = app_settings.get_setting_typed(key, fallback)
+    if value is None:
+        return fallback
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return fallback
+
+
+def _get_image_dim_cache_max() -> int:
+    return max(0, _get_setting_int("image_dim_cache_max", 2000))
+
+
+def _get_folder_cache_max() -> int:
+    return max(0, _get_setting_int("project_folder_cache_max", 32))
+
+
+def _get_folder_cache_ttl_s() -> float:
+    return max(0.0, _get_setting_float("project_folder_cache_ttl_s", 2.5))
+
+
 def _folder_cache_get(cache_key: str, signature: str) -> Optional[List[dict]]:
-    if _FOLDER_IMAGE_CACHE_TTL_S <= 0:
+    ttl_s = _get_folder_cache_ttl_s()
+    if ttl_s <= 0:
         return None
     now = time.time()
     with _folder_image_cache_lock:
@@ -50,19 +81,21 @@ def _folder_cache_get(cache_key: str, signature: str) -> Optional[List[dict]]:
         cached_at, cached_signature, cached_images = entry
         if cached_signature != signature:
             return None
-        if now - cached_at > _FOLDER_IMAGE_CACHE_TTL_S:
+        if now - cached_at > ttl_s:
             return None
         _folder_image_cache.move_to_end(cache_key)
         return cached_images
 
 
 def _folder_cache_set(cache_key: str, signature: str, images: List[dict]) -> None:
-    if _FOLDER_IMAGE_CACHE_TTL_S <= 0 or _FOLDER_IMAGE_CACHE_MAX <= 0:
+    ttl_s = _get_folder_cache_ttl_s()
+    max_entries = _get_folder_cache_max()
+    if ttl_s <= 0 or max_entries <= 0:
         return
     with _folder_image_cache_lock:
         _folder_image_cache[cache_key] = (time.time(), signature, images)
         _folder_image_cache.move_to_end(cache_key)
-        while len(_folder_image_cache) > _FOLDER_IMAGE_CACHE_MAX:
+        while len(_folder_image_cache) > max_entries:
             _folder_image_cache.popitem(last=False)
 
 
@@ -76,10 +109,13 @@ def _get_cached_dimensions(path: str, mtime: float) -> tuple[Optional[int], Opti
 
 
 def _set_cached_dimensions(path: str, mtime: float, width: Optional[int], height: Optional[int]) -> None:
+    max_entries = _get_image_dim_cache_max()
+    if max_entries <= 0:
+        return
     with _image_dim_cache_lock:
         _image_dim_cache[path] = (mtime, width, height)
         _image_dim_cache.move_to_end(path)
-        while len(_image_dim_cache) > _DIMENSION_CACHE_MAX:
+        while len(_image_dim_cache) > max_entries:
             _image_dim_cache.popitem(last=False)
 
 
@@ -932,12 +968,16 @@ def delete_folder_images(
                 return True
         return False
 
+    # Local import to avoid heavy module init at import time
+    from app.api.endpoints.gallery import _purge_thumbnail_cache_for_path  # noqa: WPS433
+
     for path in req.paths:
         # Security: validate path is within the expected folder
         try:
             abs_path = os.path.abspath(path)
             if _is_within_allowed_folder(abs_path):
                 if os.path.exists(abs_path):
+                    _purge_thumbnail_cache_for_path(abs_path)
                     os.remove(abs_path)
                     deleted += 1
                     

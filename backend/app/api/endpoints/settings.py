@@ -1,7 +1,7 @@
 """Settings API endpoints for app configuration."""
-from typing import Dict, Any
+from typing import Dict, List, Optional
 from fastapi import APIRouter
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.services import app_settings
 
@@ -27,6 +27,25 @@ class ApiKeysResponse(BaseModel):
     civitai_api_key: ApiKeyInfo
     rule34_api_key: ApiKeyInfo
     rule34_user_id: ApiKeyInfo
+
+
+class AppSettingInfo(BaseModel):
+    """Info about a configurable app setting."""
+    key: str
+    value: str
+    effective_value: str
+    source: str  # "database", "environment", "default", or "none"
+    env_var: str
+    default: str
+    type: str
+    label: str
+    description: str
+    category: str
+
+
+class AppSettingsUpdate(BaseModel):
+    """Request body for updating app settings."""
+    values: Dict[str, str] = Field(default_factory=dict)
 
 
 @router.get("/api-keys", response_model=ApiKeysResponse)
@@ -99,3 +118,30 @@ async def update_api_keys(payload: ApiKeysUpdate):
         )
     
     return ApiKeysResponse(**result)
+
+
+@router.get("/app", response_model=List[AppSettingInfo])
+async def get_app_settings(keys: Optional[str] = None):
+    """
+    Get configurable app settings with effective values.
+
+    Optional query param:
+    - keys: comma-separated list of keys to fetch
+    """
+    key_list = None
+    if keys:
+        key_list = [k.strip() for k in keys.split(",") if k.strip()]
+    settings_rows = app_settings.get_app_settings(keys=key_list)
+    return [AppSettingInfo(**row) for row in settings_rows]
+
+
+@router.put("/app", response_model=List[AppSettingInfo])
+async def update_app_settings(payload: AppSettingsUpdate):
+    """
+    Update configurable app settings.
+
+    Provide a mapping of key -> value. Empty string clears the DB override,
+    allowing environment/default values to apply.
+    """
+    updated = app_settings.set_app_settings(payload.values)
+    return [AppSettingInfo(**row) for row in updated]

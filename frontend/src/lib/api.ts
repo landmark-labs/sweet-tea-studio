@@ -316,6 +316,24 @@ export interface ApiKeysUpdate {
     rule34_user_id?: string;
 }
 
+// --- App Settings ---
+export interface AppSettingInfo {
+    key: string;
+    value: string;
+    effective_value: string;
+    source: "database" | "environment" | "default" | "none";
+    env_var: string;
+    default: string;
+    type: "string" | "int" | "float" | "bool";
+    label: string;
+    description: string;
+    category: string;
+}
+
+export interface AppSettingsUpdate {
+    values: Record<string, string>;
+}
+
 // --- Database Health & Backup ---
 export interface DatabaseFileInfo {
     name: string;
@@ -1183,6 +1201,23 @@ export const api = {
             body: JSON.stringify(keys),
         });
         if (!res.ok) throw new Error("Failed to update API keys");
+        return res.json();
+    },
+
+    // --- App Settings ---
+    getAppSettings: async (): Promise<AppSettingInfo[]> => {
+        const res = await fetch(`${API_BASE}/settings/app`);
+        if (!res.ok) throw new Error("Failed to fetch app settings");
+        return res.json();
+    },
+
+    updateAppSettings: async (values: Record<string, string>): Promise<AppSettingInfo[]> => {
+        const res = await fetch(`${API_BASE}/settings/app`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ values }),
+        });
+        if (!res.ok) throw new Error("Failed to update app settings");
         return res.json();
     },
 

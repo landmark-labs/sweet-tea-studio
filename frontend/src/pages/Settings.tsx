@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { api, Engine, ComfyLaunchConfig, ApiKeysSettings, DatabaseStatusResponse, getApiBase } from "@/lib/api";
+import { api, Engine, ComfyLaunchConfig, ApiKeysSettings, AppSettingInfo, DatabaseStatusResponse, getApiBase } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,6 +38,12 @@ export default function Settings() {
     const [savingApiKeys, setSavingApiKeys] = useState(false);
     const [showCivitaiKey, setShowCivitaiKey] = useState(false);
     const [showRule34Key, setShowRule34Key] = useState(false);
+
+    // App Settings state
+    const [appSettings, setAppSettings] = useState<AppSettingInfo[]>([]);
+    const [appSettingsDraft, setAppSettingsDraft] = useState<Record<string, string>>({});
+    const [isLoadingAppSettings, setIsLoadingAppSettings] = useState(true);
+    const [savingAppSettings, setSavingAppSettings] = useState(false);
     const [isExportingDb, setIsExportingDb] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -54,10 +60,22 @@ export default function Settings() {
         { value: "custom", label: "Custom", icon: <Palette className="w-4 h-4" /> },
     ];
 
+    const appSettingsByCategory = appSettings.reduce<Record<string, AppSettingInfo[]>>((acc, setting) => {
+        const category = setting.category || "general";
+        if (!acc[category]) {
+            acc[category] = [];
+        }
+        acc[category].push(setting);
+        return acc;
+    }, {});
+
+    const appSettingCategories = Object.keys(appSettingsByCategory).sort((a, b) => a.localeCompare(b));
+
     useEffect(() => {
         loadEngines();
         loadLaunchConfig();
         loadApiKeys();
+        loadAppSettings();
     }, []);
 
     const loadEngines = async () => {
@@ -145,6 +163,21 @@ export default function Settings() {
         }
     };
 
+    const loadAppSettings = async () => {
+        setIsLoadingAppSettings(true);
+        try {
+            const settings = await api.getAppSettings();
+            setAppSettings(settings);
+            setAppSettingsDraft(
+                Object.fromEntries(settings.map((setting) => [setting.key, setting.value ?? ""]))
+            );
+        } catch (e) {
+            console.warn("Failed to load app settings", e);
+        } finally {
+            setIsLoadingAppSettings(false);
+        }
+    };
+
     const handleSaveApiKeys = async () => {
         setSavingApiKeys(true);
         setError(null);
@@ -166,6 +199,55 @@ export default function Settings() {
         } finally {
             setSavingApiKeys(false);
         }
+    };
+
+    const handleSaveAppSettings = async () => {
+        setSavingAppSettings(true);
+        setError(null);
+        setSuccess(null);
+
+        try {
+            const updates: Record<string, string> = {};
+            appSettings.forEach((setting) => {
+                const draftValue = appSettingsDraft[setting.key] ?? "";
+                const currentValue = setting.value ?? "";
+                if (draftValue !== currentValue) {
+                    updates[setting.key] = draftValue;
+                }
+            });
+
+            if (Object.keys(updates).length === 0) {
+                setSuccess("No changes to app settings.");
+                setTimeout(() => setSuccess(null), 3000);
+                return;
+            }
+
+            const updated = await api.updateAppSettings(updates);
+            setAppSettings(updated);
+            setAppSettingsDraft(
+                Object.fromEntries(updated.map((setting) => [setting.key, setting.value ?? ""]))
+            );
+            setSuccess("App settings saved!");
+            setTimeout(() => setSuccess(null), 3000);
+        } catch (e) {
+            setError(e instanceof Error ? e.message : "Failed to save app settings");
+        } finally {
+            setSavingAppSettings(false);
+        }
+    };
+
+    const handleAppSettingChange = (key: string, value: string) => {
+        setAppSettingsDraft((prev) => ({
+            ...prev,
+            [key]: value,
+        }));
+    };
+
+    const handleClearAppSetting = (key: string) => {
+        setAppSettingsDraft((prev) => ({
+            ...prev,
+            [key]: "",
+        }));
     };
 
     const handleExportProfile = async () => {
@@ -527,6 +609,84 @@ export default function Settings() {
                         </Button>
                         <span className="text-xs text-muted-foreground">
                             leave fields empty to keep current values
+                        </span>
+                    </div>
+                </div>
+
+                {/* App Settings */}
+                <div className="space-y-6 bg-card rounded-xl p-6 border shadow-sm">
+                    <div className="flex items-center justify-between border-b pb-2">
+                        <h2 className="text-lg font-medium">performance & cache</h2>
+                        <Button variant="ghost" size="sm" onClick={loadAppSettings} disabled={isLoadingAppSettings}>
+                            <RefreshCw className={`w-4 h-4 ${isLoadingAppSettings ? "animate-spin" : ""}`} />
+                        </Button>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                        app settings override environment variables. leave a field blank to fall back to env or default values.
+                    </p>
+
+                    {isLoadingAppSettings ? (
+                        <div className="flex items-center justify-center py-6">
+                            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                        </div>
+                    ) : appSettingCategories.length ? (
+                        <div className="space-y-6">
+                            {appSettingCategories.map((category) => (
+                                <div key={category} className="space-y-4">
+                                    {appSettingCategories.length > 1 && (
+                                        <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                                            {category}
+                                        </div>
+                                    )}
+                                    {appSettingsByCategory[category]?.map((setting) => (
+                                        <div key={setting.key} className="space-y-2">
+                                            <div className="flex items-center justify-between">
+                                                <Label htmlFor={`app-setting-${setting.key}`}>{setting.label}</Label>
+                                                <span className="text-xs text-muted-foreground">
+                                                    source: {setting.source}
+                                                </span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <Input
+                                                    id={`app-setting-${setting.key}`}
+                                                    value={appSettingsDraft[setting.key] ?? ""}
+                                                    onChange={(e) => handleAppSettingChange(setting.key, e.target.value)}
+                                                    placeholder={setting.effective_value || setting.default || ""}
+                                                    className="font-mono text-sm"
+                                                />
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => handleClearAppSetting(setting.key)}
+                                                >
+                                                    clear
+                                                </Button>
+                                            </div>
+                                            <p className="text-xs text-muted-foreground">{setting.description}</p>
+                                            <p className="text-xs text-muted-foreground">
+                                                env: <code>{setting.env_var}</code> | default: {setting.default || "none"} | effective: {setting.effective_value || "none"}
+                                            </p>
+                                        </div>
+                                    ))}
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <p className="text-sm text-muted-foreground">No app settings available.</p>
+                    )}
+
+                    <div className="flex items-center gap-3 pt-4 border-t">
+                        <Button onClick={handleSaveAppSettings} disabled={savingAppSettings}>
+                            {savingAppSettings ? (
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            ) : (
+                                <Save className="w-4 h-4 mr-2" />
+                            )}
+                            save performance settings
+                        </Button>
+                        <span className="text-xs text-muted-foreground">
+                            blank values fall back to environment or defaults
                         </span>
                     </div>
                 </div>
