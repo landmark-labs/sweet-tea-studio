@@ -45,16 +45,12 @@ const buildThumbnailUrl = (path: string, mtime?: string, maxPx: number = THUMBNA
     return `${IMAGE_API_BASE}/gallery/image/path/thumbnail?${params.toString()}`;
 };
 
-const computeImageSignature = (items: FolderImage[]) => {
-    let hash = 2166136261;
-    for (const item of items) {
-        const token = `${item.path}|${item.mtime}`;
-        for (let i = 0; i < token.length; i += 1) {
-            hash ^= token.charCodeAt(i);
-            hash = Math.imul(hash, 16777619);
-        }
-    }
-    return `${items.length}:${hash >>> 0}`;
+const buildFolderImagesUrl = (projectId: string, folder: string) => {
+    const params = new URLSearchParams({
+        include_dimensions: "true",
+        dimensions_source: "auto",
+    });
+    return `${IMAGE_API_BASE}/projects/${encodeURIComponent(projectId)}/folders/${encodeURIComponent(folder)}/images?${params.toString()}`;
 };
 
 // Memoized gallery item - only re-renders when its specific props change
@@ -189,7 +185,7 @@ export const ProjectGallery = React.memo(function ProjectGallery({
     const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set());
     const lastSelectedPath = useRef<string | null>(null);
     const imagesRef = useRef<FolderImage[]>([]);
-    const lastSignatureRef = useRef<string | null>(null);
+    const etagRef = useRef<string | null>(null);
     const submenuCloseTimerRef = useRef<number | null>(null);
     // Track previous project to avoid resetting folder on transient empty states
     const prevProjectIdRef = useRef<string>(selectedProjectId);
@@ -315,7 +311,7 @@ export const ProjectGallery = React.memo(function ProjectGallery({
     useEffect(() => {
         let mounted = true;
         let timeoutId: NodeJS.Timeout;
-        lastSignatureRef.current = null;
+        etagRef.current = null;
 
         const loadImages = async (showLoading = true) => {
             if (!selectedProjectId || !selectedFolder) {
@@ -332,17 +328,24 @@ export const ProjectGallery = React.memo(function ProjectGallery({
 
             if (showLoading) setIsLoading(true);
             try {
-                const data = await api.getProjectFolderImages(
-                    parseInt(selectedProjectId),
-                    selectedFolder,
-                    { includeDimensions: true, dimensionsSource: "auto" }
-                );
+                const url = buildFolderImagesUrl(selectedProjectId, selectedFolder);
+                const headers: HeadersInit = {};
+                if (!showLoading && etagRef.current) {
+                    headers["If-None-Match"] = etagRef.current;
+                }
+                const res = await fetch(url, { headers });
+                if (res.status === 304) {
+                    return;
+                }
+                if (!res.ok) {
+                    throw new Error("Failed to fetch folder images");
+                }
+                const nextEtag = res.headers.get("ETag");
+                if (nextEtag) {
+                    etagRef.current = nextEtag;
+                }
+                const data = await res.json();
                 if (mounted) {
-                    const nextSignature = computeImageSignature(data);
-                    if (!showLoading && lastSignatureRef.current === nextSignature) {
-                        return;
-                    }
-                    lastSignatureRef.current = nextSignature;
                     setImages(data);
                     onImagesUpdateRef.current?.({
                         projectId: selectedProjectId || null,
@@ -353,7 +356,7 @@ export const ProjectGallery = React.memo(function ProjectGallery({
             } catch (e) {
                 console.error("Failed to load folder images", e);
                 if (mounted) {
-                    lastSignatureRef.current = null;
+                    etagRef.current = null;
                     setImages([]);
                     onImagesUpdateRef.current?.({
                         projectId: selectedProjectId || null,
@@ -376,7 +379,10 @@ export const ProjectGallery = React.memo(function ProjectGallery({
 
             // Skip polling if tab is hidden or panel is collapsed
             const isHidden = typeof document !== "undefined" && document.visibilityState === "hidden";
-            if (!isHidden && !collapsed) {
+            const activeEl = typeof document !== "undefined" ? document.activeElement : null;
+            const tagName = activeEl?.tagName?.toLowerCase();
+            const isTyping = tagName === "input" || tagName === "textarea" || activeEl?.hasAttribute("contenteditable");
+            if (!isHidden && !collapsed && !isTyping) {
                 await loadImages(false); // Background update
             }
 

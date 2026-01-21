@@ -2,12 +2,13 @@
 Projects API endpoints.
 Manages project creation, listing, and run organization.
 """
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, HTTPException, Depends, Query, Response, Request
 from sqlmodel import Session, select, SQLModel
 from typing import List, Optional
 from datetime import datetime
 from collections import OrderedDict
 import os
+import hashlib
 import re
 import threading
 import time
@@ -693,6 +694,8 @@ def list_project_folder_images(
     folder_name: str,
     include_dimensions: bool = Query(True),
     dimensions_source: str = Query("auto"),
+    request: Request = None,
+    response: Response = None,
     session: Session = Depends(get_session)
 ):
     """
@@ -748,7 +751,10 @@ def list_project_folder_images(
         "dims" if include_dimensions else "nodims",
         dimensions_source,
     ]
-    signature_parts = []
+    signature_parts = [
+        f"dims:{int(include_dimensions)}",
+        f"source:{dimensions_source}",
+    ]
     for path in folder_paths:
         norm_path = normalize_fs_path(str(path))
         cache_key_parts.append(norm_path)
@@ -760,8 +766,20 @@ def list_project_folder_images(
 
     cache_key = "|".join(cache_key_parts)
     signature = "|".join(signature_parts)
+    etag = hashlib.sha1(signature.encode("utf-8")).hexdigest()
+    etag_header = f"\"{etag}\""
+
+    if request is not None:
+        if_none_match = request.headers.get("if-none-match") or ""
+        if if_none_match.strip() == etag_header or if_none_match.strip().strip("\"") == etag:
+            if response is not None:
+                response.headers["ETag"] = etag_header
+            return Response(status_code=304, headers={"ETag": etag_header})
+
     cached = _folder_cache_get(cache_key, signature)
     if cached is not None:
+        if response is not None:
+            response.headers["ETag"] = etag_header
         return cached
     
     # Supported media extensions
@@ -850,6 +868,8 @@ def list_project_folder_images(
     # Sort by modification time, newest first
     images.sort(key=lambda x: x["mtime"], reverse=True)
     _folder_cache_set(cache_key, signature, images)
+    if response is not None:
+        response.headers["ETag"] = etag_header
 
     return images
 
