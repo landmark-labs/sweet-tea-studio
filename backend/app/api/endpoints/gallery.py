@@ -1539,7 +1539,8 @@ def read_gallery(
         elif not path_index.roots:
             resolved_project_id = job_project_id
         else:
-            resolved_project_id = None
+            # Fall back to job_project_id when path matching fails
+            resolved_project_id = job_project_id
 
         if project_id is not None:
             if resolved_project_id != project_id:
@@ -2098,7 +2099,7 @@ def cleanup_images(req: CleanupRequest, session: Session = Depends(get_session))
         elif not path_index or not path_index.roots:
             resolved_project_id = job.project_id if job else None
         else:
-            resolved_project_id = None
+            resolved_project_id = job.project_id if job else None
 
         if resolved_project_id == req.project_id:
             images_to_delete.append(img)
@@ -2121,28 +2122,64 @@ def cleanup_images(req: CleanupRequest, session: Session = Depends(get_session))
 
     count = 0
     deleted_files = 0
+    file_errors: List[int] = []
+    now = datetime.utcnow()
     for img in images_to_delete:
-        # Delete from disk
-        if img.path and os.path.exists(img.path):
+        if not img or not img.id:
+            continue
+
+        file_deleted_or_missing = False
+        if img.path and isinstance(img.path, str) and os.path.exists(img.path):
             try:
+                _purge_thumbnail_cache_for_path(img.path)
                 os.remove(img.path)
                 deleted_files += 1
-                
+                file_deleted_or_missing = True
+
                 # Also delete associated .json metadata file if it exists
                 json_path = os.path.splitext(img.path)[0] + ".json"
                 if os.path.exists(json_path):
                     os.remove(json_path)
             except OSError:
+                # If we can't delete the file, don't soft-delete the DB record; otherwise
+                # read_gallery's auto-resync may revive it on refresh.
                 logger.exception("Failed to delete file", extra={"path": img.path, "image_id": img.id})
+                try:
+                    if os.path.exists(img.path):
+                        file_errors.append(int(img.id))
+                        continue
+                    file_deleted_or_missing = True
+                except Exception:
+                    file_errors.append(int(img.id))
+                    continue
+        else:
+            # File already missing; keep DB consistent by soft-deleting the record.
+            file_deleted_or_missing = True
+
+        if not file_deleted_or_missing:
+            continue
 
         # Soft delete: set flag instead of removing from DB
         img.is_deleted = True
-        img.deleted_at = datetime.utcnow()
+        img.deleted_at = now
+        img.file_exists = False
         session.add(img)
         count += 1
 
-    session.commit()
-    return {"status": "cleaned", "count": count, "files_deleted": deleted_files, "soft_delete": True}
+    try:
+        session.commit()
+    except SQLAlchemyError:
+        session.rollback()
+        logger.exception("Failed to commit cleanup transaction")
+        raise HTTPException(status_code=500, detail="Failed to cleanup gallery")
+
+    return {
+        "status": "cleaned",
+        "count": count,
+        "files_deleted": deleted_files,
+        "file_errors": file_errors,
+        "soft_delete": True,
+    }
 
 
 class ResyncResult(BaseModel):

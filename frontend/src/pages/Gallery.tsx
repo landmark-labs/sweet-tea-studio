@@ -89,6 +89,11 @@ function GalleryCardContent({ item, isSelected, handleImageError }: GalleryCardC
                     <Check className="w-3 h-3" />
                 </div>
             )}
+            {item.image.is_kept && (
+                <div className="absolute top-2 right-2 z-20 bg-green-600 text-white rounded-full p-0.5 shadow-sm">
+                    <Check className="w-3 h-3" />
+                </div>
+            )}
 
             {isVideo ? (
                 <VideoThumbnail
@@ -468,15 +473,9 @@ export default function Gallery() {
     };
 
     const handleCleanupPurge = async () => {
-        const deleteCandidates = items.filter(item => !selectedIds.has(item.image.id));
+        const deleteCandidates = items.filter(item => !item.image.is_kept && !selectedIds.has(item.image.id));
         const deleteCount = deleteCandidates.length;
-
-        if (deleteCount === 0) {
-            alert("Select at least one image to keep before cleaning up.");
-            return;
-        }
-
-        const keepCount = selectedIds.size;
+        const keepCount = Math.max(items.length - deleteCount, 0);
         const confirmed = confirm(`Clean up the gallery by deleting ${deleteCount} images and keeping ${keepCount}?`);
         if (!confirmed) return;
 
@@ -491,11 +490,11 @@ export default function Gallery() {
                 folder: selectedFolder,
             });
 
-            // Step 3: Update local state - keep only the images that were marked as kept
-            setItems(items.filter((item) => selectedIds.has(item.image.id)));
+            // Step 3: Reload from server so we reflect actual persisted state
             setCleanupMode(false);
             setSelectedIds(new Set());
             setLastSelectedId(null);
+            loadGallery(search, selectedProjectId);
 
             console.log(`Cleanup complete: ${result.count} images deleted, ${result.files_deleted} files removed`);
         } catch (err) {
@@ -614,7 +613,10 @@ export default function Gallery() {
         navigate("/", { state: { loadParams: item, isRegenerate: true } });
     };
 
-    const cleanupDeleteCount = Math.max(items.length - selectedIds.size, 0);
+    const cleanupDeleteCount = items.reduce(
+        (count, item) => count + (!item.image.is_kept && !selectedIds.has(item.image.id) ? 1 : 0),
+        0
+    );
 
     // Items are now filtered server-side via folder parameter
     const displayItems = items;

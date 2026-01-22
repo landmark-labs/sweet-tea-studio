@@ -5,6 +5,7 @@ from sqlmodel import Session
 from app.models.image import Image
 from app.models.job import Job
 from app.models.prompt import Prompt
+from app.services.gallery_search import build_search_text_from_image, update_gallery_fts
 
 
 def create_job(session: Session, prompt: Prompt, params: dict | None = None) -> Job:
@@ -29,17 +30,33 @@ def test_gallery_search_filters_results(client, session):
 
     job = create_job(session, prompt, {"prompt": "Sunny beach", "negative_prompt": "rain"})
 
-    keep_image = Image(job_id=job.id, path="kept.png", filename="kept.png", caption="Vacation vibes", is_kept=True)
-    other_image = Image(job_id=job.id, path="other.png", filename="other.png", caption="City skyline", is_kept=True)
-    session.add_all([keep_image, other_image])
-    session.commit()
+    keep_path = os.path.join(os.getcwd(), "kept.png")
+    other_path = os.path.join(os.getcwd(), "other.png")
+    
+    with open(keep_path, "wb") as f: f.write(b"dummy image data")
+    with open(other_path, "wb") as f: f.write(b"dummy image data")
+    
+    try:
+        keep_image = Image(job_id=job.id, path=keep_path, filename="kept.png", caption="Vacation vibes", is_kept=True)
+        other_image = Image(job_id=job.id, path=other_path, filename="other.png", caption="City skyline", is_kept=True)
+        session.add_all([keep_image, other_image])
+        session.commit()
+        
+        # Update FTS so search works (read_gallery uses FTS if table exists)
+        for img in [keep_image, other_image]:
+            search_text = build_search_text_from_image(img)
+            update_gallery_fts(session, img.id, search_text)
+        session.commit()
 
-    response = client.get("/api/v1/gallery/", params={"search": "vacation", "limit": 10})
-    assert response.status_code == 200
-    payload = response.json()
+        response = client.get("/api/v1/gallery/", params={"search": "vacation", "limit": 10})
+        assert response.status_code == 200
+        payload = response.json()
 
-    assert len(payload) == 1
-    assert payload[0]["image"]["id"] == keep_image.id
+        assert len(payload) == 1
+        assert payload[0]["image"]["id"] == keep_image.id
+    finally:
+        if os.path.exists(keep_path): os.remove(keep_path)
+        if os.path.exists(other_path): os.remove(other_path)
     assert "X-Gallery-Request-Duration-ms" in response.headers
 
 
