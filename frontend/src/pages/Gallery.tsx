@@ -468,24 +468,20 @@ export default function Gallery() {
     };
 
     const handleCleanupPurge = async () => {
-        const deleteCandidates = items.filter(item => !item.image.is_kept && !selectedIds.has(item.image.id));
+        const deleteCandidates = items.filter(item => !selectedIds.has(item.image.id));
         const deleteCount = deleteCandidates.length;
-        const keepCount = Math.max(items.length - deleteCount, 0);
+        const keepCount = selectedIds.size;
         const confirmed = confirm(`Clean up the gallery by deleting ${deleteCount} images and keeping ${keepCount}?`);
         if (!confirmed) return;
 
         try {
-            // Step 1: Mark selected images as "kept"
             const keepIds = Array.from(selectedIds);
-            await api.keepImages(keepIds, true);
-
-            // Step 2: Call cleanup which deletes all non-kept images SCOPED to current project/folder
             const result = await api.cleanupGallery({
                 projectId: selectedProjectId,
                 folder: selectedFolder,
+                keepImageIds: keepIds,
             });
 
-            // Step 3: Reload from server so we reflect actual persisted state
             setCleanupMode(false);
             setSelectedIds(new Set());
             setLastSelectedId(null);
@@ -608,10 +604,7 @@ export default function Gallery() {
         navigate("/", { state: { loadParams: item, isRegenerate: true } });
     };
 
-    const cleanupDeleteCount = items.reduce(
-        (count, item) => count + (!item.image.is_kept && !selectedIds.has(item.image.id) ? 1 : 0),
-        0
-    );
+    const cleanupDeleteCount = Math.max(items.length - selectedIds.size, 0);
 
     // Items are now filtered server-side via folder parameter
     const displayItems = items;

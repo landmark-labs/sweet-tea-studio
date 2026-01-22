@@ -840,7 +840,7 @@ export const api = {
     },
 
     cleanupGallery: async (
-        options?: { jobId?: number; projectId?: number | null; folder?: string | null }
+        options?: { jobId?: number; projectId?: number | null; folder?: string | null; keepImageIds?: number[] }
     ): Promise<{ status: string; count: number; files_deleted: number }> => {
         const res = await fetch(`${API_BASE}/gallery/cleanup`, {
             method: "POST",
@@ -849,6 +849,7 @@ export const api = {
                 job_id: options?.jobId,
                 project_id: options?.projectId,
                 folder: options?.folder,
+                keep_image_ids: options?.keepImageIds,
             }),
         });
         if (!res.ok) throw new Error("Failed to cleanup gallery");

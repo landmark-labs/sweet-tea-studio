@@ -6,7 +6,7 @@ is_kept=1. That prevented Gallery Cleanup from removing them and created
 confusing "kept" state without any explicit user action.
 
 This migration unsets is_kept for rows that appear to have been created by the
-resync importer (job_id=-1 + extra_metadata.recovered=true).
+resync importer (job_id=-1 and/or extra_metadata contains recovered markers).
 
 Safe to run multiple times.
 
@@ -16,6 +16,7 @@ Usage:
 
 from __future__ import annotations
 
+import ast
 import json
 import os
 import sqlite3
@@ -42,39 +43,79 @@ def migrate() -> None:
         conn.close()
         return
 
-    cursor.execute(
-        "SELECT id, extra_metadata FROM image "
-        "WHERE is_kept = 1 AND job_id = -1 AND extra_metadata IS NOT NULL"
-    )
+    cursor.execute("SELECT id, job_id, extra_metadata FROM image WHERE is_kept = 1")
     rows = cursor.fetchall()
 
-    ids_to_clear: list[int] = []
-    for image_id, extra_metadata in rows:
+    ids_to_clear: set[int] = set()
+    parsed = 0
+    parse_failed = 0
+
+    def _is_truthy(value: object) -> bool:
+        if value is True:
+            return True
+        if value in (1, "1"):
+            return True
+        if isinstance(value, str) and value.strip().lower() in {"true", "yes", "y", "on"}:
+            return True
+        return False
+
+    for image_id, job_id, extra_metadata in rows:
         if image_id is None:
             continue
-        try:
-            if isinstance(extra_metadata, (bytes, bytearray)):
-                extra_metadata = extra_metadata.decode("utf-8", errors="ignore")
-            meta = json.loads(extra_metadata) if isinstance(extra_metadata, str) else extra_metadata
-        except Exception:
+
+        # Most auto-kept rows came from resync imports which used job_id=-1.
+        # Clear these even if extra_metadata is missing or malformed.
+        if job_id == -1:
+            ids_to_clear.add(int(image_id))
             continue
-        if isinstance(meta, dict) and meta.get("recovered") is True:
-            ids_to_clear.append(int(image_id))
+
+        if extra_metadata is None:
+            continue
+
+        meta_raw = extra_metadata
+        if isinstance(meta_raw, (bytes, bytearray)):
+            meta_raw = meta_raw.decode("utf-8", errors="ignore")
+
+        meta = None
+        try:
+            meta = json.loads(meta_raw) if isinstance(meta_raw, str) else meta_raw
+            parsed += 1
+        except Exception:
+            try:
+                # Some older builds stored dict repr strings; tolerate those too.
+                meta = ast.literal_eval(meta_raw) if isinstance(meta_raw, str) else None
+                parsed += 1
+            except Exception:
+                parse_failed += 1
+                continue
+
+        if not isinstance(meta, dict):
+            continue
+
+        recovered = meta.get("recovered")
+        if _is_truthy(recovered) or "recovered_at" in meta or "recovered_source" in meta:
+            ids_to_clear.add(int(image_id))
 
     if not ids_to_clear:
-        print("No migration needed - no auto-kept resync images found")
+        print(
+            "No migration needed - no auto-kept resync images found "
+            f"(candidates={len(rows)}, parsed={parsed}, parse_failed={parse_failed})"
+        )
         conn.close()
         return
 
     cursor.executemany(
         "UPDATE image SET is_kept = 0 WHERE id = ?",
-        [(img_id,) for img_id in ids_to_clear],
+        [(img_id,) for img_id in sorted(ids_to_clear)],
     )
     conn.commit()
     conn.close()
-    print(f"Cleared is_kept for {len(ids_to_clear)} auto-kept resync image(s)")
+    print(
+        "Cleared is_kept for "
+        f"{len(ids_to_clear)} auto-kept resync image(s) "
+        f"(candidates={len(rows)}, parsed={parsed}, parse_failed={parse_failed})"
+    )
 
 
 if __name__ == "__main__":
     migrate()
-

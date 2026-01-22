@@ -1,4 +1,5 @@
 import os
+import tempfile
 
 from sqlmodel import Session
 
@@ -124,3 +125,62 @@ def test_delete_image_and_standardized_errors(client, session):
     # Either 200 (re-deleted) or 404 (already deleted) is acceptable
     assert second_response.status_code in [200, 404]
     assert "X-Gallery-Request-Duration-ms" in second_response.headers
+
+
+def test_cleanup_with_keep_image_ids_deletes_kept_images(client, session):
+    prompt = Prompt(workflow_id=1, name="Cleanup KeepIds", positive_text="keep ids")
+    session.add(prompt)
+    session.commit()
+    session.refresh(prompt)
+
+    job = create_job(session, prompt, {"prompt": "Cleanup keep ids"})
+
+    fd1, path1 = tempfile.mkstemp()
+    fd2, path2 = tempfile.mkstemp()
+    os.close(fd1)
+    os.close(fd2)
+
+    try:
+        kept_image = Image(job_id=job.id, path=path1, filename="kept.png", is_kept=True)
+        other_image = Image(job_id=job.id, path=path2, filename="other.png", is_kept=False)
+        session.add_all([kept_image, other_image])
+        session.commit()
+        session.refresh(kept_image)
+        session.refresh(other_image)
+
+        # Keep one image (by explicit ID list) and delete the other, regardless of is_kept flags.
+        resp = client.post(
+            "/api/v1/gallery/cleanup",
+            json={"job_id": job.id, "keep_image_ids": [kept_image.id]},
+        )
+        assert resp.status_code == 200
+
+        with Session(session.get_bind()) as verify_session:
+            verify_kept = verify_session.get(Image, kept_image.id)
+            verify_other = verify_session.get(Image, other_image.id)
+            assert verify_kept is not None
+            assert verify_kept.is_deleted is False
+            assert verify_other is not None
+            assert verify_other.is_deleted is True
+
+        assert os.path.exists(path1)
+        assert not os.path.exists(path2)
+
+        # Now delete everything in-scope (keep list provided but empty), including the previously kept image.
+        resp2 = client.post(
+            "/api/v1/gallery/cleanup",
+            json={"job_id": job.id, "keep_image_ids": []},
+        )
+        assert resp2.status_code == 200
+
+        with Session(session.get_bind()) as verify_session:
+            verify_kept = verify_session.get(Image, kept_image.id)
+            assert verify_kept is not None
+            assert verify_kept.is_deleted is True
+
+        assert not os.path.exists(path1)
+    finally:
+        if os.path.exists(path1):
+            os.remove(path1)
+        if os.path.exists(path2):
+            os.remove(path2)

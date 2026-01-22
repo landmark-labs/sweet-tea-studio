@@ -1663,6 +1663,7 @@ class CleanupRequest(BaseModel):
     job_id: Optional[int] = None
     project_id: Optional[int] = None  # Scope cleanup to a specific project
     folder: Optional[str] = None  # Scope cleanup to a specific folder within the project
+    keep_image_ids: Optional[List[int]] = None  # If provided, delete everything in-scope except these IDs
 
 
 class BulkDeleteRequest(BaseModel):
@@ -2070,9 +2071,12 @@ def cleanup_images(req: CleanupRequest, session: Session = Depends(get_session))
     query = (
         select(Image, Job)
         .join(Job, Image.job_id == Job.id, isouter=True)
-        .where(Image.is_kept == False)
         .where(Image.is_deleted == False)
     )
+    # Backwards compatible behavior: when keep_image_ids is omitted, only delete non-kept images.
+    # When keep_image_ids is provided (even an empty list), delete everything in-scope except the provided IDs.
+    if req.keep_image_ids is None:
+        query = query.where(Image.is_kept == False)
 
     path_index = None
     if req.project_id is not None:
@@ -2119,6 +2123,11 @@ def cleanup_images(req: CleanupRequest, session: Session = Depends(get_session))
         logger.info(
             f"Cleanup scoped to project_id={req.project_id}, folder='{req.folder}': {len(images_to_delete)} images to delete"
         )
+
+    if req.keep_image_ids is not None:
+        keep_set = {int(img_id) for img_id in (req.keep_image_ids or []) if img_id is not None}
+        if keep_set:
+            images_to_delete = [img for img in images_to_delete if img.id not in keep_set]
 
     count = 0
     deleted_files = 0
