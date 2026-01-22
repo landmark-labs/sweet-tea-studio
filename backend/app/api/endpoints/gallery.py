@@ -2559,7 +2559,6 @@ def resync_images_from_disk(session: Session = Depends(get_session)):
                     height=height,
                     file_exists=True,
                     thumbnail_data=thumb_data,
-                    is_kept=True,
                     created_at=mtime,
                     extra_metadata=extra_metadata,
                 )

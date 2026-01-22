@@ -89,11 +89,6 @@ function GalleryCardContent({ item, isSelected, handleImageError }: GalleryCardC
                     <Check className="w-3 h-3" />
                 </div>
             )}
-            {item.image.is_kept && (
-                <div className="absolute top-2 right-2 z-20 bg-green-600 text-white rounded-full p-0.5 shadow-sm">
-                    <Check className="w-3 h-3" />
-                </div>
-            )}
 
             {isVideo ? (
                 <VideoThumbnail

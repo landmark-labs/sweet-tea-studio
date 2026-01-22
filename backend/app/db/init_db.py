@@ -51,6 +51,10 @@ def init_db():
     # Run migrations to add any new columns to existing databases
     from app.db.migrations.add_soft_delete_to_images import migrate as migrate_soft_delete
     migrate_soft_delete()
+
+    # Data cleanup: older resync logic auto-marked recovered images as kept
+    from app.db.migrations.clear_auto_kept_resync_images import migrate as migrate_clear_auto_kept_resync_images
+    migrate_clear_auto_kept_resync_images()
     
     # Add display_order column to workflow templates (must run before backfill_node_order)
     from app.db.migrations.add_display_order_to_workflows import migrate as migrate_display_order
