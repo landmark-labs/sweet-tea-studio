@@ -353,8 +353,9 @@ export const ImageViewer = React.memo(function ImageViewer({
             prompt: pngMetadata?.prompt as string || base.prompt,
             negative_prompt: pngMetadata?.negative_prompt as string || base.negative_prompt,
             job_params: mergedJobParams,
-            // Preserve workflow_template_id from gallery item (critical for pipe switching)
-            workflow_template_id: base.workflow_template_id,
+            // Get workflow_template_id from gallery item OR from PNG metadata parameters (backend returns this for regenerate)
+            workflow_template_id: base.workflow_template_id ??
+                (pngMetadata?.parameters as Record<string, unknown>)?.workflow_template_id as number | undefined,
         };
     }, [currentImage, matchingGalleryItem, pngMetadata]);
 
