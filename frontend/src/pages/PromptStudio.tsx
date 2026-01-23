@@ -29,6 +29,7 @@ import { formDataAtom, setFormDataAtom } from "@/lib/atoms/formAtoms";
 import { useCanvasStore } from "@/lib/stores/canvasStore";
 import { useMediaTrayStore, type MediaTrayItem } from "@/lib/stores/mediaTrayStore";
 import { useStatusPollingStore } from "@/lib/stores/statusPollingStore";
+import { useTheme } from "@/lib/ThemeContext";
 
 type PromptConstructorPanelProps = Omit<ComponentProps<typeof PromptConstructor>, "currentValues">;
 
@@ -840,6 +841,9 @@ export default function PromptStudio() {
     setPaletteOpen: (open: boolean) => void;
   }>();
 
+  // Theme context for canvas save/load
+  const { theme, setTheme } = useTheme();
+
   // Install State
   const [installOpen, setInstallOpen] = useState(false);
   const [installStatus, setInstallStatus] = useState<InstallStatus | null>(null);
@@ -1033,8 +1037,9 @@ export default function PromptStudio() {
       },
       media_tray: useMediaTrayStore.getState().items.map(({ path, filename, kind }) => ({ path, filename, kind })),
       prompt_rehydration_snapshot: activeRehydrationSnapshot,
+      theme: theme || null,
     };
-  }, [store, selectedEngineId, selectedWorkflowId, selectedProjectId, projects, generationTarget, library, activeRehydrationSnapshot, workflows]);
+  }, [store, selectedEngineId, selectedWorkflowId, selectedProjectId, projects, generationTarget, library, activeRehydrationSnapshot, workflows, theme]);
 
   const normalizeCanvasFormData = useCallback((workflowId: string, rawData: Record<string, unknown>) => {
     const workflow = workflows.find((w) => String(w.id) === String(workflowId));
@@ -1141,7 +1146,12 @@ export default function PromptStudio() {
         restoredRehydrationWorkflowIdRef.current = String(workflowId);
       }
     }
-  }, [applyCanvasFormData, setSelectedEngineId, setSelectedProjectId, setGenerationTarget, setLibrary, setSelectedWorkflowId, workflows, persistPipeParams]);
+
+    // Restore theme setting
+    if (payload.theme !== undefined && payload.theme !== null) {
+      setTheme(payload.theme);
+    }
+  }, [applyCanvasFormData, setSelectedEngineId, setSelectedProjectId, setGenerationTarget, setLibrary, setSelectedWorkflowId, workflows, persistPipeParams, setTheme]);
 
   useEffect(() => {
     registerCanvasSnapshotProvider(buildCanvasPayload);

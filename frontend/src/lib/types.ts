@@ -350,6 +350,8 @@ export interface CanvasPayload {
     }>;
     prompt_rehydration_snapshot?: PromptRehydrationSnapshotV1 | null;
     pipe_palettes?: Record<string, string[]>;
+    /** Theme mode to preserve dark/light mode setting */
+    theme?: "light" | "dark" | "system" | "custom" | null;
 }
 
 
