@@ -38,6 +38,11 @@ const GALLERY_THUMBNAIL_PX = 512;
 const buildThumbnailUrl = (imageId: number, maxPx: number = GALLERY_THUMBNAIL_PX) =>
     `${IMAGE_API_BASE}/gallery/image/${imageId}/thumbnail?max_px=${maxPx}`;
 
+// Build actual video/image URL for hover-to-play video thumbnails
+const buildMediaUrl = (imageId: number) =>
+    `${IMAGE_API_BASE}/gallery/image/${imageId}`;
+
+
 // Hover-to-play video thumbnail component
 // Uses isHovering prop from parent to control playback (overlay blocks direct mouse events)
 function VideoThumbnail({ src, className, isHovering }: { src: string; className?: string; isHovering?: boolean }) {
@@ -92,7 +97,7 @@ function GalleryCardContent({ item, isSelected, handleImageError }: GalleryCardC
 
             {isVideo ? (
                 <VideoThumbnail
-                    src={buildThumbnailUrl(item.image.id)}
+                    src={buildMediaUrl(item.image.id)}
                     className="w-full h-full object-contain transition-transform group-hover:scale-105"
                     isHovering={isHovering}
                 />
