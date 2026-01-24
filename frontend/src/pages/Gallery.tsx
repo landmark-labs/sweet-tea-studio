@@ -129,6 +129,7 @@ export default function Gallery() {
     const [projects, setProjects] = useState<Project[]>([]);
     const [cleanupMode, setCleanupMode] = useState(false);
     const [selectionMode, setSelectionMode] = useState(false);
+    const [selectionModeManual, setSelectionModeManual] = useState(false); // Tracks if selection mode was activated via button
     const [fullscreenIndex, setFullscreenIndex] = useState<number | null>(null);
     const [zoomScale, setZoomScale] = useState(1);
     const [panPosition, setPanPosition] = useState({ x: 0, y: 0 });
@@ -330,6 +331,11 @@ export default function Gallery() {
         else newSet.add(id);
         setSelectedIds(newSet);
         setLastSelectedId(id);
+
+        // Auto-disable selection mode if it was auto-activated (not via button) and nothing is selected
+        if (newSet.size === 0 && selectionMode && !selectionModeManual && !cleanupMode) {
+            setSelectionMode(false);
+        }
     };
 
     const openFullscreen = (index: number) => {
@@ -401,7 +407,12 @@ export default function Gallery() {
     };
 
     const handleImageDoubleClick = (item: GalleryItem) => {
-        setSelectionMode(true);
+        // Double-click activates selection mode automatically (not manual)
+        // It will auto-disable when all items are deselected
+        if (!selectionMode) {
+            setSelectionMode(true);
+            setSelectionModeManual(false); // Mark as auto-activated
+        }
         handleSelectionToggle(item.image.id);
     };
 
@@ -681,7 +692,11 @@ export default function Gallery() {
                             </div>
                         </form>
                         <div className="flex items-center gap-2">
-                            <Button variant={selectionMode ? "default" : "outline"} onClick={() => setSelectionMode(!selectionMode)}>
+                            <Button variant={selectionMode ? "default" : "outline"} onClick={() => {
+                                const newMode = !selectionMode;
+                                setSelectionMode(newMode);
+                                setSelectionModeManual(newMode); // Manual toggle: set flag when enabling, clear when disabling
+                            }}>
                                 {selectionMode ? "selection mode on" : "selection mode off"}
                             </Button>
                             <Button variant={cleanupMode ? "secondary" : "outline"} onClick={cleanupMode ? handleCleanupStop : handleCleanupStart}>
