@@ -11,6 +11,7 @@ interface MoveImagesDialogProps {
     selectedImageIds: number[];
     projects: Project[];
     currentProjectId?: number | null;
+    currentFolder?: string | null;
     onMoveComplete: () => void;
 }
 
@@ -20,6 +21,7 @@ export function MoveImagesDialog({
     selectedImageIds,
     projects,
     currentProjectId,
+    currentFolder,
     onMoveComplete,
 }: MoveImagesDialogProps) {
     const [targetProjectId, setTargetProjectId] = useState<string>("");
@@ -27,15 +29,17 @@ export function MoveImagesDialog({
     const [isMoving, setIsMoving] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    // Filter out drafts project and current project from target options
-    const availableProjects = projects.filter(
-        (p) => p.slug !== "drafts" && p.id !== currentProjectId
-    );
+    // Filter out drafts project only - allow same project for subfolder moves
+    const availableProjects = projects.filter((p) => p.slug !== "drafts");
 
     const selectedProject = availableProjects.find(
         (p) => String(p.id) === targetProjectId
     );
-    const availableFolders = selectedProject?.config_json?.folders || [];
+    const isSameProject = selectedProject?.id === currentProjectId;
+    // Exclude current folder when moving within the same project
+    const availableFolders = (selectedProject?.config_json?.folders || []).filter(
+        (folder: string) => !(isSameProject && folder === currentFolder)
+    );
 
     const handleMove = async () => {
         if (!targetProjectId) {
@@ -114,7 +118,7 @@ export function MoveImagesDialog({
                         </Select>
                     </div>
 
-                    {targetProjectId && availableFolders.length > 0 && (
+                    {targetProjectId && (availableFolders.length > 0 || (isSameProject && currentFolder)) && (
                         <div className="space-y-2">
                             <label className="text-sm font-medium text-slate-700">
                                 destination folder <span className="text-slate-400">(optional)</span>
@@ -127,7 +131,10 @@ export function MoveImagesDialog({
                                     <SelectValue placeholder="default output" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="__default">default output</SelectItem>
+                                    {/* Hide default output if same project and already in default folder */}
+                                    {!(isSameProject && !currentFolder) && (
+                                        <SelectItem value="__default">default output</SelectItem>
+                                    )}
                                     {availableFolders.map((folder) => (
                                         <SelectItem key={folder} value={folder}>
                                             /{folder}

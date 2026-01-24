@@ -1032,6 +1032,7 @@ export default function Gallery() {
                 selectedImageIds={moveTargetIds}
                 projects={projects}
                 currentProjectId={selectedProjectId}
+                currentFolder={selectedFolder}
                 onMoveComplete={() => {
                     setSelectedIds(new Set());
                     setSelectionMode(false);
