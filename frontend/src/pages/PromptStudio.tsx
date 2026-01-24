@@ -1046,8 +1046,11 @@ export default function PromptStudio() {
     if (!workflow) return rawData;
     const schema = workflow.input_schema || {};
     const defaults = buildSchemaDefaults(schema);
-    const filtered = filterParamsForSchema(schema, rawData);
-    return normalizeParamsWithDefaults(schema, { ...defaults, ...filtered });
+    // For canvas restoration, preserve ALL rawData keys (the exact state saved by user)
+    // and only fill in defaults for schema keys that are missing.
+    // Don't use filterParamsForSchema here - it would drop keys not in schema,
+    // which breaks video pipes if node IDs changed between save and load.
+    return normalizeParamsWithDefaults(schema, { ...defaults, ...rawData });
   }, [workflows]);
 
   const applyCanvasFormData = useCallback((workflowId: string, rawData: Record<string, unknown>) => {
