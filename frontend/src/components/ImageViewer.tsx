@@ -104,11 +104,24 @@ export const ImageViewer = React.memo(function ImageViewer({
         if (!selectedImagePath) return null;
         const rawPath = extractRawPath(selectedImagePath);
         const isApiUrl = selectedImagePath.includes('/api/') && selectedImagePath.includes('?path=');
+
+        // Extract filename properly - only use split if rawPath is a valid file path (not an API URL)
+        // If rawPath still looks like an API URL (extraction failed or no ?path= param), use a fallback
+        let filename = "preview.png";
+        const isRawPathAnApiUrl = rawPath.includes('/api/') || rawPath.includes('/gallery/');
+        if (rawPath && !isRawPathAnApiUrl) {
+            // rawPath is an actual file system path or relative path, extract the filename
+            const extracted = rawPath.split(/[\\/]/).pop();
+            if (extracted && extracted.includes('.')) {
+                filename = extracted;
+            }
+        }
+
         return {
             id: -1,
             job_id: -1,
             path: selectedImagePath,
-            filename: rawPath.split(/[\\/]/).pop() || "preview.png",
+            filename,
             created_at: new Date().toISOString(),
             // @ts-expect-error - custom property to flag API URLs
             _isApiUrl: isApiUrl
