@@ -186,3 +186,17 @@
     scrollbar-gutter: stable;
   }
 }
+
+/* Number input spinner buttons - better sizing and dark mode colors */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  opacity: 1;
+  height: 100%;
+  cursor: pointer;
+}
+
+/* Dark mode: invert spinner arrows for visibility */
+:root.dark input[type="number"]::-webkit-inner-spin-button,
+:root.dark input[type="number"]::-webkit-outer-spin-button {
+  filter: invert(1) hue-rotate(180deg);
+}

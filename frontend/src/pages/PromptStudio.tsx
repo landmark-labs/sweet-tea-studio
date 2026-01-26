@@ -3331,7 +3331,7 @@ export default function PromptStudio() {
                   }
                 }}
                 disabled={isBusy}
-                className="w-12 h-10 text-center text-sm font-semibold border rounded-md bg-surface-raised disabled:bg-muted/40 disabled:text-muted-foreground"
+                className="w-14 h-10 text-center text-sm font-semibold border border-border rounded-md bg-surface-raised dark:bg-surface-raised dark:border-border disabled:bg-muted/40 disabled:text-muted-foreground"
                 title="Number of times to run (1-100)"
               />
             </div>
