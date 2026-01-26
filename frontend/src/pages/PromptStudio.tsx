@@ -264,6 +264,8 @@ export default function PromptStudio() {
 
   const batchCancelledRef = useRef(false);
   const pendingJobIdsRef = useRef<number[]>([]); // Queue of job IDs waiting to run
+  // Batch progress tracking: [current, total] - null when not in batch mode
+  const [batchProgress, setBatchProgress] = useState<[number, number] | null>(null);
 
   // Persist batch size to localStorage
   useEffect(() => {
@@ -2199,6 +2201,8 @@ export default function PromptStudio() {
             setGenerationState("queued");
             setStatusLabel("queued");
             completionProcessedRef.current = false; // Reset for next job
+            // Update batch progress counter
+            setBatchProgress(prev => prev ? [prev[0] + 1, prev[1]] : null);
 
             setLastJobId(nextJobId);
             trackFeedStart(nextJobId);
@@ -2208,6 +2212,7 @@ export default function PromptStudio() {
           setGenerationState("completed");
           setStatusLabel("");
           setProgress(100);
+          setBatchProgress(null); // Batch complete
         }
       } catch (err) {
         console.error("Failed to check initial job status:", err);
@@ -2463,12 +2468,15 @@ export default function PromptStudio() {
           setGenerationState("queued");
           setStatusLabel("queued");
           completionProcessedRef.current = false; // Reset for next job
+          // Update batch progress counter
+          setBatchProgress(prev => prev ? [prev[0] + 1, prev[1]] : null);
 
           setLastJobId(nextJobId);
           trackFeedStart(nextJobId);
         } else {
           // Cleanup - no more jobs in the batch
           setLastJobId(null);
+          setBatchProgress(null); // Batch complete
         }
       } else if (data.type === "preview") {
         // Live Preview from KSampler - THROTTLED to prevent main thread blocking
@@ -2874,12 +2882,14 @@ export default function PromptStudio() {
     if (batchSize <= 1) {
       // Single generation - use original function
       pendingJobIdsRef.current = []; // Clear any stale queue
+      setBatchProgress(null); // Not in batch mode
       return handleGenerate(data);
     }
 
     // Reset batch state
     batchCancelledRef.current = false;
     pendingJobIdsRef.current = []; // Clear queue for new batch
+    setBatchProgress([1, batchSize]); // Start at 1/N
 
     // Submit the first job via handleGenerate - this sets up UI state properly
     console.log(`[Batch] Submitting first job via handleGenerate`);
@@ -2986,6 +2996,7 @@ export default function PromptStudio() {
     if (!lastJobId) {
       setGenerationState("cancelled");
       setStatusLabel("cancelled");
+      setBatchProgress(null);
       return;
     }
     try {
@@ -2993,6 +3004,7 @@ export default function PromptStudio() {
       setGenerationState("cancelled");
       setStatusLabel("cancelled");
       setLastJobId(null);
+      setBatchProgress(null);
     } catch (err) {
       console.error("Failed to cancel", err);
     }
@@ -3266,11 +3278,12 @@ export default function PromptStudio() {
                   (() => {
                     const activeItem = generationFeed.find(item => item.jobId === lastJobId);
                     const remainingMs = activeItem?.estimatedRemainingMs;
+                    const batchLabel = batchProgress ? ` (${batchProgress[0]}/${batchProgress[1]})` : "";
                     return (
                       <>
                         <Loader2 className="w-4 h-4 animate-spin text-white/80" />
                         <span>
-                          {Math.round(progress)}%
+                          {Math.round(progress)}%{batchLabel}
                           {remainingMs && remainingMs > 0 ? ` · ~${formatDuration(remainingMs)}` : ""}
                         </span>
                       </>
