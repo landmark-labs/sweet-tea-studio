@@ -2239,13 +2239,13 @@ def process_job(job_id: int):
         last_cancel_db_check = 0.0
         cancelled_in_db = False
 
-        def cancel_check() -> bool:
+        def cancel_check(force: bool = False) -> bool:
             nonlocal last_cancel_db_check, cancelled_in_db
             if cancel_event.is_set():
                 return True
 
             now = time.time()
-            if now - last_cancel_db_check < 1.0:
+            if not force and now - last_cancel_db_check < 1.0:
                 return cancelled_in_db
 
             last_cancel_db_check = now
@@ -2616,7 +2616,7 @@ def process_job(job_id: int):
                 except Exception as e:
                     print(f"Failed to process streamed image: {e}")
 
-            if cancel_check():
+            if cancel_check(force=True):
                 print(f"[JobProcessor] Job {job_id} cancelled before queueing prompt")
                 manager.close_job_sync(str(job_id))
                 return
@@ -2633,7 +2633,7 @@ def process_job(job_id: int):
             session.add(job)
             session.commit()
 
-            if cancel_check():
+            if cancel_check(force=True):
                 print(f"[JobProcessor] Job {job_id} cancelled after queueing prompt {prompt_id}, stopping")
                 try:
                     client.cancel_prompt(prompt_id)
@@ -2692,6 +2692,13 @@ def process_job(job_id: int):
             session.refresh(job)
             if job.status == "cancelled" or cancel_event.is_set():
                 print(f"[JobProcessor] Job {job_id} was cancelled during execution, stopping")
+                try:
+                    client.cancel_prompt(prompt_id)
+                except Exception:
+                    try:
+                        client.interrupt()
+                    except Exception:
+                        pass
                 manager.close_job_sync(str(job_id))
                 return
             

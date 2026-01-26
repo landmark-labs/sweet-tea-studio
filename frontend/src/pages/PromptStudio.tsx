@@ -2,7 +2,7 @@ import { useEffect, useState, useRef, useMemo, useCallback, memo, startTransitio
 import { useAtomValue, useSetAtom, useStore } from "jotai";
 import { addProgressEntry, calculateProgressStats, mapStatusToGenerationState, formatDuration, type GenerationState, type ProgressHistoryEntry } from "@/lib/generationState";
 import { useLocation, useNavigate, useOutletContext } from "react-router-dom";
-import { api, Engine, WorkflowTemplate, GalleryItem, EngineHealth, Project, Image as ApiImage, FolderImage, IMAGE_API_BASE } from "@/lib/api";
+import { api, Engine, WorkflowTemplate, GalleryItem, EngineHealth, Project, Image as ApiImage, FolderImage, IMAGE_API_BASE, Job } from "@/lib/api";
 import { extractPrompts, findPromptFieldsInSchema, findImageFieldsInSchema, findMediaFieldsInSchema } from "@/lib/promptUtils";
 import { DynamicForm } from "@/components/DynamicForm";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -263,7 +263,12 @@ export default function PromptStudio() {
   }, [batchSize]);
 
   const batchCancelledRef = useRef(false);
-  const pendingJobIdsRef = useRef<number[]>([]); // Queue of job IDs waiting to run
+  const batchStateRef = useRef<{
+    total: number;
+    remaining: number;
+    data: any;
+  } | null>(null);
+  const batchAdvanceInFlightRef = useRef(false);
   // Batch progress tracking: [current, total] - null when not in batch mode
   const [batchProgress, setBatchProgress] = useState<[number, number] | null>(null);
 
@@ -2192,27 +2197,17 @@ export default function PromptStudio() {
           updateFeed(lastJobId, { status: "completed", progress: 100, previewBlob: null });
           setGalleryRefresh(prev => prev + 1);
 
-          if (pendingJobIdsRef.current.length > 0) {
-            const nextJobId = pendingJobIdsRef.current.shift()!;
-            logWs(`[WS] Job already completed; chaining to next batch job: ${nextJobId}, remaining: [${pendingJobIdsRef.current.join(', ')}]`);
-
-            setProgress(0);
-            progressHistoryRef.current = [];
-            setJobStartTime(Date.now());
-            setGenerationState("queued");
-            setStatusLabel("queued");
-            completionProcessedRef.current = false; // Reset for next job
-            // Update batch progress counter
-            setBatchProgress(prev => prev ? [prev[0] + 1, prev[1]] : null);
-
-            setLastJobId(nextJobId);
-            trackFeedStart(nextJobId);
+          if (hasMoreBatchJobs()) {
+            const remaining = batchStateRef.current?.remaining ?? 0;
+            logWs(`[WS] Job already completed; starting next batch job, remaining: ${remaining}`);
+            await startNextBatchJobRef.current();
             return;
           }
 
           setGenerationState("completed");
           setStatusLabel("");
           setProgress(100);
+          batchStateRef.current = null;
           setBatchProgress(null); // Batch complete
         }
       } catch (err) {
@@ -2248,6 +2243,9 @@ export default function PromptStudio() {
         const statusUpdates: { status: string; previewBlob?: string | null } = { status: data.status };
         if (data.status === "failed" || data.status === "cancelled") {
           statusUpdates.previewBlob = null;
+          batchCancelledRef.current = data.status === "cancelled";
+          batchStateRef.current = null;
+          setBatchProgress(null);
         }
         updateFeed(lastJobId, statusUpdates);
       } else if (data.type === "progress") {
@@ -2305,7 +2303,7 @@ export default function PromptStudio() {
 
         // In batch mode, do not advance to the next job yet.
         // Wait for the backend `completed` event so we don't miss saved media payloads.
-        if (pendingJobIdsRef.current.length > 0) {
+        if (hasMoreBatchJobs()) {
           setProgress(100);
           setStatusLabel("saving");
           updateFeed(lastJobId, { status: "saving", progress: 100 });
@@ -2329,7 +2327,7 @@ export default function PromptStudio() {
           // ComfyUI finished rendering - check for more batch jobs
           logWs(`[WS] Received executing with node=null - ComfyUI done`);
 
-          if (pendingJobIdsRef.current.length > 0) {
+          if (hasMoreBatchJobs()) {
             setProgress(100);
             setStatusLabel("saving");
             updateFeed(lastJobId, { status: "saving", progress: 100 });
@@ -2347,8 +2345,8 @@ export default function PromptStudio() {
           updateFeed(lastJobId, { status: "processing" });
         }
       } else if (data.type === "completed") {
-        const hasMoreBatchJobs = pendingJobIdsRef.current.length > 0;
-        if (!hasMoreBatchJobs) {
+        const hasMore = hasMoreBatchJobs();
+        if (!hasMore) {
           setGenerationState("completed");
           setStatusLabel("");
           setProgress(100);
@@ -2459,24 +2457,14 @@ export default function PromptStudio() {
         }
         setGalleryRefresh(prev => prev + 1);
 
-        if (hasMoreBatchJobs) {
-          const nextJobId = pendingJobIdsRef.current.shift()!;
-          logWs(`[WS] Chaining to next batch job after completed: ${nextJobId}, remaining: [${pendingJobIdsRef.current.join(', ')}]`);
-
-          setProgress(0);
-          progressHistoryRef.current = [];
-          setJobStartTime(Date.now());
-          setGenerationState("queued");
-          setStatusLabel("queued");
-          completionProcessedRef.current = false; // Reset for next job
-          // Update batch progress counter
-          setBatchProgress(prev => prev ? [prev[0] + 1, prev[1]] : null);
-
-          setLastJobId(nextJobId);
-          trackFeedStart(nextJobId);
+        if (hasMore) {
+          const remaining = batchStateRef.current?.remaining ?? 0;
+          logWs(`[WS] Starting next batch job after completed, remaining: ${remaining}`);
+          void startNextBatchJobRef.current();
         } else {
           // Cleanup - no more jobs in the batch
           setLastJobId(null);
+          batchStateRef.current = null;
           setBatchProgress(null); // Batch complete
         }
       } else if (data.type === "preview") {
@@ -2510,6 +2498,8 @@ export default function PromptStudio() {
         updateFeed(lastJobId, { status: "failed", previewBlob: null });
         // Reset button to idle on error
         setLastJobId(null);
+        batchStateRef.current = null;
+        setBatchProgress(null);
       }
     };
 
@@ -2537,6 +2527,9 @@ export default function PromptStudio() {
             setStatusLabel(job.status);
             setError(job.error || "Job failed");
             updateFeed(lastJobId, { status: job.status, previewBlob: null });
+            batchCancelledRef.current = job.status === "cancelled";
+            batchStateRef.current = null;
+            setBatchProgress(null);
           } else {
             // Job might still be running, poll again
             setError("Connection lost - checking status...");
@@ -2768,19 +2761,19 @@ export default function PromptStudio() {
   };
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const handleGenerate = async (data: any) => {
-    if (!selectedEngineId || !selectedWorkflowId) return;
+  const handleGenerate = async (data: any): Promise<Job | null> => {
+    if (!selectedEngineId || !selectedWorkflowId) return null;
 
     // Guard: Don't proceed if workflow hasn't loaded yet
     // This prevents first generation using empty params when workflows array is still loading
     if (!selectedWorkflow) {
       console.warn("[Generation] Workflow not loaded yet, skipping");
-      return;
+      return null;
     }
 
     if (engineOffline) {
       setError(selectedEngineHealth?.last_error || "ComfyUI is unreachable. Waiting for reconnection...");
-      return;
+      return null;
     }
 
     // SAFETY: If data is empty (uninitialized form atom), load saved/default values first
@@ -2865,11 +2858,43 @@ export default function PromptStudio() {
       lastSubmittedParamsRef.current = cleanParams; // Persist for preview
       setLastJobId(job.id);
       trackFeedStart(job.id);
+      return job;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create job");
       setGenerationState("failed");
       setStatusLabel("failed");
+      return null;
     }
+  };
+
+  const startNextBatchJob = useCallback(async () => {
+    const batchState = batchStateRef.current;
+    if (!batchState || batchCancelledRef.current) return false;
+    if (batchState.remaining <= 0) return false;
+    if (batchAdvanceInFlightRef.current) return false;
+
+    batchAdvanceInFlightRef.current = true;
+    try {
+      const nextJob = await handleGenerate(batchState.data);
+      if (!nextJob) {
+        batchStateRef.current = null;
+        setBatchProgress(null);
+        return false;
+      }
+      batchState.remaining -= 1;
+      setBatchProgress(prev => (prev ? [prev[0] + 1, prev[1]] : null));
+      return true;
+    } finally {
+      batchAdvanceInFlightRef.current = false;
+    }
+  }, [handleGenerate]);
+
+  const startNextBatchJobRef = useRef(startNextBatchJob);
+  startNextBatchJobRef.current = startNextBatchJob;
+
+  const hasMoreBatchJobs = () => {
+    const batchState = batchStateRef.current;
+    return !!batchState && batchState.remaining > 0 && !batchCancelledRef.current;
   };
 
   // Delegate to Context for Global Header button
@@ -2877,88 +2902,35 @@ export default function PromptStudio() {
   const handleGenerateRef = useRef(handleGenerate);
   handleGenerateRef.current = handleGenerate;
 
-  // Batch generation: submit multiple jobs to backend queue
-  // Backend processes them sequentially - we track job IDs to show progress for each
+  // Batch generation: submit jobs one at a time
+  // Queue the next job only after the previous completes to preserve cancel control
   const handleBatchGenerate = useCallback(async (data: any) => {
     if (batchSize <= 1) {
       // Single generation - use original function
-      pendingJobIdsRef.current = []; // Clear any stale queue
+      batchCancelledRef.current = false;
+      batchStateRef.current = null;
       setBatchProgress(null); // Not in batch mode
       return handleGenerate(data);
     }
 
     // Reset batch state
     batchCancelledRef.current = false;
-    pendingJobIdsRef.current = []; // Clear queue for new batch
+    const dataSnapshot = JSON.parse(JSON.stringify(data ?? {}));
+    batchStateRef.current = {
+      total: batchSize,
+      remaining: batchSize - 1,
+      data: dataSnapshot,
+    };
     setBatchProgress([1, batchSize]); // Start at 1/N
 
-    // Submit the first job via handleGenerate - this sets up UI state properly
-    console.log(`[Batch] Submitting first job via handleGenerate`);
-    await handleGenerate(data);
-
-    // Submit remaining jobs directly to the backend queue
-    // They will be processed after the first completes
-    for (let i = 1; i < batchSize; i++) {
-      if (batchCancelledRef.current) {
-        console.log(`[Batch] Cancelled before submitting job ${i + 1}/${batchSize}`);
-        break;
-      }
-
-      try {
-        // Build clean params (same logic as handleGenerate)
-        const schema = visibleSchema || {};
-        const bypassedNodeIds = new Set<string>();
-        Object.entries(schema).forEach(([key, field]: [string, any]) => {
-          if (field.widget === 'toggle' && (key.toLowerCase().includes('bypass') || field.title?.toLowerCase().includes('bypass'))) {
-            if (data[key]) {
-              if (field.x_node_id) bypassedNodeIds.add(field.x_node_id);
-            }
-          }
-        });
-
-        const cleanParams = Object.keys(data).reduce((acc, key) => {
-          if (key.startsWith("__bypass_")) {
-            acc[key] = data[key];
-            return acc;
-          }
-          if (key in schema) {
-            const field = schema[key] as any;
-            if (field.x_node_id && bypassedNodeIds.has(field.x_node_id)) {
-              const isBypassToggle = field.widget === 'toggle' && (key.toLowerCase().includes('bypass') || field.title?.toLowerCase().includes('bypass'));
-              if (!isBypassToggle) return acc;
-            }
-            acc[key] = data[key];
-          }
-          return acc;
-        }, {} as Record<string, any>);
-
-        const rehydration = filterPromptRehydrationSnapshot(promptRehydrationSnapshotRef.current, cleanParams, library);
-        if (rehydration) {
-          cleanParams.__st_prompt_rehydration = rehydration;
-        }
-
-        const job = await api.createJob(
-          parseInt(selectedEngineId!),
-          parseInt(selectedWorkflowId!),
-          selectedProjectId ? parseInt(selectedProjectId) : null,
-          cleanParams,
-          generationTarget || null
-        );
-        jobOutputContextRef.current.set(job.id, {
-          projectId: selectedProjectId || null,
-          outputDir: selectedProjectId ? (generationTarget || null) : null,
-        });
-
-        // Add to pending queue - WebSocket completion handler will pick this up
-        pendingJobIdsRef.current.push(job.id);
-        console.log(`[Batch] Submitted job ${i + 1}/${batchSize} (id=${job.id}), queue: [${pendingJobIdsRef.current.join(', ')}]`);
-      } catch (err) {
-        console.error(`[Batch] Failed to submit job ${i + 1}:`, err);
-      }
+    console.log(`[Batch] Starting batch with ${batchSize} job(s)`);
+    const firstJob = await handleGenerate(dataSnapshot);
+    if (!firstJob) {
+      batchStateRef.current = null;
+      setBatchProgress(null);
+      return;
     }
-
-    console.log(`[Batch] All ${batchSize} jobs submitted. Pending queue: [${pendingJobIdsRef.current.join(', ')}]`);
-  }, [batchSize, handleGenerate, library, visibleSchema, selectedEngineId, selectedWorkflowId, selectedProjectId, generationTarget]);
+  }, [batchSize, handleGenerate]);
 
   const handleBatchGenerateRef = useRef(handleBatchGenerate);
   handleBatchGenerateRef.current = handleBatchGenerate;
@@ -2977,22 +2949,11 @@ export default function PromptStudio() {
   }, [generation, store]);
 
   const handleCancel = async () => {
-    // Cancel any running batch and clear pending queue
+    // Cancel any running batch and stop future batch jobs
     batchCancelledRef.current = true;
-
-    // Capture pending jobs before clearing - these are already on the backend
-    const pendingJobs = [...pendingJobIdsRef.current];
-    pendingJobIdsRef.current = [];
-
-    // Cancel queued jobs first so their Comfy prompts are removed before we interrupt the current run.
-    // This prevents Comfy from immediately advancing to the next queued prompt after an interrupt.
-    await Promise.all(
-      pendingJobs.map((jobId) =>
-        api.cancelJob(jobId).catch((err) =>
-          console.error(`Failed to cancel pending job ${jobId}:`, err)
-        )
-      )
-    );
+    batchStateRef.current = null;
+    batchAdvanceInFlightRef.current = false;
+    setBatchProgress(null);
 
     if (!lastJobId) {
       setGenerationState("cancelled");
