@@ -184,3 +184,26 @@ def test_cleanup_with_keep_image_ids_deletes_kept_images(client, session):
             os.remove(path1)
         if os.path.exists(path2):
             os.remove(path2)
+
+
+def test_matches_naming_convention():
+    """
+    Test the _matches_naming_convention helper function.
+    Files following the pattern {project}-{subfolder}-{number} should return True.
+    Non-standard names should return False.
+    """
+    from app.api.endpoints.gallery import _matches_naming_convention
+    
+    # Files that SHOULD match the naming convention
+    assert _matches_naming_convention("myproject-output-0001.png") is True
+    assert _matches_naming_convention("photos-transform-0051.jpg") is True
+    assert _matches_naming_convention("test-upload-1.webp") is True
+    assert _matches_naming_convention("project123-subfolder-999.jpeg") is True
+    
+    # Files that should NOT match (keep original name when moved)
+    assert _matches_naming_convention("myimage.jpg") is False
+    assert _matches_naming_convention("photo.png") is False
+    assert _matches_naming_convention("sunset_beach.webp") is False
+    assert _matches_naming_convention("IMG_20240101.jpg") is False
+    assert _matches_naming_convention("screenshot-2024.png") is False
+    assert _matches_naming_convention("just-one-dash.png") is False

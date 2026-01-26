@@ -1867,6 +1867,22 @@ def _get_next_image_number(directory: Path, prefix: str = "") -> int:
     return max_num + 1
 
 
+def _matches_naming_convention(filename: str) -> bool:
+    """
+    Check if a filename matches Sweet Tea's naming convention.
+    
+    Standard format: {project-slug}-{subfolder}-{NNNN}.ext
+    Examples: myproject-output-0051.png, photos-transform-0001.jpg
+    
+    Returns True if the filename matches this pattern, False otherwise.
+    Files like 'myimage.jpg' or 'photo.png' will return False.
+    """
+    stem = Path(filename).stem
+    # Pattern: word-word-digits (at least one digit at the end after two dashes)
+    pattern = re.compile(r"^[\w]+-[\w]+-\d+$")
+    return bool(pattern.match(stem))
+
+
 def _clone_job(session: Session, job: Job, target_project_id: int) -> Job:
     """
     Clone a job record to support splitting a batch.
@@ -1894,6 +1910,7 @@ def _clone_job(session: Session, job: Job, target_project_id: int) -> Job:
     session.add(new_job)
     session.flush()  # Ensure we get an ID
     return new_job
+
 
 
 @router.post("/move", response_model=MoveImagesResult)
@@ -2009,8 +2026,24 @@ def move_images(req: MoveImagesRequest, session: Session = Depends(get_session))
             # Determine file extension
             ext = old_path.suffix.lower() or ".png"
             
-            # Generate new filename: project-subfolder-0051.ext
-            new_filename = f"{filename_prefix}{next_num:04d}{ext}"
+            # Only rename if file already follows the naming convention
+            old_filename = old_path.name
+            if _matches_naming_convention(old_filename):
+                # Generate new filename: project-subfolder-0051.ext
+                new_filename = f"{filename_prefix}{next_num:04d}{ext}"
+                next_num += 1
+            else:
+                # Keep original filename, but ensure uniqueness
+                new_filename = old_filename
+                # Handle collision by appending _1, _2, etc.
+                candidate = dest_dir / new_filename
+                counter = 1
+                while candidate.exists():
+                    stem = old_path.stem
+                    new_filename = f"{stem}_{counter}{ext}"
+                    candidate = dest_dir / new_filename
+                    counter += 1
+            
             new_path = dest_dir / new_filename
             
             # Move the file
@@ -2033,7 +2066,6 @@ def move_images(req: MoveImagesRequest, session: Session = Depends(get_session))
             
             new_paths[img_id] = str(new_path)
             moved += 1
-            next_num += 1
             
         except Exception as e:
             logger.exception("Failed to move image", extra={"image_id": img_id, "error": str(e)})
