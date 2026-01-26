@@ -26,7 +26,7 @@ interface ImageViewerProps {
     selectedImagePath?: string;
     onLoadMore?: () => void;  // Callback to load more images when near end
     resetKey?: number;  // When changed, reset selectedIndex to 0 (for new generations)
-
+    selectionKey?: number;  // When changed, exit navigation mode (for gallery re-selections)
 }
 
 const METADATA_CACHE_LIMIT = 200;
@@ -42,7 +42,8 @@ export const ImageViewer = React.memo(function ImageViewer({
     onDelete,
     selectedImagePath,
     onLoadMore,
-    resetKey
+    resetKey,
+    selectionKey
 }: ImageViewerProps) {
     const [copyState, setCopyState] = React.useState<{ positive: boolean; negative: boolean }>({ positive: false, negative: false });
     const [selectedIndex, setSelectedIndex] = React.useState<number>(0);
@@ -135,14 +136,21 @@ export const ImageViewer = React.memo(function ImageViewer({
     }, [images]);
 
     // When selectedImagePath changes, switch back to locked mode
+    // When selectedImagePath OR selectionKey changes, switch back to locked mode
     const lastSelectedImagePathRef = React.useRef<string | undefined>(undefined);
+    const lastSelectionKeyRef = React.useRef<number | undefined>(undefined);
+
     React.useEffect(() => {
-        if (selectedImagePath !== lastSelectedImagePathRef.current) {
+        const pathChanged = selectedImagePath !== lastSelectedImagePathRef.current;
+        const keyChanged = selectionKey !== lastSelectionKeyRef.current;
+
+        if (pathChanged || (selectionKey !== undefined && keyChanged)) {
             lastSelectedImagePathRef.current = selectedImagePath;
+            lastSelectionKeyRef.current = selectionKey;
             // New image selected externally - switch to locked mode
             setNavigationMode(false);
         }
-    }, [selectedImagePath]);
+    }, [selectedImagePath, selectionKey]);
 
     // External reset hook (used after new generations)
     React.useEffect(() => {

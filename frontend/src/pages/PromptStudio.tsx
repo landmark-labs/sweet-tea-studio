@@ -274,6 +274,7 @@ export default function PromptStudio() {
 
   // Selection State
   const [previewPath, setPreviewPath] = useState<string | null>(null);
+  const [gallerySelectionKey, setGallerySelectionKey] = useState(0);
   const [previewMetadata, setPreviewMetadata] = useState<any>(null);
   const viewerContextRef = useRef<Pick<PromptStudioViewerStateV1, "source" | "projectId" | "folder">>({
     source: "recent",
@@ -3096,6 +3097,7 @@ export default function PromptStudio() {
     setPreviewPath(buildViewerApiPath(extractRawViewerPath(imagePath)));
     setProjectGalleryImages(pgImages);
     setPreviewMetadata(null);
+    setGallerySelectionKey((prev) => prev + 1);
   }, [buildViewerApiPath, extractRawViewerPath, setViewerContext]);
 
   const handleMediaTrayShowInViewer = useCallback((path: string, trayItems: MediaTrayItem[]) => {
@@ -3109,6 +3111,7 @@ export default function PromptStudio() {
       }))
     );
     setPreviewMetadata(null);
+    setGallerySelectionKey((prev) => prev + 1);
   }, [buildViewerApiPath, extractRawViewerPath, setViewerContext]);
 
   if (isBootLoading) {
@@ -3453,6 +3456,7 @@ export default function PromptStudio() {
             onDelete={handleGalleryDelete}
             onRegenerate={handleRegenerate}
             resetKey={galleryRefresh}
+            selectionKey={gallerySelectionKey}
           />
         </ErrorBoundary>
       </div>

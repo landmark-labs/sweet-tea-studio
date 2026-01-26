@@ -81,4 +81,46 @@ describe("ImageViewer prompt copy", () => {
 
         await waitFor(() => expect(execSpy).toHaveBeenCalledWith("copy"));
     });
+
+    it("resets navigation mode when selectionKey changes", async () => {
+        const img1 = sampleImage;
+        const img2 = { ...sampleImage, id: 2, path: "/tmp/img2.png", filename: "img2.png" };
+
+        metadataSpy.mockImplementation(async (path) => ({
+            path,
+            prompt: "prompt",
+            negative_prompt: "negative",
+            parameters: {},
+            source: "database"
+        }));
+
+        const { rerender } = render(
+            <ImageViewer
+                images={[img1, img2]}
+                selectedImagePath={img1.path}
+                selectionKey={0}
+            />
+        );
+
+        const img = await screen.findByAltText("Preview");
+        expect(img).toHaveAttribute("src", expect.stringContaining("example.png"));
+
+        fireEvent.keyDown(window, { key: "ArrowRight" });
+
+        await waitFor(() => {
+            expect(img).toHaveAttribute("src", expect.stringContaining("img2.png"));
+        });
+
+        rerender(
+            <ImageViewer
+                images={[img1, img2]}
+                selectedImagePath={img1.path}
+                selectionKey={1}
+            />
+        );
+
+        await waitFor(() => {
+            expect(img).toHaveAttribute("src", expect.stringContaining("example.png"));
+        });
+    });
 });
