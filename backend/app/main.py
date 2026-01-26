@@ -3,7 +3,7 @@ import asyncio
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.endpoints import canvases, collections, engines, extensions, files, gallery, jobs, library, models, monitoring, projects, workflows, portfolio, snippets, status
+from app.api.endpoints import canvases, collections, engines, extensions, files, gallery, jobs, library, models, monitoring, projects, workflows, portfolio, snippets
 from app.api.endpoints.library_tags import start_tag_cache_refresh_background
 from app.core.config import settings
 from app.core.error_handlers import register_gallery_error_handlers
@@ -11,10 +11,19 @@ from app.core.websockets import manager
 from app.core.version import get_git_sha_short
 from app.services.comfy_watchdog import watchdog
 from app.services.comfy_launcher import comfy_launcher
+from app.core.comfy_client import ComfyConnectionError
+from fastapi.responses import JSONResponse
 from app.db.init_db import init_db
 
 app = FastAPI(title="Sweet Tea Studio Backend")
 register_gallery_error_handlers(app)
+
+@app.exception_handler(ComfyConnectionError)
+async def comfy_connection_error_handler(request, exc):
+    return JSONResponse(
+        status_code=503,
+        content={"detail": str(exc)},
+    )
 
 @app.on_event("startup")
 async def on_startup():
@@ -98,7 +107,6 @@ app.include_router(monitoring.router, prefix="/api/v1/monitoring", tags=["monito
 app.include_router(models.router, prefix="/api/v1/models", tags=["models"])
 app.include_router(portfolio.router, prefix="/api/v1/portfolio", tags=["portfolio"])
 app.include_router(snippets.router, prefix="/api/v1/snippets", tags=["snippets"])
-app.include_router(status.router, prefix="/api/v1", tags=["status"])
 from app.api.endpoints import settings as settings_endpoints
 app.include_router(settings_endpoints.router, prefix="/api/v1", tags=["settings"])
 from app.api.endpoints import database

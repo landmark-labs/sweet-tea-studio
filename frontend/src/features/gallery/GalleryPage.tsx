@@ -20,7 +20,8 @@ import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/h
 import { ProjectSidebar } from "@/components/ProjectSidebar";
 import { VirtualGrid } from "@/components/VirtualGrid";
 import { MoveImagesDialog } from "@/components/MoveImagesDialog";
-import React from "react";
+import { buildMediaUrl, buildThumbnailUrl } from "@/features/gallery/utils";
+import { GalleryCardContent } from "@/features/gallery/components/GalleryCardContent";
 import { useMediaTrayStore } from "@/lib/stores/mediaTrayStore";
 
 const MISSING_IMAGE_SRC =
@@ -33,87 +34,6 @@ const MIN_COLUMN_WIDTH = 260;
 const MAX_COLUMN_COUNT = 4;
 
 // Larger thumbnails for Gallery (512px) vs ProjectGallery sidebar (256px) due to bigger cards
-const GALLERY_THUMBNAIL_PX = 512;
-
-const buildThumbnailUrl = (imageId: number, maxPx: number = GALLERY_THUMBNAIL_PX) =>
-    `${IMAGE_API_BASE}/gallery/image/${imageId}/thumbnail?max_px=${maxPx}`;
-
-// Build actual video/image URL for hover-to-play video thumbnails
-const buildMediaUrl = (imageId: number) =>
-    `${IMAGE_API_BASE}/gallery/image/${imageId}`;
-
-
-// Hover-to-play video thumbnail component
-// Uses isHovering prop from parent to control playback (overlay blocks direct mouse events)
-function VideoThumbnail({ src, className, isHovering }: { src: string; className?: string; isHovering?: boolean }) {
-    const videoRef = React.useRef<HTMLVideoElement>(null);
-
-    React.useEffect(() => {
-        if (videoRef.current) {
-            if (isHovering) {
-                videoRef.current.play().catch(() => { });
-            } else {
-                videoRef.current.pause();
-                videoRef.current.currentTime = 0;
-            }
-        }
-    }, [isHovering]);
-
-    return (
-        <video
-            ref={videoRef}
-            src={src}
-            className={className}
-            preload="metadata"
-            muted
-            playsInline
-            loop
-        />
-    );
-}
-
-// Wrapper for gallery card content to track hover state for video playback
-interface GalleryCardContentProps {
-    item: GalleryItem;
-    isSelected: boolean;
-    handleImageError: (e: React.SyntheticEvent<HTMLImageElement>) => void;
-}
-
-function GalleryCardContent({ item, isSelected, handleImageError }: GalleryCardContentProps) {
-    const [isHovering, setIsHovering] = useState(false);
-    const isVideo = isVideoFile(item.image.path, item.image.filename);
-
-    return (
-        <div
-            className="relative bg-slate-100 aspect-square overflow-hidden"
-            onMouseEnter={() => setIsHovering(true)}
-            onMouseLeave={() => setIsHovering(false)}
-        >
-            {isSelected && (
-                <div className="absolute top-2 left-2 z-20 bg-blue-500 text-white rounded-full p-0.5 shadow-sm">
-                    <Check className="w-3 h-3" />
-                </div>
-            )}
-
-            {isVideo ? (
-                <VideoThumbnail
-                    src={buildMediaUrl(item.image.id)}
-                    className="w-full h-full object-contain transition-transform group-hover:scale-105"
-                    isHovering={isHovering}
-                />
-            ) : (
-                <img
-                    src={buildThumbnailUrl(item.image.id)}
-                    alt={item.image.filename}
-                    className="w-full h-full object-contain transition-transform group-hover:scale-105"
-                    loading="lazy"
-                    decoding="async"
-                    onError={handleImageError}
-                />
-            )}
-        </div>
-    );
-}
 
 export default function Gallery() {
     const [items, setItems] = useState<GalleryItem[]>([]);

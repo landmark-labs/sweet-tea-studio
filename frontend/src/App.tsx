@@ -6,13 +6,13 @@ import { GenerationProvider } from "./lib/GenerationContext";
 import { UndoToastProvider } from "./components/ui/undo-toast";
 import { ThemeProvider } from "./lib/ThemeContext";
 
-const PromptStudio = lazy(() => import("./pages/PromptStudio"));
-const Gallery = lazy(() => import("./pages/Gallery"));
+const PromptStudio = lazy(() => import("./features/prompt-studio"));
+const Gallery = lazy(() => import("./features/gallery"));
 const PromptLibrary = lazy(() => import("./pages/PromptLibrary"));
 const WorkflowLibrary = lazy(() => import("./pages/WorkflowLibrary")); // Will be renamed to PipesLibrary
 const Models = lazy(() => import("./pages/Models"));
 const Projects = lazy(() => import("./pages/Projects"));
-const Settings = lazy(() => import("./pages/Settings"));
+const Settings = lazy(() => import("./features/settings"));
 
 function App() {
   return (

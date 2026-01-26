@@ -26,7 +26,7 @@ Upgrade Sweet Tea Studio to a media-aware pipeline (image + video) for image-to-
 
 ## Files and entry points
 - Backend: backend/app/api/endpoints/workflows.py, backend/app/services/job_processor.py, backend/app/core/comfy_client.py, backend/app/api/endpoints/gallery.py, backend/app/api/endpoints/files.py, backend/app/api/endpoints/projects.py, backend/app/models/image.py, backend/app/models/portfolio.py
-- Frontend: frontend/src/components/ImageUpload.tsx, frontend/src/components/ImageViewer.tsx, frontend/src/components/RunningGallery.tsx, frontend/src/components/ProjectGallery.tsx, frontend/src/pages/PromptStudio.tsx, frontend/src/pages/Gallery.tsx, frontend/src/lib/api.ts, frontend/src/lib/types.ts, frontend/src/lib/promptUtils.ts
+- Frontend: frontend/src/components/ImageUpload.tsx, frontend/src/components/ImageViewer.tsx, frontend/src/components/RunningGallery.tsx, frontend/src/components/ProjectGallery.tsx, frontend/src/features/prompt-studio/PromptStudioPage.tsx, frontend/src/features/gallery/GalleryPage.tsx, frontend/src/lib/api.ts, frontend/src/lib/types.ts, frontend/src/lib/promptUtils.ts
 
 ## Data model / API changes
 - Add media fields to Image (preferred to minimize churn): media_kind, mime_type, size_bytes, duration_ms, frame_count, fps, codec, audio_codec, bitrate, poster_path.

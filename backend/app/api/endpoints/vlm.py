@@ -8,7 +8,7 @@ from app.db.engine import engine as db_engine
 from app.models.image import Image
 from app.models.prompt import Prompt
 from app.services.vlm import vlm_service
-from app.services.gallery_search import build_search_text_from_image, update_gallery_fts
+from app.services.gallery.search import build_search_text_from_image, update_gallery_fts
 
 router = APIRouter()
 

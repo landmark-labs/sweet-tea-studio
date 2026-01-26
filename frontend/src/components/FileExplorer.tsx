@@ -5,6 +5,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { splitPathSegments } from "@/lib/pathUtils";
 
 interface FileExplorerProps {
     engineId?: string;
@@ -154,7 +155,7 @@ export function FileExplorer({ engineId, projectId, projectName, onFileSelect }:
     const goUp = () => {
         if (!currentPath) return;
         // Get parent directory by splitting path and removing last segment
-        const segments = currentPath.replace(/[/\\]+$/, "").split(/[/\\]/).filter(Boolean);
+        const segments = splitPathSegments(currentPath);
         if (segments.length === 0) {
             setPath("");
         } else {
@@ -164,7 +165,7 @@ export function FileExplorer({ engineId, projectId, projectName, onFileSelect }:
         }
     };
 
-    const pathSegments = useMemo(() => currentPath.split(/[/\\]/).filter(Boolean), [currentPath]);
+    const pathSegments = useMemo(() => splitPathSegments(currentPath), [currentPath]);
     const isRoot = pathSegments.length === 0;
 
     return (

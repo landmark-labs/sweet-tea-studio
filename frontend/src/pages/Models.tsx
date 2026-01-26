@@ -8,6 +8,7 @@ import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ArrowDownCircle, FolderOpen, Info, Link2, Rocket, Sparkles, Trash2, XCircle } from "lucide-react";
 import { getApiBase } from "@/lib/api";
+import { splitPathSegments } from "@/lib/pathUtils";
 
 type ModelCategory = string;
 
@@ -199,7 +200,7 @@ export default function Models() {
         (m.notes?.toLowerCase().includes(term) ?? false);
       if (selectedCategory === "all" || !selectedCategory) return matchesSearch;
 
-      const pathSegments = m.location.toLowerCase().split(/[\\/]/);
+      const pathSegments = splitPathSegments(m.location.toLowerCase());
       return matchesSearch && pathSegments.includes(selectedCategory.toLowerCase());
     });
     console.log("[Models] filteredModels result:", result.length);

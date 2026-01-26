@@ -60,7 +60,9 @@ def _relative_path(path: Path, root: Path) -> str:
     """Return a path relative to ``root`` to keep database rows portable."""
 
     try:
-        return str(path.resolve().relative_to(root.resolve()))
+        rel = path.resolve().relative_to(root.resolve())
+        # Use POSIX separators for portability across Windows/Linux.
+        return rel.as_posix()
     except ValueError as exc:  # pragma: no cover - defensive guard
         raise ValueError(f"Path {path} must be inside root {root}") from exc
 

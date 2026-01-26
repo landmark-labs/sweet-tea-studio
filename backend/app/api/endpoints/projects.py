@@ -4,6 +4,7 @@ Manages project creation, listing, and run organization.
 """
 from fastapi import APIRouter, HTTPException, Depends, Query, Response, Request
 from sqlmodel import Session, select, SQLModel
+from sqlalchemy import func, and_, or_
 from typing import List, Optional
 from datetime import datetime
 from collections import OrderedDict
@@ -137,53 +138,95 @@ def slugify(text: str) -> str:
     return text or "untitled"
 
 
-def _collect_project_image_stats(session: Session, projects: List[Project]) -> dict[int, dict[str, Optional[datetime] | int]]:
-    if not projects:
+def _compute_project_stats_sql(session: Session, project_ids: List[int]) -> dict[int, dict[str, any]]:
+    """
+    Compute image counts and last activity for projects using efficient SQL aggregation.
+    Returns: {project_id: {"count": int, "last": datetime | None}}
+    """
+    if not project_ids:
         return {}
+    
+    # Use SQL aggregation: GROUP BY project_id, COUNT images, MAX created_at
+    
+    stats: dict[int, dict[str, any]] = {pid: {"count": 0, "last": None} for pid in project_ids}
+    
+    # Query images grouped by job's project_id
+    query = (
+        select(
+            Job.project_id,
+            func.count(Image.id).label("image_count"),
+            func.max(Image.created_at).label("last_activity")
+        )
+        .join(Job, Image.job_id == Job.id)
+        .where(
+            and_(
+                Image.is_deleted == False,
+                or_(Image.file_exists == None, Image.file_exists == True),  # Include NULL and True
+                Job.project_id.in_(project_ids)
+            )
+        )
+        .group_by(Job.project_id)
+    )
+    
+    results = session.exec(query).all()
+    
+    for project_id, count, last in results:
+        if project_id in stats:
+            stats[project_id] = {"count": count or 0, "last": last}
+    
+    return stats
+
+
+def _augment_project_stats_with_path_matches(
+    session: Session,
+    projects: List[Project],
+    stats: dict[int, dict[str, any]],
+) -> dict[int, dict[str, any]]:
+    """
+    Add counts for images whose jobs have no project_id but whose paths map to a project root.
+    This preserves parity with gallery's path-based project resolution.
+    """
+    if not projects:
+        return stats
 
     engines = session.exec(select(Engine)).all()
     path_index = build_project_path_index(engines=engines, projects=projects)
+    if not path_index.roots:
+        return stats
 
-    stats: dict[int, dict[str, Optional[datetime] | int]] = {
-        int(p.id): {"count": 0, "last": None} for p in projects if p.id is not None
-    }
+    like_clauses = []
+    for root, project_id, _slug in path_index.roots:
+        if project_id not in stats:
+            continue
+        root_normalized = root.replace("\\", "/")
+        like_clauses.append(Image.path.like(f"{root_normalized}%"))
+        root_back = root_normalized.replace("/", "\\")
+        if root_back != root_normalized:
+            like_clauses.append(Image.path.like(f"{root_back}%"))
 
-    needs_commit = False
+    if not like_clauses:
+        return stats
+
     rows = session.exec(
         select(Image, Job)
         .join(Job, Image.job_id == Job.id, isouter=True)
-        .where(Image.is_deleted == False)
+        .where(
+            and_(
+                Image.is_deleted == False,
+                or_(Image.file_exists == None, Image.file_exists == True),
+                or_(Job.project_id == None, Job.id == None),
+                or_(*like_clauses),
+            )
+        )
     ).all()
 
-    now = datetime.utcnow()
     for img, job in rows:
         if not img or img.id is None:
             continue
-
-        file_exists = img.file_exists
-        if file_exists is None:
-            if img.path and isinstance(img.path, str):
-                file_exists = os.path.exists(img.path)
-            else:
-                file_exists = False
-            img.file_exists = file_exists
-            if not file_exists:
-                img.is_deleted = True
-                img.deleted_at = now
-            session.add(img)
-            needs_commit = True
-
-        if not file_exists or img.is_deleted:
+        if job and job.project_id is not None:
             continue
 
-        project_id = None
-        path_project_id = path_index.match_project_id(img.path) if img.path else None
-        if path_project_id is not None:
-            project_id = path_project_id
-        elif not path_index.roots:
-            if job and job.project_id is not None:
-                project_id = job.project_id
-
+        project_id = path_index.match_project_id(img.path) if img.path else None
         if project_id is None or project_id not in stats:
             continue
 
@@ -195,13 +238,53 @@ def _collect_project_image_stats(session: Session, projects: List[Project]) -> d
         if last is None or (candidate and candidate > last):
             stats_entry["last"] = candidate
 
-    if needs_commit:
-        try:
-            session.commit()
-        except Exception:
-            session.rollback()
-
     return stats
+
+
+def refresh_project_stats(session: Session, project_id: int) -> None:
+    """
+    Refresh cached image stats for a single project.
+    Called when images are created, deleted, or moved.
+    """
+    project = session.get(Project, project_id)
+    if not project:
+        return
+    
+    stats = _compute_project_stats_sql(session, [project_id])
+    stats = _augment_project_stats_with_path_matches(session, [project], stats)
+    project_stats = stats.get(project_id, {"count": 0, "last": None})
+    
+    project.cached_image_count = project_stats["count"]
+    project.cached_last_activity = project_stats["last"]
+    session.add(project)
+    # Don't commit here - let the caller handle the transaction
+
+
+def refresh_all_project_stats(session: Session) -> int:
+    """
+    Refresh cached stats for ALL projects. Used for initial population or periodic sync.
+    Returns the number of projects updated.
+    """
+    projects = session.exec(select(Project)).all()
+    if not projects:
+        return 0
+    
+    project_ids = [p.id for p in projects if p.id is not None]
+    stats = _compute_project_stats_sql(session, project_ids)
+    stats = _augment_project_stats_with_path_matches(session, projects, stats)
+    
+    updated = 0
+    for project in projects:
+        if project.id is None:
+            continue
+        project_stats = stats.get(project.id, {"count": 0, "last": None})
+        project.cached_image_count = project_stats["count"]
+        project.cached_last_activity = project_stats["last"]
+        session.add(project)
+        updated += 1
+    
+    session.commit()
+    return updated
 
 
 @router.get("", response_model=List[ProjectRead])
@@ -214,35 +297,58 @@ def list_projects(
     
     By default, excludes archived projects. Set include_archived=true to see all.
     The 'drafts' project is always included as the default project.
+    
+    Uses cached stats for fast response. Stats are refreshed when images change.
     """
+    # Allow media index resync in background (throttled to once per 60s)
     maybe_resync_media_index(session)
 
-    # 1. Fetch Projects
+    # Fetch Projects
     query = select(Project)
     if not include_archived:
         query = query.where(Project.archived_at == None)
     
     projects = session.exec(query.order_by(Project.display_order, Project.id)).all()
     
-    stats_map = _collect_project_image_stats(session, projects)
+    # Check if any projects need stats refresh (cached values are NULL/zero for all)
+    needs_refresh = all(
+        p.cached_image_count == 0 and p.cached_last_activity is None 
+        for p in projects
+    ) and len(projects) > 0
     
-    # 3. Merge
+    if needs_refresh:
+        # First load: populate cached stats for all projects
+        project_ids = [p.id for p in projects if p.id is not None]
+        stats_map = _compute_project_stats_sql(session, project_ids)
+        stats_map = _augment_project_stats_with_path_matches(session, projects, stats_map)
+        
+        # Update cached values (commit separately to avoid blocking response)
+        for p in projects:
+            if p.id in stats_map:
+                p.cached_image_count = stats_map[p.id]["count"]
+                p.cached_last_activity = stats_map[p.id]["last"]
+                session.add(p)
+        try:
+            session.commit()
+        except Exception:
+            session.rollback()
+    
+    # Build response using cached values
     project_reads = []
     for p in projects:
-        s = stats_map.get(p.id, {"count": 0, "last": None})
-        
-        # Fallback to project updated_at if no job activity
-        last_activity = s["last"] or p.updated_at
+        # Use cached values, fallback to updated_at for last_activity
+        last_activity = p.cached_last_activity or p.updated_at
         
         project_reads.append(
             ProjectRead(
                 **p.dict(),
-                image_count=s["count"],
+                image_count=p.cached_image_count,
                 last_activity=last_activity
             )
         )
         
     return project_reads
+
 
 
 class ProjectReorderItem(SQLModel):

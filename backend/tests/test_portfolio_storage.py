@@ -72,7 +72,7 @@ def test_record_run_uses_relative_paths_and_embeds_provenance(tmp_path: Path, ex
     # Assert
     with Session(engine) as session:
         output_row = session.exec(select(Output)).one()
-        assert output_row.path == str(image_path.relative_to(root_dir))
+        assert output_row.path == image_path.relative_to(root_dir).as_posix()
         assert output_row.thumb_jpeg is not None
         assert output_row.perceptual_hash == "hash123"
 

@@ -1,5 +1,5 @@
-import { useEffect, useState, useRef, useMemo, useCallback, memo, startTransition, type ComponentProps } from "react";
-import { useAtomValue, useSetAtom, useStore } from "jotai";
+import { useEffect, useState, useRef, useMemo, useCallback, startTransition } from "react";
+import { useSetAtom, useStore } from "jotai";
 import { addProgressEntry, calculateProgressStats, mapStatusToGenerationState, formatDuration, type GenerationState, type ProgressHistoryEntry } from "@/lib/generationState";
 import { useLocation, useNavigate, useOutletContext } from "react-router-dom";
 import { api, Engine, WorkflowTemplate, GalleryItem, EngineHealth, Project, Image as ApiImage, FolderImage, IMAGE_API_BASE, Job } from "@/lib/api";
@@ -14,24 +14,34 @@ import { Loader2, ChevronLeft, ChevronRight } from "lucide-react";
 import { ImageViewer } from "@/components/ImageViewer";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { InstallStatusDialog, InstallStatus } from "@/components/InstallStatusDialog";
-import { PromptConstructor, COLORS } from "@/components/PromptConstructor";
+import { COLORS } from "@/components/PromptConstructor";
 import { CanvasPayload, PromptItem, type PromptRehydrationSnapshotV1, type PromptRehydrationItemV1 } from "@/lib/types";
 
 import { stripDarkVariantClasses } from "@/lib/utils";
+import { getBasename, normalizePath } from "@/lib/pathUtils";
 import { useUndoRedo } from "@/lib/undoRedo";
 import { ProjectGallery } from "@/components/ProjectGallery";
 import { MediaTray } from "@/components/MediaTray";
 import { useGenerationFeedStore, usePromptLibraryStore } from "@/lib/stores/promptDataStore";
 import { useGeneration } from "@/lib/GenerationContext";
 import { logClientEventThrottled } from "@/lib/clientDiagnostics";
-import { deletePipeParams, loadPipeParams, loadPromptRehydrationSnapshot, savePipeParams, savePromptRehydrationSnapshot } from "@/lib/persistedState";
+import { deletePipeParams, loadPipeParams, savePipeParams } from "@/lib/persistedState";
 import { formDataAtom, setFormDataAtom } from "@/lib/atoms/formAtoms";
+import { PromptConstructorPanel } from "@/features/prompt-studio/components/PromptConstructorPanel";
+import {
+  buildSchemaDefaults,
+  filterParamsForSchema,
+  filterPromptRehydrationSnapshot,
+  isPersistableSchemaKey,
+  normalizeParamsWithDefaults,
+  persistPromptStudioRehydrationSnapshot,
+  readPromptStudioRehydrationSnapshot,
+} from "@/features/prompt-studio/promptStudioUtils";
 import { useCanvasStore } from "@/lib/stores/canvasStore";
 import { useMediaTrayStore, type MediaTrayItem } from "@/lib/stores/mediaTrayStore";
 import { useStatusPollingStore } from "@/lib/stores/statusPollingStore";
 import { useTheme } from "@/lib/ThemeContext";
 
-type PromptConstructorPanelProps = Omit<ComponentProps<typeof PromptConstructor>, "currentValues">;
 
 type PromptStudioViewerStateV1 = {
   v: 1;
@@ -43,171 +53,6 @@ type PromptStudioViewerStateV1 = {
 };
 
 const PROMPT_STUDIO_VIEWER_STATE_KEY = "ds_promptstudio_viewer_state_v1";
-
-type PromptStudioRehydrationStateV1 = {
-  v: 1;
-  workflowId: string;
-  snapshot: PromptRehydrationSnapshotV1 | null;
-  at: number;
-};
-
-const isPromptRehydrationSnapshotV1 = (value: unknown): value is PromptRehydrationSnapshotV1 => {
-  if (!value || typeof value !== "object") return false;
-  const snapshot = value as Partial<PromptRehydrationSnapshotV1>;
-  if (snapshot.version !== 1) return false;
-  if (!snapshot.fields || typeof snapshot.fields !== "object") return false;
-  return true;
-};
-
-const readPromptStudioRehydrationSnapshot = async (workflowId: string): Promise<PromptRehydrationSnapshotV1 | null> => {
-  if (!workflowId) return null;
-  try {
-    const raw = await loadPromptRehydrationSnapshot(workflowId);
-    if (!raw || typeof raw !== "object") return null;
-    const parsed = raw as Partial<PromptStudioRehydrationStateV1> | null;
-    if (!parsed || parsed.v !== 1) return null;
-    const snapshot = parsed.snapshot;
-    if (snapshot === null) return null;
-    return isPromptRehydrationSnapshotV1(snapshot) ? snapshot : null;
-  } catch {
-    return null;
-  }
-};
-
-const persistPromptStudioRehydrationSnapshot = (workflowId: string, snapshot: PromptRehydrationSnapshotV1 | null) => {
-  if (!workflowId) return;
-  if (!snapshot) {
-    void savePromptRehydrationSnapshot(workflowId, null);
-    return;
-  }
-  const state: PromptStudioRehydrationStateV1 = {
-    v: 1,
-    workflowId,
-    snapshot,
-    at: Date.now(),
-  };
-  void savePromptRehydrationSnapshot(workflowId, state);
-};
-
-const PromptConstructorPanel = memo(function PromptConstructorPanel(props: PromptConstructorPanelProps) {
-  const currentValues = useAtomValue(formDataAtom) as Record<string, string>;
-  return <PromptConstructor {...props} currentValues={currentValues} />;
-});
-
-const isPersistableSchemaKey = (key: string) =>
-  !key.startsWith("__") || key.startsWith("__bypass_");
-
-const buildSchemaDefaults = (schema: Record<string, any>) => {
-  const defaults: Record<string, unknown> = {};
-  Object.entries(schema || {}).forEach(([key, field]) => {
-    if (isPersistableSchemaKey(key) && field?.default !== undefined) {
-      defaults[key] = field.default;
-    }
-  });
-  return defaults;
-};
-
-const filterParamsForSchema = (
-  schema: Record<string, any>,
-  params: Record<string, unknown> | null | undefined
-) => {
-  const filtered: Record<string, unknown> = {};
-  if (!params || typeof params !== "object") return filtered;
-  Object.entries(params).forEach(([key, value]) => {
-    if (value === undefined) return;
-    // Always preserve __bypass_ keys from job_params for regeneration
-    // These keys may not exist in the schema at runtime but are still valid
-    if (key.startsWith("__bypass_")) {
-      filtered[key] = value;
-      return;
-    }
-    if (isPersistableSchemaKey(key) && key in schema) {
-      filtered[key] = value;
-    }
-  });
-  return filtered;
-};
-
-const normalizeParamsWithDefaults = (
-  schema: Record<string, any>,
-  params: Record<string, unknown>
-) => {
-  const normalized: Record<string, unknown> = { ...params };
-  Object.entries(schema || {}).forEach(([key, field]) => {
-    if (!isPersistableSchemaKey(key)) return;
-    if (field?.default === undefined) return;
-
-    const value = normalized[key];
-    if (value === undefined || value === null) {
-      normalized[key] = field.default;
-      return;
-    }
-
-    if (Array.isArray(field.enum)) {
-      const defaultValue = field.default;
-      const valueStr = typeof value === "string" ? value : String(value);
-      const trimmed = valueStr.trim();
-      const enumHasEmpty = field.enum.includes("");
-      const isEmpty = trimmed.length === 0;
-
-      // Only reset if value is truly empty - preserve values that exist even if not
-      // in static enum list. This allows regeneration with samplers/schedulers/models
-      // that were valid at generation time but may not be in the hardcoded enum.
-      // DynamicForm handles showing "stale" values, ComfyUI validates at execution.
-      if (isEmpty && !enumHasEmpty) {
-        normalized[key] = defaultValue;
-      }
-    }
-  });
-  return normalized;
-};
-
-const filterPromptRehydrationSnapshot = (
-  snapshot: PromptRehydrationSnapshotV1 | null | undefined,
-  params: Record<string, unknown>,
-  library: PromptItem[]
-): PromptRehydrationSnapshotV1 | null => {
-  if (!snapshot || snapshot.version !== 1 || !snapshot.fields || typeof snapshot.fields !== "object") {
-    return null;
-  }
-
-  const fields: Record<string, PromptRehydrationItemV1[]> = {};
-  const libraryById = new Map(library.map((snippet) => [snippet.id, snippet]));
-
-  Object.entries(snapshot.fields).forEach(([fieldKey, items]) => {
-    if (typeof (params as any)?.[fieldKey] !== "string") return;
-    if (!Array.isArray(items) || items.length === 0) return;
-
-    // Only persist snippet links for blocks that currently match the live snippet content.
-    // If a block is showing historical ("frozen") content, treat it as plain text for this generation.
-    const normalized: PromptRehydrationItemV1[] = items.map((item) => {
-      if (item?.type !== "block" || typeof item?.sourceId !== "string" || !item.sourceId) {
-        return item;
-      }
-
-      const liveSnippet = libraryById.get(item.sourceId);
-      if (!liveSnippet || liveSnippet.type !== "block") {
-        return { type: "text", content: item.content };
-      }
-
-      if (item.content !== liveSnippet.content) {
-        return { type: "text", content: item.content };
-      }
-
-      return item;
-    });
-
-    const hasLiveLinkedSnippet = normalized.some(
-      (item) => item?.type === "block" && typeof item?.sourceId === "string" && item.sourceId.length > 0
-    );
-    if (!hasLiveLinkedSnippet) return;
-
-    fields[fieldKey] = normalized;
-  });
-
-  if (Object.keys(fields).length === 0) return null;
-  return { version: 1, fields };
-};
 
 export default function PromptStudio() {
   const [engines, setEngines] = useState<Engine[]>([]);
@@ -327,7 +172,7 @@ export default function PromptStudio() {
   const normalizePathForCompare = useCallback((pathStr?: string | null): string => {
     const rawPath = extractRawViewerPath(pathStr);
     if (!rawPath) return "";
-    return rawPath.replace(/\\/g, "/").toLowerCase();
+    return normalizePath(rawPath).toLowerCase();
   }, [extractRawViewerPath]);
 
   const persistViewerState = useCallback(
@@ -1550,7 +1395,7 @@ export default function PromptStudio() {
       id: galleryItem?.image?.id ?? -1,
       job_id: galleryItem?.image?.job_id ?? null,
       path: rawPath,
-      filename: galleryItem?.image?.filename || rawPath.split(/[\\/]/).pop() || "image.png",
+      filename: galleryItem?.image?.filename || getBasename(rawPath, "image.png"),
       created_at: galleryItem?.image?.created_at || new Date().toISOString(),
     };
 
@@ -1645,7 +1490,7 @@ export default function PromptStudio() {
 
     const loadParams: GalleryItem = {
       ...(item || {} as GalleryItem),
-      image: item?.image || { id: -1, job_id: -1, path: rawPath, filename: rawPath.split(/[\\/]/).pop() || 'image.png', created_at: '' },
+      image: item?.image || { id: -1, job_id: -1, path: rawPath, filename: getBasename(rawPath, "image.png"), created_at: '' },
       prompt: positivePrompt,
       negative_prompt: negativePrompt,
       workflow_template_id: workflowId,
@@ -1907,7 +1752,7 @@ export default function PromptStudio() {
           const inputMatch = imagePath.match(/[/\\]input[/\\](.+)$/);
           if (inputMatch) {
             // Image already in input dir - use relative path directly
-            const relativePath = inputMatch[1].replace(/\\/g, "/");
+            const relativePath = normalizePath(inputMatch[1]);
             console.log("[LoadParams] Reusing existing input path:", relativePath);
             baseParams[mediaField] = relativePath;
           } else {
@@ -1918,7 +1763,7 @@ export default function PromptStudio() {
               const res = await fetch(url);
               if (res.ok) {
                 const blob = await res.blob();
-                const filename = imagePath.split(/[\\/]/).pop() || (mediaType === "video" ? "injected_video.mp4" : "injected_image.png");
+                const filename = getBasename(imagePath, mediaType === "video" ? "injected_video.mp4" : "injected_image.png");
                 const file = new File([blob], filename, { type: blob.type });
 
                 const engineId = selectedEngineId ? parseInt(selectedEngineId) : undefined;
@@ -2036,7 +1881,7 @@ export default function PromptStudio() {
         // If the image already lives in ComfyUI/input, reuse its relative path
         const inputMatch = imagePath.match(/[/\\]input[/\\](.+)$/);
         if (inputMatch) {
-          const relativePath = inputMatch[1].replace(/\\/g, "/");
+          const relativePath = normalizePath(inputMatch[1]);
           console.log("[ImageInject] Reusing existing input path:", relativePath);
           const currentFormData = store.get(formDataAtom) || {};
           const newFormData = { ...currentFormData, [imageField]: relativePath };
@@ -2053,7 +1898,7 @@ export default function PromptStudio() {
         const url = buildViewerApiPath(extractRawViewerPath(imagePath));
         const res = await fetch(url);
         const blob = await res.blob();
-        const filename = imagePath.split(/[\\/]/).pop() || "injected_image.png";
+        const filename = getBasename(imagePath, "injected_image.png");
         const file = new File([blob], filename, { type: blob.type });
 
         const id = selectedEngineId ? parseInt(selectedEngineId) : undefined;
@@ -2990,7 +2835,7 @@ export default function PromptStudio() {
         const url = buildViewerApiPath(extractRawViewerPath(fromImagePath));
         const res = await fetch(url);
         const blob = await res.blob();
-        const filename = fromImagePath.split(/[\\/]/).pop() || "transfer.png";
+        const filename = getBasename(fromImagePath, "transfer.png");
         const file = new File([blob], filename, { type: blob.type });
 
         const uploaded = await api.uploadFile(file, selectedEngineId ? parseInt(selectedEngineId) : undefined);

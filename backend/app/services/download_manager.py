@@ -92,6 +92,10 @@ def _get_aria2c_path() -> Path | None:
 def _download_aria2c() -> Path | None:
     """Download aria2c to the sweet_tea folder."""
     global _aria2c_path
+
+    # Only auto-download the Windows build. On other platforms we rely on PATH.
+    if os.name != "nt":
+        return None
     
     sweet_tea_dir = _get_sweet_tea_dir()
     aria2c_exe = sweet_tea_dir / "aria2c.exe"

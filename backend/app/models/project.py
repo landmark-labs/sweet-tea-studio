@@ -17,6 +17,10 @@ class Project(ProjectBase, table=True):
     updated_at: datetime = Field(default_factory=datetime.utcnow)
     archived_at: Optional[datetime] = None
     display_order: int = Field(default=0)
+    # Cached stats for fast project listing (updated when images change)
+    cached_image_count: int = Field(default=0)
+    cached_last_activity: Optional[datetime] = Field(default=None)
+
 
 
 class ProjectCreate(SQLModel):

@@ -32,7 +32,7 @@ This repo already contains an actionable performance plan in `docs/perf_roadmap.
 
 ## Implemented in this pass
 
-### `frontend/src/pages/PromptStudio.tsx`
+### `frontend/src/features/prompt-studio/PromptStudioPage.tsx`
 
 - **Stop re-render cascades into `ImageViewer`, `ProjectGallery`, `MediaTray`, and `PromptConstructor`** during unrelated state updates by:
   - Memoizing the `images` array passed into `ImageViewer`.

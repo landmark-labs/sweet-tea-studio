@@ -31,7 +31,7 @@ Sweet Tea Studio is a local-first web interface for managing and executing Stabl
 ## 3. Key Subsystems & Recent Features
 
 ### A. VLM & Vision Assist (NEW)
-**Files:** `backend/app/services/vlm.py`, `frontend/src/pages/PromptStudio.tsx`
+**Files:** `backend/app/services/vlm.py`, `frontend/src/features/prompt-studio/PromptStudioPage.tsx`
 *   **Functionality**: Provides local image captioning and tag extraction.
 *   **Implementation**: 
     *   Loads `WaitMsBeforeAsync` optimized models locally (no API calls).
@@ -68,7 +68,7 @@ Sweet Tea Studio is a local-first web interface for managing and executing Stabl
     *   Configurable `ROOT_DIR` (default: `~/.sweet-tea`) for file storage.
 
 ### F. Status Indicators (NEW in 0.6.0)
-**Files:** `backend/app/api/endpoints/status.py`, `frontend/src/components/StatusBar.tsx`
+**Files:** `backend/app/api/endpoints/monitoring.py`, `frontend/src/components/StatusBar.tsx`
 *   **Functionality**: Compact status bar showing system health at a glance.
 *   **Implementation**:
     *   Four indicators: Engine, Queue, I/O, Models.

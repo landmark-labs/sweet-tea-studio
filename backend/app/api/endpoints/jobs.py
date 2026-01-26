@@ -21,6 +21,7 @@ from app.models.engine import Engine
 from app.db.engine import engine as db_engine
 from app.core.websockets import manager
 from app.services.job_processor import process_job, signal_job_cancel
+from app.services.comfy_watchdog import watchdog
 
 # ===== DIAGNOSTIC MODE TOGGLE =====
 DIAGNOSTIC_MODE = True
@@ -48,6 +49,9 @@ def create_job(job_data: JobCreate, background_tasks: BackgroundTasks):
         engine = session.get(Engine, job_data.engine_id)
         if not engine:
             raise HTTPException(status_code=404, detail="Engine not found")
+        
+        # Check if engine is online
+        watchdog.ensure_engine_ready(engine)
         
         # Validate Workflow
         workflow = session.get(WorkflowTemplate, job_data.workflow_template_id)

@@ -227,6 +227,16 @@ export interface FolderImage {
     height?: number;
 }
 
+export interface GalleryQuery {
+    search?: string;
+    skip?: number;
+    limit?: number;
+    projectId?: number | null;
+    folder?: string | null;
+    unassignedOnly?: boolean;
+    includeThumbnails?: boolean;
+}
+
 // ====================
 // LIBRARY (Prompts, Tags)
 // ====================
@@ -302,6 +312,27 @@ export interface TagPromptResponse {
     prompt: string;
     ordered_tags: string[];
     prompt_id?: number;
+}
+
+// ====================
+// SNIPPETS
+// ====================
+
+export interface Snippet {
+    id: number;
+    label: string;
+    content: string;
+    color?: string;
+    sort_order: number;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface SnippetCreate {
+    label: string;
+    content: string;
+    color?: string;
+    sort_order?: number;
 }
 
 // ====================
@@ -428,4 +459,80 @@ export interface StatusSummary {
     jobs_running: number;
     jobs_completed_24h: number;
     system: SystemMetrics;
+}
+
+// ====================
+// SETTINGS
+// ====================
+
+export interface ApiKeyInfo {
+    value: string;  // Masked value like "abc1...xyz9"
+    is_set: boolean;
+    source: "database" | "environment" | "none";
+}
+
+export interface ApiKeysSettings {
+    civitai_api_key: ApiKeyInfo;
+    rule34_api_key: ApiKeyInfo;
+    rule34_user_id: ApiKeyInfo;
+}
+
+export interface ApiKeysUpdate {
+    civitai_api_key?: string;
+    rule34_api_key?: string;
+    rule34_user_id?: string;
+}
+
+export interface AppSettingInfo {
+    key: string;
+    value: string;
+    effective_value: string;
+    source: "database" | "environment" | "default" | "none";
+    env_var: string;
+    default: string;
+    type: "string" | "int" | "float" | "bool";
+    label: string;
+    description: string;
+    category: string;
+}
+
+export interface AppSettingsUpdate {
+    values: Record<string, string>;
+}
+
+// ====================
+// DATABASE & BACKUPS
+// ====================
+
+export interface DatabaseFileInfo {
+    name: string;
+    path: string;
+    size_bytes: number;
+    size_mb: number;
+    exists: boolean;
+    health_status: string;
+    wal_size_bytes?: number | null;
+    shm_size_bytes?: number | null;
+}
+
+export interface BackupInfo {
+    filename: string;
+    path: string;
+    size_bytes: number;
+    size_mb: number;
+    created_at: string;
+}
+
+export interface DatabaseStatusResponse {
+    databases: DatabaseFileInfo[];
+    backups_dir: string;
+    backups_count: number;
+    latest_backup?: BackupInfo | null;
+    total_size_mb: number;
+}
+
+export interface BackupCreateResponse {
+    success: boolean;
+    message: string;
+    backup?: BackupInfo | null;
 }

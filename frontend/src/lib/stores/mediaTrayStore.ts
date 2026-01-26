@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { isVideoFile } from "@/lib/media";
 import { createDeferredStorage } from "@/lib/deferredStorage";
+import { getBasename } from "@/lib/pathUtils";
 
 export type MediaTrayItem = {
   path: string;
@@ -47,8 +48,7 @@ const normalizePath = (value: string) => {
 
 const extractFilename = (path: string) => {
   const normalized = normalizePath(path);
-  const last = normalized.split(/[\\/]/).pop();
-  return last || normalized || "media";
+  return getBasename(normalized, normalized || "media");
 };
 
 const toItem = (input: AddMediaTrayInput): MediaTrayItem | null => {

@@ -172,7 +172,6 @@ class ComfyUILauncher:
         # Try common paths
         possible_paths = [
             Path.home() / "ComfyUI",
-            Path("C:/Users/jkoti/sd/Data/Packages/ComfyUI"),
             Path("/workspace/ComfyUI"),
             Path("~/stable-diffusion/ComfyUI").expanduser(),
         ]

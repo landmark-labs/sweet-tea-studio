@@ -3,6 +3,7 @@ import { Download, ExternalLink, X, Check, ArrowLeft, ArrowRight, RotateCcw, Cop
 import { Button } from "./ui/button";
 import { api, Image as ApiImage, GalleryItem, IMAGE_API_BASE } from "@/lib/api";
 import { isVideoFile } from "@/lib/media";
+import { getBasename } from "@/lib/pathUtils";
 import { workflowSupportsImageInput } from "@/lib/workflowGraph";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 import { InpaintEditor } from "@/components/InpaintEditor";
@@ -112,7 +113,7 @@ export const ImageViewer = React.memo(function ImageViewer({
         const isRawPathAnApiUrl = rawPath.includes('/api/') || rawPath.includes('/gallery/');
         if (rawPath && !isRawPathAnApiUrl) {
             // rawPath is an actual file system path or relative path, extract the filename
-            const extracted = rawPath.split(/[\\/]/).pop();
+            const extracted = getBasename(rawPath);
             if (extracted && extracted.includes('.')) {
                 filename = extracted;
             }

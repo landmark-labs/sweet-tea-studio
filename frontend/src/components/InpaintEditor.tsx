@@ -5,6 +5,7 @@ import { Slider } from '@/components/ui/slider';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Brush, Eraser, Loader2, Move, Redo, RotateCcw, Save, Trash2, Undo, ZoomIn, ZoomOut } from 'lucide-react';
+import { getBasename } from "@/lib/pathUtils";
 
 interface InpaintEditorProps {
     open: boolean;
@@ -57,9 +58,9 @@ export function InpaintEditor({ open, onOpenChange, imageUrl, onSave }: InpaintE
         try {
             if (imageUrl.includes("?path=")) {
                 const url = new URL(imageUrl, window.location.origin);
-                base = url.searchParams.get("path")?.split(/[\\/]/).pop() || base;
+                base = getBasename(url.searchParams.get("path") || "", base);
             } else {
-                base = imageUrl.split(/[\\/]/).pop() || base;
+                base = getBasename(imageUrl, base);
             }
         } catch {
             base = "image";

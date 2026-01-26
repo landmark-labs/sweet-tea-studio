@@ -20,7 +20,8 @@ from app.core.version import get_git_sha_short
 
 router = APIRouter()
 _client_log_lock = threading.Lock()
-_client_log_dir = Path(__file__).resolve().parents[3] / "logs"
+# Store diagnostics alongside other Sweet Tea metadata instead of the repo tree.
+_client_log_dir = settings.meta_dir / "logs"
 _client_log_path = _client_log_dir / "client_diagnostics.jsonl"
 _client_log_max_mb = float(os.getenv("SWEET_TEA_CLIENT_LOG_MAX_MB", "20"))
 _client_log_enabled = os.getenv("SWEET_TEA_CLIENT_LOG_ENABLED", "true").lower() not in ("0", "false", "no")
@@ -189,6 +190,29 @@ def log_client_diagnostics(payload: ClientLogPayload):
                 handle.write(json.dumps(entry, ensure_ascii=True, separators=(",", ":")) + "\n")
 
     return {"status": "ok", "received": len(entries)}
+
+
+@router.post("/restart")
+async def restart_backend():
+    """
+    Restart the backend server.
+
+    Triggers a graceful shutdown of the backend process.
+    Relies on the process manager (Docker, systemd, etc.) to restart the service.
+    Returns immediately with acknowledgment, then exits after a brief delay.
+    """
+    import os
+    import threading
+
+    def delayed_exit():
+        import time
+        time.sleep(0.5)  # Brief delay to allow response to be sent
+        os._exit(0)  # Exit with code 0 so process manager restarts
+
+    # Start exit in background thread so response can be sent first
+    threading.Thread(target=delayed_exit, daemon=True).start()
+
+    return {"message": "Backend restarting...", "status": "shutting_down"}
 
 
 @router.get("/status/summary")

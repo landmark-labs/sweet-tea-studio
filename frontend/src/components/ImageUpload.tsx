@@ -6,6 +6,7 @@ import { api, Project, FolderImage, IMAGE_API_BASE } from "@/lib/api";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
+import { getBasename, normalizePath } from "@/lib/pathUtils";
 import { InpaintEditor } from "@/components/InpaintEditor";
 
 interface ImageUploadProps {
@@ -306,7 +307,7 @@ export function ImageUpload({
             if (inputDirMatch) {
                 // Extract the relative path after /input/
                 // This works for paths like /opt/ComfyUI/input/project/folder/file.jpg
-                const relativePath = inputDirMatch[1].replace(/\\/g, '/'); // Normalize to forward slashes
+                const relativePath = normalizePath(inputDirMatch[1]);
                 console.log(`[ImageUpload] Using existing input path: ${relativePath}`);
                 onChange(relativePath);
                 addToRecent(relativePath);
@@ -374,7 +375,7 @@ export function ImageUpload({
         const inputDirMatch = path.match(/[/\\]input[/\\](.+)$/);
         if (inputDirMatch) {
             // Extract the relative path after /input/
-            const relativePath = inputDirMatch[1].replace(/\\/g, '/'); // Normalize to forward slashes
+            const relativePath = normalizePath(inputDirMatch[1]);
             console.log(`[ImageUpload] Using existing input path: ${relativePath}`);
             onChange(relativePath);
             addToRecent(relativePath);
@@ -702,7 +703,7 @@ export function ImageUpload({
                                                 </div>
                                             )}
                                             <div className="absolute inset-x-0 bottom-0 bg-black/70 text-white text-[10px] p-1 truncate opacity-0 group-hover:opacity-100 transition-opacity">
-                                                {path.split(/[\\/]/).pop()}
+                                                {getBasename(path)}
                                             </div>
                                         </button>
                                     ))}
@@ -756,7 +757,7 @@ export function ImageUpload({
                                                         </div>
                                                     )}
                                                     <div className="absolute inset-x-0 bottom-0 bg-black/70 text-white text-[10px] p-1 truncate opacity-0 group-hover:opacity-100 transition-opacity">
-                                                        {path.split(/[\\/]/).pop()}
+                                                        {getBasename(path)}
                                                     </div>
                                                 </button>
                                             ))}

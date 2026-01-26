@@ -58,7 +58,7 @@ The main page for creating and running image generations.
 
 | Feature | Description | Files |
 |---------|-------------|-------|
-| Prompt Studio Page | Main generation interface container | `frontend/src/pages/PromptStudio.tsx` |
+| Prompt Studio Page | Main generation interface container | `frontend/src/features/prompt-studio/PromptStudioPage.tsx` |
 | Dynamic Form System | Auto-generated forms from workflow schema | `frontend/src/components/DynamicForm.tsx` |
 | Form Persistence | LocalStorage persistence of form data | `frontend/src/components/DynamicForm.tsx` |
 | Undo/Redo Support | Ctrl+Z/Ctrl+Shift+Z in form fields | `frontend/src/lib/undoRedo.tsx` |
@@ -88,7 +88,7 @@ The main page for creating and running image generations.
 | Job Processing | Background task execution | `backend/app/services/job_processor.py` |
 | Job Cancellation | Interrupt running jobs | `backend/app/api/endpoints/jobs.py` |
 | WebSocket Updates | Real-time progress streaming | `backend/app/api/endpoints/jobs.py`, `backend/app/core/websockets.py` |
-| Progress Display | Progress bar in UI | `frontend/src/pages/PromptStudio.tsx` |
+| Progress Display | Progress bar in UI | `frontend/src/features/prompt-studio/PromptStudioPage.tsx` |
 | Preview Images | Live generation previews | `frontend/src/components/GenerationFeed.tsx` |
 
 ### 2.5 Generation Feed & Results
@@ -174,7 +174,7 @@ The main page for creating and running image generations.
 | Folder System | Input/output/masks/custom folders | `backend/app/api/endpoints/projects.py` |
 | Add Folder | Create new project subfolders | `backend/app/api/endpoints/projects.py` (add_project_folder) |
 | Folder Images | List images in project folders | `backend/app/api/endpoints/projects.py` (list_project_folder_images) |
-| Folder Selection | UI to select destination folder | `frontend/src/pages/PromptStudio.tsx` |
+| Folder Selection | UI to select destination folder | `frontend/src/features/prompt-studio/PromptStudioPage.tsx` |
 
 ### 4.3 Project Sidebar
 
@@ -199,8 +199,8 @@ The main page for creating and running image generations.
 
 | Feature | Description | Files |
 |---------|-------------|-------|
-| Gallery Page | Main image browsing interface | `frontend/src/pages/Gallery.tsx` |
-| Gallery API | Fetch images with search/filters | `backend/app/api/endpoints/gallery.py` |
+| Gallery Page | Main image browsing interface | `frontend/src/features/gallery/GalleryPage.tsx` |
+| Gallery API | Fetch images with search/filters | `backend/app/api/endpoints/gallery.py`, `backend/app/services/gallery/` |
 | Search/Filter | Fuzzy text search across prompts | `backend/app/api/endpoints/gallery.py` |
 | Project Filter | Filter by project assignment | `backend/app/api/endpoints/gallery.py` |
 
@@ -211,8 +211,8 @@ The main page for creating and running image generations.
 | Delete Image | Soft-delete images | `backend/app/api/endpoints/gallery.py` (delete_image) |
 | Keep/Discard | Mark images as kept | `backend/app/api/endpoints/gallery.py` (keep_images) |
 | Cleanup | Batch remove non-kept images | `backend/app/api/endpoints/gallery.py` (cleanup_images) |
-| Multi-Select | Shift/Ctrl click selection | `frontend/src/pages/Gallery.tsx` |
-| Bulk Delete | Delete multiple selected images | `frontend/src/pages/Gallery.tsx` |
+| Multi-Select | Shift/Ctrl click selection | `frontend/src/features/gallery/GalleryPage.tsx` |
+| Bulk Delete | Delete multiple selected images | `frontend/src/features/gallery/GalleryPage.tsx` |
 
 ### 5.3 Image Viewing
 
@@ -435,12 +435,11 @@ The main page for creating and running image generations.
 
 | Feature | Description | Files |
 |---------|-------------|-------|
-| Status Summary | Aggregated system status | `backend/app/api/endpoints/status.py` |
-| Engine Check | ComfyUI connectivity check | `backend/app/api/endpoints/status.py` (check_engine_status) |
-| Queue Check | Job queue status | `backend/app/api/endpoints/status.py` (get_queue_status) |
-| I/O Check | File I/O health | `backend/app/api/endpoints/status.py` (get_io_status) |
-| Models Check | Model availability | `backend/app/api/endpoints/status.py` (get_models_status) |
-| I/O Error Recording | Track file write errors | `backend/app/api/endpoints/status.py` (record_io_error) |
+| Status Summary | Aggregated system status | `backend/app/api/endpoints/monitoring.py` (get_status_summary) |
+| Engine Check | ComfyUI connectivity check | `backend/app/api/endpoints/monitoring.py` (get_status_summary) |
+| Queue Check | Job queue status | `backend/app/api/endpoints/monitoring.py` (get_status_summary) |
+| I/O Check | File I/O health | `backend/app/api/endpoints/monitoring.py` (get_status_summary) |
+| Models Check | Model availability | `backend/app/api/endpoints/monitoring.py` (get_status_summary) |
 
 ### 11.3 Monitoring
 
@@ -508,7 +507,7 @@ The main page for creating and running image generations.
 
 | Feature | Description | Files |
 |---------|-------------|-------|
-| Settings Page | Application settings | `frontend/src/pages/Settings.tsx` |
+| Settings Page | Application settings | `frontend/src/features/settings/SettingsPage.tsx` |
 | Database Export | Export database backup | `frontend/src/components/Layout.tsx` |
 
 ### 13.2 Backend Configuration

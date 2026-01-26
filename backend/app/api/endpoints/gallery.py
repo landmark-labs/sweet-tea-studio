@@ -2,18 +2,14 @@ import hashlib
 import io
 import json
 import logging
-import mimetypes
 import os
 import re
 import shutil
 import subprocess
 import sys
-import threading
 import time
 import zipfile
 from datetime import datetime
-from collections import OrderedDict
-from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -35,39 +31,54 @@ from app.models.project import Project
 from app.models.prompt import Prompt
 from app.models.workflow import WorkflowTemplate
 from app.core.config import settings
-from app.services import app_settings
-from app.services.gallery_search import build_search_text_from_image, update_gallery_fts
+from app.services.gallery.constants import (
+    THUMBNAIL_DEFAULT_PX,
+    THUMBNAIL_MAX_PX,
+    THUMBNAIL_MIN_PX,
+    VIDEO_EXTENSIONS,
+)
+from app.services.gallery.metadata import (
+    _ahash_for_image_path,
+    _ahash_for_thumbnail_bytes,
+    _build_resync_extra_metadata,
+    _coerce_json_dict,
+    _decode_xp_comment,
+    _extract_metadata_from_file,
+    _extract_prompts_from_comment_blob,
+    _extract_prompts_from_param_dict,
+    _merge_resync_extra_metadata,
+    _safe_int,
+)
+from app.services.gallery.paths import (
+    _guess_media_type,
+    _is_skipped_media_path,
+    _log_resolution_failure,
+    _normalize_fs_path,
+    _resolve_media_path,
+)
+from app.services.gallery.search import (
+    _build_search_block,
+    _fts_available,
+    _fts_query,
+    _score_search_match,
+    build_search_text_from_image,
+    update_gallery_fts,
+)
+from app.services.gallery.thumbnails import (
+    _build_placeholder_svg,
+    _create_image_thumbnail_bytes,
+    _create_inline_thumbnail,
+    _create_video_poster_bytes,
+    _maybe_prune_thumbnail_cache,
+    _purge_thumbnail_cache_for_path,
+    _thumbnail_cache_dir,
+)
 from app.services.media_paths import build_project_path_index
 from app.services.media_sync import maybe_resync_media_index
+from app.api.endpoints.projects import refresh_project_stats
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
-_fts_cache: Dict[str, Optional[bool]] = {"available": None}
-
-VIDEO_EXTENSIONS = {".mp4", ".webm", ".mov", ".mkv", ".avi", ".m4v", ".mpg", ".mpeg"}
-
-
-def _fts_available(session: Session) -> bool:
-    cached = _fts_cache.get("available")
-    if cached is not None:
-        return cached
-    try:
-        result = session.exec(
-            text("SELECT name FROM sqlite_master WHERE type='table' AND name='gallery_fts' LIMIT 1")
-        ).first()
-        available = result is not None
-    except Exception:
-        available = False
-    _fts_cache["available"] = available
-    return available
-
-
-def _fts_query(search: str) -> str:
-    tokens = [t for t in search.replace('"', " ").replace("'", " ").split() if t]
-    if not tokens:
-        return ""
-    return " ".join(f"{token}*" for token in tokens)
-
 
 class GalleryItem(BaseModel):
     image: ImageRead
@@ -88,668 +99,6 @@ class GalleryItem(BaseModel):
     project_id: Optional[int] = None
 
 
-def _decode_xp_comment(raw: Any) -> Optional[str]:
-    """
-    Decode Windows XPComment (UTF-16LE with null terminator) or generic bytes.
-    """
-    if raw is None:
-        return None
-    if isinstance(raw, bytes):
-        try:
-            return raw.decode("utf-16le", errors="ignore").rstrip("\x00")
-        except Exception:
-            try:
-                return raw.decode("utf-8", errors="ignore")
-            except Exception:
-                return None
-    if isinstance(raw, str):
-        return raw
-    return None
-
-
-def _normalize_fs_path(path: str) -> str:
-    cleaned = (path or "").strip().strip('"').strip("'")
-    if not cleaned:
-        return ""
-    try:
-        return os.path.normcase(os.path.normpath(cleaned))
-    except Exception:
-        return cleaned
-
-
-def _coerce_json_dict(value: Any) -> Dict[str, Any]:
-    if isinstance(value, dict):
-        return value
-    if isinstance(value, str):
-        try:
-            parsed = json.loads(value)
-            return parsed if isinstance(parsed, dict) else {}
-        except Exception:
-            return {}
-    return {}
-
-
-def _compute_ahash(img: PILImage.Image, size: int = 16) -> str:
-    """
-    Compute a simple average-hash (aHash) for rename/move matching.
-
-    Returns a fixed-width hex string (size*size bits).
-    """
-    try:
-        resample = getattr(PILImage, "Resampling", PILImage).LANCZOS
-    except Exception:
-        resample = getattr(PILImage, "LANCZOS", 1)
-
-    small = img.convert("L").resize((size, size), resample=resample)
-    pixels = list(small.getdata())
-    if not pixels:
-        return ""
-    avg = sum(pixels) / len(pixels)
-    bits = "".join("1" if px > avg else "0" for px in pixels)
-    return hex(int(bits, 2))[2:].zfill((size * size) // 4)
-
-
-def _ahash_for_thumbnail_bytes(data: bytes) -> Optional[str]:
-    if not data:
-        return None
-    try:
-        with PILImage.open(io.BytesIO(data)) as img:
-            return _compute_ahash(img)
-    except Exception:
-        return None
-
-
-def _ahash_for_image_path(path: str) -> Optional[str]:
-    if not path:
-        return None
-    try:
-        with PILImage.open(path) as img:
-            return _compute_ahash(img)
-    except Exception:
-        return None
-
-
-def _is_skipped_media_path(path: Path) -> bool:
-    """
-    Filter out non-gallery media like masks, thumbnails, and cache/trash artifacts.
-
-    Keep this conservative: better to skip obvious non-gallery assets than to import noise.
-    """
-    parts_lower = {p.lower() for p in path.parts}
-    skip_dirs = {
-        ".trash",
-        ".cache",
-        ".thumbnails",
-        "thumbnails",
-        "__pycache__",
-        "masks",
-        "mask",
-    }
-    if parts_lower & skip_dirs:
-        return True
-
-    name_lower = path.name.lower()
-    stem_lower = path.stem.lower()
-    if any(token in stem_lower for token in ("_thumb", "_thumbnail", "-thumb", "-thumbnail")):
-        return True
-    if any(token in name_lower for token in ("thumb", "thumbnail")):
-        return True
-
-    # Heuristic: mask exports often contain a clear "mask" token even outside /masks.
-    if path.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp"}:
-        if stem_lower == "mask":
-            return True
-        if stem_lower.startswith(("mask_", "mask-")):
-            return True
-        if stem_lower.endswith(("_mask", "-mask")):
-            return True
-
-    return False
-
-
-def _safe_int(value: Any) -> Optional[int]:
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, int):
-        return value
-    if isinstance(value, str):
-        stripped = value.strip()
-        if stripped.isdigit():
-            try:
-                return int(stripped)
-            except Exception:
-                return None
-    return None
-
-
-def _create_inline_thumbnail(
-    path: str,
-    max_px: int = 256,
-    quality: int = 45,
-) -> tuple[Optional[bytes], Optional[int], Optional[int]]:
-    """
-    Create a compact inline thumbnail for DB storage.
-
-    Returns (thumbnail_bytes, width, height).
-    """
-    try:
-        with PILImage.open(path) as img:
-            img = ImageOps.exif_transpose(img)
-            width, height = img.size
-            img.thumbnail((max_px, max_px))
-            if img.mode in ("RGBA", "P"):
-                img = img.convert("RGB")
-            buf = io.BytesIO()
-            img.save(buf, format="JPEG", quality=quality)
-            return buf.getvalue(), width, height
-    except Exception:
-        return None, None, None
-
-
-def _build_resync_extra_metadata(
-    *,
-    prompt: Optional[str],
-    negative_prompt: Optional[str],
-    parameters: Dict[str, Any],
-    source: str,
-    mtime: datetime,
-    recovered: bool = True,
-) -> Dict[str, Any]:
-    timestamp = mtime.isoformat()
-    active_prompt = {
-        "stage": 0,
-        "positive_text": prompt,
-        "negative_text": negative_prompt,
-        "timestamp": timestamp,
-        "source": source or "resync",
-    }
-    return {
-        "active_prompt": active_prompt,
-        "prompt_history": [active_prompt],
-        "generation_params": parameters or {},
-        "recovered": recovered,
-        "recovered_source": source or "resync",
-        "recovered_at": timestamp,
-    }
-
-
-def _merge_resync_extra_metadata(
-    existing: Any,
-    *,
-    file_metadata: Optional[Dict[str, Any]],
-    mtime: datetime,
-) -> tuple[Optional[Dict[str, Any]], bool]:
-    """
-    Backfill/normalize extra_metadata to the canonical Sweet Tea structure.
-
-    Returns (merged_metadata, changed).
-    """
-    current_raw = _coerce_json_dict(existing)
-
-    # SQLAlchemy JSON columns do not reliably track in-place mutations to nested dicts.
-    # Work on a copy so callers can assign a new object when changes occur.
-    try:
-        import copy
-
-        current = copy.deepcopy(current_raw)
-    except Exception:
-        current = dict(current_raw) if isinstance(current_raw, dict) else {}
-    changed = False
-
-    prompt = None
-    negative_prompt = None
-    parameters: Dict[str, Any] = {}
-    source = "resync"
-
-    if file_metadata:
-        prompt = file_metadata.get("prompt")
-        negative_prompt = file_metadata.get("negative_prompt")
-        parameters = file_metadata.get("parameters") if isinstance(file_metadata.get("parameters"), dict) else {}
-        source = str(file_metadata.get("source") or source)
-
-    # Legacy resync payload (pre-fix): {"positive_prompt","negative_prompt","params",...}
-    if not prompt and isinstance(current.get("positive_prompt"), str):
-        prompt = current.get("positive_prompt")
-    if not negative_prompt and isinstance(current.get("negative_prompt"), str):
-        negative_prompt = current.get("negative_prompt")
-    if not parameters and isinstance(current.get("params"), dict):
-        parameters = current.get("params") or {}
-
-    existing_gen_params = current.get("generation_params") if isinstance(current.get("generation_params"), dict) else {}
-
-    # If we still don't have prompt strings, infer from parameter dicts (ComfyUI-style workflows).
-    if not prompt or not isinstance(prompt, str) or not prompt.strip() or not negative_prompt or not isinstance(negative_prompt, str) or not negative_prompt.strip():
-        inferred_pos, inferred_neg = _extract_prompts_from_param_dict(parameters or existing_gen_params)
-        if not prompt and inferred_pos:
-            prompt = inferred_pos
-        if not negative_prompt and inferred_neg:
-            negative_prompt = inferred_neg
-
-    prompt = prompt.strip() if isinstance(prompt, str) and prompt.strip() else None
-    negative_prompt = negative_prompt.strip() if isinstance(negative_prompt, str) and negative_prompt.strip() else None
-
-    active_prompt = current.get("active_prompt")
-    if not isinstance(active_prompt, dict):
-        timestamp = mtime.isoformat()
-        active_prompt = {
-            "stage": 0,
-            "positive_text": prompt,
-            "negative_text": negative_prompt,
-            "timestamp": timestamp,
-            "source": source or "resync",
-        }
-        current["active_prompt"] = active_prompt
-
-        # Preserve any existing generation params; merge newly recovered keys in.
-        merged_params: Dict[str, Any] = dict(existing_gen_params or {})
-        if parameters:
-            for k, v in parameters.items():
-                merged_params.setdefault(k, v)
-        current["generation_params"] = merged_params
-
-        current["prompt_history"] = [active_prompt]
-        if current.get("recovered") is None:
-            current["recovered"] = True
-        if not current.get("recovered_source"):
-            current["recovered_source"] = source or "resync"
-        if not current.get("recovered_at"):
-            current["recovered_at"] = timestamp
-        changed = True
-        return current, changed
-
-    if prompt and not active_prompt.get("positive_text"):
-        active_prompt["positive_text"] = prompt
-        changed = True
-    if negative_prompt and not active_prompt.get("negative_text"):
-        active_prompt["negative_text"] = negative_prompt
-        changed = True
-
-    raw_history = current.get("prompt_history")
-    if not isinstance(raw_history, list):
-        current["prompt_history"] = [active_prompt]
-        changed = True
-    else:
-        history = [entry for entry in raw_history if isinstance(entry, dict)]
-        if history != raw_history:
-            current["prompt_history"] = history
-            changed = True
-        if not history:
-            current["prompt_history"] = [active_prompt]
-            changed = True
-        else:
-            stage0 = None
-            for entry in history:
-                if entry.get("stage") == 0:
-                    stage0 = entry
-                    break
-            if stage0:
-                if prompt and not stage0.get("positive_text"):
-                    stage0["positive_text"] = prompt
-                    changed = True
-                if negative_prompt and not stage0.get("negative_text"):
-                    stage0["negative_text"] = negative_prompt
-                    changed = True
-
-    gen_params = current.get("generation_params")
-    if not isinstance(gen_params, dict):
-        merged_params: Dict[str, Any] = dict(existing_gen_params or {})
-        if parameters:
-            for k, v in parameters.items():
-                merged_params.setdefault(k, v)
-        current["generation_params"] = merged_params
-        changed = True
-    elif parameters:
-        for k, v in parameters.items():
-            if k not in gen_params:
-                gen_params[k] = v
-                changed = True
-
-    if current.get("recovered") is None:
-        current["recovered"] = True
-        changed = True
-    if not current.get("recovered_source"):
-        current["recovered_source"] = source
-        changed = True
-
-    return current, changed
-
-
-def _extract_metadata_from_file(file_path: str) -> Optional[Dict[str, Any]]:
-    """
-    Extract metadata from an image file (PNG, JPEG) for resync.
-    
-    Returns a dict with prompt, negative_prompt, parameters, and source,
-    or None if no metadata could be extracted.
-    """
-    try:
-        with PILImage.open(file_path) as img:
-            info = img.info or {}
-            result = {
-                "prompt": None,
-                "negative_prompt": None,
-                "parameters": {},
-                "source": "none"
-            }
-            
-            # Try comment metadata (PNG text chunks, JPEG comment segments, EXIF XPComment/UserComment)
-            try:
-                comment_text = None
-                for key in ("comment", "Comment", "Description", "parameters", "Parameters"):
-                    if key in info and info.get(key):
-                        comment_text = _decode_xp_comment(info.get(key))
-                        if comment_text:
-                            break
-
-                exif = None
-                try:
-                    exif = img.getexif()
-                except Exception:
-                    exif = None
-
-                if not comment_text and exif:
-                    XP_COMMENT_TAG = 0x9C9C  # 40092
-                    if XP_COMMENT_TAG in exif:
-                        comment_text = _decode_xp_comment(exif[XP_COMMENT_TAG])
-
-                    if not comment_text:
-                        for tag_id, value in exif.items():
-                            tag_name = ExifTags.TAGS.get(tag_id, tag_id)
-                            if str(tag_name).lower() in {"xpcomment", "usercomment", "comment"}:
-                                comment_text = _decode_xp_comment(value)
-                                if comment_text:
-                                    break
-                
-                if comment_text:
-                    parsed = _extract_prompts_from_comment_blob(comment_text)
-                    if parsed.get("prompt"):
-                        result["prompt"] = parsed.get("prompt")
-                    if parsed.get("negative_prompt"):
-                        result["negative_prompt"] = parsed.get("negative_prompt")
-                    if isinstance(parsed.get("parameters"), dict) and parsed.get("parameters"):
-                        result["parameters"].update(parsed.get("parameters") or {})
-                    if result["prompt"] or result["negative_prompt"] or result["parameters"]:
-                        result["source"] = "comment"
-            except Exception:
-                pass
-            
-            # Try Sweet Tea provenance
-            if "sweet_tea_provenance" in info:
-                try:
-                    provenance = json.loads(info["sweet_tea_provenance"])
-                    result["prompt"] = result["prompt"] or provenance.get("positive_prompt")
-                    result["negative_prompt"] = result["negative_prompt"] or provenance.get("negative_prompt")
-                    result["parameters"] = {
-                        k: v for k, v in provenance.items()
-                        if k not in ["positive_prompt", "negative_prompt", "models", "params"]
-                        and v is not None
-                    }
-                    if "params" in provenance and isinstance(provenance["params"], dict):
-                        result["parameters"].update(provenance["params"])
-                    result["source"] = "sweet_tea"
-                except json.JSONDecodeError:
-                    pass
-            
-            # Try ComfyUI "prompt" metadata
-            if "prompt" in info and result["source"] == "none":
-                try:
-                    prompt_data = json.loads(info["prompt"])
-                    for node_id, node in prompt_data.items():
-                        if isinstance(node, dict):
-                            class_type = node.get("class_type", "")
-                            inputs = node.get("inputs", {})
-                            if class_type == "CLIPTextEncode":
-                                text = inputs.get("text", "")
-                                if not result["prompt"]:
-                                    result["prompt"] = text
-                                elif not result["negative_prompt"]:
-                                    result["negative_prompt"] = text
-                            elif "KSampler" in class_type or "Sampler" in class_type:
-                                for k in ["seed", "steps", "cfg", "sampler_name", "scheduler", "denoise"]:
-                                    if k in inputs and inputs[k] is not None:
-                                        result["parameters"][k] = inputs[k]
-                            elif "CheckpointLoader" in class_type or "Load Checkpoint" in class_type:
-                                ckpt = inputs.get("ckpt_name")
-                                if ckpt:
-                                    result["parameters"]["checkpoint"] = ckpt
-                    result["source"] = "comfyui"
-                except json.JSONDecodeError:
-                    pass
-            
-            # Return result if any metadata was found
-            if result["source"] != "none" or result["prompt"] or result["negative_prompt"]:
-                return result
-    
-    except Exception:
-        pass
-    
-    # Try sidecar JSON file
-    try:
-        sidecar_path = os.path.splitext(file_path)[0] + ".json"
-        if os.path.exists(sidecar_path):
-            with open(sidecar_path, "r", encoding="utf-8") as sf:
-                sidecar_data = json.load(sf)
-                if isinstance(sidecar_data, dict):
-                    result = {
-                        "prompt": sidecar_data.get("positive_prompt"),
-                        "negative_prompt": sidecar_data.get("negative_prompt"),
-                        "parameters": {},
-                        "source": "sidecar_json"
-                    }
-                    if "params" in sidecar_data and isinstance(sidecar_data["params"], dict):
-                        result["parameters"].update(sidecar_data["params"])
-                    return result
-    except Exception:
-        pass
-    
-    return None
-
-def _extract_prompts_from_comment_blob(comment: Optional[str]) -> Dict[str, Any]:
-    """
-    Attempt to pull positive/negative prompts from a JPEG comment/XPComment blob.
-    """
-    result: Dict[str, Any] = {"prompt": None, "negative_prompt": None, "parameters": {}}
-    if not comment:
-        return result
-
-    # JSON is the cleanest form – many tools embed JSON into comments
-    try:
-        parsed = json.loads(comment)
-        if isinstance(parsed, dict):
-            result["prompt"] = parsed.get("positive_prompt") or parsed.get("prompt") or parsed.get("text") or parsed.get("text_positive")
-            result["negative_prompt"] = parsed.get("negative_prompt") or parsed.get("text_negative") or parsed.get("negative")
-
-            params = parsed.get("params") if isinstance(parsed.get("params"), dict) else {}
-            result["parameters"].update(params)
-            for k, v in parsed.items():
-                if k in {"positive_prompt", "negative_prompt", "prompt", "text", "text_positive", "text_negative", "negative", "params"}:
-                    continue
-                if v is None or isinstance(v, (dict, list)):
-                    continue
-                result["parameters"][k] = v
-
-            return result
-    except json.JSONDecodeError:
-        pass
-
-    # Heuristic split on "Negative prompt:"
-    # Also look for parameters line (usually at the end, starting with Steps: or Size:)
-    
-    rest_text = comment
-    params_dict: Dict[str, Any] = {}
-    
-    # Try to find parameters line at the end
-    lines = comment.strip().split('\n')
-    if len(lines) > 0:
-        last_line = lines[-1].strip()
-        # Common A1111/ComfyUI text format markers
-        if last_line.startswith("Steps:") or last_line.startswith("Size:") or "Sampler:" in last_line:
-            # Parse parameters
-            try:
-                # Naive split by comma might fail if values contain commas, but it's a good start for this format
-                # A better regex structure would be needed for complex cases
-                items = [x.strip() for x in last_line.split(',') if x.strip()]
-                for item in items:
-                    if ':' in item:
-                        k, v = item.split(':', 1)
-                        params_dict[k.strip()] = v.strip()
-
-                size_raw = params_dict.get("Size")
-                if isinstance(size_raw, str) and "x" in size_raw:
-                    w_raw, h_raw = size_raw.lower().split("x", 1)
-                    try:
-                        params_dict["width"] = int(w_raw.strip())
-                        params_dict["height"] = int(h_raw.strip())
-                    except Exception:
-                        pass
-                
-                # Remove the params line from text
-                rest_text = '\n'.join(lines[:-1]).strip()
-                result["parameters"] = params_dict
-            except Exception:
-                pass
-
-    lower = rest_text.lower()
-    if "negative prompt:" in lower:
-        # standard "Negative prompt:" label
-        parts = re.split(r"Negative prompt:", rest_text, flags=re.IGNORECASE, maxsplit=1)
-        if len(parts) == 2:
-            result["prompt"] = parts[0].strip() or None
-            result["negative_prompt"] = parts[1].strip() or None
-            return result
-            
-    # Fallback: treat whole remaining text as positive prompt
-    result["prompt"] = rest_text.strip() or None
-    return result
-
-
-def _extract_prompts_from_param_dict(params: Any) -> tuple[Optional[str], Optional[str]]:
-    """
-    Best-effort extraction of positive/negative prompts from a params dict.
-
-    Mirrors the frontend prompt heuristics so Gallery can still render prompts
-    when `active_prompt` was not populated at generation time.
-    """
-    if not isinstance(params, dict):
-        return None, None
-
-    def as_nonempty_string(value: Any) -> Optional[str]:
-        if isinstance(value, str):
-            stripped = value.strip()
-            if stripped:
-                return stripped
-        return None
-
-    entries: list[tuple[str, str]] = []
-    for key, value in params.items():
-        if not isinstance(key, str):
-            continue
-        s = as_nonempty_string(value)
-        if not s:
-            continue
-        entries.append((key, s))
-
-    if not entries:
-        return None, None
-
-    positive: Optional[str] = None
-    negative: Optional[str] = None
-
-    positive_keys = {"positive", "prompt", "text_positive", "text_g", "clip_l", "active_positive", "positive_prompt"}
-    negative_keys = {"negative", "text_negative", "negative_prompt", "clip_l_negative", "active_negative"}
-
-    # Pass 1: explicit keys + contains-positive/negative heuristics.
-    for key, value in entries:
-        lower_key = key.lower()
-
-        if lower_key in positive_keys or ("positive" in lower_key and "negative" not in lower_key):
-            if not positive or len(value) > len(positive):
-                positive = value
-
-        if lower_key in negative_keys or ("negative" in lower_key and "positive" not in lower_key):
-            if not negative or len(value) > len(negative):
-                negative = value
-
-    # Pass 2: ComfyUI patterns (CLIPTextEncode.text / 6.text / STRING_LITERAL.*).
-    if not positive or not negative:
-        clip_nodes: list[dict[str, str]] = []
-        for key, value in entries:
-            lower_key = key.lower()
-            is_clip_textencode = ("cliptextencode" in lower_key and ".text" in lower_key) or bool(
-                re.match(r"^\d+\.text$", key, flags=re.IGNORECASE)
-            )
-            is_string_literal = ("string_literal" in lower_key) or (".string" in lower_key and "lora" not in lower_key)
-
-            if not (is_clip_textencode or is_string_literal):
-                continue
-
-            node_match = re.match(r"^(\d+)\.|^([^.]+)\.", key)
-            node_id = node_match.group(1) if node_match and node_match.group(1) else (node_match.group(2) if node_match else key)
-            clip_nodes.append({"key": key, "value": value, "node_id": node_id})
-
-        def sort_key(node: dict[str, str]) -> tuple[int, str]:
-            node_id = node.get("node_id") or ""
-            try:
-                return (0, f"{int(node_id):010d}")
-            except Exception:
-                return (1, node_id)
-
-        clip_nodes.sort(key=sort_key)
-
-        if clip_nodes and not positive:
-            positive = clip_nodes[0]["value"]
-        if len(clip_nodes) >= 2 and not negative:
-            negative = clip_nodes[1]["value"]
-
-    # Pass 3: title-ish hints embedded in keys.
-    if not positive or not negative:
-        for key, value in entries:
-            if not positive and re.search(r"positive.*(prompt|text)", key, flags=re.IGNORECASE):
-                positive = value
-            if not negative and re.search(r"negative.*(prompt|text)", key, flags=re.IGNORECASE):
-                negative = value
-            if positive and negative:
-                break
-
-    return positive, negative
-
-
-def _build_search_block(
-    prompt_text: Optional[str],
-    negative_prompt: Optional[str],
-    caption: Optional[str],
-    tags: List[str],
-    history: List[Dict[str, Any]],
-) -> str:
-    history_text = " ".join(
-        (
-            (entry.get("positive_text") or "") + " " + (entry.get("negative_text") or "")
-            for entry in history
-            if isinstance(entry, dict)
-        )
-    )
-
-    return " ".join(
-        filter(
-            None,
-            [prompt_text or "", negative_prompt or "", caption or "", " ".join(tags), history_text],
-        )
-    ).lower()
-
-
-def _score_search_match(search: str, text_block: str) -> float:
-    search_lower = (search or "").strip().lower()
-    if not search_lower:
-        return 0.0
-
-    text_lower = text_block.lower()
-    tokens = [t for t in search_lower.replace(",", " ").split() if t]
-    token_hits = sum(1 for t in tokens if t in text_lower)
-    coverage = token_hits / len(tokens) if tokens else 0
-    similarity = SequenceMatcher(None, search_lower, text_lower).ratio()
-    substring_bonus = 0.25 if search_lower in text_lower else 0
-    return (0.6 * coverage) + (0.4 * similarity) + substring_bonus
-
-
 def _log_context(request: Optional[Request], **extra: Any) -> Dict[str, Any]:
     context = {
         "path": request.url.path if request else None,
@@ -758,522 +107,6 @@ def _log_context(request: Optional[Request], **extra: Any) -> Dict[str, Any]:
     }
     context.update({k: v for k, v in extra.items() if v is not None})
     return context
-
-
-def _guess_media_type(path: str) -> str:
-    guessed = mimetypes.guess_type(path)[0]
-    if guessed:
-        return guessed
-    ext = os.path.splitext(path)[1].lower()
-    if ext in VIDEO_EXTENSIONS:
-        if ext == ".webm":
-            return "video/webm"
-        if ext == ".mov":
-            return "video/quicktime"
-        if ext == ".mkv":
-            return "video/x-matroska"
-        if ext == ".avi":
-            return "video/x-msvideo"
-        if ext in (".mpg", ".mpeg"):
-            return "video/mpeg"
-        return "video/mp4"
-    return "application/octet-stream"
-
-
-THUMBNAIL_MIN_PX = 64
-THUMBNAIL_MAX_PX = 1024
-THUMBNAIL_DEFAULT_PX = 256
-_THUMB_CACHE_DEFAULT_MAX_FILES = 10000
-_THUMB_CACHE_DEFAULT_MAX_MB = 1024
-_THUMB_CACHE_DEFAULT_MAX_AGE_DAYS = 30
-_THUMB_CACHE_DEFAULT_PRUNE_INTERVAL_S = 600
-_MEDIA_PATH_CACHE_DEFAULT_MAX = 2048
-_MEDIA_PATH_CACHE_DEFAULT_TTL_S = 300
-_resolve_path_cache: "OrderedDict[str, tuple[float, Optional[str]]]" = OrderedDict()
-_resolve_path_cache_lock = threading.Lock()
-_thumb_cache_prune_lock = threading.Lock()
-_thumb_cache_prune_last = 0.0
-
-
-def _get_setting_int(key: str, fallback: int) -> int:
-    value = app_settings.get_setting_typed(key, fallback)
-    if value is None:
-        return fallback
-    try:
-        return int(float(value))
-    except (TypeError, ValueError):
-        return fallback
-
-
-def _get_setting_float(key: str, fallback: float) -> float:
-    value = app_settings.get_setting_typed(key, fallback)
-    if value is None:
-        return fallback
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return fallback
-
-
-def _get_thumb_cache_max_files() -> int:
-    return max(0, _get_setting_int("thumb_cache_max_files", _THUMB_CACHE_DEFAULT_MAX_FILES))
-
-
-def _get_thumb_cache_max_mb() -> int:
-    return max(0, _get_setting_int("thumb_cache_max_mb", _THUMB_CACHE_DEFAULT_MAX_MB))
-
-
-def _get_thumb_cache_max_age_days() -> int:
-    return max(0, _get_setting_int("thumb_cache_max_age_days", _THUMB_CACHE_DEFAULT_MAX_AGE_DAYS))
-
-
-def _get_thumb_cache_prune_interval_s() -> float:
-    return max(0.0, _get_setting_float("thumb_cache_prune_interval_s", _THUMB_CACHE_DEFAULT_PRUNE_INTERVAL_S))
-
-
-def _get_media_path_cache_max() -> int:
-    return max(0, _get_setting_int("media_path_cache_max", _MEDIA_PATH_CACHE_DEFAULT_MAX))
-
-
-def _get_media_path_cache_ttl_s() -> float:
-    return max(0.0, _get_setting_float("media_path_cache_ttl_s", _MEDIA_PATH_CACHE_DEFAULT_TTL_S))
-
-
-def _resolve_cache_get(path: str) -> tuple[bool, Optional[str]]:
-    ttl_s = _get_media_path_cache_ttl_s()
-    if ttl_s <= 0:
-        return False, None
-    key = _normalize_fs_path(path)
-    if not key:
-        return False, None
-    now = time.time()
-    with _resolve_path_cache_lock:
-        entry = _resolve_path_cache.get(key)
-        if not entry:
-            return False, None
-        cached_at, cached_value = entry
-        if now - cached_at > ttl_s:
-            _resolve_path_cache.pop(key, None)
-            return False, None
-        _resolve_path_cache.move_to_end(key)
-        return True, cached_value
-
-
-def _resolve_cache_set(path: str, resolved: Optional[str]) -> None:
-    ttl_s = _get_media_path_cache_ttl_s()
-    max_entries = _get_media_path_cache_max()
-    if ttl_s <= 0 or max_entries <= 0:
-        return
-    key = _normalize_fs_path(path)
-    if not key:
-        return
-    with _resolve_path_cache_lock:
-        _resolve_path_cache[key] = (time.time(), resolved)
-        _resolve_path_cache.move_to_end(key)
-        while len(_resolve_path_cache) > max_entries:
-            _resolve_path_cache.popitem(last=False)
-
-
-def _resolve_media_path(path: str, session: Session) -> Optional[str]:
-    cache_hit, cached = _resolve_cache_get(path)
-    if cache_hit:
-        if cached and os.path.exists(cached):
-            return cached
-        if cached is None:
-            return None
-
-    if os.path.exists(path):
-        _resolve_cache_set(path, path)
-        return path
-
-    normalized = path.replace("\\", "/")
-    while normalized.startswith("./"):
-        normalized = normalized[2:]
-
-    # Try engines in a stable, useful order: active -> Local ComfyUI -> any.
-    engines: list[Engine] = []
-    seen_ids: set[int] = set()
-
-    active = session.exec(select(Engine).where(Engine.is_active == True)).first()
-    if active and active.id is not None:
-        engines.append(active)
-        seen_ids.add(active.id)
-
-    local = session.exec(select(Engine).where(Engine.name == "Local ComfyUI")).first()
-    if local and local.id is not None and local.id not in seen_ids:
-        engines.append(local)
-        seen_ids.add(local.id)
-
-    for engine in session.exec(select(Engine)).all():
-        if engine.id is not None and engine.id in seen_ids:
-            continue
-        engines.append(engine)
-        if engine.id is not None:
-            seen_ids.add(engine.id)
-
-    def candidate_paths_for_base(base: str) -> list[str]:
-        base_str = str(base).strip().strip('"').strip("'")
-        if not base_str:
-            return []
-
-        base_path = Path(base_str)
-        candidates: list[Path] = []
-
-        segments = [segment for segment in normalized.split("/") if segment and segment != "."]
-        suffixes = ["/".join(segments[i:]) for i in range(len(segments))] if segments else [normalized]
-
-        # Direct join: <base>/<path>, progressively dropping leading segments.
-        for suffix in suffixes:
-            candidates.append(base_path / suffix)
-
-        # If base points to ComfyUI root (or unknown), try common subdirs.
-        # If base points to /.../output, try sibling /.../input.
-        # If base points to /.../input, try sibling /.../output.
-        base_name = base_path.name.lower()
-        if base_name in {"input", "output"}:
-            siblings_root = base_path.parent
-            for suffix in suffixes:
-                candidates.append(siblings_root / "input" / suffix)
-                candidates.append(siblings_root / "output" / suffix)
-        else:
-            for suffix in suffixes:
-                candidates.append(base_path / "input" / suffix)
-                candidates.append(base_path / "output" / suffix)
-
-        # Deduplicate while preserving order
-        unique: list[str] = []
-        seen: set[str] = set()
-        for cand in candidates:
-            cand_str = str(cand)
-            if cand_str in seen:
-                continue
-            seen.add(cand_str)
-            unique.append(cand_str)
-        return unique
-
-    for engine in engines:
-        for base in (engine.input_dir, engine.output_dir):
-            if not base:
-                continue
-            for candidate in candidate_paths_for_base(base):
-                if os.path.exists(candidate):
-                    _resolve_cache_set(path, candidate)
-                    return candidate
-
-    # Final fallback: allow environment-configured ComfyUI locations even if engine rows
-    # are misconfigured or missing paths.
-    for base in (
-        getattr(settings, "COMFYUI_INPUT_DIR", None),
-        getattr(settings, "COMFYUI_OUTPUT_DIR", None),
-        getattr(settings, "COMFYUI_PATH", None),
-    ):
-        if not base:
-            continue
-        for candidate in candidate_paths_for_base(str(base)):
-            if os.path.exists(candidate):
-                _resolve_cache_set(path, candidate)
-                return candidate
-
-    _resolve_cache_set(path, None)
-    return None
-
-
-def _log_resolution_failure(path: str, session: Session) -> None:
-    normalized = (path or "").replace("\\", "/")
-    engines = session.exec(select(Engine)).all()
-    engine_payload = []
-    for engine in engines[:10]:
-        engine_payload.append(
-            {
-                "id": engine.id,
-                "name": engine.name,
-                "is_active": engine.is_active,
-                "input_dir": engine.input_dir,
-                "output_dir": engine.output_dir,
-            }
-        )
-    logger.info(
-        "Unable to resolve media path",
-        extra={
-            "path": path,
-            "normalized": normalized,
-            "settings_comfyui_input_dir": getattr(settings, "COMFYUI_INPUT_DIR", None),
-            "settings_comfyui_output_dir": getattr(settings, "COMFYUI_OUTPUT_DIR", None),
-            "settings_comfyui_path": getattr(settings, "COMFYUI_PATH", None),
-            "engines_total": len(engines),
-            "engines_sample": engine_payload,
-        },
-    )
-
-
-def _thumbnail_cache_dir() -> Path:
-    cache_dir = settings.meta_dir / "thumbnails"
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    return cache_dir
-
-
-def _maybe_prune_thumbnail_cache() -> None:
-    global _thumb_cache_prune_last
-    max_files = _get_thumb_cache_max_files()
-    max_mb = _get_thumb_cache_max_mb()
-    max_age_days = _get_thumb_cache_max_age_days()
-    prune_interval_s = _get_thumb_cache_prune_interval_s()
-
-    if max_files <= 0 and max_mb <= 0 and max_age_days <= 0:
-        return
-
-    now = time.time()
-    if now - _thumb_cache_prune_last < prune_interval_s:
-        return
-
-    with _thumb_cache_prune_lock:
-        if now - _thumb_cache_prune_last < prune_interval_s:
-            return
-        _thumb_cache_prune_last = now
-
-    cache_dir = _thumbnail_cache_dir()
-    try:
-        entries: list[tuple[float, int, Path]] = []
-        total_bytes = 0
-        cutoff = None
-        if max_age_days > 0:
-            cutoff = now - (max_age_days * 86400)
-
-        for entry in cache_dir.iterdir():
-            if not entry.is_file():
-                continue
-            try:
-                stat = entry.stat()
-            except OSError:
-                continue
-            total_bytes += stat.st_size
-            if cutoff and stat.st_mtime < cutoff:
-                try:
-                    entry.unlink()
-                except OSError:
-                    pass
-                continue
-            entries.append((stat.st_mtime, stat.st_size, entry))
-
-        max_bytes = max_mb * 1024 * 1024 if max_mb > 0 else 0
-        max_files_limit = max_files if max_files > 0 else 0
-
-        if (max_files_limit and len(entries) > max_files_limit) or (max_bytes and total_bytes > max_bytes):
-            entries.sort(key=lambda item: item[0])  # oldest first
-            remaining = len(entries)
-            for _mtime, size, path in entries:
-                if max_files_limit and remaining <= max_files_limit and (not max_bytes or total_bytes <= max_bytes):
-                    break
-                try:
-                    path.unlink()
-                except OSError:
-                    continue
-                total_bytes = max(0, total_bytes - size)
-                remaining -= 1
-    except Exception as exc:
-        logger.debug("Failed to prune thumbnail cache", extra={"error": str(exc)})
-
-
-def _purge_thumbnail_cache_for_path(path: str) -> int:
-    """
-    Remove all cached thumbnails for a given source image path.
-    
-    Thumbnails are keyed by SHA1 of "{path}:{mtime}:{size}:{max_px}:{type}".
-    Since we don't know all possible max_px variants, we generate cache keys
-    for common sizes and delete matching files.
-    
-    Returns the number of cache files deleted.
-    """
-    cache_dir = _thumbnail_cache_dir()
-    deleted = 0
-    
-    # Try to get file stats for accurate cache key matching
-    try:
-        stat = os.stat(path)
-        mtime_ns = stat.st_mtime_ns
-        size = stat.st_size
-    except OSError:
-        # File already deleted, use fallback key format
-        mtime_ns = None
-        size = None
-    
-    # Common thumbnail sizes used by Gallery (512) and ProjectGallery (256)
-    for max_px in [64, 128, 256, 512, 1024]:
-        for media_type in ["image", "video"]:
-            if mtime_ns is not None and size is not None:
-                cache_key = f"{path}:{mtime_ns}:{size}:{max_px}:{media_type}"
-            else:
-                # Fallback key format when file is already deleted
-                cache_key = f"{path}:{max_px}:{media_type}"
-            
-            cache_name = hashlib.sha1(cache_key.encode("utf-8")).hexdigest()
-            cache_path = cache_dir / f"{cache_name}.jpg"
-            
-            try:
-                if cache_path.exists():
-                    cache_path.unlink()
-                    deleted += 1
-            except OSError:
-                pass
-    
-    return deleted
-
-
-def _build_placeholder_svg(label: str, size_px: int) -> bytes:
-    size = max(64, min(size_px, 512))
-    safe_label = re.sub(r"[^a-zA-Z0-9 _-]", "", label).strip() or "preview"
-    svg = f"""<svg xmlns="http://www.w3.org/2000/svg" width="{size}" height="{size}" viewBox="0 0 {size} {size}">
-  <rect width="100%" height="100%" fill="#0f172a"/>
-  <rect x="8" y="8" width="{size - 16}" height="{size - 16}" rx="10" ry="10" fill="#1e293b"/>
-  <text x="50%" y="50%" text-anchor="middle" dominant-baseline="middle" fill="#e2e8f0" font-family="Arial, sans-serif" font-size="{max(10, size // 8)}" letter-spacing="2">{safe_label.upper()}</text>
-</svg>"""
-    return svg.encode("utf-8")
-
-
-def _create_image_thumbnail_bytes(path: str, max_px: int, quality: int = 60) -> Optional[bytes]:
-    try:
-        with PILImage.open(path) as img:
-            img = ImageOps.exif_transpose(img)
-            img.thumbnail((max_px, max_px))
-            if img.mode in ("RGBA", "P"):
-                img = img.convert("RGB")
-            buf = io.BytesIO()
-            img.save(buf, format="JPEG", quality=quality, optimize=True)
-            return buf.getvalue()
-    except Exception as exc:
-        logger.debug("Failed to build image thumbnail", extra={"path": path, "error": str(exc)})
-        return None
-
-
-def _create_video_poster_bytes(path: str, max_px: int) -> Optional[bytes]:
-    def resolve_ffmpeg() -> Optional[str]:
-        configured = getattr(settings, "FFMPEG_PATH", None)
-        if configured and isinstance(configured, str) and configured.strip():
-            candidate = configured.strip().strip('"')
-            if os.path.exists(candidate):
-                return candidate
-
-        ffmpeg_from_path = shutil.which("ffmpeg")
-        if ffmpeg_from_path:
-            return ffmpeg_from_path
-
-        # Common Conda layout on Windows: %CONDA_PREFIX%/Library/bin/ffmpeg.exe
-        if os.name == "nt":
-            conda_candidate = Path(sys.prefix) / "Library" / "bin" / "ffmpeg.exe"
-            if conda_candidate.exists():
-                return str(conda_candidate)
-
-        # Common venv layout on *nix: <prefix>/bin/ffmpeg
-        unix_candidate = Path(sys.prefix) / "bin" / "ffmpeg"
-        if unix_candidate.exists():
-            return str(unix_candidate)
-
-        return None
-
-    ffmpeg = resolve_ffmpeg()
-    if not ffmpeg:
-        return None
-
-    scale_expr = f"scale={max_px}:{max_px}:force_original_aspect_ratio=decrease"
-
-    # Order matters: try fast seek first, then a decoding-based thumbnail filter.
-    attempts: list[list[str]] = []
-    for ss in ("0.5", "0.0"):
-        attempts.append([
-            ffmpeg,
-            "-hide_banner",
-            "-nostdin",
-            "-loglevel",
-            "error",
-            "-ss",
-            ss,
-            "-i",
-            path,
-            "-frames:v",
-            "1",
-            "-vf",
-            scale_expr,
-            "-f",
-            "image2pipe",
-            "-vcodec",
-            "mjpeg",
-            "-an",
-            "pipe:1",
-        ])
-
-    # Fallback: ask ffmpeg to pick a representative frame (can be slower but works for tricky seeks).
-    attempts.append([
-        ffmpeg,
-        "-hide_banner",
-        "-nostdin",
-        "-loglevel",
-        "error",
-        "-i",
-        path,
-        "-frames:v",
-        "1",
-        "-vf",
-        f"thumbnail,{scale_expr}",
-        "-f",
-        "image2pipe",
-        "-vcodec",
-        "mjpeg",
-        "-an",
-        "pipe:1",
-    ])
-
-    last_error: str | None = None
-    last_returncode: int | None = None
-
-    for cmd in attempts:
-        ss = None
-        if "-ss" in cmd:
-            try:
-                ss = cmd[cmd.index("-ss") + 1]
-            except Exception:
-                ss = None
-        try:
-            result = subprocess.run(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                check=False,
-                timeout=10,
-            )
-        except subprocess.TimeoutExpired:
-            logger.debug("Video poster generation timed out", extra={"path": path, "ss": ss})
-            continue
-
-        last_returncode = result.returncode
-        stderr_text = result.stderr.decode("utf-8", errors="ignore")
-        if stderr_text:
-            last_error = stderr_text[:400]
-
-        if result.returncode == 0 and result.stdout:
-            return result.stdout
-
-        logger.debug(
-            "Video poster generation failed",
-            extra={
-                "path": path,
-                "ss": ss,
-                "stderr": stderr_text[:200],
-            },
-        )
-
-    if last_error or last_returncode is not None:
-        logger.info(
-            "Video poster generation failed; returning placeholder",
-            extra={
-                "path": path,
-                "returncode": last_returncode,
-                "stderr": last_error,
-                "ffmpeg": ffmpeg,
-            },
-        )
-
-    return None
-
 
 @router.get("/", response_model=List[GalleryItem])
 def read_gallery(
@@ -1689,6 +522,9 @@ def _bulk_soft_delete(image_ids: List[int], session: Session) -> BulkDeleteResul
     deleted_count = 0
     now = datetime.utcnow()
     timestamp = now.strftime("%Y%m%d_%H%M%S")
+    
+    # Track affected projects for cache refresh
+    affected_job_ids = set(img.job_id for img in images if img.job_id)
 
     for img_id in image_ids:
         image = images_by_id.get(img_id)
@@ -1729,6 +565,22 @@ def _bulk_soft_delete(image_ids: List[int], session: Session) -> BulkDeleteResul
         deleted_count += 1
 
     session.commit()
+    
+    # Refresh cached stats for affected projects
+    if affected_job_ids and deleted_count > 0:
+        jobs = session.exec(select(Job).where(Job.id.in_(affected_job_ids))).all()
+        affected_project_ids = set(j.project_id for j in jobs if j.project_id)
+        for project_id in affected_project_ids:
+            try:
+                refresh_project_stats(session, project_id)
+            except Exception:
+                logger.exception("Failed to refresh project stats", extra={"project_id": project_id})
+        if affected_project_ids:
+            try:
+                session.commit()
+            except Exception:
+                session.rollback()
+    
     return BulkDeleteResult(deleted=deleted_count, not_found=not_found, file_errors=file_errors)
 
 
@@ -1770,6 +622,9 @@ def restore_images(req: RestoreRequest, session: Session = Depends(get_session))
         select(Image).where(Image.id.in_(req.image_ids)).where(Image.is_deleted == True)
     ).all()
     images_by_id = {img.id: img for img in images}
+    
+    # Track affected jobs for cache refresh
+    affected_job_ids = set(img.job_id for img in images if img.job_id)
     
     not_found = [img_id for img_id in req.image_ids if img_id not in images_by_id]
     file_errors: List[int] = []
@@ -1819,6 +674,21 @@ def restore_images(req: RestoreRequest, session: Session = Depends(get_session))
         session.rollback()
         logger.exception("Failed to commit image restore transaction")
         raise HTTPException(status_code=500, detail="Failed to restore images")
+    
+    # Refresh cached stats for affected projects
+    if affected_job_ids and restored_count > 0:
+        jobs = session.exec(select(Job).where(Job.id.in_(affected_job_ids))).all()
+        affected_project_ids = set(j.project_id for j in jobs if j.project_id)
+        for project_id in affected_project_ids:
+            try:
+                refresh_project_stats(session, project_id)
+            except Exception:
+                logger.exception("Failed to refresh project stats", extra={"project_id": project_id})
+        if affected_project_ids:
+            try:
+                session.commit()
+            except Exception:
+                session.rollback()
     
     return RestoreResult(restored=restored_count, not_found=not_found, file_errors=file_errors)
 
@@ -2077,6 +947,27 @@ def move_images(req: MoveImagesRequest, session: Session = Depends(get_session))
         session.rollback()
         logger.exception("Failed to commit image move transaction")
         raise HTTPException(status_code=500, detail="Failed to save moved images")
+    
+    # Refresh cached stats for affected projects (source and destination)
+    if moved > 0:
+        # Collect source project_ids from original jobs
+        source_project_ids: set[int] = set()
+        for jid in job_ids:
+            job = session.get(Job, jid)
+            if job and job.project_id and job.project_id != req.project_id:
+                source_project_ids.add(job.project_id)
+        
+        # Refresh stats for all affected projects
+        all_affected_projects = source_project_ids | {req.project_id}
+        for project_id in all_affected_projects:
+            try:
+                refresh_project_stats(session, project_id)
+            except Exception:
+                logger.exception("Failed to refresh project stats", extra={"project_id": project_id})
+        try:
+            session.commit()
+        except Exception:
+            session.rollback()
     
     logger.info(
         "Moved images to project",

@@ -64,6 +64,10 @@ def init_db():
     from app.db.migrations.add_display_order_to_projects import migrate as migrate_project_display_order
     migrate_project_display_order()
     
+    # Add cached stats columns to projects (image_count, last_activity)
+    from app.db.migrations.add_cached_stats_to_projects import migrate as migrate_cached_stats
+    migrate_cached_stats()
+    
     # Backfill __node_order for existing workflows
     from app.db.migrations.backfill_node_order import migrate as migrate_node_order
     migrate_node_order()
@@ -133,4 +137,3 @@ def init_db():
             session.add(i2i_pipe)
             session.commit()
             print("Seeded default starter pipes (sts_t2i_basic, sts_i2i_basic).")
-

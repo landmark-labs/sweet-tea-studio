@@ -121,7 +121,7 @@ Sweet Tea Studio is a local-first web interface for ComfyUI that replaces node g
 - Live job progress, previews, and running gallery.
 
 **Key UI files**
-- `frontend/src/pages/PromptStudio.tsx`
+- `frontend/src/features/prompt-studio/PromptStudioPage.tsx`
 - `frontend/src/components/DynamicForm.tsx`
 - `frontend/src/lib/undoRedo.tsx`
 - `frontend/src/components/PromptConstructor.tsx`
@@ -190,12 +190,13 @@ Sweet Tea Studio is a local-first web interface for ComfyUI that replaces node g
 - View metadata, pan/zoom, and regenerate.
 
 **Key UI files**
-- `frontend/src/pages/Gallery.tsx`
+- `frontend/src/features/gallery/GalleryPage.tsx`
 - `frontend/src/components/ImageViewer.tsx`
 
 **Backend endpoints and services**
 - `backend/app/api/endpoints/gallery.py`
-- `backend/app/services/gallery_search.py`
+- `backend/app/services/gallery/`
+- `backend/app/services/gallery/search.py`
 
 **Related data models**
 - `backend/app/models/image.py`
@@ -281,7 +282,6 @@ Sweet Tea Studio is a local-first web interface for ComfyUI that replaces node g
 - `frontend/src/components/PerformanceHUD.tsx`
 
 **Backend endpoints and services**
-- `backend/app/api/endpoints/status.py`
 - `backend/app/api/endpoints/monitoring.py`
 - `backend/app/services/monitoring.py`
 
@@ -290,7 +290,7 @@ Sweet Tea Studio is a local-first web interface for ComfyUI that replaces node g
 - Adjust app settings and API keys from Settings page.
 
 **Key UI files**
-- `frontend/src/pages/Settings.tsx`
+- `frontend/src/features/settings/SettingsPage.tsx`
 
 **Backend endpoints and services**
 - `backend/app/api/endpoints/settings.py`
@@ -347,18 +347,17 @@ All endpoints are under `/api/v1`.
 - `monitoring/`: System metrics endpoints.
 - `models/`: Model discovery and download queue.
 - `portfolio/`: Portfolio run/output query endpoints.
-- `status`: Status summary and subsystem health checks.
 - `settings`: API keys and app settings management.
 
 ## 8. Frontend Reference
 ### 8.1 Pages and Routes
-- `/` -> `frontend/src/pages/PromptStudio.tsx`
+- `/` -> `frontend/src/features/prompt-studio/PromptStudioPage.tsx`
 - `/projects` -> `frontend/src/pages/Projects.tsx`
 - `/pipes` -> `frontend/src/pages/WorkflowLibrary.tsx`
-- `/gallery` -> `frontend/src/pages/Gallery.tsx`
+- `/gallery` -> `frontend/src/features/gallery/GalleryPage.tsx`
 - `/library` -> `frontend/src/pages/PromptLibrary.tsx`
 - `/models` -> `frontend/src/pages/Models.tsx`
-- `/settings` -> `frontend/src/pages/Settings.tsx`
+- `/settings` -> `frontend/src/features/settings/SettingsPage.tsx`
 
 ### 8.2 Key Components
 - Dynamic forms and prompts: `frontend/src/components/DynamicForm.tsx`, `frontend/src/components/PromptConstructor.tsx`
@@ -408,7 +407,6 @@ Shadcn-based components in `frontend/src/components/ui/`, including `accordion.t
 - `backend/app/api/endpoints/extensions.py`
 - `backend/app/api/endpoints/vlm.py`
 - `backend/app/api/endpoints/models.py`
-- `backend/app/api/endpoints/status.py`
 - `backend/app/api/endpoints/monitoring.py`
 - `backend/app/api/endpoints/portfolio.py`
 - `backend/app/api/endpoints/canvases.py`

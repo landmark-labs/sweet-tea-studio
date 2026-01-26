@@ -41,7 +41,7 @@ If dark mode still looks “too light”, start by tuning the dark values in `fr
 
 ### Left column: Configurator (node params + generate)
 
-- **Configurator container + orchestration**: `frontend/src/pages/PromptStudio.tsx`
+- **Configurator container + orchestration**: `frontend/src/features/prompt-studio/PromptStudioPage.tsx`
 - **Dynamic node form rendering**: `frontend/src/components/DynamicForm.tsx`
 - **Inputs/controls styling (shared)**:
   - `frontend/src/components/ui/input.tsx`
