@@ -108,6 +108,56 @@ def _log_context(request: Optional[Request], **extra: Any) -> Dict[str, Any]:
     context.update({k: v for k, v in extra.items() if v is not None})
     return context
 
+
+def _attach_job_prompt_rehydration(
+    result: Dict[str, Any],
+    session: Session,
+    *,
+    path: str,
+    actual_path: Optional[str],
+) -> None:
+    if not isinstance(result, dict):
+        return
+
+    params = result.get("parameters")
+    if not isinstance(params, dict):
+        params = {}
+        result["parameters"] = params
+
+    needs_workflow = "workflow_template_id" not in params
+    needs_rehydration = "__st_prompt_rehydration" not in params
+    if not (needs_workflow or needs_rehydration):
+        return
+
+    image = session.exec(
+        select(Image).where(Image.path == path).order_by(Image.created_at.desc())
+    ).first()
+    if not image and actual_path and actual_path != path:
+        image = session.exec(
+            select(Image).where(Image.path == actual_path).order_by(Image.created_at.desc())
+        ).first()
+    if not image or not image.job_id:
+        return
+
+    job = session.get(Job, image.job_id)
+    if not job:
+        return
+
+    if needs_workflow and job.workflow_template_id:
+        params["workflow_template_id"] = job.workflow_template_id
+
+    if needs_rehydration and job.input_params:
+        job_params = job.input_params
+        if isinstance(job_params, str):
+            try:
+                job_params = json.loads(job_params)
+            except json.JSONDecodeError:
+                job_params = {}
+        if isinstance(job_params, dict):
+            rehydration = job_params.get("__st_prompt_rehydration")
+            if rehydration:
+                params["__st_prompt_rehydration"] = rehydration
+
 @router.get("/", response_model=List[GalleryItem])
 def read_gallery(
     request: Request,
@@ -1787,6 +1837,7 @@ def get_image_metadata_by_path(path: str, session: Session = Depends(get_session
                     if "params" in provenance and isinstance(provenance["params"], dict):
                         result["parameters"].update(provenance["params"])
                     result["source"] = "sweet_tea"
+                    _attach_job_prompt_rehydration(result, session, path=path, actual_path=actual_path)
                     return result
                 except json.JSONDecodeError:
                     pass
