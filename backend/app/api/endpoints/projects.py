@@ -487,35 +487,37 @@ def add_project_folder(
     
     if folder_name in folders:
         raise HTTPException(status_code=400, detail="Folder already exists")
-        
+
+    # Create directory using new structure BEFORE updating config.
+    active_engine = session.exec(select(Engine).where(Engine.is_active == True)).first()
+    try:
+        if active_engine and active_engine.input_dir and folder_name != "output":
+            # New folders (except output) go in /ComfyUI/input/<project>/
+            project_input_dir = settings.get_project_input_dir_in_comfy(
+                active_engine.input_dir, project.slug
+            )
+            project_input_dir.mkdir(parents=True, exist_ok=True)
+            (project_input_dir / folder_name).mkdir(exist_ok=True)
+        elif active_engine and active_engine.output_dir:
+            # Fallback to legacy sweet_tea location
+            settings.ensure_sweet_tea_project_dirs(
+                active_engine.output_dir,
+                project.slug,
+                subfolders=[folder_name]
+            )
+        else:
+            settings.ensure_project_dirs(project.slug, subfolders=[folder_name])
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create folder '{folder_name}': {str(e)}")
+
     folders.append(folder_name)
     # Create a NEW dict to trigger SQLAlchemy change detection
     project.config_json = {**config, "folders": folders}
     project.updated_at = datetime.utcnow()
-    
+
     session.add(project)
     session.commit()
     session.refresh(project)
-    
-    # Create directory using new structure
-    active_engine = session.exec(select(Engine).where(Engine.is_active == True)).first()
-    
-    if active_engine and active_engine.input_dir and folder_name != "output":
-        # New folders (except output) go in /ComfyUI/input/<project>/
-        project_input_dir = settings.get_project_input_dir_in_comfy(
-            active_engine.input_dir, project.slug
-        )
-        project_input_dir.mkdir(parents=True, exist_ok=True)
-        (project_input_dir / folder_name).mkdir(exist_ok=True)
-    elif active_engine and active_engine.output_dir:
-        # Fallback to legacy sweet_tea location
-        settings.ensure_sweet_tea_project_dirs(
-            active_engine.output_dir, 
-            project.slug, 
-            subfolders=[folder_name]
-        )
-    else:
-        settings.ensure_project_dirs(project.slug, subfolders=[folder_name])
     
     stats_map = _collect_project_image_stats(session, [project])
     stats = stats_map.get(project.id, {"count": 0, "last": None})
