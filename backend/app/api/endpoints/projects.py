@@ -8,6 +8,7 @@ from sqlalchemy import func, and_, or_
 from typing import List, Optional
 from datetime import datetime
 from collections import OrderedDict
+import logging
 import os
 import hashlib
 import re
@@ -30,12 +31,18 @@ from app.services.media_sync import maybe_resync_media_index
 
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 _image_dim_cache: "OrderedDict[str, tuple[float, Optional[int], Optional[int]]]" = OrderedDict()
 _image_dim_cache_lock = threading.Lock()
 
 _folder_image_cache: "OrderedDict[str, tuple[float, str, List[dict]]]" = OrderedDict()
 _folder_image_cache_lock = threading.Lock()
+
+_project_stats_refresh_lock = threading.Lock()
+_project_stats_refresh_in_flight = False
+_project_stats_refresh_last_started = 0.0
+_PROJECT_STATS_REFRESH_MIN_INTERVAL_S = 10.0
 
 
 def _get_setting_int(key: str, fallback: int) -> int:
@@ -287,6 +294,49 @@ def refresh_all_project_stats(session: Session) -> int:
     return updated
 
 
+def _refresh_project_stats_for_ids(project_ids: List[int]) -> None:
+    global _project_stats_refresh_in_flight
+    try:
+        if not project_ids:
+            return
+        with Session(engine) as session:
+            projects = session.exec(select(Project).where(Project.id.in_(project_ids))).all()
+            if not projects:
+                return
+            stats = _compute_project_stats_sql(session, project_ids)
+            stats = _augment_project_stats_with_path_matches(session, projects, stats)
+            for project in projects:
+                if project.id is None:
+                    continue
+                project_stats = stats.get(project.id, {"count": 0, "last": None})
+                project.cached_image_count = project_stats["count"]
+                project.cached_last_activity = project_stats["last"]
+                session.add(project)
+            session.commit()
+    except Exception as exc:
+        logger.warning("[Projects] Background stats refresh failed: %s", exc)
+    finally:
+        with _project_stats_refresh_lock:
+            _project_stats_refresh_in_flight = False
+
+
+def _schedule_project_stats_refresh(project_ids: List[int]) -> None:
+    global _project_stats_refresh_in_flight, _project_stats_refresh_last_started
+    now = time.time()
+    with _project_stats_refresh_lock:
+        if _project_stats_refresh_in_flight:
+            return
+        if now - _project_stats_refresh_last_started < _PROJECT_STATS_REFRESH_MIN_INTERVAL_S:
+            return
+        _project_stats_refresh_in_flight = True
+        _project_stats_refresh_last_started = now
+    threading.Thread(
+        target=_refresh_project_stats_for_ids,
+        args=(project_ids,),
+        daemon=True,
+    ).start()
+
+
 @router.get("", response_model=List[ProjectRead])
 def list_projects(
     include_archived: bool = False,
@@ -309,29 +359,16 @@ def list_projects(
         query = query.where(Project.archived_at == None)
     
     projects = session.exec(query.order_by(Project.display_order, Project.id)).all()
-    
+
     # Check if any projects need stats refresh (cached values are NULL/zero for all)
     needs_refresh = all(
-        p.cached_image_count == 0 and p.cached_last_activity is None 
+        p.cached_image_count == 0 and p.cached_last_activity is None
         for p in projects
     ) and len(projects) > 0
-    
+
     if needs_refresh:
-        # First load: populate cached stats for all projects
         project_ids = [p.id for p in projects if p.id is not None]
-        stats_map = _compute_project_stats_sql(session, project_ids)
-        stats_map = _augment_project_stats_with_path_matches(session, projects, stats_map)
-        
-        # Update cached values (commit separately to avoid blocking response)
-        for p in projects:
-            if p.id in stats_map:
-                p.cached_image_count = stats_map[p.id]["count"]
-                p.cached_last_activity = stats_map[p.id]["last"]
-                session.add(p)
-        try:
-            session.commit()
-        except Exception:
-            session.rollback()
+        _schedule_project_stats_refresh(project_ids)
     
     # Build response using cached values
     project_reads = []
