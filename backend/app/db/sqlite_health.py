@@ -122,6 +122,59 @@ def create_rolling_backup(
     return BackupResult(created=True, path=dest)
 
 
+def create_overwrite_backup(
+    db_path: Path,
+    *,
+    backups_dir: Path,
+    backup_name: str,
+    timeout_s: float = 5.0,
+) -> BackupResult:
+    """
+    Create a single overwrite backup (no stacking).
+    """
+    if not db_path.exists():
+        return BackupResult(created=False, reason="db_missing")
+
+    backups_dir.mkdir(parents=True, exist_ok=True)
+    dest = backups_dir / backup_name
+    
+    # We don't check intervals for overwrite backups; we just do it.
+    try:
+        tmp_dest = dest.with_suffix(dest.suffix + ".tmp")
+        _backup_via_sqlite_api(db_path, tmp_dest, timeout_s=timeout_s)
+        
+        # Windows-friendly retry loop for atomic replacement
+        import time
+        max_retries = 3
+        last_error = None
+        
+        for i in range(max_retries):
+            try:
+                if dest.exists():
+                    try:
+                        dest.unlink()
+                    except OSError:
+                        pass
+                
+                # Atomic rename
+                os.replace(tmp_dest, dest)
+                return BackupResult(created=True, path=dest)
+            except OSError as e:
+                last_error = e
+                time.sleep(0.2 * (i + 1))
+        
+        raise last_error or RuntimeError("Failed to replace backup file after retries")
+
+    except Exception as e:
+        # Cleanup temp file if needed
+        if 'tmp_dest' in locals() and tmp_dest.exists():
+            try:
+                tmp_dest.unlink()
+            except OSError:
+                pass
+        return BackupResult(created=False, reason=f"error: {e}")
+
+
 def create_portable_snapshot(
     source_db: Path,
     dest_db: Path,
@@ -158,6 +211,46 @@ def create_portable_snapshot(
         _remove_sqlite_sidecars(tmp_path)
 
 
+def _find_portable_snapshot_tmp(snapshot: Path, *, timeout_s: float) -> Optional[Path]:
+    candidates = sorted(
+        (p for p in snapshot.parent.glob(f"{snapshot.name}*.tmp") if p.is_file()),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+    for candidate in candidates:
+        status = quick_check_path(candidate, timeout_s=timeout_s)
+        if status in (None, "ok"):
+            return candidate
+    return None
+
+
+def _ensure_portable_snapshot(
+    source_db: Path,
+    dest_db: Path,
+    *,
+    timeout_s: float,
+) -> None:
+    status = quick_check_path(dest_db, timeout_s=timeout_s)
+    if status in (None, "ok") and dest_db.exists():
+        return
+    if not dest_db.exists():
+        tmp_candidate = _find_portable_snapshot_tmp(dest_db, timeout_s=timeout_s)
+        if tmp_candidate is not None:
+            try:
+                os.replace(tmp_candidate, dest_db)
+                _remove_sqlite_sidecars(dest_db)
+                print(f"[DB] Adopted portable snapshot from temp file {tmp_candidate}")
+                return
+            except Exception as exc:
+                print(f"[DB] Failed to adopt portable snapshot temp {tmp_candidate}: {exc}")
+    try:
+        if status not in (None, "ok") and status != "missing":
+            print(f"[DB] Portable snapshot failed quick_check: {status}; rebuilding.")
+        create_portable_snapshot(source_db, dest_db, timeout_s=timeout_s)
+    except Exception as exc:
+        print(f"[DB] Portable snapshot refresh failed: {exc}")
+
+
 def _set_portable_pragmas(db_path: Path, *, timeout_s: float = 5.0) -> None:
     with sqlite3.connect(str(db_path), timeout=timeout_s) as conn:
         conn.execute("PRAGMA journal_mode=DELETE;")
@@ -183,7 +276,10 @@ def _recover_from_portable_snapshot(
     timeout_s: float,
 ) -> bool:
     if not snapshot.exists():
-        return False
+        tmp_candidate = _find_portable_snapshot_tmp(snapshot, timeout_s=timeout_s)
+        if tmp_candidate is None:
+            return False
+        snapshot = tmp_candidate
 
     snapshot_status = quick_check_path(snapshot, timeout_s=timeout_s)
     if snapshot_status not in (None, "ok"):
@@ -204,6 +300,42 @@ def _recover_from_portable_snapshot(
     return True
 
 
+def _recover_from_latest_backup(
+    db_path: Path,
+    *,
+    label: str,
+    backups_dir: Path,
+    recovery_dir: Path,
+    timeout_s: float,
+) -> bool:
+    prefix = f"{db_path.stem}.backup-"
+    backups = sorted(
+        (p for p in backups_dir.glob(f"{prefix}*{db_path.suffix}") if p.is_file()),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+    for backup in backups:
+        status = quick_check_path(backup, timeout_s=timeout_s)
+        if status not in (None, "ok"):
+            print(f"[DB] Skipping backup {backup} (quick_check: {status})")
+            continue
+
+        recovery_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+        recovered_path = recovery_dir / f"{db_path.stem}.backup-{timestamp}{db_path.suffix}"
+        recovered_path = _ensure_unique_path(recovered_path)
+
+        shutil.copy2(str(backup), str(recovered_path))
+        _assert_recovered_db_ok(recovered_path, label=label, timeout_s=timeout_s)
+
+        broken = _swap_recovered_database_into_place(db_path, recovered_path)
+        print(f"[DB] Preserved original at {broken}")
+        print(f"[DB] Restored {label} from rolling backup at {backup}")
+        return True
+
+    return False
+
+
 def ensure_sqlite_database_or_raise(
     db_path: Path,
     *,
@@ -216,12 +348,14 @@ def ensure_sqlite_database_or_raise(
     backup_min_interval: timedelta = timedelta(hours=24),
     timeout_s: float = 5.0,
     portable_snapshot_path: Optional[Path] = None,
+    backup_mode: str = "rolling",  # "rolling" or "overwrite"
+    backup_name: Optional[str] = None,
 ) -> None:
     """
     Ensure an on-disk SQLite DB is usable.
 
     - Never deletes the original DB.
-    - Creates rolling backups when the DB is healthy.
+    - Creates backups when the DB is healthy.
     - If corruption is detected and ``auto_recover`` is enabled, attempts a
       best-effort recovery into a new DB and swaps it into place while keeping
       the original as *.broken-<timestamp>.db.
@@ -241,13 +375,24 @@ def ensure_sqlite_database_or_raise(
         quick_check_error = str(exc)
 
     if quick_check_error in (None, "ok"):
-        create_rolling_backup(
-            db_path,
-            backups_dir=backups_dir,
-            keep=backup_keep,
-            min_interval=backup_min_interval,
-            timeout_s=timeout_s,
-        )
+        if portable_snapshot_path:
+            _ensure_portable_snapshot(db_path, portable_snapshot_path, timeout_s=timeout_s)
+        
+        if backup_mode == "overwrite" and backup_name:
+            create_overwrite_backup(
+                db_path,
+                backups_dir=backups_dir,
+                backup_name=backup_name,
+                timeout_s=timeout_s,
+            )
+        else:
+            create_rolling_backup(
+                db_path,
+                backups_dir=backups_dir,
+                keep=backup_keep,
+                min_interval=backup_min_interval,
+                timeout_s=timeout_s,
+            )
         return
 
     if not auto_recover:
@@ -264,6 +409,42 @@ def ensure_sqlite_database_or_raise(
                 recovery_dir=recovery_dir,
                 timeout_s=timeout_s,
             ):
+                if backup_mode == "overwrite" and backup_name:
+                    create_overwrite_backup(
+                        db_path,
+                        backups_dir=backups_dir,
+                        backup_name=backup_name,
+                        timeout_s=timeout_s,
+                    )
+                else:
+                    create_rolling_backup(
+                        db_path,
+                        backups_dir=backups_dir,
+                        keep=backup_keep,
+                        min_interval=timedelta(seconds=0),
+                        timeout_s=timeout_s,
+                    )
+                _ensure_portable_snapshot(db_path, portable_snapshot_path, timeout_s=timeout_s)
+                return
+        except Exception as exc:
+            print(f"[DB] Portable snapshot recovery failed: {exc}")
+
+    try:
+        if _recover_from_latest_backup(
+            db_path,
+            label=label,
+            backups_dir=backups_dir,
+            recovery_dir=recovery_dir,
+            timeout_s=timeout_s,
+        ):
+            if backup_mode == "overwrite" and backup_name:
+                create_overwrite_backup(
+                    db_path,
+                    backups_dir=backups_dir,
+                    backup_name=backup_name,
+                    timeout_s=timeout_s,
+                )
+            else:
                 create_rolling_backup(
                     db_path,
                     backups_dir=backups_dir,
@@ -271,9 +452,11 @@ def ensure_sqlite_database_or_raise(
                     min_interval=timedelta(seconds=0),
                     timeout_s=timeout_s,
                 )
-                return
-        except Exception as exc:
-            print(f"[DB] Portable snapshot recovery failed: {exc}")
+            if portable_snapshot_path:
+                _ensure_portable_snapshot(db_path, portable_snapshot_path, timeout_s=timeout_s)
+            return
+    except Exception as exc:
+        print(f"[DB] Rolling backup recovery failed: {exc}")
 
     try:
         recovered = recover_sqlite_database(
@@ -296,13 +479,24 @@ def ensure_sqlite_database_or_raise(
         return
 
     # Create a fresh backup of the recovered DB as the new baseline.
-    create_rolling_backup(
-        db_path,
-        backups_dir=backups_dir,
-        keep=backup_keep,
-        min_interval=timedelta(seconds=0),
-        timeout_s=timeout_s,
-    )
+    # Create a fresh backup of the recovered DB as the new baseline.
+    if backup_mode == "overwrite" and backup_name:
+        create_overwrite_backup(
+            db_path,
+            backups_dir=backups_dir,
+            backup_name=backup_name,
+            timeout_s=timeout_s,
+        )
+    else:
+        create_rolling_backup(
+            db_path,
+            backups_dir=backups_dir,
+            keep=backup_keep,
+            min_interval=timedelta(seconds=0),
+            timeout_s=timeout_s,
+        )
+    if portable_snapshot_path:
+        _ensure_portable_snapshot(db_path, portable_snapshot_path, timeout_s=timeout_s)
 
 
 def recover_sqlite_database(

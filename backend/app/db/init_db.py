@@ -40,6 +40,8 @@ def init_db():
         backups_dir=backups_dir,
         recovery_dir=recovery_dir,
         allow_recreate=True,  # tags.db is a cache and can be rebuilt if unrecoverable
+        backup_mode="overwrite",
+        backup_name="tags.backup.db",
     )
 
     # Create main app tables in profile.db

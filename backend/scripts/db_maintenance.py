@@ -17,6 +17,7 @@ def main() -> int:
     from app.db.sqlite_health import (
         checkpoint_wal,
         create_rolling_backup,
+        create_overwrite_backup,
         ensure_sqlite_database_or_raise,
         quick_check_path,
     )
@@ -69,12 +70,19 @@ def main() -> int:
 
     if args.cmd == "backup":
         print(f"{label}: {db_path}")
-        result = create_rolling_backup(
-            db_path,
-            backups_dir=backups_dir,
-            keep=max(1, args.keep),
-            min_interval=timedelta(seconds=0),
-        )
+        if args.tags:
+            result = create_overwrite_backup(
+                db_path,
+                backups_dir=backups_dir,
+                backup_name="tags.backup.db",
+            )
+        else:
+            result = create_rolling_backup(
+                db_path,
+                backups_dir=backups_dir,
+                keep=max(1, args.keep),
+                min_interval=timedelta(seconds=0),
+            )
         if result.created:
             print(f"backup: {result.path}")
             return 0

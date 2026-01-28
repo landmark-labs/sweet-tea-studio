@@ -16,6 +16,7 @@ from app.core.config import settings
 from app.db.sqlite_health import (
     checkpoint_wal,
     create_rolling_backup,
+    create_overwrite_backup,
     quick_check_path,
     BackupResult,
 )
@@ -175,13 +176,20 @@ async def create_backup(database: str = "profile.db"):
         # Checkpoint WAL first to ensure backup is complete
         checkpoint_wal(db_path)
         
-        # Create backup with no minimum interval (force immediate backup)
-        result = create_rolling_backup(
-            db_path,
-            backups_dir=backups_dir,
-            keep=20,
-            min_interval=timedelta(seconds=0),
-        )
+        # Create backup
+        if database == "tags.db":
+            result = create_overwrite_backup(
+                db_path,
+                backups_dir=backups_dir,
+                backup_name="tags.backup.db",
+            )
+        else:
+            result = create_rolling_backup(
+                db_path,
+                backups_dir=backups_dir,
+                keep=20,
+                min_interval=timedelta(seconds=0),
+            )
         
         if result.created and result.path:
             stat = result.path.stat()
