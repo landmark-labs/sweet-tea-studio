@@ -27,6 +27,7 @@ class LaunchConfig:
     port: int = 8188  # ComfyUI port
     is_available: bool = False  # Whether ComfyUI can be launched
     detection_method: str = ""  # How we found ComfyUI
+    should_auto_start: bool = False  # Whether ComfyUI should auto-start on app launch
 
 
 class ComfyUILauncher:
@@ -95,6 +96,7 @@ class ComfyUILauncher:
                 args=data.get("args") or [],
                 port=data.get("port", 8188),
                 detection_method=data.get("detection_method", "saved_config"),
+                should_auto_start=data.get("should_auto_start", False),
             )
 
             if config.path and self._is_valid_comfyui_path(config.path):
@@ -121,6 +123,7 @@ class ComfyUILauncher:
                         "args": config.args or [],
                         "port": config.port,
                         "detection_method": config.detection_method,
+                        "should_auto_start": config.should_auto_start,
                     },
                     fh,
                     ensure_ascii=False,
@@ -402,11 +405,20 @@ class ComfyUILauncher:
                 }
 
             if self.is_running():
+                # Even if already running, ensure we mark that we WANT it running
+                if not config.should_auto_start:
+                    config.should_auto_start = True
+                    self._save_config_to_disk(config)
+
                 return {
                     "success": True,
                     "message": "ComfyUI is already running",
-                    "pid": self._process.pid,
+                    "pid": self._process.pid if self._process else None,
                 }
+            
+            # Update auto-start preference
+            config.should_auto_start = True
+            self._save_config_to_disk(config)
 
             try:
                 python_exe = config.python_path or "python"
@@ -432,7 +444,7 @@ class ComfyUILauncher:
                 
                 # Open log file in append mode
                 self._log_handle = open(self._log_file, "a", encoding="utf-8")
-                self._log_handle.write(f"\n\n--- ComfyUI Launch {datetime.now().isoformat()} ---\n")
+                self._log_handle.write(f"\\n\\n--- ComfyUI Launch {datetime.now().isoformat()} ---\\n")
                 self._log_handle.flush()
 
                 self._process = subprocess.Popen(
@@ -472,8 +484,15 @@ class ComfyUILauncher:
                     "error": self._last_error,
                 }
     
-    async def stop(self) -> dict:
-        """Stop the managed ComfyUI process."""
+    async def stop(self, preserve_intent: bool = False) -> dict:
+        """
+        Stop the managed ComfyUI process.
+        
+        Args:
+            preserve_intent: If True, does not change the 'should_auto_start' preference.
+                            Useful for app shutdown where we want to resume on next start
+                            if it was running.
+        """
         async with self._lock:
             cooldown_remaining = self._cooldown_remaining()
             if cooldown_remaining > 0:
@@ -514,6 +533,13 @@ class ComfyUILauncher:
 
                 self._last_action_at = time.time()
                 self._last_error = None
+
+                # Update auto-start preference unless we're just shutting down the app
+                if not preserve_intent:
+                    config = self.get_config()
+                    config.should_auto_start = False
+                    self._save_config_to_disk(config)
+
                 return {"success": True, "message": "ComfyUI stopped"}
 
             except Exception as e:

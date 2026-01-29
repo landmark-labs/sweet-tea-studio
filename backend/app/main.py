@@ -42,6 +42,12 @@ async def on_startup():
             print(f"[Startup] {result.get('message')}")
         else:
             print(f"[Startup] Adoption failed: {result.get('error', result.get('message'))}")
+    else:
+        # Check if we should auto-start
+        config = comfy_launcher.get_config()
+        if config.should_auto_start:
+            print("[Startup] Auto-starting ComfyUI based on previous session...")
+            asyncio.create_task(comfy_launcher.launch())
 
 @app.on_event("shutdown")
 async def on_shutdown():
@@ -69,6 +75,9 @@ async def on_shutdown():
         print(f"[Shutdown] SQLite WAL cleanup skipped: {exc}")
 
     await watchdog.stop()
+    
+    print("[Shutdown] Stopping ComfyUI...")
+    await comfy_launcher.stop(preserve_intent=True)
 
 # Helps confirm which backend build is running (especially in container deployments).
 @app.middleware("http")
