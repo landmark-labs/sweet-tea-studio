@@ -132,6 +132,18 @@ def _infer_media_kind(
     return None
 
 
+def _extract_tooltip(config: Optional[Dict[str, Any]]) -> Optional[str]:
+    if not isinstance(config, dict):
+        return None
+    for key in ("tooltip", "description", "help", "info"):
+        value = config.get(key)
+        if isinstance(value, str):
+            cleaned = value.strip()
+            if cleaned:
+                return cleaned
+    return None
+
+
 def generate_schema_from_graph(graph: Dict[str, Any], object_info: Dict[str, Any]) -> Dict[str, Any]:
     schema: Dict[str, Any] = {}
     
@@ -211,12 +223,15 @@ def generate_schema_from_graph(graph: Dict[str, Any], object_info: Dict[str, Any
             # Include node_id to make keys stable even when multiple nodes share a class_type.
             field_key = f"{class_type}#{node_id}.{input_name}"
             
+            tooltip = _extract_tooltip(config)
             base_field = {
                 "x_node_id": node_id,
                 "x_class_type": class_type,
                 "x_title": title or class_type,
                 "x_instance": count,
             }
+            if tooltip:
+                base_field["x_tooltip"] = tooltip
             
             media_kind = _infer_media_kind(val_type, config, input_name, class_type)
             if media_kind:
@@ -416,6 +431,8 @@ def _sync_input_schema_with_graph(
             if isinstance(existing_def, dict):
                 if "enum" not in existing_def and isinstance(fresh_def.get("enum"), list):
                     existing_def["enum"] = fresh_def["enum"]
+                if "x_tooltip" not in existing_def and isinstance(fresh_def.get("x_tooltip"), str):
+                    existing_def["x_tooltip"] = fresh_def["x_tooltip"]
                 # Some schemas store enums but not the current default; keep user's default.
                 existing_schema[existing_key] = existing_def
             continue

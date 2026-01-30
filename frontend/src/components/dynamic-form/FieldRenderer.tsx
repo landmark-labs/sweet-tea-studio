@@ -5,6 +5,7 @@ import { ImageUpload } from "@/components/ImageUpload";
 import { PromptAutocompleteTextarea } from "@/components/PromptAutocompleteTextarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
@@ -12,7 +13,7 @@ import { formFieldAtom } from "@/lib/atoms/formAtoms";
 import { formatFloatDisplay } from "@/lib/formatters";
 import type { PromptItem, PromptRehydrationItemV1 } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { isMediaUploadField, resolveMediaKind, resolveParamTitle } from "./fieldUtils";
+import { isMediaUploadField, resolveMediaKind, resolveParamTitle, resolveParamTooltip } from "./fieldUtils";
 
 interface FieldRendererProps {
   fieldKey: string;
@@ -72,10 +73,12 @@ export const FieldRenderer = React.memo(function FieldRenderer({
   const isMediaUpload = isMediaUploadField(fieldKey, field);
   const isPaletteVariant = variant === "palette";
   const fieldTitle = resolveParamTitle(fieldKey, field);
+  const tooltip = resolveParamTooltip(field);
 
   const labelClassName = cn(
     isPaletteVariant ? "text-[9px] font-semibold text-violet-700 dark:text-foreground/90" : "text-xs text-foreground/80",
-    isActive && (isPaletteVariant ? "text-violet-800 dark:text-foreground" : "text-blue-600 dark:text-primary font-semibold")
+    isActive && (isPaletteVariant ? "text-violet-800 dark:text-foreground" : "text-blue-600 dark:text-primary font-semibold"),
+    tooltip && "cursor-help"
   );
 
   const controlClassName = cn(
@@ -105,6 +108,20 @@ export const FieldRenderer = React.memo(function FieldRenderer({
     </button>
   ) : null;
 
+  const wrapWithTooltip = (content: JSX.Element) => {
+    if (!tooltip) return content;
+    return (
+      <TooltipProvider delayDuration={200}>
+        <Tooltip>
+          <TooltipTrigger asChild>{content}</TooltipTrigger>
+          <TooltipContent side="top" className="max-w-xs text-xs">
+            <p className="whitespace-pre-wrap">{tooltip}</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  };
+
   const wrapWithEndAction = (content: JSX.Element) => {
     if (!endAction) return content;
     const placeAtTop = isMediaUpload || field.widget === "textarea";
@@ -131,13 +148,23 @@ export const FieldRenderer = React.memo(function FieldRenderer({
         {!hideLabel && (
           <div className="flex items-center gap-2">
             {paletteButton}
-            <Label className={labelClassName}>{fieldTitle}</Label>
+            {wrapWithTooltip(<Label className={labelClassName}>{fieldTitle}</Label>)}
           </div>
         )}
         {hideLabel && paletteButton && (
           <div className="flex items-center gap-2">
             {paletteButton}
-            <span className={cn("text-[10px] text-muted-foreground", isPaletteVariant && "text-violet-600 dark:text-foreground/80")}>{fieldTitle}</span>
+            {wrapWithTooltip(
+              <span
+                className={cn(
+                  "text-[10px] text-muted-foreground",
+                  isPaletteVariant && "text-violet-600 dark:text-foreground/80",
+                  tooltip && "cursor-help"
+                )}
+              >
+                {fieldTitle}
+              </span>
+            )}
           </div>
         )}
         <ImageUpload
@@ -163,12 +190,14 @@ export const FieldRenderer = React.memo(function FieldRenderer({
         {shouldShowLabelRow && (
           <div className="flex items-center gap-2">
             {paletteButton}
-            <Label
-              htmlFor={fieldKey}
-              className={labelClassName}
-            >
-              {fieldTitle}
-            </Label>
+            {wrapWithTooltip(
+              <Label
+                htmlFor={fieldKey}
+                className={labelClassName}
+              >
+                {fieldTitle}
+              </Label>
+            )}
           </div>
         )}
         {shouldUsePromptEditor ? (
@@ -211,15 +240,17 @@ export const FieldRenderer = React.memo(function FieldRenderer({
       <div className={cn("flex items-center justify-between", isPaletteVariant ? "py-1" : "py-2")}>
         <div className="flex items-center gap-2 min-w-0">
           {paletteButton}
-          <Label
-            htmlFor={fieldKey}
-            className={cn(
-              "truncate",
-              labelClassName
-            )}
-          >
-            {fieldTitle}
-          </Label>
+          {wrapWithTooltip(
+            <Label
+              htmlFor={fieldKey}
+              className={cn(
+                "truncate",
+                labelClassName
+              )}
+            >
+              {fieldTitle}
+            </Label>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <span className={cn("text-[10px] uppercase", isPaletteVariant ? "text-violet-600/80 dark:text-foreground/70" : "text-foreground/70")}>{value ? "Bypassed" : "Active"}</span>
@@ -242,9 +273,11 @@ export const FieldRenderer = React.memo(function FieldRenderer({
     <div className={cn("flex items-center", isPaletteVariant ? "py-0 gap-1" : "py-0.5 gap-2")}>
       <div className={cn("flex items-center gap-1 flex-shrink-0 min-w-0", isPaletteVariant ? "justify-start w-8" : "justify-end w-28")}>
         {paletteButton}
-        <Label htmlFor={fieldKey} className={cn(isPaletteVariant ? "text-left" : "text-right", "truncate", labelClassName)}>
-          {fieldTitle}
-        </Label>
+        {wrapWithTooltip(
+          <Label htmlFor={fieldKey} className={cn(isPaletteVariant ? "text-left" : "text-right", "truncate", labelClassName)}>
+            {fieldTitle}
+          </Label>
+        )}
       </div>
       {field.enum || dynamicOptions[fieldKey] ? (
         (() => {

@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { FileJson, AlertTriangle, GitBranch, Edit2, Trash2, Save, RotateCw, CheckCircle2, XCircle, GripVertical, ChevronDown, ChevronUp } from "lucide-react";
 import { api, WorkflowTemplate, getApiBase } from "@/lib/api";
 import { WorkflowGraphViewer } from "@/components/WorkflowGraphViewer";
@@ -18,6 +19,7 @@ import { cn } from "@/lib/utils";
 import { labels } from "@/ui/labels";
 import { stripSchemaMeta } from "@/lib/schema";
 import { useGeneration } from "@/lib/GenerationContext";
+import { resolveParamTooltip } from "@/components/dynamic-form/fieldUtils";
 
 const arraysEqual = (a: string[], b: string[]) => {
     if (a.length !== b.length) return false;
@@ -86,6 +88,20 @@ const NodeCard = ({ node, schemaEdits, setSchemaEdits }: NodeCardProps) => {
     };
 
     const paramCount = node.active.length + node.hidden.length;
+
+    const wrapWithTooltip = (content: JSX.Element, tooltip?: string) => {
+        if (!tooltip) return content;
+        return (
+            <TooltipProvider delayDuration={200}>
+                <Tooltip>
+                    <TooltipTrigger asChild>{content}</TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-xs text-xs">
+                        <p className="whitespace-pre-wrap">{tooltip}</p>
+                    </TooltipContent>
+                </Tooltip>
+            </TooltipProvider>
+        );
+    };
 
     return (
         <div
@@ -192,22 +208,27 @@ const NodeCard = ({ node, schemaEdits, setSchemaEdits }: NodeCardProps) => {
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {node.active.map(([key, field]: [string, any]) => (
-                                    <TableRow key={key} className="hover:bg-muted/30">
-                                        <TableCell className="py-2">
-                                            <Input
-                                                className="h-7 text-xs"
-                                                value={field.title || key}
-                                                onChange={(e) => {
-                                                    const s = { ...schemaEdits };
-                                                    s[key].title = e.target.value;
-                                                    setSchemaEdits(s);
-                                                }}
-                                            />
-                                        </TableCell>
-                                        <TableCell className="font-mono text-[10px] text-muted-foreground py-2">{key}</TableCell>
-                                        <TableCell className="text-xs text-muted-foreground py-2">{field.type}</TableCell>
-                                        <TableCell className="py-2">
+                                {node.active.map(([key, field]: [string, any]) => {
+                                    const tooltip = resolveParamTooltip(field);
+                                    return (
+                                        <TableRow key={key} className="hover:bg-muted/30">
+                                            <TableCell className="py-2">
+                                                {wrapWithTooltip(
+                                                    <Input
+                                                        className="h-7 text-xs"
+                                                        value={field.title || key}
+                                                        onChange={(e) => {
+                                                            const s = { ...schemaEdits };
+                                                            s[key].title = e.target.value;
+                                                            setSchemaEdits(s);
+                                                        }}
+                                                    />,
+                                                    tooltip
+                                                )}
+                                            </TableCell>
+                                            <TableCell className="font-mono text-[10px] text-muted-foreground py-2">{key}</TableCell>
+                                            <TableCell className="text-xs text-muted-foreground py-2">{field.type}</TableCell>
+                                            <TableCell className="py-2">
                                             {field.widget === "toggle" || field.type === "boolean" ? (
                                                 <Switch
                                                     checked={Boolean(field.default)}
@@ -265,8 +286,9 @@ const NodeCard = ({ node, schemaEdits, setSchemaEdits }: NodeCardProps) => {
                                                 setSchemaEdits(s);
                                             }}>Hide</Button>
                                         </TableCell>
-                                    </TableRow>
-                                ))}
+                                        </TableRow>
+                                    );
+                                })}
                             </TableBody>
                         </Table>
                     )}
@@ -276,9 +298,17 @@ const NodeCard = ({ node, schemaEdits, setSchemaEdits }: NodeCardProps) => {
                             <div className="px-4 py-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Hidden Parameters</div>
                             <Table>
                                 <TableBody>
-                                    {node.hidden.map(([key, field]: [string, any]) => (
-                                        <TableRow key={key} className="hover:bg-muted/30 opacity-60">
-                                            <TableCell className="py-2 text-xs text-muted-foreground w-[30%]">{field.title || key}</TableCell>
+                                    {node.hidden.map(([key, field]: [string, any]) => {
+                                        const tooltip = resolveParamTooltip(field);
+                                        const label = field.title || key;
+                                        return (
+                                            <TableRow key={key} className="hover:bg-muted/30 opacity-60">
+                                                <TableCell className="py-2 text-xs text-muted-foreground w-[30%]">
+                                                    {wrapWithTooltip(
+                                                        <span className={tooltip ? "cursor-help" : undefined}>{label}</span>,
+                                                        tooltip
+                                                    )}
+                                                </TableCell>
                                             <TableCell className="font-mono text-[10px] text-muted-foreground py-2 w-[20%] break-all">{key}</TableCell>
                                             <TableCell className="text-xs py-2 text-muted-foreground w-[15%]">{field.type}</TableCell>
                                             <TableCell className="py-2 text-xs text-muted-foreground w-[25%]">{String(field.default ?? "-")}</TableCell>
@@ -291,8 +321,9 @@ const NodeCard = ({ node, schemaEdits, setSchemaEdits }: NodeCardProps) => {
                                                     Restore
                                                 </Button>
                                             </TableCell>
-                                        </TableRow>
-                                    ))}
+                                            </TableRow>
+                                        );
+                                    })}
                                 </TableBody>
                             </Table>
                         </div>

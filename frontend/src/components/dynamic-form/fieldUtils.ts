@@ -40,6 +40,24 @@ export const resolveParamTitle = (fieldKey: string, field: Record<string, unknow
   return base || raw;
 };
 
+export const resolveParamTooltip = (field: Record<string, unknown>) => {
+  const pick = (value: unknown) => {
+    if (typeof value !== "string") return null;
+    const cleaned = value.trim();
+    return cleaned ? cleaned : null;
+  };
+
+  return (
+    pick(field.x_tooltip) ||
+    pick(field.tooltip) ||
+    pick(field.description) ||
+    pick((field as Record<string, unknown>)["x_description"]) ||
+    pick((field as Record<string, unknown>)["help"]) ||
+    pick((field as Record<string, unknown>)["x_help"]) ||
+    ""
+  );
+};
+
 export const isMediaUploadField = (fieldKey: string, field: Record<string, unknown>) => {
   const key = fieldKey.toLowerCase();
   const title = String(field.title || "").toLowerCase();
