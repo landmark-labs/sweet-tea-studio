@@ -171,6 +171,14 @@ export const useCanvasStore = create<CanvasStoreState>()(
             canvas = await api.getCanvas(canvasId);
           }
 
+          // Auto-save: if we are switching FROM a valid canvas, and have a way to snapshot it, save it first.
+          const currentId = get().selectedCanvasId;
+          const provider = get().snapshotProvider;
+          if (currentId && provider && currentId !== canvasId) {
+            console.log("Auto-saving canvas", currentId, "before switching to", canvasId);
+            await get().saveCanvas();
+          }
+
           if (!canvas) return;
 
           if (applier) {
