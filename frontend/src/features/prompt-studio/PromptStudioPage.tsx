@@ -2433,49 +2433,7 @@ export default function PromptStudio() {
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
   }, [lastJobId]);
 
-  // Global Shortcut for Generation
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey && e.key.toLowerCase() === "t") {
-        const activeEl = document.activeElement as HTMLElement | null;
-        const tagName = activeEl?.tagName?.toLowerCase();
-        const isEditable =
-          tagName === "input" ||
-          tagName === "textarea" ||
-          Boolean(activeEl?.isContentEditable) ||
-          activeEl?.getAttribute("contenteditable") === "true";
-        if (isEditable) return;
-        e.preventDefault();
-        toggleMediaTray();
-        return;
-      }
 
-      if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-        // Skip if focus is inside the snippet editor (Ctrl+Enter saves the snippet there)
-        // UNLESS both the title and content inputs are empty - then trigger generation
-        const activeEl = document.activeElement;
-        const snippetEditor = activeEl?.closest('[data-snippet-editor="true"]');
-        if (snippetEditor) {
-          // Check if both inputs are empty - if so, allow generation
-          const titleInput = snippetEditor.querySelector('input') as HTMLInputElement | null;
-          const contentTextarea = snippetEditor.querySelector('textarea') as HTMLTextAreaElement | null;
-          const titleEmpty = !titleInput?.value?.trim();
-          const contentEmpty = !contentTextarea?.value?.trim();
-
-          if (!titleEmpty || !contentEmpty) {
-            // Editor has content, let the snippet editor handle it
-            return;
-          }
-          // Both empty - fall through to trigger generation
-        }
-
-        if (!selectedWorkflowId || !selectedWorkflow || isBusy || engineOffline) return;
-        handleBatchGenerate(store.get(formDataAtom));
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectedWorkflowId, selectedWorkflow, isBusy, engineOffline, store, toggleMediaTray, handleBatchGenerate]);
 
   // Use data from GenerationContext if available to avoid duplicate API calls
   const generation = useGeneration();
@@ -2779,6 +2737,50 @@ export default function PromptStudio() {
 
   const handleBatchGenerateRef = useRef(handleBatchGenerate);
   handleBatchGenerateRef.current = handleBatchGenerate;
+
+  // Global Shortcut for Generation
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey && e.key.toLowerCase() === "t") {
+        const activeEl = document.activeElement as HTMLElement | null;
+        const tagName = activeEl?.tagName?.toLowerCase();
+        const isEditable =
+          tagName === "input" ||
+          tagName === "textarea" ||
+          Boolean(activeEl?.isContentEditable) ||
+          activeEl?.getAttribute("contenteditable") === "true";
+        if (isEditable) return;
+        e.preventDefault();
+        toggleMediaTray();
+        return;
+      }
+
+      if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+        // Skip if focus is inside the snippet editor (Ctrl+Enter saves the snippet there)
+        // UNLESS both the title and content inputs are empty - then trigger generation
+        const activeEl = document.activeElement;
+        const snippetEditor = activeEl?.closest('[data-snippet-editor="true"]');
+        if (snippetEditor) {
+          // Check if both inputs are empty - if so, allow generation
+          const titleInput = snippetEditor.querySelector('input') as HTMLInputElement | null;
+          const contentTextarea = snippetEditor.querySelector('textarea') as HTMLTextAreaElement | null;
+          const titleEmpty = !titleInput?.value?.trim();
+          const contentEmpty = !contentTextarea?.value?.trim();
+
+          if (!titleEmpty || !contentEmpty) {
+            // Editor has content, let the snippet editor handle it
+            return;
+          }
+          // Both empty - fall through to trigger generation
+        }
+
+        if (!selectedWorkflowId || !selectedWorkflow || isBusy || engineOffline) return;
+        handleBatchGenerate(store.get(formDataAtom));
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [selectedWorkflowId, selectedWorkflow, isBusy, engineOffline, store, toggleMediaTray, handleBatchGenerate]);
 
   useEffect(() => {
     if (!generation) return;
