@@ -2475,7 +2475,7 @@ export default function PromptStudio() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectedWorkflowId, selectedWorkflow, isBusy, engineOffline, store, toggleMediaTray]);
+  }, [selectedWorkflowId, selectedWorkflow, isBusy, engineOffline, store, toggleMediaTray, handleBatchGenerate]);
 
   // Use data from GenerationContext if available to avoid duplicate API calls
   const generation = useGeneration();
