@@ -202,15 +202,18 @@ async def restart_backend():
     Returns immediately with acknowledgment, then exits after a brief delay.
     """
     import os
+    import sys
     import threading
 
-    def delayed_exit():
+    def delayed_restart():
         import time
         time.sleep(0.5)  # Brief delay to allow response to be sent
-        os._exit(0)  # Exit with code 0 so process manager restarts
+        # Re-execute the current process with the same arguments
+        # This works for standalone scripts and keeps the same PID often, or effectively replaces it
+        os.execv(sys.executable, [sys.executable] + sys.argv)
 
-    # Start exit in background thread so response can be sent first
-    threading.Thread(target=delayed_exit, daemon=True).start()
+    # Start restart in background thread so response can be sent first
+    threading.Thread(target=delayed_restart, daemon=True).start()
 
     return {"message": "Backend restarting...", "status": "shutting_down"}
 
