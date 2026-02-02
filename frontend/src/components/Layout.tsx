@@ -71,13 +71,18 @@ export default function Layout() {
     setIsRestarting(true);
     try {
       await api.restartBackend();
-      // Backend will restart, page should reconnect automatically
-    } catch (e) {
-      // Expected - backend exits before response completes
-      console.log("Backend restarting...");
+      // Backend handles the restart gracefully with a delay, so we expect a success response.
+    } catch (e: unknown) {
+      console.error("Failed to restart backend:", e);
+      if (e instanceof Error) {
+        alert(`Failed to restart backend: ${e.message}`);
+      } else {
+        alert("Failed to restart backend: Unknown error");
+      }
+    } finally {
+      // Keep spinning for a moment as backend restarts
+      setTimeout(() => setIsRestarting(false), 3000);
     }
-    // Keep spinning for a moment as backend restarts
-    setTimeout(() => setIsRestarting(false), 3000);
   };
 
   return (
