@@ -1839,15 +1839,6 @@ export default function PromptStudio() {
       const nextRehydrationSnapshot: PromptRehydrationSnapshotV1 | null =
         Object.keys(rehydrationFields).length > 0 ? { version: 1, fields: rehydrationFields } : null;
 
-      // DEBUG: Log what we're setting for rehydration
-      console.log("[LoadParams] Setting rehydration snapshot", {
-        hasSnapshot: !!nextRehydrationSnapshot,
-        snapshotFields: nextRehydrationSnapshot ? Object.keys(nextRehydrationSnapshot.fields) : [],
-        rawRehydrationPresent: !!rawRehydration,
-        positiveTarget,
-        negativeTarget,
-      });
-
       setActiveRehydrationSnapshot(nextRehydrationSnapshot);
       setActiveRehydrationKey((prev) => prev + 1);
       persistPromptStudioRehydrationSnapshot(targetWorkflowId, nextRehydrationSnapshot);

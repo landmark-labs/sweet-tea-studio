@@ -912,17 +912,6 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
             lastAppliedRehydrationKeyRef.current !== rehydrationKey
         );
 
-        // DEBUG: Log rehydration state
-        console.log("[Rehydration] Effect triggered", {
-            externalValueSyncKey,
-            rehydrationKey,
-            lastAppliedKey: lastAppliedRehydrationKeyRef.current,
-            shouldApplyRehydration,
-            hasSnapshot: !!rehydrationSnapshot,
-            snapshotFields: rehydrationSnapshot ? Object.keys((rehydrationSnapshot as any).fields || {}) : [],
-            availableFields,
-        });
-
         if (shouldApplyRehydration) {
             lastAppliedRehydrationKeyRef.current = rehydrationKey ?? null;
         }
@@ -933,7 +922,6 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
 
             if (shouldApplyRehydration) {
                 const snapshotItems = (rehydrationSnapshot as any)?.fields?.[fieldKey] as PromptRehydrationItemV1[] | undefined;
-                console.log("[Rehydration] Processing field", { fieldKey, currentVal: currentVal.substring(0, 50), snapshotItemCount: snapshotItems?.length ?? 0 });
                 if (Array.isArray(snapshotItems) && snapshotItems.length > 0) {
                     const libraryById = libraryByIdRef.current;
                     let textLabelCounter = 0;
@@ -1007,7 +995,20 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
             const next = nextFieldItems[key];
             const curr = currentItems[key];
             if (!curr || curr.length !== next.length) return true;
-            return next.some((item, i) => item.id !== curr[i]?.id || item.content !== curr[i]?.content);
+            return next.some((item, i) => {
+                const current = curr[i];
+                if (!current) return true;
+                return (
+                    item.id !== current.id ||
+                    item.type !== current.type ||
+                    item.content !== current.content ||
+                    item.sourceId !== current.sourceId ||
+                    item.label !== current.label ||
+                    item.color !== current.color ||
+                    item.rehydrationMode !== current.rehydrationMode ||
+                    item.frozenContent !== current.frozenContent
+                );
+            });
         });
 
         if (hasChanges) {
