@@ -768,6 +768,8 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
     const reconcileHandleRef = useRef<IdleHandle | null>(null);
     const reconcileTokenRef = useRef(0);
     const lastAppliedRehydrationKeyRef = useRef<number | null>(null);
+    // Per-field tracking of rehydrated values to prevent reconciliation from overwriting
+    const rehydratedFieldValuesRef = useRef<Record<string, string>>({});
 
     const buildItemsFromValue = (
         value: string,
@@ -975,15 +977,9 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
                     nextFieldItems[fieldKey] = rebuildItemsForValue(currentVal, snippetIndexRef.current);
                 }
                 // CRITICAL FIX: Lock the reconciliation logic to prevent it from overwriting our work.
-                // By updating lastCompiledRef and lastReconciledRef with the *current* values,
-                // we tell the reconciliation effect "we just built this, don't touch it".
+                // Track this field as rehydrated with its current value (per-field tracking).
                 lastReconciledRef.current[fieldKey] = normalizePrompt(currentVal);
-                if (Object.keys(nextFieldItems).length > 0) {
-                    // We don't have the exact compiled string here easily without running compileItemsToPrompt
-                    // but reconciliation only checks lastCompiledRef if *that* matches currentVal.
-                    // So we set it to the current value to short-circuit the echo check.
-                    lastCompiledRef.current = { field: fieldKey, value: currentVal };
-                }
+                rehydratedFieldValuesRef.current[fieldKey] = currentVal;
 
             } else {
                 // Use ref to avoid adding snippetIndex to dependency array (prevents infinite loops)
@@ -1097,6 +1093,11 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
 
                 const librarySnippet = libraryById.get(item.sourceId);
                 if (!librarySnippet) {
+                    // FIX: If the item is already a frozen block (e.g. rehydrated orphan), preserve it
+                    if (item.rehydrationMode === "frozen" && item.type === "block") {
+                        return item;
+                    }
+
                     didChangeField = true;
                     return { ...item, type: "text" as const, sourceId: undefined, rehydrationMode: undefined, frozenContent: undefined, label: item.label || "Text" };
                 }
@@ -1181,6 +1182,12 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
 
         const rawVal = currentValues[targetField];
         const currentVal = typeof rawVal === "string" ? rawVal : (rawVal === null || rawVal === undefined ? "" : String(rawVal));
+
+        // CRITICAL FIX: Skip reconciliation if this field was just rehydrated with this exact value.
+        // This prevents reconciliation from overwriting rehydrated blocks when the user clicks on a field.
+        if (rehydratedFieldValuesRef.current[targetField] === currentVal) {
+            return;
+        }
 
         // GUARD: If this value matches exactly what we just compiled for this field,
         // it is an "Echo" from the parent. We trust our local state (items) is legally correct
