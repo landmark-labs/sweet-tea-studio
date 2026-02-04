@@ -241,6 +241,10 @@ const SortableItem = React.memo(function SortableItem({ item, textIndex, onRemov
         (item.rehydrationMode === "live" || item.rehydrationMode === "frozen")
             ? item.rehydrationMode
             : (item.frozenContent !== undefined ? "frozen" : "live");
+    const baseLabel = item.label || item.content.slice(0, 15);
+    const displayLabel = activeRehydrationMode === "frozen" && !baseLabel.startsWith("*")
+        ? `*${baseLabel}`
+        : baseLabel;
 
     return (
         <HoverCard openDelay={500}>
@@ -256,7 +260,7 @@ const SortableItem = React.memo(function SortableItem({ item, textIndex, onRemov
                     {...attributes}
                     {...listeners}
                 >
-                    <span className="truncate flex-1 min-w-0">{item.label || item.content.slice(0, 15)}</span>
+                    <span className="truncate flex-1 min-w-0">{displayLabel}</span>
 
                     <Button
                         variant="ghost"
