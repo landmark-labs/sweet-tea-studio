@@ -922,26 +922,39 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
                 if (Array.isArray(snapshotItems) && snapshotItems.length > 0) {
                     const libraryById = libraryByIdRef.current;
                     let textLabelCounter = 0;
-                    nextFieldItems[fieldKey] = snapshotItems.flatMap((snap, idx) => {
+                    nextFieldItems[fieldKey] = snapshotItems.flatMap((snap, idx): PromptItem[] => {
                         const content = typeof snap?.content === "string" ? snap.content : "";
                         if (snap?.type === "block" && typeof snap?.sourceId === "string" && snap.sourceId) {
                             const librarySnippet = libraryById.get(snap.sourceId);
+
+                            // FIX: Allow orphan blocks for stale/stale-modified snippets
+                            // Instead of downgrading to text when librarySnippet is missing, we create a
+                            // "Frozen" block using the snapshot's metadata. 
+                            const label = librarySnippet?.label || snap.label || "Snippet";
+                            const color = librarySnippet?.color || snap.color || COLORS[0];
+
+                            // If snippet is missing from library entirely (deleted)
                             if (!librarySnippet) {
-                                textLabelCounter += 1;
                                 return [{
                                     id: `rehydrate-${fieldKey}-${idx}`,
-                                    type: "text" as const,
+                                    type: "block" as const,
+                                    sourceId: snap.sourceId,
                                     content,
-                                    label: snap?.label || `Text ${textLabelCounter}`,
+                                    label,
+                                    color,
+                                    rehydrationMode: "frozen" as const,
+                                    frozenContent: content,
                                 }];
                             }
+
+                            // Normal rehydration (snippet exists)
                             return [{
                                 id: `rehydrate-${fieldKey}-${idx}`,
                                 type: "block" as const,
                                 sourceId: snap.sourceId,
                                 content,
-                                label: librarySnippet.label || snap?.label,
-                                color: librarySnippet.color || snap?.color,
+                                label,
+                                color,
                                 ...(content !== librarySnippet.content
                                     ? { rehydrationMode: "frozen" as const, frozenContent: content }
                                     : {}),
@@ -961,6 +974,17 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
                     // Use ref to avoid adding snippetIndex to dependency array (prevents infinite loops)
                     nextFieldItems[fieldKey] = rebuildItemsForValue(currentVal, snippetIndexRef.current);
                 }
+                // CRITICAL FIX: Lock the reconciliation logic to prevent it from overwriting our work.
+                // By updating lastCompiledRef and lastReconciledRef with the *current* values,
+                // we tell the reconciliation effect "we just built this, don't touch it".
+                lastReconciledRef.current[fieldKey] = normalizePrompt(currentVal);
+                if (Object.keys(nextFieldItems).length > 0) {
+                    // We don't have the exact compiled string here easily without running compileItemsToPrompt
+                    // but reconciliation only checks lastCompiledRef if *that* matches currentVal.
+                    // So we set it to the current value to short-circuit the echo check.
+                    lastCompiledRef.current = { field: fieldKey, value: currentVal };
+                }
+
             } else {
                 // Use ref to avoid adding snippetIndex to dependency array (prevents infinite loops)
                 nextFieldItems[fieldKey] = rebuildItemsForValue(currentVal, snippetIndexRef.current);
