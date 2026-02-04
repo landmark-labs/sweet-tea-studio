@@ -972,6 +972,9 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
             lastAppliedRehydrationKeyRef.current = rehydrationKey ?? null;
         }
 
+        // Apply snapshot rehydration across all prompt fields.
+        // Important: this effect should NOT be keyed to targetField/focus changes,
+        // otherwise focus switches rebuild from live snippets and can downgrade stale blocks.
         availableFields.forEach((fieldKey) => {
             const rawVal = (valuesRef.current as any)?.[fieldKey];
             const currentVal = typeof rawVal === "string" ? rawVal : (rawVal === null || rawVal === undefined ? "" : String(rawVal));
@@ -1214,6 +1217,8 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
         if (snapshotBuilt && snapshotBuilt.length > 0) {
             const snapshotNormalized = normalizePrompt(compileItemsToPrompt(snapshotBuilt));
             if (snapshotNormalized === normalizedCurrent) {
+                // If the prompt text matches the rehydration snapshot, prefer the snapshot blocks
+                // even when focus changes (reconcile path). This keeps stale snippet bricks intact.
                 const snapshotStr = snapshotBuilt.map(normalizeItem).join('~');
                 const itemsStr = currentItems.map(normalizeItem).join('~');
                 if (snapshotStr !== itemsStr) {
