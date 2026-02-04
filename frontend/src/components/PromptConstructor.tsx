@@ -1032,7 +1032,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
             syncingLibraryRef.current = false;
         }, 0);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [availableFields, externalValueSyncKey, rehydrationKey, rehydrationSnapshot, schema, targetField, buildItemsFromSnapshot]);
+    }, [availableFields, externalValueSyncKey, rehydrationKey, rehydrationSnapshot, schema, buildItemsFromSnapshot]);
 
     // Sync Library: keep linked blocks + prompt text aligned when snippets change.
     // Important: reconciliation depends on `library`, so we must guard against it
