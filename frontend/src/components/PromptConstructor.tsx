@@ -826,6 +826,62 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
         return nextItems;
     };
 
+    const buildItemsFromSnapshot = useCallback((
+        fieldKey: string,
+        snapshotItems?: PromptRehydrationItemV1[]
+    ): PromptItem[] | null => {
+        if (!Array.isArray(snapshotItems) || snapshotItems.length === 0) return null;
+        const libraryById = libraryByIdRef.current;
+        let textLabelCounter = 0;
+
+        const built = snapshotItems.flatMap((snap, idx): PromptItem[] => {
+            const content = typeof snap?.content === "string" ? snap.content : "";
+            if (snap?.type === "block" && typeof snap?.sourceId === "string" && snap.sourceId) {
+                const librarySnippet = libraryById.get(snap.sourceId);
+
+                // Preserve orphan blocks for stale/deleted snippets.
+                const label = librarySnippet?.label || snap.label || "Snippet";
+                const color = librarySnippet?.color || snap.color || COLORS[0];
+
+                if (!librarySnippet) {
+                    return [{
+                        id: `rehydrate-${fieldKey}-${idx}`,
+                        type: "block" as const,
+                        sourceId: snap.sourceId,
+                        content,
+                        label,
+                        color,
+                        rehydrationMode: "frozen" as const,
+                        frozenContent: content,
+                    }];
+                }
+
+                return [{
+                    id: `rehydrate-${fieldKey}-${idx}`,
+                    type: "block" as const,
+                    sourceId: snap.sourceId,
+                    content,
+                    label,
+                    color,
+                    ...(content !== librarySnippet.content
+                        ? { rehydrationMode: "frozen" as const, frozenContent: content }
+                        : {}),
+                }];
+            }
+
+            if (!content.length) return [];
+            textLabelCounter += 1;
+            return [{
+                id: `rehydrate-${fieldKey}-${idx}`,
+                type: "text" as const,
+                content,
+                label: snap?.label || `Text ${textLabelCounter}`,
+            }];
+        });
+
+        return built;
+    }, []);
+
     const rebuildItemsForValue = (
         value: string,
         index: ReturnType<typeof buildSnippetIndex>
@@ -922,57 +978,9 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
 
             if (shouldApplyRehydration) {
                 const snapshotItems = (rehydrationSnapshot as any)?.fields?.[fieldKey] as PromptRehydrationItemV1[] | undefined;
-                if (Array.isArray(snapshotItems) && snapshotItems.length > 0) {
-                    const libraryById = libraryByIdRef.current;
-                    let textLabelCounter = 0;
-                    nextFieldItems[fieldKey] = snapshotItems.flatMap((snap, idx): PromptItem[] => {
-                        const content = typeof snap?.content === "string" ? snap.content : "";
-                        if (snap?.type === "block" && typeof snap?.sourceId === "string" && snap.sourceId) {
-                            const librarySnippet = libraryById.get(snap.sourceId);
-
-                            // FIX: Allow orphan blocks for stale/stale-modified snippets
-                            // Instead of downgrading to text when librarySnippet is missing, we create a
-                            // "Frozen" block using the snapshot's metadata. 
-                            const label = librarySnippet?.label || snap.label || "Snippet";
-                            const color = librarySnippet?.color || snap.color || COLORS[0];
-
-                            // If snippet is missing from library entirely (deleted)
-                            if (!librarySnippet) {
-                                return [{
-                                    id: `rehydrate-${fieldKey}-${idx}`,
-                                    type: "block" as const,
-                                    sourceId: snap.sourceId,
-                                    content,
-                                    label,
-                                    color,
-                                    rehydrationMode: "frozen" as const,
-                                    frozenContent: content,
-                                }];
-                            }
-
-                            // Normal rehydration (snippet exists)
-                            return [{
-                                id: `rehydrate-${fieldKey}-${idx}`,
-                                type: "block" as const,
-                                sourceId: snap.sourceId,
-                                content,
-                                label,
-                                color,
-                                ...(content !== librarySnippet.content
-                                    ? { rehydrationMode: "frozen" as const, frozenContent: content }
-                                    : {}),
-                            }];
-                        }
-
-                        if (!content.length) return [];
-                        textLabelCounter += 1;
-                        return [{
-                            id: `rehydrate-${fieldKey}-${idx}`,
-                            type: "text" as const,
-                            content,
-                            label: snap?.label || `Text ${textLabelCounter}`,
-                        }];
-                    });
+                const built = buildItemsFromSnapshot(fieldKey, snapshotItems);
+                if (built && built.length > 0) {
+                    nextFieldItems[fieldKey] = built;
                 } else {
                     // Use ref to avoid adding snippetIndex to dependency array (prevents infinite loops)
                     nextFieldItems[fieldKey] = rebuildItemsForValue(currentVal, snippetIndexRef.current);
@@ -1024,7 +1032,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
             syncingLibraryRef.current = false;
         }, 0);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [availableFields, externalValueSyncKey, rehydrationKey, rehydrationSnapshot, schema, targetField]);
+    }, [availableFields, externalValueSyncKey, rehydrationKey, rehydrationSnapshot, schema, targetField, buildItemsFromSnapshot]);
 
     // Sync Library: keep linked blocks + prompt text aligned when snippets change.
     // Important: reconciliation depends on `library`, so we must guard against it
@@ -1196,11 +1204,39 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
 
         const rawVal = currentValues[targetField];
         const currentVal = typeof rawVal === "string" ? rawVal : (rawVal === null || rawVal === undefined ? "" : String(rawVal));
+        const normalizedCurrent = normalizePrompt(currentVal);
+
+        const normalizeItem = (i: PromptItem) => `${i.type}|${i.content}|${i.label || ''}|${i.sourceId || ''}|${i.rehydrationMode || ''}|${i.frozenContent || ''}`;
+        const currentItems = fieldItemsRef.current[targetField] || [];
+
+        const snapshotItems = (rehydrationSnapshot as any)?.fields?.[targetField] as PromptRehydrationItemV1[] | undefined;
+        const snapshotBuilt = buildItemsFromSnapshot(targetField, snapshotItems);
+        if (snapshotBuilt && snapshotBuilt.length > 0) {
+            const snapshotNormalized = normalizePrompt(compileItemsToPrompt(snapshotBuilt));
+            if (snapshotNormalized === normalizedCurrent) {
+                const snapshotStr = snapshotBuilt.map(normalizeItem).join('~');
+                const itemsStr = currentItems.map(normalizeItem).join('~');
+                if (snapshotStr !== itemsStr) {
+                    setItems(snapshotBuilt, "Prompt reconstructed", false, "reconcile");
+                }
+                lastReconciledRef.current[targetField] = normalizedCurrent;
+                rehydratedFieldValuesRef.current[targetField] = currentVal;
+                return;
+            }
+        }
 
         // CRITICAL FIX: Skip reconciliation if this field was just rehydrated with this exact value.
         // This prevents reconciliation from overwriting rehydrated blocks when the user clicks on a field.
         if (rehydratedFieldValuesRef.current[targetField] === currentVal) {
             return;
+        }
+
+        if (currentItems.length > 0) {
+            const compiledNormalized = normalizePrompt(compileItemsToPrompt(currentItems));
+            if (compiledNormalized === normalizedCurrent) {
+                lastReconciledRef.current[targetField] = normalizedCurrent;
+                return;
+            }
         }
 
         // GUARD: If this value matches exactly what we just compiled for this field,
@@ -1230,8 +1266,6 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
             let cursor = 0;
 
             const safeVal = currentVal;
-            const normalizedCurrent = normalizePrompt(safeVal);
-
             selectedMatches.forEach((m) => {
                 if (m.start > cursor) {
                     let gap = safeVal.substring(cursor, m.start);
@@ -1297,8 +1331,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
                 return item;
             });
 
-            const currentItems = fieldItemsRef.current[targetField] || [];
-            const normalizeItem = (i: PromptItem) => `${i.type}|${i.content}|${i.label || ''}|${i.sourceId || ''}`;
+            const normalizeItem = (i: PromptItem) => `${i.type}|${i.content}|${i.label || ''}|${i.sourceId || ''}|${i.rehydrationMode || ''}|${i.frozenContent || ''}`;
             const labeledStr = labeledItems.map(normalizeItem).join('~');
             const itemsStr = currentItems.map(normalizeItem).join('~');
             const isDifferent = labeledStr !== itemsStr;
@@ -1334,7 +1367,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
             reconcileHandleRef.current = null;
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentValues[targetField], targetField, isTargetValid, snippetIndex]);
+    }, [currentValues[targetField], targetField, isTargetValid, snippetIndex, buildItemsFromSnapshot, rehydrationSnapshot]);
 
 
     // Compile (OUTPUT Channel: Items -> Parent)
