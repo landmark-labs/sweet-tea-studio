@@ -911,6 +911,18 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
             typeof rehydrationKey === "number" &&
             lastAppliedRehydrationKeyRef.current !== rehydrationKey
         );
+
+        // DEBUG: Log rehydration state
+        console.log("[Rehydration] Effect triggered", {
+            externalValueSyncKey,
+            rehydrationKey,
+            lastAppliedKey: lastAppliedRehydrationKeyRef.current,
+            shouldApplyRehydration,
+            hasSnapshot: !!rehydrationSnapshot,
+            snapshotFields: rehydrationSnapshot ? Object.keys((rehydrationSnapshot as any).fields || {}) : [],
+            availableFields,
+        });
+
         if (shouldApplyRehydration) {
             lastAppliedRehydrationKeyRef.current = rehydrationKey ?? null;
         }
@@ -921,6 +933,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
 
             if (shouldApplyRehydration) {
                 const snapshotItems = (rehydrationSnapshot as any)?.fields?.[fieldKey] as PromptRehydrationItemV1[] | undefined;
+                console.log("[Rehydration] Processing field", { fieldKey, currentVal: currentVal.substring(0, 50), snapshotItemCount: snapshotItems?.length ?? 0 });
                 if (Array.isArray(snapshotItems) && snapshotItems.length > 0) {
                     const libraryById = libraryByIdRef.current;
                     let textLabelCounter = 0;
