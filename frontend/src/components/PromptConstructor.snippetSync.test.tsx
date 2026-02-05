@@ -1,4 +1,4 @@
-import { render, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { Provider as JotaiProvider } from "jotai";
 import type { Dispatch, PropsWithChildren, SetStateAction } from "react";
@@ -54,9 +54,56 @@ describe("PromptConstructor snippet sync", () => {
 
         // PromptConstructor's internal sync guard clears on a 0ms tick.
         // Ensure it's settled before we simulate a snippet library edit.
-        await new Promise((resolve) => setTimeout(resolve, 0));
+        await act(async () => {
+            await new Promise((resolve) => setTimeout(resolve, 0));
+        });
 
-        rerender(
+        await act(async () => {
+            rerender(
+                <PromptConstructor
+                    schema={schema}
+                    onUpdate={onUpdate}
+                    onUpdateMany={onUpdateMany}
+                    currentValues={currentValues}
+                    targetField="prompt"
+                    onTargetChange={() => undefined}
+                    onFinish={() => undefined}
+                    snippets={[nextSnippet]}
+                    onUpdateSnippets={onUpdateSnippets as unknown as Dispatch<SetStateAction<PromptItem[]>>}
+                />
+            );
+        });
+
+        await waitFor(() => expect(onUpdateMany).toHaveBeenCalled());
+        expect(onUpdateMany).toHaveBeenLastCalledWith({ prompt: "bar, something" });
+        expect(onUpdate).not.toHaveBeenCalled();
+    });
+
+    it("relinks text-only prompt segments into snippet blocks when an edited snippet now matches", async () => {
+        const onUpdate = vi.fn();
+        const onUpdateMany = vi.fn();
+        const onUpdateSnippets = vi.fn();
+
+        const schema = {
+            prompt: { type: "string", widget: "textarea", title: "Prompt" },
+        };
+
+        const currentValues = { prompt: "bar, something" };
+
+        const oldSnippet: PromptItem = {
+            id: "s1",
+            type: "block",
+            label: "Foo",
+            content: "foo",
+            color: COLORS[0],
+        };
+
+        const nextSnippet: PromptItem = {
+            ...oldSnippet,
+            content: "bar",
+        };
+
+        const { rerender } = render(
             <PromptConstructor
                 schema={schema}
                 onUpdate={onUpdate}
@@ -65,13 +112,34 @@ describe("PromptConstructor snippet sync", () => {
                 targetField="prompt"
                 onTargetChange={() => undefined}
                 onFinish={() => undefined}
-                snippets={[nextSnippet]}
+                snippets={[oldSnippet]}
                 onUpdateSnippets={onUpdateSnippets as unknown as Dispatch<SetStateAction<PromptItem[]>>}
-            />
+            />,
+            { wrapper: Providers }
         );
 
-        await waitFor(() => expect(onUpdateMany).toHaveBeenCalled());
-        expect(onUpdateMany).toHaveBeenLastCalledWith({ prompt: "bar, something" });
-        expect(onUpdate).not.toHaveBeenCalled();
+        await act(async () => {
+            await new Promise((resolve) => setTimeout(resolve, 0));
+        });
+
+        await act(async () => {
+            rerender(
+                <PromptConstructor
+                    schema={schema}
+                    onUpdate={onUpdate}
+                    onUpdateMany={onUpdateMany}
+                    currentValues={currentValues}
+                    targetField="prompt"
+                    onTargetChange={() => undefined}
+                    onFinish={() => undefined}
+                    snippets={[nextSnippet]}
+                    onUpdateSnippets={onUpdateSnippets as unknown as Dispatch<SetStateAction<PromptItem[]>>}
+                />
+            );
+        });
+
+        await waitFor(() => {
+            expect(screen.getAllByText("Foo").length).toBeGreaterThan(1);
+        });
     });
 });

@@ -1117,7 +1117,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
                 }
             }
 
-            const synced = updated.map(item => {
+            let synced = updated.map(item => {
                 if (item.type !== "block" || !item.sourceId) return item;
 
                 const librarySnippet = libraryById.get(item.sourceId);
@@ -1144,6 +1144,18 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
 
                 return item;
             });
+
+            // If this field currently has only text items, a library edit may create
+            // a brand new match that should become a linked snippet brick.
+            const hasLinkedBlocksBeforeRelink = synced.some(i => i.type === "block" && !!i.sourceId);
+            if (!hasLinkedBlocksBeforeRelink && valueForRebuild) {
+                const relinked = rebuildItemsForValue(valueForRebuild, snippetIndexRef.current);
+                const relinkedHasLinkedBlocks = relinked.some(i => i.type === "block" && !!i.sourceId);
+                if (relinkedHasLinkedBlocks) {
+                    synced = relinked;
+                    didChangeField = true;
+                }
+            }
 
             if (didChangeField) {
                 didChangeItems = true;
