@@ -886,7 +886,11 @@ export const api = {
         return res.json();
     },
 
-    deleteFolderImages: async (projectId: number, folderName: string, paths: string[]): Promise<{ deleted: number; errors: string[] }> => {
+    deleteFolderImages: async (
+        projectId: number,
+        folderName: string,
+        paths: string[]
+    ): Promise<{ deleted: number; errors: string[]; soft_deleted: number; soft_deleted_ids: number[] }> => {
         const res = await fetch(`${API_BASE}/projects/${projectId}/folders/${encodeURIComponent(folderName)}/delete-images`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },

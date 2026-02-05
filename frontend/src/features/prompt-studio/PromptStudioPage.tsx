@@ -802,8 +802,12 @@ export default function PromptStudio() {
     viewerSource,
   ]);
 
-  // Handle bulk delete from ProjectGallery - update viewer if showing a deleted image
-  const handleProjectGalleryBulkDelete = useCallback((deletedPaths: string[], remainingImages: FolderImage[]) => {
+  // Handle delete events from ProjectGallery (single or bulk) and wire undo support.
+  const handleProjectGalleryBulkDelete = useCallback((
+    deletedPaths: string[],
+    remainingImages: FolderImage[],
+    deletedImageIds: number[] = [],
+  ) => {
     // Update the projectGalleryImages used for navigation
     setProjectGalleryImages(remainingImages);
     const deletedSet = new Set(deletedPaths.map((p) => normalizePathForCompare(p)));
@@ -829,7 +833,46 @@ export default function PromptStudio() {
         }
       }
     }
-  }, [previewPath, extractRawViewerPath, buildViewerApiPath, normalizePathForCompare]);
+
+    const deletedIds = normalizeDeleteIds(deletedImageIds);
+    if (deletedIds.length > 0) {
+      const toastUndo = async (idsToRestore: number[]) => {
+        try {
+          await undoDeletedImages(idsToRestore);
+        } catch (err) {
+          console.error("Failed to undo project-gallery image delete", err);
+          alert("Failed to undo image delete.");
+        }
+      };
+
+      showUndoToast(
+        deletedIds.length === 1 ? "image deleted" : `${deletedIds.length} images deleted`,
+        deletedIds,
+        toastUndo
+      );
+
+      recordChange({
+        label: deletedIds.length === 1 ? "Deleted image" : `Deleted ${deletedIds.length} images`,
+        category: "structure",
+        undo: () => {
+          void toastUndo(deletedIds);
+        },
+        redo: () => {
+          void redoDeletedImages(deletedIds);
+        },
+      });
+    }
+  }, [
+    buildViewerApiPath,
+    extractRawViewerPath,
+    normalizeDeleteIds,
+    normalizePathForCompare,
+    previewPath,
+    recordChange,
+    redoDeletedImages,
+    showUndoToast,
+    undoDeletedImages,
+  ]);
 
   const handleProjectGalleryImagesUpdate = useCallback((payload: { projectId: string | null; folder: string | null; images: FolderImage[] }) => {
     if (viewerSource !== "project_gallery" && viewerSource !== "output_folder") return;

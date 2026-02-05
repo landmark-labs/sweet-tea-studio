@@ -20,7 +20,7 @@ interface ProjectGalleryProps {
     workflows?: any[];
     onRegenerate?: (item: any, seedOption: 'same' | 'random') => void;
     onUseInPipe?: (payload: { workflowId: string; imagePath: string; galleryItem: GalleryItem }) => void;
-    onBulkDelete?: (deletedPaths: string[], remainingImages: FolderImage[]) => void;
+    onBulkDelete?: (deletedPaths: string[], remainingImages: FolderImage[], deletedImageIds?: number[]) => void;
     externalSelection?: {
         projectId?: string | null;
         folder?: string | null;
@@ -506,7 +506,7 @@ export const ProjectGallery = React.memo(function ProjectGallery({
     // Bulk delete handler
     const handleBulkDelete = async () => {
         if (selectedPaths.size === 0 || !selectedProjectId || !selectedFolder) return;
-        if (!confirm(`Delete ${selectedPaths.size} images? This cannot be undone.`)) return;
+        if (!confirm(`Delete ${selectedPaths.size} images? You can undo briefly if they are tracked in the generation history.`)) return;
 
         // Capture the paths to delete before any async operations
         // This prevents stale closure issues where selectedPaths might change during the await
@@ -516,7 +516,7 @@ export const ProjectGallery = React.memo(function ProjectGallery({
         setSelectedPaths(new Set());
 
         try {
-            await api.deleteFolderImages(parseInt(selectedProjectId), selectedFolder, Array.from(pathsToDelete));
+            const result = await api.deleteFolderImages(parseInt(selectedProjectId), selectedFolder, Array.from(pathsToDelete));
             // Use the captured Set for filtering to ensure we remove exactly the deleted paths
             const remainingImages = imagesRef.current.filter(img => !pathsToDelete.has(img.path));
             setImages(remainingImages);
@@ -526,7 +526,7 @@ export const ProjectGallery = React.memo(function ProjectGallery({
                 images: remainingImages,
             });
             // Notify parent so ImageViewer can update if showing a deleted image
-            onBulkDelete?.(Array.from(pathsToDelete), remainingImages);
+            onBulkDelete?.(Array.from(pathsToDelete), remainingImages, result.soft_deleted_ids || []);
         } catch (e) {
             console.error("Bulk delete failed", e);
             alert("failed to delete some images");
@@ -621,7 +621,7 @@ export const ProjectGallery = React.memo(function ProjectGallery({
         if (!contextMenu || !selectedProjectId || !selectedFolder) return;
         const { image } = contextMenu;
 
-        if (!confirm(`Delete "${image.filename}"? This cannot be undone.`)) {
+        if (!confirm(`Delete "${image.filename}"? You can undo briefly if it is tracked in the generation history.`)) {
             setContextMenu(null);
             return;
         }
@@ -638,7 +638,7 @@ export const ProjectGallery = React.memo(function ProjectGallery({
                 }
             }
 
-            await api.deleteFolderImages(parseInt(selectedProjectId), selectedFolder, [image.path]);
+            const result = await api.deleteFolderImages(parseInt(selectedProjectId), selectedFolder, [image.path]);
             const newImages = images.filter(img => img.path !== image.path);
             setImages(newImages);
             onImagesUpdateRef.current?.({
@@ -646,6 +646,7 @@ export const ProjectGallery = React.memo(function ProjectGallery({
                 folder: selectedFolder || null,
                 images: newImages,
             });
+            onBulkDelete?.([image.path], newImages, result.soft_deleted_ids || []);
 
             // Navigate to next image after deletion
             if (nextImage && onSelectImage) {

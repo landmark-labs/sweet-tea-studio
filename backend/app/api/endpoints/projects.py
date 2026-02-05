@@ -1084,9 +1084,12 @@ def delete_folder_images(
     """
     Delete image files from a project folder.
     
-    Permanently removes the files from disk. This is irreversible.
+    DB-tracked images are soft-deleted and moved to .trash so they can be restored.
+    Non-tracked files are moved to folder-local .trash as best effort.
     """
     import os
+    import shutil
+    from pathlib import Path
     
     project = session.get(Project, project_id)
     if not project:
@@ -1113,8 +1116,8 @@ def delete_folder_images(
         raise HTTPException(status_code=404, detail=f"Folder '{folder_name}' not found")
     
     deleted = 0
-    errors = []
-    soft_deleted_count = 0
+    errors: List[str] = []
+    soft_deleted_ids: List[int] = []
     
     folder_abses = [normalize_fs_path(os.path.abspath(str(path))) for path in folder_paths]
 
@@ -1128,7 +1131,9 @@ def delete_folder_images(
         return False
 
     # Local import to avoid heavy module init at import time
-    from app.api.endpoints.gallery import _purge_thumbnail_cache_for_path  # noqa: WPS433
+    from app.api.endpoints.gallery import _bulk_soft_delete, _purge_thumbnail_cache_for_path  # noqa: WPS433
+
+    valid_existing_paths: List[str] = []
 
     for path in req.paths:
         # Security: validate path is within the expected folder
@@ -1136,38 +1141,83 @@ def delete_folder_images(
             abs_path = os.path.abspath(path)
             if _is_within_allowed_folder(abs_path):
                 if os.path.exists(abs_path):
-                    _purge_thumbnail_cache_for_path(abs_path)
-                    os.remove(abs_path)
-                    deleted += 1
-                    
-                    # Also remove .json sidecar if exists
-                    json_path = os.path.splitext(abs_path)[0] + ".json"
-                    if os.path.exists(json_path):
-                        os.remove(json_path)
-                    
-                    # Soft-delete the corresponding Image record in the database
-                    # This prevents "Missing File" artifacts in the gallery
-                    db_image = session.exec(
-                        select(Image).where(Image.path == abs_path)
-                    ).first()
-                    if db_image:
-                        db_image.is_deleted = True
-                        db_image.deleted_at = datetime.utcnow()
-                        session.add(db_image)
-                        soft_deleted_count += 1
+                    valid_existing_paths.append(abs_path)
                 else:
                     errors.append(f"File not found: {path}")
             else:
                 errors.append(f"Access denied: {path}")
         except Exception as e:
             errors.append(f"Failed to delete {path}: {str(e)}")
-    
-    # Commit all soft-delete changes
-    if soft_deleted_count > 0:
-        session.commit()
+
+    normalized_to_path: dict[str, str] = {}
+    normalized_targets: List[str] = []
+    for abs_path in valid_existing_paths:
+        normalized = normalize_fs_path(abs_path).lower()
+        normalized_to_path[normalized] = abs_path
+        normalized_targets.append(normalized)
+
+    images_by_normalized_path: dict[str, Image] = {}
+    if normalized_targets:
+        db_images = session.exec(
+            select(Image).where(func.lower(Image.path).in_(normalized_targets))
+        ).all()
+        for db_image in db_images:
+            db_norm = normalize_fs_path(db_image.path).lower()
+            images_by_normalized_path[db_norm] = db_image
+
+    image_ids_to_soft_delete: List[int] = []
+    seen_image_ids: set[int] = set()
+    non_db_paths: List[str] = []
+    for normalized_path, abs_path in normalized_to_path.items():
+        db_image = images_by_normalized_path.get(normalized_path)
+        if db_image and db_image.id not in seen_image_ids:
+            seen_image_ids.add(db_image.id)
+            image_ids_to_soft_delete.append(db_image.id)
+        else:
+            non_db_paths.append(abs_path)
+
+    if image_ids_to_soft_delete:
+        soft_delete_result = _bulk_soft_delete(image_ids_to_soft_delete, session)
+        deleted += soft_delete_result.deleted
+        soft_deleted_ids.extend(
+            img_id
+            for img_id in image_ids_to_soft_delete
+            if img_id not in soft_delete_result.not_found
+        )
+        if soft_delete_result.not_found:
+            errors.extend([f"Missing DB record for image id {img_id}" for img_id in soft_delete_result.not_found])
+        if soft_delete_result.file_errors:
+            errors.extend([f"Failed to move file to trash for image id {img_id}" for img_id in soft_delete_result.file_errors])
+
+    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    for abs_path in non_db_paths:
+        try:
+            _purge_thumbnail_cache_for_path(abs_path)
+            original_path = Path(abs_path)
+            trash_dir = original_path.parent / ".trash"
+            trash_dir.mkdir(exist_ok=True)
+
+            trash_base = f"{timestamp}_file_{original_path.name}"
+            trash_path = trash_dir / trash_base
+            suffix = 2
+            while trash_path.exists():
+                trash_path = trash_dir / f"{timestamp}_file_{suffix}_{original_path.name}"
+                suffix += 1
+
+            shutil.move(str(original_path), str(trash_path))
+
+            json_path = original_path.with_suffix(".json")
+            if json_path.exists():
+                json_target = trash_dir / f"{trash_path.stem}{json_path.suffix}"
+                shutil.move(str(json_path), str(json_target))
+
+            deleted += 1
+        except Exception as e:
+            errors.append(f"Failed to move {abs_path} to trash: {str(e)}")
     
     return {
         "deleted": deleted,
         "errors": errors,
-        "soft_deleted": soft_deleted_count
+        "soft_deleted": len(soft_deleted_ids),
+        "soft_deleted_ids": soft_deleted_ids,
     }
