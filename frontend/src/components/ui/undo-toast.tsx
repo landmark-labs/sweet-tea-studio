@@ -73,7 +73,7 @@ export function UndoToastProvider({ children, duration = 5000 }: UndoToastProvid
             {children}
             {/* Toast Container */}
             {toasts.length > 0 && (
-                <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[200] flex flex-col gap-2 pointer-events-none">
+                <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[200] flex flex-col gap-2 pointer-events-auto">
                     {toasts.map((toast) => (
                         <UndoToastItem
                             key={toast.id}
@@ -120,6 +120,7 @@ function UndoToastItem({ toast, onUndo, onDismiss }: UndoToastItemProps) {
             <span className="text-sm flex-1">{toast.message}</span>
 
             <button
+                type="button"
                 onClick={onUndo}
                 className="flex items-center gap-1.5 text-amber-400 hover:text-amber-300 font-medium text-sm transition-colors"
             >
@@ -128,6 +129,7 @@ function UndoToastItem({ toast, onUndo, onDismiss }: UndoToastItemProps) {
             </button>
 
             <button
+                type="button"
                 onClick={onDismiss}
                 className="text-slate-400 hover:text-white transition-colors"
                 aria-label="Dismiss"

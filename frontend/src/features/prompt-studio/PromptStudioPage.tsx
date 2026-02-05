@@ -97,6 +97,7 @@ export default function PromptStudio() {
   // Include lastJobId in busy check - if we have an active job, we're busy even if state updates lagged
   const isBusy = isQueuing || isRunning || lastJobId !== null;
   const { showUndoToast } = useUndoToast();
+  const { registerStateChange, recordChange } = useUndoRedo();
 
   const [batchSize, setBatchSize] = useState<number>(() => {
     const saved = localStorage.getItem("ds_batch_size");
@@ -605,6 +606,69 @@ export default function PromptStudio() {
     loadGallery();
   }, [galleryRefresh, loadGallery]);
 
+  const deleteUndoInFlightRef = useRef<Set<string>>(new Set());
+
+  const normalizeDeleteIds = useCallback((ids: number[]) => {
+    return Array.from(new Set(ids.filter((id) => id > 0))).sort((a, b) => a - b);
+  }, []);
+
+  const undoDeletedImages = useCallback(async (idsToRestore: number[]) => {
+    const normalizedIds = normalizeDeleteIds(idsToRestore);
+    if (normalizedIds.length === 0) return;
+
+    const opKey = `undo:${normalizedIds.join(",")}`;
+    if (deleteUndoInFlightRef.current.has(opKey)) return;
+    deleteUndoInFlightRef.current.add(opKey);
+
+    try {
+      const restoreResult = await api.restoreImages(normalizedIds);
+      if (restoreResult.file_errors.length > 0) {
+        console.warn("Restore completed with file errors", restoreResult);
+      }
+      await loadGalleryRef.current();
+      setGalleryRefresh((prev) => prev + 1);
+    } finally {
+      deleteUndoInFlightRef.current.delete(opKey);
+    }
+  }, [normalizeDeleteIds]);
+
+  const redoDeletedImages = useCallback(async (idsToDelete: number[]) => {
+    const normalizedIds = normalizeDeleteIds(idsToDelete);
+    if (normalizedIds.length === 0) return;
+
+    const opKey = `redo:${normalizedIds.join(",")}`;
+    if (deleteUndoInFlightRef.current.has(opKey)) return;
+    deleteUndoInFlightRef.current.add(opKey);
+
+    try {
+      const deleteIdSet = new Set(normalizedIds);
+      setGalleryImages((prev) => prev.filter((item) => !deleteIdSet.has(item.image.id)));
+      setSelectedGalleryIds((prev) => {
+        const next = new Set(prev);
+        normalizedIds.forEach((id) => next.delete(id));
+        return next;
+      });
+
+      try {
+        await api.bulkDeleteImages(normalizedIds);
+      } catch (e) {
+        console.error("Bulk re-delete failed, falling back to sequential", e);
+        for (const id of normalizedIds) {
+          try {
+            await api.deleteImage(id);
+          } catch (err) {
+            console.error("Failed to re-delete image", id, err);
+          }
+        }
+      }
+
+      await loadGalleryRef.current();
+      setGalleryRefresh((prev) => prev + 1);
+    } finally {
+      deleteUndoInFlightRef.current.delete(opKey);
+    }
+  }, [normalizeDeleteIds]);
+
   // Handle Deletion from Gallery or Auto-Discard
   const handleGalleryDelete = useCallback(async (ids: Set<number> | number, path?: string) => {
     const idsToDelete = typeof ids === 'number' ? new Set([ids]) : ids;
@@ -686,16 +750,32 @@ export default function PromptStudio() {
           }
         }
 
-        showUndoToast(
-          validIds.length === 1 ? "image deleted" : `${validIds.length} images deleted`,
-          validIds,
-          async (idsToRestore) => {
-            if (idsToRestore.length === 0) return;
-            await api.restoreImages(idsToRestore);
-            await loadGalleryRef.current();
-            setGalleryRefresh((prev) => prev + 1);
+        const deletedIdsSnapshot = [...validIds];
+        const toastUndo = async (idsToRestore: number[]) => {
+          try {
+            await undoDeletedImages(idsToRestore);
+          } catch (err) {
+            console.error("Failed to undo image delete", err);
+            alert("Failed to undo image delete.");
           }
+        };
+
+        showUndoToast(
+          deletedIdsSnapshot.length === 1 ? "image deleted" : `${deletedIdsSnapshot.length} images deleted`,
+          deletedIdsSnapshot,
+          toastUndo
         );
+
+        recordChange({
+          label: deletedIdsSnapshot.length === 1 ? "Deleted image" : `Deleted ${deletedIdsSnapshot.length} images`,
+          category: "structure",
+          undo: () => {
+            void toastUndo(deletedIdsSnapshot);
+          },
+          redo: () => {
+            void redoDeletedImages(deletedIdsSnapshot);
+          },
+        });
       }
 
       // If there was a path-based delete, refresh the gallery to remove the deleted item
@@ -715,7 +795,10 @@ export default function PromptStudio() {
     normalizePathForCompare,
     previewPath,
     projectGalleryImages,
+    recordChange,
+    redoDeletedImages,
     showUndoToast,
+    undoDeletedImages,
     viewerSource,
   ]);
 
@@ -1205,8 +1288,6 @@ export default function PromptStudio() {
       cancelled = true;
     };
   }, [selectedWorkflow, visibleSchema, setFormData, store, pendingLoadParams, loadCachedPipeParams, persistPipeParams, persistPromptStudioRehydrationSnapshot]);
-
-  const { registerStateChange } = useUndoRedo();
 
   const flushPendingPersist = useCallback(() => {
     const pending = pendingPersistRef.current;

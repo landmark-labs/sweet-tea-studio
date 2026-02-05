@@ -115,6 +115,12 @@ export function PromptAutocompleteTextarea({
 
     // Segregated undo: notify global system when text input is focused
     const { setTextInputFocused } = useUndoRedo();
+    useEffect(() => {
+        return () => {
+            // Ensure global undo doesn't stay in text-mode if this field unmounts while focused.
+            setTextInputFocused(false);
+        };
+    }, [setTextInputFocused]);
     const [autocompleteEnabled, setAutocompleteEnabled] = useState<boolean>(() => {
         if (typeof window === "undefined") return true;
         const raw = window.localStorage.getItem(AUTOCOMPLETE_STORAGE_KEY);
