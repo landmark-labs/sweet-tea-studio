@@ -23,6 +23,8 @@ import { MoveImagesDialog } from "@/components/MoveImagesDialog";
 import { buildMediaUrl, buildThumbnailUrl } from "@/features/gallery/utils";
 import { GalleryCardContent } from "@/features/gallery/components/GalleryCardContent";
 import { useMediaTrayStore } from "@/lib/stores/mediaTrayStore";
+import { useUndoToast } from "@/components/ui/undo-toast";
+import { useUndoRedo } from "@/lib/undoRedo";
 
 const MISSING_IMAGE_SRC =
     "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MDAiIGhlaWdodD0iNDAwIiB2aWV3Qm94PSIwIDAgNDAwIDQwMCI+PHJlY3Qgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsbD0iI2UyZThmMCIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjOTRhM2I4IiBmb250LWZhbWlseT0iQXJpYWwsIHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMjQiPk1pc3NpbmcgRmlsZTwvdGV4dD48L3N2Zz4=";
@@ -74,6 +76,10 @@ export default function Gallery() {
 
     const navigate = useNavigate();
     const addToMediaTray = useMediaTrayStore(useCallback((state) => state.addItems, []));
+    const { showUndoToast } = useUndoToast();
+    const { recordChange } = useUndoRedo();
+    const deleteUndoInFlightRef = useRef<Set<string>>(new Set());
+    const cleanupModeRef = useRef(cleanupMode);
 
     // Keep fullscreen index valid when items update
     useEffect(() => {
@@ -122,6 +128,10 @@ export default function Gallery() {
     useEffect(() => {
         selectedProjectIdRef.current = selectedProjectId;
     }, [selectedProjectId]);
+
+    useEffect(() => {
+        cleanupModeRef.current = cleanupMode;
+    }, [cleanupMode]);
 
     const loadGallery = useCallback(async (
         query?: string,
@@ -191,6 +201,94 @@ export default function Gallery() {
             }
         }
     }, []);
+
+    const normalizeDeleteIds = useCallback((ids: number[]) => {
+        return Array.from(new Set(ids.filter((id) => id > 0))).sort((a, b) => a - b);
+    }, []);
+
+    const reloadCurrentScope = useCallback(async (loadAll?: boolean) => {
+        await loadGallery(searchRef.current, selectedProjectIdRef.current, {
+            loadAll: loadAll ?? cleanupModeRef.current,
+            folder: selectedFolderRef.current,
+        });
+    }, [loadGallery]);
+
+    const undoDeletedImages = useCallback(async (idsToRestore: number[]) => {
+        const normalizedIds = normalizeDeleteIds(idsToRestore);
+        if (normalizedIds.length === 0) return;
+
+        const opKey = `undo:${normalizedIds.join(",")}`;
+        if (deleteUndoInFlightRef.current.has(opKey)) return;
+        deleteUndoInFlightRef.current.add(opKey);
+
+        try {
+            const restoreResult = await api.restoreImages(normalizedIds);
+            if (restoreResult.file_errors.length > 0) {
+                console.warn("Restore completed with file errors", restoreResult);
+            }
+            await reloadCurrentScope();
+        } finally {
+            deleteUndoInFlightRef.current.delete(opKey);
+        }
+    }, [normalizeDeleteIds, reloadCurrentScope]);
+
+    const redoDeletedImages = useCallback(async (idsToDelete: number[]) => {
+        const normalizedIds = normalizeDeleteIds(idsToDelete);
+        if (normalizedIds.length === 0) return;
+
+        const opKey = `redo:${normalizedIds.join(",")}`;
+        if (deleteUndoInFlightRef.current.has(opKey)) return;
+        deleteUndoInFlightRef.current.add(opKey);
+
+        try {
+            try {
+                await api.bulkDeleteImages(normalizedIds);
+            } catch (e) {
+                console.error("Bulk re-delete failed, falling back to sequential", e);
+                for (const id of normalizedIds) {
+                    try {
+                        await api.deleteImage(id);
+                    } catch (err) {
+                        console.error("Failed to re-delete image", id, err);
+                    }
+                }
+            }
+            await reloadCurrentScope();
+        } finally {
+            deleteUndoInFlightRef.current.delete(opKey);
+        }
+    }, [normalizeDeleteIds, reloadCurrentScope]);
+
+    const registerDeleteUndo = useCallback((deletedIds: number[]) => {
+        const normalizedIds = normalizeDeleteIds(deletedIds);
+        if (normalizedIds.length === 0) return;
+
+        const toastUndo = async (idsToRestore: number[]) => {
+            try {
+                await undoDeletedImages(idsToRestore);
+            } catch (err) {
+                console.error("Failed to undo gallery delete", err);
+                alert("Failed to undo image delete.");
+            }
+        };
+
+        showUndoToast(
+            normalizedIds.length === 1 ? "image deleted" : `${normalizedIds.length} images deleted`,
+            normalizedIds,
+            toastUndo
+        );
+
+        recordChange({
+            label: normalizedIds.length === 1 ? "Deleted image" : `Deleted ${normalizedIds.length} images`,
+            category: "structure",
+            undo: () => {
+                void toastUndo(normalizedIds);
+            },
+            redo: () => {
+                void redoDeletedImages(normalizedIds);
+            },
+        });
+    }, [normalizeDeleteIds, recordChange, redoDeletedImages, showUndoToast, undoDeletedImages]);
 
     const fetchProjects = useCallback(async () => {
         try {
@@ -362,11 +460,17 @@ export default function Gallery() {
         try {
             // Prefer single bulk call to avoid hammering the API and DB
             const res = await api.bulkDeleteImages(ids);
+            const deletedIds = ids.filter((id) => !res.not_found.includes(id));
 
             // Update UI for all deleted IDs
-            const deletedSet = new Set(ids);
+            const deletedSet = new Set(deletedIds);
             setItems(prev => prev.filter(i => !deletedSet.has(i.image.id)));
-            setSelectedIds(new Set());
+            setSelectedIds(prev => {
+                const next = new Set(prev);
+                deletedIds.forEach((id) => next.delete(id));
+                return next;
+            });
+            registerDeleteUndo(deletedIds);
 
             if (res.not_found.length || res.file_errors.length) {
                 alert(`Deleted ${res.deleted} images. Skipped ${res.not_found.length} missing. File errors: ${res.file_errors.length}.`);
@@ -374,19 +478,25 @@ export default function Gallery() {
         } catch (e) {
             console.error("Bulk delete failed, retrying sequentially", e);
             // Fallback: delete sequentially to reduce concurrent load
-            let failed = 0;
+            const failedIds: number[] = [];
             for (const id of ids) {
                 try {
                     await api.deleteImage(id);
                 } catch {
-                    failed += 1;
+                    failedIds.push(id);
                 }
             }
-            const deletedSet = new Set(ids);
+            const succeededIds = ids.filter((id) => !failedIds.includes(id));
+            const deletedSet = new Set(succeededIds);
             setItems(prev => prev.filter(i => !deletedSet.has(i.image.id)));
-            setSelectedIds(new Set());
+            setSelectedIds(prev => {
+                const next = new Set(prev);
+                succeededIds.forEach((id) => next.delete(id));
+                return next;
+            });
+            registerDeleteUndo(succeededIds);
 
-            if (failed > 0) alert(`Failed to delete ${failed} images`);
+            if (failedIds.length > 0) alert(`Failed to delete ${failedIds.length} images`);
         }
     };
 
@@ -405,6 +515,7 @@ export default function Gallery() {
 
     const handleCleanupPurge = async () => {
         const deleteCandidates = items.filter(item => !selectedIds.has(item.image.id));
+        const deleteCandidateIds = deleteCandidates.map((item) => item.image.id);
         const deleteCount = deleteCandidates.length;
         const keepCount = selectedIds.size;
         const confirmed = confirm(`Clean up the gallery by deleting ${deleteCount} images and keeping ${keepCount}?`);
@@ -417,6 +528,10 @@ export default function Gallery() {
                 folder: selectedFolder,
                 keepImageIds: keepIds,
             });
+            const deletedIds = (result.deleted_ids && result.deleted_ids.length > 0)
+                ? result.deleted_ids
+                : deleteCandidateIds;
+            registerDeleteUndo(deletedIds);
 
             setCleanupMode(false);
             setSelectedIds(new Set());
@@ -460,6 +575,7 @@ export default function Gallery() {
             // Calculate new items
             const newItems = items.filter((item) => item.image.id !== id);
             setItems(newItems);
+            registerDeleteUndo([id]);
 
             // Update selection
             setSelectedIds((prev) => {

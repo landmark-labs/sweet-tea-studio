@@ -1102,65 +1102,33 @@ def cleanup_images(req: CleanupRequest, session: Session = Depends(get_session))
         if keep_set:
             images_to_delete = [img for img in images_to_delete if img.id not in keep_set]
 
-    count = 0
-    deleted_files = 0
-    file_errors: List[int] = []
-    now = datetime.utcnow()
-    for img in images_to_delete:
-        if not img or not img.id:
-            continue
-
-        file_deleted_or_missing = False
-        if img.path and isinstance(img.path, str) and os.path.exists(img.path):
-            try:
-                _purge_thumbnail_cache_for_path(img.path)
-                os.remove(img.path)
-                deleted_files += 1
-                file_deleted_or_missing = True
-
-                # Also delete associated .json metadata file if it exists
-                json_path = os.path.splitext(img.path)[0] + ".json"
-                if os.path.exists(json_path):
-                    os.remove(json_path)
-            except OSError:
-                # If we can't delete the file, don't soft-delete the DB record; otherwise
-                # read_gallery's auto-resync may revive it on refresh.
-                logger.exception("Failed to delete file", extra={"path": img.path, "image_id": img.id})
-                try:
-                    if os.path.exists(img.path):
-                        file_errors.append(int(img.id))
-                        continue
-                    file_deleted_or_missing = True
-                except Exception:
-                    file_errors.append(int(img.id))
-                    continue
-        else:
-            # File already missing; keep DB consistent by soft-deleting the record.
-            file_deleted_or_missing = True
-
-        if not file_deleted_or_missing:
-            continue
-
-        # Soft delete: set flag instead of removing from DB
-        img.is_deleted = True
-        img.deleted_at = now
-        img.file_exists = False
-        session.add(img)
-        count += 1
+    image_ids_to_delete = [int(img.id) for img in images_to_delete if img and img.id is not None]
+    if not image_ids_to_delete:
+        return {
+            "status": "cleaned",
+            "count": 0,
+            "files_deleted": 0,
+            "file_errors": [],
+            "soft_delete": True,
+            "deleted_ids": [],
+        }
 
     try:
-        session.commit()
+        bulk_result = _bulk_soft_delete(image_ids_to_delete, session)
     except SQLAlchemyError:
-        session.rollback()
-        logger.exception("Failed to commit cleanup transaction")
+        logger.exception("Failed to cleanup gallery via bulk soft delete")
         raise HTTPException(status_code=500, detail="Failed to cleanup gallery")
+
+    deleted_ids = [img_id for img_id in image_ids_to_delete if img_id not in bulk_result.not_found]
+    deleted_files = max(bulk_result.deleted - len(bulk_result.file_errors), 0)
 
     return {
         "status": "cleaned",
-        "count": count,
+        "count": bulk_result.deleted,
         "files_deleted": deleted_files,
-        "file_errors": file_errors,
+        "file_errors": bulk_result.file_errors,
         "soft_delete": True,
+        "deleted_ids": deleted_ids,
     }
 
 

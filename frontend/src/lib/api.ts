@@ -572,7 +572,7 @@ export const api = {
 
     cleanupGallery: async (
         options?: { jobId?: number; projectId?: number | null; folder?: string | null; keepImageIds?: number[] }
-    ): Promise<{ status: string; count: number; files_deleted: number }> => {
+    ): Promise<{ status: string; count: number; files_deleted: number; file_errors: number[]; soft_delete: boolean; deleted_ids: number[] }> => {
         const res = await fetch(`${API_BASE}/gallery/cleanup`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
