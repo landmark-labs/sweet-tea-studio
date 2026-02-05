@@ -248,6 +248,20 @@ def _augment_project_stats_with_path_matches(
     return stats
 
 
+def _collect_project_image_stats(
+    session: Session,
+    projects: List[Project],
+) -> dict[int, dict[str, any]]:
+    if not projects:
+        return {}
+    project_ids = [p.id for p in projects if p.id is not None]
+    if not project_ids:
+        return {}
+    stats = _compute_project_stats_sql(session, project_ids)
+    stats = _augment_project_stats_with_path_matches(session, projects, stats)
+    return stats
+
+
 def refresh_project_stats(session: Session, project_id: int) -> None:
     """
     Refresh cached image stats for a single project.
