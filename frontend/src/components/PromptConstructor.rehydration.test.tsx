@@ -1,5 +1,5 @@
 
-import { render, waitFor, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { Provider as JotaiProvider } from "jotai";
 import type { Dispatch, PropsWithChildren, SetStateAction } from "react";
@@ -47,7 +47,7 @@ describe("PromptConstructor stale snippet rehydration", () => {
         // Here we test the "deleted" case as it's the most extreme "stale" case.
         const snippets: PromptItem[] = [];
 
-        const { container } = render(
+        render(
             <PromptConstructor
                 schema={schema}
                 onUpdate={onUpdate}
@@ -70,12 +70,8 @@ describe("PromptConstructor stale snippet rehydration", () => {
         await new Promise((resolve) => setTimeout(resolve, 50));
 
         // Expectation: The component should render a BLOCK, not just text.
-        // We look for the label "Stale Snippet" which only exists in the block definition.
-
-        // NOTE: In the broken state, the reconciliation logic will see "foo" in text, 
-        // see empty library, and overwrite the rehydrated block with a Text item "foo".
-        // So we expect this to FAIL until fixed.
-        const block = screen.queryByText("Stale Snippet");
+        // Frozen blocks render with a "*" prefix in the visible label.
+        const block = screen.queryByText(/\*?Stale Snippet/);
         expect(block).toBeInTheDocument();
     });
 });
