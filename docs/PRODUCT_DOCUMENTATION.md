@@ -118,7 +118,7 @@ Sweet Tea Studio is a local-first web interface for ComfyUI that replaces node g
 **User experience**
 - Dynamic, schema-driven forms for each pipe.
 - Prompt constructor with reorderable blocks and tag autocomplete.
-- Live job progress, previews, and running gallery.
+- Live job progress, previews, and generation feed.
 
 **Key UI files**
 - `frontend/src/features/prompt-studio/PromptStudioPage.tsx`
@@ -130,7 +130,6 @@ Sweet Tea Studio is a local-first web interface for ComfyUI that replaces node g
 - `frontend/src/components/ImageUpload.tsx`
 - `frontend/src/components/InpaintEditor.tsx`
 - `frontend/src/components/GenerationFeed.tsx`
-- `frontend/src/components/RunningGallery.tsx`
 - `frontend/src/components/ImageViewer.tsx`
 - `frontend/src/components/ProjectGallery.tsx`
 - `frontend/src/lib/GenerationContext.tsx`
@@ -174,7 +173,7 @@ Sweet Tea Studio is a local-first web interface for ComfyUI that replaces node g
 **Key UI files**
 - `frontend/src/pages/Projects.tsx`
 - `frontend/src/components/ProjectSidebar.tsx`
-- `frontend/src/components/CollectionSidebar.tsx` (legacy)
+- `frontend/src/components/CanvasSidebar.tsx`
 
 **Backend endpoints and services**
 - `backend/app/api/endpoints/projects.py`
@@ -361,7 +360,7 @@ All endpoints are under `/api/v1`.
 
 ### 8.2 Key Components
 - Dynamic forms and prompts: `frontend/src/components/DynamicForm.tsx`, `frontend/src/components/PromptConstructor.tsx`
-- Gallery and viewer: `frontend/src/components/RunningGallery.tsx`, `frontend/src/components/ImageViewer.tsx`
+- Gallery and viewer: `frontend/src/components/ProjectGallery.tsx`, `frontend/src/components/ImageViewer.tsx`
 - Workflow graph: `frontend/src/components/WorkflowGraphViewer.tsx`
 - ComfyUI control: `frontend/src/components/ComfyUIControl.tsx`
 - Status and performance: `frontend/src/components/StatusBar.tsx`, `frontend/src/components/PerformanceHUD.tsx`
@@ -370,11 +369,11 @@ All endpoints are under `/api/v1`.
 - API client: `frontend/src/lib/api.ts`
 - Types: `frontend/src/lib/types.ts`
 - Schema utilities: `frontend/src/lib/schema.ts`
-- Telemetry helpers: `frontend/src/lib/telemetry.ts`
+- Client diagnostics: `frontend/src/lib/clientDiagnostics.ts`
 - UI labels: `frontend/src/ui/labels.ts`
 
 ### 8.4 UI Component Library
-Shadcn-based components in `frontend/src/components/ui/`, including `accordion.tsx`, `dialog.tsx`, `tabs.tsx`, `tooltip.tsx`, and others.
+Shadcn-based components in `frontend/src/components/ui/`, including `dialog.tsx`, `select.tsx`, `tooltip.tsx`, and others.
 
 ## 9. Backend Reference
 ### 9.1 Core Modules

@@ -96,7 +96,6 @@ The main page for creating and running image generations.
 | Feature | Description | Files |
 |---------|-------------|-------|
 | Generation Feed | Real-time results panel | `frontend/src/components/GenerationFeed.tsx` |
-| Running Gallery | Floating panel with recent generations | `frontend/src/components/RunningGallery.tsx` |
 | Image Viewer | Full-screen image preview with metadata | `frontend/src/components/ImageViewer.tsx` |
 | Project Gallery | Project-specific image grid | `frontend/src/components/ProjectGallery.tsx` |
 
@@ -182,7 +181,7 @@ The main page for creating and running image generations.
 |---------|-------------|-------|
 | Project Sidebar | Collapsible project/folder tree | `frontend/src/components/ProjectSidebar.tsx` |
 | Project Selection | Global project context | `frontend/src/lib/GenerationContext.tsx` |
-| Collection Sidebar | Legacy collection navigation | `frontend/src/components/CollectionSidebar.tsx` |
+| Canvas Sidebar | Canvas history and context panel | `frontend/src/components/CanvasSidebar.tsx` |
 
 ### 4.4 Job Association
 
@@ -534,13 +533,10 @@ The main page for creating and running image generations.
 
 | Component | File |
 |-----------|------|
-| Accordion | `frontend/src/components/ui/accordion.tsx` |
 | Alert | `frontend/src/components/ui/alert.tsx` |
 | Badge | `frontend/src/components/ui/badge.tsx` |
 | Button | `frontend/src/components/ui/button.tsx` |
 | Card | `frontend/src/components/ui/card.tsx` |
-| Checkbox | `frontend/src/components/ui/checkbox.tsx` |
-| Command | `frontend/src/components/ui/command.tsx` |
 | Context Menu | `frontend/src/components/ui/context-menu.tsx` |
 | Dialog | `frontend/src/components/ui/dialog.tsx` |
 | Draggable Panel | `frontend/src/components/ui/draggable-panel.tsx` |
@@ -555,7 +551,6 @@ The main page for creating and running image generations.
 | Slider | `frontend/src/components/ui/slider.tsx` |
 | Switch | `frontend/src/components/ui/switch.tsx` |
 | Table | `frontend/src/components/ui/table.tsx` |
-| Tabs | `frontend/src/components/ui/tabs.tsx` |
 | Textarea | `frontend/src/components/ui/textarea.tsx` |
 | Tooltip | `frontend/src/components/ui/tooltip.tsx` |
 
@@ -568,7 +563,7 @@ The main page for creating and running image generations.
 | `frontend/src/lib/types.ts` | Consolidated TypeScript type definitions |
 | `frontend/src/lib/api.ts` | HTTP API client with all endpoints |
 | `frontend/src/lib/utils.ts` | Utility functions (cn, etc.) |
-| `frontend/src/lib/telemetry.ts` | Analytics/telemetry helpers |
+| `frontend/src/lib/clientDiagnostics.ts` | Client diagnostics buffering and flush logic |
 | `frontend/src/lib/schema.ts` | Schema manipulation utilities |
 | `frontend/src/ui/labels.ts` | UI label constants |
 
