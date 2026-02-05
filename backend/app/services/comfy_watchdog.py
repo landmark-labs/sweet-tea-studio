@@ -81,18 +81,21 @@ class ComfyWatchdog:
             except asyncio.TimeoutError:
                 continue
 
-    async def _poll_once(self):
+    async def poll_now(self, force: bool = True):
+        await self._poll_once(force=force)
+
+    async def _poll_once(self, force: bool = False):
         now = time.monotonic()
         with Session(db_engine) as session:
             engines = session.exec(select(Engine).where(Engine.is_active == True)).all()
 
         for engine in engines:
             state = self.state.get(engine.id)
-            if state and not state.healthy and now < state.next_check:
+            if state and not state.healthy and now < state.next_check and not force:
                 # Respect backoff when down
                 continue
 
-            if state and state.healthy and (now - state.last_checked) < self.poll_interval:
+            if state and state.healthy and (now - state.last_checked) < self.poll_interval and not force:
                 continue
 
             await asyncio.to_thread(self._check_engine, engine)

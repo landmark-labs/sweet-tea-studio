@@ -104,7 +104,7 @@ function SortableTrayCell({
           <img
             src={thumbUrl}
             alt={item.filename}
-            className={cn("w-full h-full object-cover", reorderMode ? "opacity-95" : "")}
+            className={cn("w-full h-full object-contain bg-black/50", reorderMode ? "opacity-95" : "")}
             loading="lazy"
             decoding="async"
           />

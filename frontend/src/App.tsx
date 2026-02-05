@@ -1,4 +1,4 @@
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, useEffect } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Layout from "./components/Layout";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -6,15 +6,55 @@ import { GenerationProvider } from "./lib/GenerationContext";
 import { UndoToastProvider } from "./components/ui/undo-toast";
 import { ThemeProvider } from "./lib/ThemeContext";
 
-const PromptStudio = lazy(() => import("./features/prompt-studio"));
-const Gallery = lazy(() => import("./features/gallery"));
-const PromptLibrary = lazy(() => import("./pages/PromptLibrary"));
-const WorkflowLibrary = lazy(() => import("./pages/WorkflowLibrary")); // Will be renamed to PipesLibrary
-const Models = lazy(() => import("./pages/Models"));
-const Projects = lazy(() => import("./pages/Projects"));
-const Settings = lazy(() => import("./features/settings"));
+const loadPromptStudio = () => import("./features/prompt-studio");
+const loadGallery = () => import("./features/gallery");
+const loadPromptLibrary = () => import("./pages/PromptLibrary");
+const loadWorkflowLibrary = () => import("./pages/WorkflowLibrary");
+const loadModels = () => import("./pages/Models");
+const loadProjects = () => import("./pages/Projects");
+const loadSettings = () => import("./features/settings");
+
+const PromptStudio = lazy(loadPromptStudio);
+const Gallery = lazy(loadGallery);
+const PromptLibrary = lazy(loadPromptLibrary);
+const WorkflowLibrary = lazy(loadWorkflowLibrary); // Will be renamed to PipesLibrary
+const Models = lazy(loadModels);
+const Projects = lazy(loadProjects);
+const Settings = lazy(loadSettings);
 
 function App() {
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const warmRoutes = () => {
+      void Promise.allSettled([
+        loadProjects(),
+        loadWorkflowLibrary(),
+        loadGallery(),
+        loadPromptLibrary(),
+        loadModels(),
+        loadSettings(),
+      ]);
+    };
+
+    const windowWithIdle = window as Window & {
+      requestIdleCallback?: (cb: IdleRequestCallback, options?: IdleRequestOptions) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+
+    if (typeof windowWithIdle.requestIdleCallback === "function") {
+      const idleId = windowWithIdle.requestIdleCallback(() => warmRoutes(), { timeout: 1200 });
+      return () => {
+        if (typeof windowWithIdle.cancelIdleCallback === "function") {
+          windowWithIdle.cancelIdleCallback(idleId);
+        }
+      };
+    }
+
+    const timeoutId = window.setTimeout(() => warmRoutes(), 250);
+    return () => window.clearTimeout(timeoutId);
+  }, []);
+
   return (
     <ThemeProvider>
       <GenerationProvider>

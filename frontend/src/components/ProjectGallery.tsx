@@ -111,7 +111,7 @@ const GalleryItemCell = React.memo(function GalleryItemCell({
                     <video
                         src={mediaUrl}
                         poster={thumbnailUrl}
-                        className="w-full h-full object-cover"
+                        className="w-full h-full object-contain bg-black/50"
                         preload="metadata"
                         muted
                         playsInline
@@ -122,7 +122,7 @@ const GalleryItemCell = React.memo(function GalleryItemCell({
                     <img
                         src={thumbnailUrl}
                         alt={image.filename}
-                        className="w-full h-full object-cover"
+                        className="w-full h-full object-contain bg-black/50"
                         loading="lazy"
                         decoding="async"
                     />
@@ -131,7 +131,7 @@ const GalleryItemCell = React.memo(function GalleryItemCell({
                 <img
                     src={thumbnailUrl}
                     alt={image.filename}
-                    className="w-full h-full object-cover"
+                    className="w-full h-full object-contain bg-black/50"
                     loading="lazy"
                     decoding="async"
                 />

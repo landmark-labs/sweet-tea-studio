@@ -111,6 +111,7 @@ export function PromptAutocompleteTextarea({
 }: PromptAutocompleteTextareaProps) {
     const textareaRef = useRef<HTMLTextAreaElement | null>(null);
     const backdropRef = useRef<HTMLDivElement | null>(null);
+    const backdropSyncRafRef = useRef<number | null>(null);
 
     // Segregated undo: notify global system when text input is focused
     const { setTextInputFocused } = useUndoRedo();
@@ -215,12 +216,31 @@ export function PromptAutocompleteTextarea({
         setCursor((prev) => (prev === next ? prev : next));
     };
 
+    const syncBackdropScroll = useCallback((textarea?: HTMLTextAreaElement | null) => {
+        const source = textarea ?? textareaRef.current;
+        const backdrop = backdropRef.current;
+        if (!source || !backdrop) return;
+        if (backdrop.scrollTop !== source.scrollTop) {
+            backdrop.scrollTop = source.scrollTop;
+        }
+        if (backdrop.scrollLeft !== source.scrollLeft) {
+            backdrop.scrollLeft = source.scrollLeft;
+        }
+    }, []);
+
+    const scheduleBackdropScrollSync = useCallback((textarea?: HTMLTextAreaElement | null) => {
+        if (backdropSyncRafRef.current !== null) {
+            cancelAnimationFrame(backdropSyncRafRef.current);
+        }
+        backdropSyncRafRef.current = requestAnimationFrame(() => {
+            backdropSyncRafRef.current = null;
+            syncBackdropScroll(textarea);
+        });
+    }, [syncBackdropScroll]);
+
     // Scroll Sync
     const handleScroll = (e: React.UIEvent<HTMLTextAreaElement>) => {
-        if (backdropRef.current) {
-            backdropRef.current.scrollTop = e.currentTarget.scrollTop;
-            backdropRef.current.scrollLeft = e.currentTarget.scrollLeft;
-        }
+        syncBackdropScroll(e.currentTarget);
     };
 
     // Restore cursor position after external value changes (e.g., when delimiters are auto-inserted)
@@ -231,6 +251,15 @@ export function PromptAutocompleteTextarea({
             textareaRef.current.setSelectionRange(pos, pos);
         }
     }, [localValue]);
+
+    useEffect(() => {
+        return () => {
+            if (backdropSyncRafRef.current !== null) {
+                cancelAnimationFrame(backdropSyncRafRef.current);
+                backdropSyncRafRef.current = null;
+            }
+        };
+    }, []);
 
     const currentToken = useMemo(() => {
         const before = localValue.slice(0, cursor);
@@ -672,6 +701,12 @@ export function PromptAutocompleteTextarea({
         if (!showHighlightOverlay || !highlightState?.matches) return false;
         return highlightState.matches.some((m) => cursor >= m.start && cursor <= m.end);
     }, [showHighlightOverlay, highlightState, cursor]);
+
+    // Keep highlight overlay scroll/viewport aligned even when textarea scroll changes without onScroll events
+    useLayoutEffect(() => {
+        if (!showHighlightOverlay) return;
+        scheduleBackdropScrollSync(textareaRef.current);
+    }, [showHighlightOverlay, localValue, cursor, isFocused, scheduleBackdropScrollSync]);
 
     const getTextareaIndexFromPoint = useCallback((
         textarea: HTMLTextAreaElement,

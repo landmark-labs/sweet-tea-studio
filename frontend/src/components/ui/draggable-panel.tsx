@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from "react";
+import React, { useRef, useState, useEffect, useCallback } from "react";
 import { cn } from "@/lib/utils";
 
 interface DraggablePanelProps {
@@ -9,7 +9,7 @@ interface DraggablePanelProps {
 }
 
 export function DraggablePanel({ children, className, defaultPosition = { x: 0, y: 0 }, persistenceKey }: DraggablePanelProps) {
-    const [position, setPosition] = useState(() => {
+    const [position, setPosition] = useState<{ x: number; y: number }>(() => {
         if (persistenceKey) {
             try {
                 const saved = localStorage.getItem(persistenceKey);
@@ -24,10 +24,28 @@ export function DraggablePanel({ children, className, defaultPosition = { x: 0, 
     const [isDragging, setIsDragging] = useState(false);
     const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
     const nodeRef = useRef<HTMLDivElement>(null);
+    const clampRafRef = useRef<number | null>(null);
 
     // Keep track of latest position for event handlers
     const posRef = useRef(position);
     useEffect(() => { posRef.current = position; }, [position]);
+
+    const clampToViewport = useCallback((candidate: { x: number; y: number }) => {
+        const node = nodeRef.current;
+        if (!node) return candidate;
+
+        const rect = node.getBoundingClientRect();
+        const panelWidth = rect.width || node.offsetWidth || 0;
+        const panelHeight = rect.height || node.offsetHeight || 0;
+
+        const maxX = Math.max(0, window.innerWidth - panelWidth);
+        const maxY = Math.max(0, window.innerHeight - panelHeight);
+
+        return {
+            x: Math.max(0, Math.min(candidate.x, maxX)),
+            y: Math.max(0, Math.min(candidate.y, maxY)),
+        };
+    }, []);
 
     const handleMouseDown = (e: React.MouseEvent) => {
         // Only allow dragging from direct children or specific handles if needed
@@ -54,21 +72,7 @@ export function DraggablePanel({ children, className, defaultPosition = { x: 0, 
             let newX = e.clientX - dragStart.x;
             let newY = e.clientY - dragStart.y;
 
-            // Get panel dimensions for boundary calculation
-            if (nodeRef.current) {
-                const rect = nodeRef.current.getBoundingClientRect();
-                const panelWidth = rect.width;
-                const panelHeight = rect.height;
-
-                // Constrain to viewport boundaries
-                const maxX = window.innerWidth - panelWidth;
-                const maxY = window.innerHeight - panelHeight;
-
-                newX = Math.max(0, Math.min(newX, maxX));
-                newY = Math.max(0, Math.min(newY, maxY));
-            }
-
-            setPosition({ x: newX, y: newY });
+            setPosition(clampToViewport({ x: newX, y: newY }));
         };
 
         const handleMouseUp = () => {
@@ -89,7 +93,46 @@ export function DraggablePanel({ children, className, defaultPosition = { x: 0, 
             document.removeEventListener('mousemove', handleMouseMove);
             document.removeEventListener('mouseup', handleMouseUp);
         };
-    }, [isDragging, dragStart, persistenceKey]);
+    }, [clampToViewport, isDragging, dragStart, persistenceKey]);
+
+    useEffect(() => {
+        const scheduleClamp = () => {
+            if (clampRafRef.current !== null) {
+                cancelAnimationFrame(clampRafRef.current);
+            }
+            clampRafRef.current = requestAnimationFrame(() => {
+                clampRafRef.current = null;
+                setPosition((prev) => {
+                    const next = clampToViewport(prev);
+                    if (next.x === prev.x && next.y === prev.y) return prev;
+                    if (persistenceKey) {
+                        localStorage.setItem(persistenceKey, JSON.stringify(next));
+                    }
+                    return next;
+                });
+            });
+        };
+
+        scheduleClamp();
+        window.addEventListener("resize", scheduleClamp, { passive: true });
+
+        const node = nodeRef.current;
+        const resizeObserver = (typeof ResizeObserver !== "undefined" && node)
+            ? new ResizeObserver(() => scheduleClamp())
+            : null;
+        if (resizeObserver && node) {
+            resizeObserver.observe(node);
+        }
+
+        return () => {
+            window.removeEventListener("resize", scheduleClamp);
+            resizeObserver?.disconnect();
+            if (clampRafRef.current !== null) {
+                cancelAnimationFrame(clampRafRef.current);
+                clampRafRef.current = null;
+            }
+        };
+    }, [clampToViewport, persistenceKey]);
 
     return (
         <div

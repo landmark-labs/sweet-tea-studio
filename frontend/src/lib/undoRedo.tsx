@@ -95,9 +95,17 @@ export function UndoRedoProvider({ children }: { children: ReactNode }) {
       const isUndo = (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z" && !event.shiftKey;
       const isRedo = (event.ctrlKey || event.metaKey) && (event.key.toLowerCase() === "y" || (event.shiftKey && event.key.toLowerCase() === "z"));
 
+      const activeEl = document.activeElement as HTMLElement | null;
+      const tagName = activeEl?.tagName?.toLowerCase();
+      const isNativeEditable =
+        tagName === "input" ||
+        tagName === "textarea" ||
+        Boolean(activeEl?.isContentEditable) ||
+        activeEl?.getAttribute("contenteditable") === "true";
+
       // Segregated undo: when focused on a text input/textarea, let browser handle it
       // This allows native text undo to work without interference
-      if (textInputFocusedRef.current) {
+      if (textInputFocusedRef.current || isNativeEditable) {
         // Don't intercept - let browser native undo/redo work
         return;
       }

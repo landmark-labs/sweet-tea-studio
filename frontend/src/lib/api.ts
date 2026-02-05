@@ -164,7 +164,7 @@ export const api = {
         return res.json();
     },
 
-    getComfyLogs: async (lines = 200): Promise<{ logs: string }> => {
+    getComfyLogs: async (lines = 500): Promise<{ logs: string }> => {
         const res = await fetch(`${API_BASE}/monitoring/comfyui/logs?lines=${lines}`);
         if (!res.ok) throw new Error("Failed to fetch logs");
         return res.json();
@@ -214,9 +214,26 @@ export const api = {
     },
 
     // --- Workflows ---
-    getWorkflows: async (): Promise<WorkflowTemplate[]> => {
-        const res = await fetch(`${API_BASE}/workflows/`);
+    getWorkflows: async (includeArchived = false): Promise<WorkflowTemplate[]> => {
+        const params = includeArchived ? "?include_archived=true" : "";
+        const res = await fetch(`${API_BASE}/workflows/${params}`);
         if (!res.ok) throw new Error("Failed to fetch workflows");
+        return res.json();
+    },
+
+    archiveWorkflow: async (workflowId: number): Promise<WorkflowTemplate> => {
+        const res = await fetch(`${API_BASE}/workflows/${workflowId}/archive`, {
+            method: "POST",
+        });
+        if (!res.ok) throw new Error("Failed to archive workflow");
+        return res.json();
+    },
+
+    unarchiveWorkflow: async (workflowId: number): Promise<WorkflowTemplate> => {
+        const res = await fetch(`${API_BASE}/workflows/${workflowId}/unarchive`, {
+            method: "POST",
+        });
+        if (!res.ok) throw new Error("Failed to unarchive workflow");
         return res.json();
     },
 
@@ -494,6 +511,16 @@ export const api = {
             body: JSON.stringify({ image_ids: imageIds }),
         });
         if (!res.ok) throw new Error("Failed to delete images");
+        return res.json();
+    },
+
+    restoreImages: async (imageIds: number[]): Promise<{ restored: number; not_found: number[]; file_errors: number[] }> => {
+        const res = await fetch(`${API_BASE}/gallery/restore`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ image_ids: imageIds }),
+        });
+        if (!res.ok) throw new Error("Failed to restore images");
         return res.json();
     },
 

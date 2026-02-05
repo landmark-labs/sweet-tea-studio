@@ -103,6 +103,7 @@ export interface WorkflowTemplate {
     id: number;
     name: string;
     description?: string | null;
+    archived_at?: string | null;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     graph_json: any;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

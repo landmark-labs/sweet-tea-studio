@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Optional, Dict, Any, List
 from sqlmodel import Field, SQLModel, JSON
 
@@ -8,6 +9,7 @@ class WorkflowTemplateBase(SQLModel):
     input_schema: Dict[str, Any] = Field(sa_type=JSON)
     node_mapping: Optional[Dict[str, Any]] = Field(default=None, sa_type=JSON)
     display_order: int = Field(default=0)
+    archived_at: Optional[datetime] = Field(default=None)
 
 class WorkflowTemplate(WorkflowTemplateBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)

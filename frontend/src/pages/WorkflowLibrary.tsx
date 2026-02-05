@@ -12,7 +12,7 @@ import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { FileJson, AlertTriangle, GitBranch, Edit2, Trash2, Save, RotateCw, CheckCircle2, XCircle, GripVertical, ChevronDown, ChevronUp } from "lucide-react";
+import { FileJson, AlertTriangle, GitBranch, Edit2, Trash2, Save, RotateCw, CheckCircle2, XCircle, GripVertical, ChevronDown, ChevronUp, Archive } from "lucide-react";
 import { api, WorkflowTemplate, getApiBase } from "@/lib/api";
 import { WorkflowGraphViewer } from "@/components/WorkflowGraphViewer";
 import { cn } from "@/lib/utils";
@@ -351,6 +351,8 @@ interface SortableWorkflowCardProps {
     onExport: (w: WorkflowTemplate) => void;
     onEdit: (w: WorkflowTemplate) => void;
     onDelete: (id: number) => void;
+    onArchive: (id: number) => void;
+    onUnarchive: (id: number) => void;
     onStartInstall: (nodes: string[]) => void;
 }
 
@@ -361,8 +363,11 @@ const SortableWorkflowCard = ({
     onExport,
     onEdit,
     onDelete,
+    onArchive,
+    onUnarchive,
     onStartInstall
 }: SortableWorkflowCardProps) => {
+    const isArchived = Boolean(w.archived_at);
     const {
         attributes,
         listeners,
@@ -370,7 +375,7 @@ const SortableWorkflowCard = ({
         transform,
         transition,
         isDragging
-    } = useSortable({ id: w.id });
+    } = useSortable({ id: w.id, disabled: isArchived });
 
     const style = {
         transform: CSS.Transform.toString(transform),
@@ -385,19 +390,22 @@ const SortableWorkflowCard = ({
             style={style}
             className={cn(
                 "relative group hover:shadow-lg transition-shadow",
+                isArchived && "opacity-65 border-dashed",
                 isDragging && "ring-2 ring-blue-300 shadow-xl"
             )}
             title={w.description || undefined}
         >
             {/* Drag Handle */}
-            <div
-                {...attributes}
-                {...listeners}
-                className="absolute top-2 left-2 p-1.5 rounded bg-muted/40 hover:bg-muted/60 cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground transition-colors z-10"
-                title="Drag to reorder"
-            >
-                <GripVertical className="w-4 h-4" />
-            </div>
+            {!isArchived && (
+                <div
+                    {...attributes}
+                    {...listeners}
+                    className="absolute top-2 left-2 p-1.5 rounded bg-muted/40 hover:bg-muted/60 cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground transition-colors z-10"
+                    title="Drag to reorder"
+                >
+                    <GripVertical className="w-4 h-4" />
+                </div>
+            )}
 
             <CardHeader className="pl-10">
                 <div className="flex justify-between items-start">
@@ -439,6 +447,15 @@ const SortableWorkflowCard = ({
                 <Button variant="ghost" size="sm" onClick={() => onEdit(w)}>
                     <Edit2 className="w-4 h-4 mr-1" /> edit
                 </Button>
+                {isArchived ? (
+                    <Button variant="ghost" size="sm" onClick={() => onUnarchive(w.id)} title="unarchive pipe">
+                        <Archive className="w-4 h-4 mr-1 rotate-180" /> unarchive
+                    </Button>
+                ) : (
+                    <Button variant="ghost" size="sm" onClick={() => onArchive(w.id)} title="archive pipe">
+                        <Archive className="w-4 h-4 mr-1" /> archive
+                    </Button>
+                )}
                 <Button variant="ghost" size="sm" className="hover:text-red-500" onClick={() => onDelete(w.id)}>
                     <Trash2 className="w-4 h-4" />
                 </Button>
@@ -450,6 +467,7 @@ const SortableWorkflowCard = ({
 
 export default function WorkflowLibrary() {
     const [workflows, setWorkflows] = useState<WorkflowTemplate[]>([]);
+    const [showArchived, setShowArchived] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [importFile, setImportFile] = useState<File | null>(null);
     const [importName, setImportName] = useState("");
@@ -482,6 +500,7 @@ export default function WorkflowLibrary() {
     const [selectedWorkflowForGraph, setSelectedWorkflowForGraph] = useState<WorkflowTemplate | null>(null);
 
     // Composition State
+    const SHOW_PIPE_COMPOSE = false;
     const [composeOpen, setComposeOpen] = useState(false);
     const [composeSource, setComposeSource] = useState<string>("");
     const [composeTarget, setComposeTarget] = useState<string>("");
@@ -540,7 +559,7 @@ export default function WorkflowLibrary() {
 
     const loadWorkflows = async () => {
         try {
-            const data = await api.getWorkflows();
+            const data = await api.getWorkflows(showArchived);
             setWorkflows(data);
         } catch (err) {
             setError("Failed to load workflows");
@@ -549,13 +568,14 @@ export default function WorkflowLibrary() {
 
     useEffect(() => {
         // If context already has workflows, use them initially
-        if (contextWorkflows && contextWorkflows.length > 0) {
+        if (!showArchived && contextWorkflows && contextWorkflows.length > 0) {
             setWorkflows(contextWorkflows);
+            void loadWorkflows();
         } else {
-            loadWorkflows();
+            void loadWorkflows();
         }
         return () => stopPolling();
-    }, [contextWorkflows]);
+    }, [contextWorkflows, showArchived]);
 
 
 
@@ -651,6 +671,27 @@ export default function WorkflowLibrary() {
             setWorkflows(workflows.filter(w => w.id !== id));
         } catch (err) {
             setError("Failed to delete");
+        }
+    };
+
+    const handleArchive = async (id: number) => {
+        if (!confirm("Archive this pipe?")) return;
+        try {
+            await api.archiveWorkflow(id);
+            await loadWorkflows();
+            await generation?.refreshWorkflows?.();
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "Failed to archive pipe");
+        }
+    };
+
+    const handleUnarchive = async (id: number) => {
+        try {
+            await api.unarchiveWorkflow(id);
+            await loadWorkflows();
+            await generation?.refreshWorkflows?.();
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "Failed to unarchive pipe");
         }
     };
 
@@ -1076,6 +1117,10 @@ export default function WorkflowLibrary() {
         const { active, over } = event;
         if (!over || active.id === over.id) return;
 
+        const activeWorkflow = workflows.find(w => w.id === active.id);
+        const overWorkflow = workflows.find(w => w.id === over.id);
+        if (activeWorkflow?.archived_at || overWorkflow?.archived_at) return;
+
         const oldIndex = workflows.findIndex(w => w.id === active.id);
         const newIndex = workflows.findIndex(w => w.id === over.id);
         if (oldIndex === -1 || newIndex === -1) return;
@@ -1109,6 +1154,10 @@ export default function WorkflowLibrary() {
             <div className="flex justify-between items-center mb-6">
                 <h1 className="text-3xl font-bold">{labels.pageTitle.pipes}</h1>
                 <div className="flex gap-2">
+                    <Button variant={showArchived ? "secondary" : "ghost"} onClick={() => setShowArchived(!showArchived)}>
+                        {showArchived ? "hide archived" : "view archived"}
+                    </Button>
+                    {SHOW_PIPE_COMPOSE && (
                     <Dialog open={composeOpen} onOpenChange={(open) => {
                         setComposeOpen(open);
                         if (!open) {
@@ -1180,6 +1229,7 @@ export default function WorkflowLibrary() {
                             </DialogFooter>
                         </DialogContent>
                     </Dialog>
+                    )}
 
                     <Dialog open={isDialogOpen} onOpenChange={(open) => {
                         setIsDialogOpen(open);
@@ -1253,6 +1303,8 @@ export default function WorkflowLibrary() {
                                     onExport={handleExport}
                                     onEdit={handleEdit}
                                     onDelete={handleDelete}
+                                    onArchive={handleArchive}
+                                    onUnarchive={handleUnarchive}
                                     onStartInstall={startInstall}
                                 />
                             );

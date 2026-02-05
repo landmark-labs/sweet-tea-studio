@@ -666,14 +666,14 @@ def create_workflow(workflow_in: WorkflowTemplateCreate):
 
 
 @router.get("/", response_model=List[WorkflowTemplateRead])
-def read_workflows(skip: int = 0, limit: int = 100):
+def read_workflows(skip: int = 0, limit: int = 100, include_archived: bool = False):
     with Session(db_engine) as session:
-        workflows = session.exec(
-            select(WorkflowTemplate)
-            .order_by(WorkflowTemplate.display_order, WorkflowTemplate.id)
-            .offset(skip)
-            .limit(limit)
-        ).all()
+        query = select(WorkflowTemplate).order_by(WorkflowTemplate.display_order, WorkflowTemplate.id)
+        if not include_archived:
+            query = query.where(WorkflowTemplate.archived_at == None)  # noqa: E711
+        query = query.offset(skip).limit(limit)
+
+        workflows = session.exec(query).all()
         
         # Batch Self-Healing
         # Check if any workflow needs healing
@@ -831,6 +831,32 @@ def delete_workflow(workflow_id: int):
         session.delete(workflow)
         session.commit()
         return {"ok": True}
+
+
+@router.post("/{workflow_id}/archive", response_model=WorkflowTemplateRead)
+def archive_workflow(workflow_id: int):
+    with Session(db_engine) as session:
+        workflow = session.get(WorkflowTemplate, workflow_id)
+        if not workflow:
+            raise HTTPException(status_code=404, detail="Workflow not found")
+        workflow.archived_at = datetime.utcnow()
+        session.add(workflow)
+        session.commit()
+        session.refresh(workflow)
+        return workflow
+
+
+@router.post("/{workflow_id}/unarchive", response_model=WorkflowTemplateRead)
+def unarchive_workflow(workflow_id: int):
+    with Session(db_engine) as session:
+        workflow = session.get(WorkflowTemplate, workflow_id)
+        if not workflow:
+            raise HTTPException(status_code=404, detail="Workflow not found")
+        workflow.archived_at = None
+        session.add(workflow)
+        session.commit()
+        session.refresh(workflow)
+        return workflow
 
 class WorkflowReorderItem(BaseModel):
     id: int

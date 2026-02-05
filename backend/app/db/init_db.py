@@ -1,3 +1,6 @@
+import json
+from pathlib import Path
+
 from sqlmodel import SQLModel, Session, select
 from app.db.engine import engine, tags_engine
 # Import models so they are registered with SQLModel.metadata
@@ -17,6 +20,97 @@ from app.models.portfolio import (
 )
 from app.core.config import settings
 from app.db.sqlite_health import ensure_sqlite_database_or_raise
+
+STARTUP_PIPE_EXPORT_DIR = Path(__file__).resolve().parent / "starter_pipes"
+STARTUP_PIPE_EXPORTS = [
+    STARTUP_PIPE_EXPORT_DIR / "sts_t2i_basic_pipe.json",
+    STARTUP_PIPE_EXPORT_DIR / "sts_i2i_resample.json",
+    STARTUP_PIPE_EXPORT_DIR / "sts_inpainter_pipe.json",
+]
+
+
+def _build_workflow_from_startup_bundle(path: Path, display_order: int) -> WorkflowTemplate | None:
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        print(f"Failed to parse startup pipe {path}: {exc}")
+        return None
+
+    if not isinstance(raw, dict):
+        return None
+
+    graph_json = None
+    input_schema = {}
+    node_mapping = None
+    name = path.stem
+    description = "seeded starter pipe"
+
+    metadata = raw.get("_sweet_tea")
+    if isinstance(metadata, dict):
+        maybe_graph = raw.get("workflow")
+        if not isinstance(maybe_graph, dict):
+            return None
+        graph_json = maybe_graph
+
+        meta_name = metadata.get("name")
+        if isinstance(meta_name, str) and meta_name.strip():
+            name = meta_name.strip()
+
+        meta_description = metadata.get("description")
+        if isinstance(meta_description, str) and meta_description.strip():
+            description = meta_description.strip()
+
+        meta_schema = metadata.get("input_schema")
+        if isinstance(meta_schema, dict):
+            input_schema = meta_schema
+
+        meta_mapping = metadata.get("node_mapping")
+        if isinstance(meta_mapping, dict):
+            node_mapping = meta_mapping
+    else:
+        if "nodes" in raw and isinstance(raw.get("nodes"), list):
+            return None
+        graph_json = raw
+
+    if not isinstance(graph_json, dict) or not graph_json:
+        return None
+
+    return WorkflowTemplate(
+        name=name[:255],
+        description=description[:500] if description else None,
+        graph_json=graph_json,
+        input_schema=input_schema if isinstance(input_schema, dict) else {},
+        node_mapping=node_mapping if isinstance(node_mapping, dict) else None,
+        display_order=display_order,
+    )
+
+
+def _seed_startup_pipes(session: Session) -> int:
+    seeded = 0
+    seen_names: set[str] = set()
+
+    for path in STARTUP_PIPE_EXPORTS:
+        if not path.exists():
+            continue
+
+        workflow = _build_workflow_from_startup_bundle(path, display_order=seeded)
+        if workflow is None:
+            continue
+
+        base_name = workflow.name
+        suffix = 2
+        while workflow.name.lower() in seen_names:
+            workflow.name = f"{base_name}_{suffix}"
+            suffix += 1
+
+        seen_names.add(workflow.name.lower())
+        session.add(workflow)
+        seeded += 1
+
+    if seeded > 0:
+        session.commit()
+
+    return seeded
 
 
 def init_db():
@@ -61,6 +155,10 @@ def init_db():
     # Add display_order column to workflow templates (must run before backfill_node_order)
     from app.db.migrations.add_display_order_to_workflows import migrate as migrate_display_order
     migrate_display_order()
+
+    # Add archived_at column to workflow templates
+    from app.db.migrations.add_archived_at_to_workflows import migrate as migrate_workflow_archive
+    migrate_workflow_archive()
     
     # Add display_order column to projects
     from app.db.migrations.add_display_order_to_projects import migrate as migrate_project_display_order
@@ -118,24 +216,28 @@ def init_db():
         
         # Seed default starter pipes if empty
         if not session.exec(select(WorkflowTemplate)).first():
-            from app.db.default_workflows import DEFAULT_T2I_WORKFLOW, DEFAULT_I2I_WORKFLOW
-            
-            t2i_pipe = WorkflowTemplate(
-                name="sts_t2i_basic",
-                description="basic text-to-image starter pipe",
-                graph_json=DEFAULT_T2I_WORKFLOW["graph"],
-                input_schema=DEFAULT_T2I_WORKFLOW["input_schema"],
-                node_mapping=DEFAULT_T2I_WORKFLOW.get("node_mapping")
-            )
-            i2i_pipe = WorkflowTemplate(
-                name="sts_i2i_basic",
-                description="basic image-to-image starter pipe",
-                graph_json=DEFAULT_I2I_WORKFLOW["graph"],
-                input_schema=DEFAULT_I2I_WORKFLOW["input_schema"],
-                node_mapping=DEFAULT_I2I_WORKFLOW.get("node_mapping")
-            )
-            
-            session.add(t2i_pipe)
-            session.add(i2i_pipe)
-            session.commit()
-            print("Seeded default starter pipes (sts_t2i_basic, sts_i2i_basic).")
+            seeded_startup_count = _seed_startup_pipes(session)
+            if seeded_startup_count > 0:
+                print(f"Seeded {seeded_startup_count} starter pipes from bundled exports.")
+            else:
+                from app.db.default_workflows import DEFAULT_T2I_WORKFLOW, DEFAULT_I2I_WORKFLOW
+
+                t2i_pipe = WorkflowTemplate(
+                    name="sts_t2i_basic",
+                    description="basic text-to-image starter pipe",
+                    graph_json=DEFAULT_T2I_WORKFLOW["graph"],
+                    input_schema=DEFAULT_T2I_WORKFLOW["input_schema"],
+                    node_mapping=DEFAULT_T2I_WORKFLOW.get("node_mapping")
+                )
+                i2i_pipe = WorkflowTemplate(
+                    name="sts_i2i_basic",
+                    description="basic image-to-image starter pipe",
+                    graph_json=DEFAULT_I2I_WORKFLOW["graph"],
+                    input_schema=DEFAULT_I2I_WORKFLOW["input_schema"],
+                    node_mapping=DEFAULT_I2I_WORKFLOW.get("node_mapping")
+                )
+
+                session.add(t2i_pipe)
+                session.add(i2i_pipe)
+                session.commit()
+                print("Seeded default starter pipes (sts_t2i_basic, sts_i2i_basic).")

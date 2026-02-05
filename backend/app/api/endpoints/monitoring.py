@@ -1,3 +1,4 @@
+import asyncio
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Any, List
@@ -365,8 +366,19 @@ def get_comfyui_status():
 async def start_comfyui():
     """Start the ComfyUI process."""
     from app.services.comfy_launcher import comfy_launcher
-    
+
     result = await comfy_launcher.launch()
+    if result.get("success"):
+        async def warm_watchdog_after_start() -> None:
+            # Force short-interval probes so UI reflects readiness quickly after launch.
+            for _ in range(30):
+                await watchdog.poll_now(force=True)
+                states = watchdog.get_status()
+                if any(state.get("healthy") for state in states):
+                    break
+                await asyncio.sleep(0.5)
+
+        asyncio.create_task(warm_watchdog_after_start())
     return result
 
 
@@ -380,7 +392,7 @@ async def stop_comfyui():
 
 
 @router.get("/comfyui/logs")
-def get_comfyui_logs(lines: int = 200):
+def get_comfyui_logs(lines: int = 500):
     """Get console logs from the managed ComfyUI process."""
     from app.services.comfy_launcher import comfy_launcher
     return {"logs": comfy_launcher.get_logs(lines)}

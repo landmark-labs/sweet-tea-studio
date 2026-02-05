@@ -1,0 +1,1893 @@
+{
+  "workflow": {
+    "1": {
+      "inputs": {
+        "ckpt_name": "hassakuXLIllustrious_v21fix.safetensors"
+      },
+      "class_type": "CheckpointLoaderSimple",
+      "_meta": {
+        "title": "Load Checkpoint"
+      }
+    },
+    "112": {
+      "inputs": {
+        "noise_mask": true,
+        "positive": [
+          "113",
+          0
+        ],
+        "negative": [
+          "114",
+          0
+        ],
+        "vae": [
+          "1",
+          2
+        ],
+        "pixels": [
+          "151",
+          1
+        ],
+        "mask": [
+          "151",
+          2
+        ]
+      },
+      "class_type": "InpaintModelConditioning",
+      "_meta": {
+        "title": "InpaintModelConditioning",
+        "hiddenInControls": true
+      }
+    },
+    "113": {
+      "inputs": {
+        "text": "",
+        "clip": [
+          "149",
+          1
+        ]
+      },
+      "class_type": "CLIPTextEncode",
+      "_meta": {
+        "title": "positive prompt"
+      }
+    },
+    "114": {
+      "inputs": {
+        "text": "",
+        "clip": [
+          "149",
+          1
+        ]
+      },
+      "class_type": "CLIPTextEncode",
+      "_meta": {
+        "title": "negative prompt"
+      }
+    },
+    "115": {
+      "inputs": {
+        "seed": 1027844571373128,
+        "steps": 30,
+        "cfg": 5,
+        "sampler_name": "euler_ancestral",
+        "scheduler": "normal",
+        "denoise": 0.35,
+        "model": [
+          "149",
+          0
+        ],
+        "positive": [
+          "112",
+          0
+        ],
+        "negative": [
+          "112",
+          1
+        ],
+        "latent_image": [
+          "112",
+          2
+        ]
+      },
+      "class_type": "KSampler",
+      "_meta": {
+        "title": "KSampler"
+      }
+    },
+    "116": {
+      "inputs": {
+        "samples": [
+          "115",
+          0
+        ],
+        "vae": [
+          "1",
+          2
+        ]
+      },
+      "class_type": "VAEDecode",
+      "_meta": {
+        "title": "VAE Decode",
+        "hiddenInControls": true
+      }
+    },
+    "127": {
+      "inputs": {
+        "stitcher": [
+          "151",
+          0
+        ],
+        "inpainted_image": [
+          "116",
+          0
+        ]
+      },
+      "class_type": "InpaintStitchImproved",
+      "_meta": {
+        "title": "✂️ Inpaint Stitch (Improved)",
+        "hiddenInControls": true
+      }
+    },
+    "149": {
+      "inputs": {
+        "lora_name": "realistic filter [IL].safetensors",
+        "strength_model": 0.6,
+        "strength_clip": 0.6,
+        "model": [
+          "849",
+          0
+        ],
+        "clip": [
+          "849",
+          1
+        ]
+      },
+      "class_type": "LoraLoader",
+      "_meta": {
+        "title": "Load LoRA"
+      }
+    },
+    "151": {
+      "inputs": {
+        "downscale_algorithm": "lanczos",
+        "upscale_algorithm": "lanczos",
+        "preresize": false,
+        "preresize_mode": "ensure minimum resolution",
+        "preresize_min_width": 1024,
+        "preresize_min_height": 1024,
+        "preresize_max_width": 16384,
+        "preresize_max_height": 16384,
+        "mask_fill_holes": false,
+        "mask_expand_pixels": 0,
+        "mask_invert": false,
+        "mask_blend_pixels": 32,
+        "mask_hipass_filter": 0.1,
+        "extend_for_outpainting": false,
+        "extend_up_factor": 1,
+        "extend_down_factor": 1,
+        "extend_left_factor": 1,
+        "extend_right_factor": 1,
+        "context_from_mask_extend_factor": 1,
+        "output_resize_to_target_size": true,
+        "output_target_width": 1024,
+        "output_target_height": 1024,
+        "output_padding": "32",
+        "image": [
+          "1029",
+          0
+        ],
+        "mask": [
+          "1031",
+          0
+        ]
+      },
+      "class_type": "InpaintCropImproved",
+      "_meta": {
+        "title": "✂️ Inpaint Crop (Improved)"
+      }
+    },
+    "226": {
+      "inputs": {
+        "lora_name": "fingers_adjuster_illustrious2.0stable_v1.0.safetensors",
+        "strength_model": 0.65,
+        "strength_clip": 1,
+        "model": [
+          "233",
+          0
+        ],
+        "clip": [
+          "233",
+          1
+        ]
+      },
+      "class_type": "LoraLoader",
+      "_meta": {
+        "title": "Load LoRA"
+      }
+    },
+    "233": {
+      "inputs": {
+        "lora_name": "ck-shadow-circuit-IL-000012.safetensors",
+        "strength_model": 0.4,
+        "strength_clip": 0.4,
+        "model": [
+          "1",
+          0
+        ],
+        "clip": [
+          "1",
+          1
+        ]
+      },
+      "class_type": "LoraLoader",
+      "_meta": {
+        "title": "Load LoRA"
+      }
+    },
+    "360": {
+      "inputs": {
+        "lora_name": "Semi-realism_illustrious.safetensors",
+        "strength_model": 0.4,
+        "strength_clip": 0.4,
+        "model": [
+          "361",
+          0
+        ],
+        "clip": [
+          "361",
+          1
+        ]
+      },
+      "class_type": "LoraLoader",
+      "_meta": {
+        "title": "Load LoRA"
+      }
+    },
+    "361": {
+      "inputs": {
+        "lora_name": "B-mixxxlora.safetensors",
+        "strength_model": 1,
+        "strength_clip": 1,
+        "model": [
+          "226",
+          0
+        ],
+        "clip": [
+          "226",
+          1
+        ]
+      },
+      "class_type": "LoraLoader",
+      "_meta": {
+        "title": "Load LoRA"
+      }
+    },
+    "849": {
+      "inputs": {
+        "lora_name": "iLLMythSmo0thL1nes.safetensors",
+        "strength_model": 0.6,
+        "strength_clip": 0.6,
+        "model": [
+          "360",
+          0
+        ],
+        "clip": [
+          "360",
+          1
+        ]
+      },
+      "class_type": "LoraLoader",
+      "_meta": {
+        "title": "Load LoRA"
+      }
+    },
+    "970": {
+      "inputs": {
+        "images": [
+          "127",
+          0
+        ]
+      },
+      "class_type": "PreviewImage",
+      "_meta": {
+        "title": "Preview Image",
+        "hiddenInControls": true
+      }
+    },
+    "1029": {
+      "inputs": {
+        "image": "clipspace/clipspace-painted-masked-1767912505245.png [input]"
+      },
+      "class_type": "LoadImage",
+      "_meta": {
+        "title": "Load Image"
+      }
+    },
+    "1030": {
+      "inputs": {
+        "image": "hibiscus-input-0472_mask.png"
+      },
+      "class_type": "LoadImage",
+      "_meta": {
+        "title": "Load Image"
+      }
+    },
+    "1031": {
+      "inputs": {
+        "method": "intensity",
+        "image": [
+          "1030",
+          0
+        ]
+      },
+      "class_type": "Image To Mask",
+      "_meta": {
+        "title": "Image To Mask",
+        "hiddenInControls": true
+      }
+    }
+  },
+  "_sweet_tea": {
+    "version": 1,
+    "name": "sts_inpainter",
+    "description": "inpainting pipeline",
+    "exported_at": "2026-02-05T19:24:51.499643Z",
+    "input_schema": {
+      "CheckpointLoaderSimple#1.ckpt_name": {
+        "type": "string",
+        "title": "ckpt_name (CheckpointLoaderSimple)",
+        "default": "hassakuXLIllustrious_v21fix.safetensors",
+        "enum": [
+          "aMixIllustrious_aMix.safetensors",
+          "hassakuXLIllustrious_v21fix.safetensors",
+          "waiNSFWIllustrious_v150.safetensors"
+        ],
+        "x_node_id": "1",
+        "x_class_type": "CheckpointLoaderSimple",
+        "x_title": "Load Checkpoint",
+        "x_instance": 1
+      },
+      "CLIPTextEncode#113.text": {
+        "type": "string",
+        "title": "positive prompt",
+        "default": "",
+        "widget": "textarea",
+        "x_node_id": "113",
+        "x_class_type": "CLIPTextEncode",
+        "x_title": "positive prompt",
+        "x_instance": 1,
+        "x_core": true
+      },
+      "CLIPTextEncode#114.text": {
+        "type": "string",
+        "title": "negative prompt",
+        "default": "",
+        "widget": "textarea",
+        "x_node_id": "114",
+        "x_class_type": "CLIPTextEncode",
+        "x_title": "negative prompt",
+        "x_instance": 2,
+        "x_core": true
+      },
+      "KSampler#115.seed": {
+        "type": "integer",
+        "title": "seed (KSampler)",
+        "default": -1,
+        "minimum": -1,
+        "maximum": 18446744073709552000,
+        "x_node_id": "115",
+        "x_class_type": "KSampler",
+        "x_title": "KSampler",
+        "x_instance": 1,
+        "x_core": true
+      },
+      "KSampler#115.steps": {
+        "type": "integer",
+        "title": "steps (KSampler)",
+        "default": 30,
+        "minimum": 1,
+        "maximum": 10000,
+        "x_node_id": "115",
+        "x_class_type": "KSampler",
+        "x_title": "KSampler",
+        "x_instance": 1,
+        "x_core": true
+      },
+      "KSampler#115.cfg": {
+        "type": "number",
+        "title": "cfg (KSampler)",
+        "default": 5,
+        "minimum": 0,
+        "maximum": 100,
+        "step": 0.1,
+        "x_node_id": "115",
+        "x_class_type": "KSampler",
+        "x_title": "KSampler",
+        "x_instance": 1,
+        "x_core": true
+      },
+      "KSampler#115.sampler_name": {
+        "type": "string",
+        "title": "sampler_name (KSampler)",
+        "default": "euler_ancestral",
+        "enum": [
+          "euler",
+          "euler_cfg_pp",
+          "euler_ancestral",
+          "euler_ancestral_cfg_pp",
+          "heun",
+          "heunpp2",
+          "exp_heun_2_x0",
+          "exp_heun_2_x0_sde",
+          "dpm_2",
+          "dpm_2_ancestral",
+          "lms",
+          "dpm_fast",
+          "dpm_adaptive",
+          "dpmpp_2s_ancestral",
+          "dpmpp_2s_ancestral_cfg_pp",
+          "dpmpp_sde",
+          "dpmpp_sde_gpu",
+          "dpmpp_2m",
+          "dpmpp_2m_cfg_pp",
+          "dpmpp_2m_sde",
+          "dpmpp_2m_sde_gpu",
+          "dpmpp_2m_sde_heun",
+          "dpmpp_2m_sde_heun_gpu",
+          "dpmpp_3m_sde",
+          "dpmpp_3m_sde_gpu",
+          "ddpm",
+          "lcm",
+          "ipndm",
+          "ipndm_v",
+          "deis",
+          "res_multistep",
+          "res_multistep_cfg_pp",
+          "res_multistep_ancestral",
+          "res_multistep_ancestral_cfg_pp",
+          "gradient_estimation",
+          "gradient_estimation_cfg_pp",
+          "er_sde",
+          "seeds_2",
+          "seeds_3",
+          "sa_solver",
+          "sa_solver_pece",
+          "ddim",
+          "uni_pc",
+          "uni_pc_bh2",
+          "legacy_rk",
+          "rk",
+          "rk_beta",
+          "deis_3m_ode",
+          "deis_2m_ode",
+          "deis_3m",
+          "deis_2m",
+          "res_6s_ode",
+          "res_5s_ode",
+          "res_3s_ode",
+          "res_2s_ode",
+          "res_3m_ode",
+          "res_2m_ode",
+          "res_6s",
+          "res_5s",
+          "res_3s",
+          "res_2s",
+          "res_3m",
+          "res_2m"
+        ],
+        "x_node_id": "115",
+        "x_class_type": "KSampler",
+        "x_title": "KSampler",
+        "x_instance": 1,
+        "x_core": true
+      },
+      "KSampler#115.scheduler": {
+        "type": "string",
+        "title": "scheduler (KSampler)",
+        "default": "normal",
+        "enum": [
+          "simple",
+          "sgm_uniform",
+          "karras",
+          "exponential",
+          "ddim_uniform",
+          "beta",
+          "normal",
+          "linear_quadratic",
+          "kl_optimal",
+          "bong_tangent",
+          "beta57"
+        ],
+        "x_node_id": "115",
+        "x_class_type": "KSampler",
+        "x_title": "KSampler",
+        "x_instance": 1,
+        "x_core": true
+      },
+      "KSampler#115.denoise": {
+        "type": "number",
+        "title": "denoise (KSampler)",
+        "default": 0.35,
+        "minimum": 0,
+        "maximum": 1,
+        "step": 0.01,
+        "x_node_id": "115",
+        "x_class_type": "KSampler",
+        "x_title": "KSampler",
+        "x_instance": 1,
+        "x_core": true
+      },
+      "LoraLoader#149.lora_name": {
+        "type": "string",
+        "title": "lora_name (LoraLoader)",
+        "default": "realistic filter [IL].safetensors",
+        "enum": [
+          "B-mixxxlora.safetensors",
+          "Dramatic Lighting Slider.safetensors",
+          "Matte_Skin_Illustrious_v4.safetensors",
+          "Motion_Lines_(Concept)_ILXL.safetensors",
+          "Realim_Lora_BSY_IL_V1_RA42.safetensors",
+          "Semi-realism_illustrious.safetensors",
+          "chroma-flash-heun_r01-fp32-pruned.safetensors",
+          "ck-NeurocoreShadowCircuit-ZIT_000003000.safetensors",
+          "ck-shadow-circuit-IL-000012.safetensors",
+          "ck_cyberpunk.safetensors",
+          "codex_sss_chroma-000012.safetensors",
+          "fingers_adjuster_illustrious2.0stable_v1.0.safetensors",
+          "iLLMythSmo0thL1nes.safetensors",
+          "lenovo_z.safetensors",
+          "realistic filter [IL].safetensors",
+          "rimixO.safetensors",
+          "wan/23High noise-Cumshot Aesthetics.safetensors",
+          "wan/56Low noise-Cumshot Aesthetics.safetensors",
+          "wan/DR34ML4Y_I2V_14B_HIGH.safetensors",
+          "wan/DR34ML4Y_I2V_14B_HIGH_V2.safetensors",
+          "wan/DR34ML4Y_I2V_14B_LOW.safetensors",
+          "wan/DR34ML4Y_I2V_14B_LOW_V2.safetensors",
+          "wan/NSFW-22-H-e8.safetensors",
+          "wan/NSFW-22-L-e8.safetensors",
+          "wan/P009-The-Walk-Wan2.2-i2v_Normal-H.safetensors",
+          "wan/P009-The-Walk-Wan2.2-i2v_Normal-L.safetensors",
+          "wan/PENISLORA_22_i2v_HIGH_e320.safetensors",
+          "wan/PENISLORA_22_i2v_LOW_e496.safetensors",
+          "wan/W22_NSFW_Posing_Nude_i2v_HN_v2.safetensors",
+          "wan/W22_NSFW_Posing_Nude_i2v_LN_v2.safetensors",
+          "wan/Wan2.2 - I2V - Fucking Machine - HIGH 14B.safetensors",
+          "wan/Wan2.2 - I2V - Fucking Machine - LOW 14B.safetensors",
+          "wan/Wan2.2-I2V-High-MysticXXX.safetensors",
+          "wan/Wan2.2-I2V-Low-MysticXXX.safetensors",
+          "wan/Wan_22_ComfyUI_Repackaged_wan22_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
+          "wan/Wan_22_ComfyUI_Repackaged_wan22_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors",
+          "wan/anal_insertion_HIGH_V01.safetensors",
+          "wan/anal_insertion_LOW_V01.safetensors",
+          "wan/ass_ripple_HIGH_V01.safetensors",
+          "wan/ass_ripple_LOW_V01.safetensors",
+          "wan/cum2_h_20.safetensors",
+          "wan/cum4_h_30.safetensors",
+          "wan/cum4_l_75.safetensors",
+          "wan/cum_l_70.safetensors",
+          "wan/dance_b high 250905.safetensors",
+          "wan/dance_b low 250905.safetensors",
+          "wan/derpfuckedfrombehind_000002125_high_noise.safetensors",
+          "wan/derpfuckedfrombehind_000002125_low_noise.safetensors",
+          "wan/h_wan22_lightning.safetensors",
+          "wan/jfj-deepthroat-W22-I2V-HN.safetensors",
+          "wan/jfj-deepthroat-W22-I2V-LN.safetensors",
+          "wan/l_wan22_lightning.safetensors",
+          "wan/reverse_suspended_congress_I2V_high.safetensors",
+          "wan/reverse_suspended_congress_I2V_low.safetensors",
+          "wan/slop_twerk_HighNoise_merged3_7_v2.safetensors",
+          "wan/slop_twerk_LowNoise_merged3_7_v2.safetensors",
+          "wan/wan21_lightning.safetensors",
+          "wan/wan22-4n4lpl4y-i2v-182epoc-low-k3nk.safetensors",
+          "wan/wan22-4n4lpl4y-i2v-222epoc-high-k3nk.safetensors",
+          "wan/wan22-ultimatedeepthroat-I2V-101epoc-low-k3nk.safetensors",
+          "wan/wan22-ultimatedeepthroat-i2v-102epoc-high-k3nk.safetensors",
+          "wan/wan22.r3v3rs3_c0wg1rl-14b-High-i2v_e70.safetensors",
+          "wan/wan22.r3v3rs3_c0wg1rl-14b-Low-i2v_e70.safetensors",
+          "wan/wan22_i2v_anal_v1_high_noise.safetensors",
+          "wan/wan22_i2v_anal_v1_low_noise.safetensors",
+          "wan/wan22_i2v_futa_cowgirl_high_noise.safetensors",
+          "wan/wan22_i2v_futa_cowgirl_low_noise.safetensors",
+          "zturbo_penis_v3_e340.safetensors"
+        ],
+        "x_node_id": "149",
+        "x_class_type": "LoraLoader",
+        "x_title": "Load LoRA",
+        "x_instance": 1
+      },
+      "LoraLoader#149.strength_model": {
+        "type": "number",
+        "title": "strength_model (LoraLoader)",
+        "default": 0.6,
+        "minimum": -100,
+        "maximum": 100,
+        "step": 0.01,
+        "x_node_id": "149",
+        "x_class_type": "LoraLoader",
+        "x_title": "Load LoRA",
+        "x_instance": 1
+      },
+      "LoraLoader#149.strength_clip": {
+        "type": "number",
+        "title": "strength_clip (LoraLoader)",
+        "default": 0.6,
+        "minimum": -100,
+        "maximum": 100,
+        "step": 0.01,
+        "x_node_id": "149",
+        "x_class_type": "LoraLoader",
+        "x_title": "Load LoRA",
+        "x_instance": 1
+      },
+      "InpaintCropImproved#151.downscale_algorithm": {
+        "type": "string",
+        "title": "downscale_algorithm (InpaintCropImproved)",
+        "default": "lanczos",
+        "enum": [
+          "nearest",
+          "bilinear",
+          "bicubic",
+          "lanczos",
+          "box",
+          "hamming"
+        ],
+        "x_node_id": "151",
+        "x_class_type": "InpaintCropImproved",
+        "x_title": "✂️ Inpaint Crop (Improved)",
+        "x_instance": 1,
+        "x_node_alias": "inpainter",
+        "x_core": true
+      },
+      "InpaintCropImproved#151.upscale_algorithm": {
+        "type": "string",
+        "title": "upscale_algorithm (InpaintCropImproved)",
+        "default": "lanczos",
+        "enum": [
+          "nearest",
+          "bilinear",
+          "bicubic",
+          "lanczos",
+          "box",
+          "hamming"
+        ],
+        "x_node_id": "151",
+        "x_class_type": "InpaintCropImproved",
+        "x_title": "✂️ Inpaint Crop (Improved)",
+        "x_instance": 1,
+        "x_node_alias": "inpainter",
+        "x_core": true
+      },
+      "InpaintCropImproved#151.preresize_mode": {
+        "type": "string",
+        "title": "preresize_mode (InpaintCropImproved)",
+        "default": "ensure minimum resolution",
+        "enum": [
+          "ensure minimum resolution",
+          "ensure maximum resolution",
+          "ensure minimum and maximum resolution"
+        ],
+        "x_node_id": "151",
+        "x_class_type": "InpaintCropImproved",
+        "x_title": "✂️ Inpaint Crop (Improved)",
+        "x_instance": 1,
+        "x_node_alias": "inpainter",
+        "x_core": true,
+        "__hidden": true
+      },
+      "InpaintCropImproved#151.preresize_min_width": {
+        "type": "integer",
+        "title": "preresize_min_width (InpaintCropImproved)",
+        "default": 1024,
+        "minimum": 0,
+        "maximum": 16384,
+        "x_node_id": "151",
+        "x_class_type": "InpaintCropImproved",
+        "x_title": "✂️ Inpaint Crop (Improved)",
+        "x_instance": 1,
+        "x_node_alias": "inpainter",
+        "x_core": true,
+        "__hidden": true
+      },
+      "InpaintCropImproved#151.preresize_min_height": {
+        "type": "integer",
+        "title": "preresize_min_height (InpaintCropImproved)",
+        "default": 1024,
+        "minimum": 0,
+        "maximum": 16384,
+        "x_node_id": "151",
+        "x_class_type": "InpaintCropImproved",
+        "x_title": "✂️ Inpaint Crop (Improved)",
+        "x_instance": 1,
+        "x_node_alias": "inpainter",
+        "x_core": true,
+        "__hidden": true
+      },
+      "InpaintCropImproved#151.preresize_max_width": {
+        "type": "integer",
+        "title": "preresize_max_width (InpaintCropImproved)",
+        "default": 16384,
+        "minimum": 0,
+        "maximum": 16384,
+        "x_node_id": "151",
+        "x_class_type": "InpaintCropImproved",
+        "x_title": "✂️ Inpaint Crop (Improved)",
+        "x_instance": 1,
+        "x_node_alias": "inpainter",
+        "x_core": true,
+        "__hidden": true
+      },
+      "InpaintCropImproved#151.preresize_max_height": {
+        "type": "integer",
+        "title": "preresize_max_height (InpaintCropImproved)",
+        "default": 16384,
+        "minimum": 0,
+        "maximum": 16384,
+        "x_node_id": "151",
+        "x_class_type": "InpaintCropImproved",
+        "x_title": "✂️ Inpaint Crop (Improved)",
+        "x_instance": 1,
+        "x_node_alias": "inpainter",
+        "x_core": true,
+        "__hidden": true
+      },
+      "InpaintCropImproved#151.mask_expand_pixels": {
+        "type": "integer",
+        "title": "mask_expand_pixels (InpaintCropImproved)",
+        "default": 0,
+        "minimum": 0,
+        "maximum": 16384,
+        "x_node_id": "151",
+        "x_class_type": "InpaintCropImproved",
+        "x_title": "✂️ Inpaint Crop (Improved)",
+        "x_instance": 1,
+        "x_node_alias": "inpainter",
+        "x_core": true
+      },
+      "InpaintCropImproved#151.mask_blend_pixels": {
+        "type": "integer",
+        "title": "mask_blend_pixels (InpaintCropImproved)",
+        "default": 32,
+        "minimum": 0,
+        "maximum": 64,
+        "x_node_id": "151",
+        "x_class_type": "InpaintCropImproved",
+        "x_title": "✂️ Inpaint Crop (Improved)",
+        "x_instance": 1,
+        "x_node_alias": "inpainter",
+        "x_core": true
+      },
+      "InpaintCropImproved#151.mask_hipass_filter": {
+        "type": "number",
+        "title": "mask_hipass_filter (InpaintCropImproved)",
+        "default": 0.1,
+        "minimum": 0,
+        "maximum": 1,
+        "step": 0.01,
+        "x_node_id": "151",
+        "x_class_type": "InpaintCropImproved",
+        "x_title": "✂️ Inpaint Crop (Improved)",
+        "x_instance": 1,
+        "x_node_alias": "inpainter",
+        "x_core": true
+      },
+      "InpaintCropImproved#151.extend_up_factor": {
+        "type": "number",
+        "title": "extend_up_factor (InpaintCropImproved)",
+        "default": 1,
+        "minimum": 0.01,
+        "maximum": 100,
+        "step": 0.01,
+        "x_node_id": "151",
+        "x_class_type": "InpaintCropImproved",
+        "x_title": "✂️ Inpaint Crop (Improved)",
+        "x_instance": 1,
+        "x_node_alias": "inpainter",
+        "x_core": true,
+        "__hidden": true
+      },
+      "InpaintCropImproved#151.extend_down_factor": {
+        "type": "number",
+        "title": "extend_down_factor (InpaintCropImproved)",
+        "default": 1,
+        "minimum": 0.01,
+        "maximum": 100,
+        "step": 0.01,
+        "x_node_id": "151",
+        "x_class_type": "InpaintCropImproved",
+        "x_title": "✂️ Inpaint Crop (Improved)",
+        "x_instance": 1,
+        "x_node_alias": "inpainter",
+        "x_core": true,
+        "__hidden": true
+      },
+      "InpaintCropImproved#151.extend_left_factor": {
+        "type": "number",
+        "title": "extend_left_factor (InpaintCropImproved)",
+        "default": 1,
+        "minimum": 0.01,
+        "maximum": 100,
+        "step": 0.01,
+        "x_node_id": "151",
+        "x_class_type": "InpaintCropImproved",
+        "x_title": "✂️ Inpaint Crop (Improved)",
+        "x_instance": 1,
+        "x_node_alias": "inpainter",
+        "x_core": true,
+        "__hidden": true
+      },
+      "InpaintCropImproved#151.extend_right_factor": {
+        "type": "number",
+        "title": "extend_right_factor (InpaintCropImproved)",
+        "default": 1,
+        "minimum": 0.01,
+        "maximum": 100,
+        "step": 0.01,
+        "x_node_id": "151",
+        "x_class_type": "InpaintCropImproved",
+        "x_title": "✂️ Inpaint Crop (Improved)",
+        "x_instance": 1,
+        "x_node_alias": "inpainter",
+        "x_core": true,
+        "__hidden": true
+      },
+      "InpaintCropImproved#151.context_from_mask_extend_factor": {
+        "type": "number",
+        "title": "context_from_mask_extend_factor (InpaintCropImproved)",
+        "default": 1,
+        "minimum": 1,
+        "maximum": 100,
+        "step": 0.01,
+        "x_node_id": "151",
+        "x_class_type": "InpaintCropImproved",
+        "x_title": "✂️ Inpaint Crop (Improved)",
+        "x_instance": 1,
+        "x_node_alias": "inpainter",
+        "x_core": true
+      },
+      "InpaintCropImproved#151.output_target_width": {
+        "type": "integer",
+        "title": "output_target_width (InpaintCropImproved)",
+        "default": 1024,
+        "minimum": 64,
+        "maximum": 16384,
+        "x_node_id": "151",
+        "x_class_type": "InpaintCropImproved",
+        "x_title": "✂️ Inpaint Crop (Improved)",
+        "x_instance": 1,
+        "x_node_alias": "inpainter",
+        "x_core": true
+      },
+      "InpaintCropImproved#151.output_target_height": {
+        "type": "integer",
+        "title": "output_target_height (InpaintCropImproved)",
+        "default": 1024,
+        "minimum": 64,
+        "maximum": 16384,
+        "x_node_id": "151",
+        "x_class_type": "InpaintCropImproved",
+        "x_title": "✂️ Inpaint Crop (Improved)",
+        "x_instance": 1,
+        "x_node_alias": "inpainter",
+        "x_core": true
+      },
+      "InpaintCropImproved#151.output_padding": {
+        "type": "string",
+        "title": "output_padding (InpaintCropImproved)",
+        "default": "32",
+        "enum": [
+          "0",
+          "8",
+          "16",
+          "32",
+          "64",
+          "128",
+          "256",
+          "512"
+        ],
+        "x_node_id": "151",
+        "x_class_type": "InpaintCropImproved",
+        "x_title": "✂️ Inpaint Crop (Improved)",
+        "x_instance": 1,
+        "x_node_alias": "inpainter",
+        "x_core": true
+      },
+      "InpaintCropImproved#151.optional_context_mask": {
+        "type": "string",
+        "title": "optional_context_mask (InpaintCropImproved)",
+        "default": "",
+        "widget": "media_upload",
+        "x_media_kind": "image",
+        "x_node_id": "151",
+        "x_class_type": "InpaintCropImproved",
+        "x_title": "✂️ Inpaint Crop (Improved)",
+        "x_instance": 1,
+        "x_node_alias": "inpainter",
+        "x_core": true,
+        "__hidden": true
+      },
+      "LoraLoader#226.lora_name": {
+        "type": "string",
+        "title": "lora_name (LoraLoader #226)",
+        "default": "fingers_adjuster_illustrious2.0stable_v1.0.safetensors",
+        "enum": [
+          "B-mixxxlora.safetensors",
+          "Dramatic Lighting Slider.safetensors",
+          "Matte_Skin_Illustrious_v4.safetensors",
+          "Motion_Lines_(Concept)_ILXL.safetensors",
+          "Realim_Lora_BSY_IL_V1_RA42.safetensors",
+          "Semi-realism_illustrious.safetensors",
+          "chroma-flash-heun_r01-fp32-pruned.safetensors",
+          "ck-NeurocoreShadowCircuit-ZIT_000003000.safetensors",
+          "ck-shadow-circuit-IL-000012.safetensors",
+          "ck_cyberpunk.safetensors",
+          "codex_sss_chroma-000012.safetensors",
+          "fingers_adjuster_illustrious2.0stable_v1.0.safetensors",
+          "iLLMythSmo0thL1nes.safetensors",
+          "lenovo_z.safetensors",
+          "realistic filter [IL].safetensors",
+          "rimixO.safetensors",
+          "wan/23High noise-Cumshot Aesthetics.safetensors",
+          "wan/56Low noise-Cumshot Aesthetics.safetensors",
+          "wan/DR34ML4Y_I2V_14B_HIGH.safetensors",
+          "wan/DR34ML4Y_I2V_14B_HIGH_V2.safetensors",
+          "wan/DR34ML4Y_I2V_14B_LOW.safetensors",
+          "wan/DR34ML4Y_I2V_14B_LOW_V2.safetensors",
+          "wan/NSFW-22-H-e8.safetensors",
+          "wan/NSFW-22-L-e8.safetensors",
+          "wan/P009-The-Walk-Wan2.2-i2v_Normal-H.safetensors",
+          "wan/P009-The-Walk-Wan2.2-i2v_Normal-L.safetensors",
+          "wan/PENISLORA_22_i2v_HIGH_e320.safetensors",
+          "wan/PENISLORA_22_i2v_LOW_e496.safetensors",
+          "wan/W22_NSFW_Posing_Nude_i2v_HN_v2.safetensors",
+          "wan/W22_NSFW_Posing_Nude_i2v_LN_v2.safetensors",
+          "wan/Wan2.2 - I2V - Fucking Machine - HIGH 14B.safetensors",
+          "wan/Wan2.2 - I2V - Fucking Machine - LOW 14B.safetensors",
+          "wan/Wan2.2-I2V-High-MysticXXX.safetensors",
+          "wan/Wan2.2-I2V-Low-MysticXXX.safetensors",
+          "wan/Wan_22_ComfyUI_Repackaged_wan22_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
+          "wan/Wan_22_ComfyUI_Repackaged_wan22_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors",
+          "wan/anal_insertion_HIGH_V01.safetensors",
+          "wan/anal_insertion_LOW_V01.safetensors",
+          "wan/ass_ripple_HIGH_V01.safetensors",
+          "wan/ass_ripple_LOW_V01.safetensors",
+          "wan/cum2_h_20.safetensors",
+          "wan/cum4_h_30.safetensors",
+          "wan/cum4_l_75.safetensors",
+          "wan/cum_l_70.safetensors",
+          "wan/dance_b high 250905.safetensors",
+          "wan/dance_b low 250905.safetensors",
+          "wan/derpfuckedfrombehind_000002125_high_noise.safetensors",
+          "wan/derpfuckedfrombehind_000002125_low_noise.safetensors",
+          "wan/h_wan22_lightning.safetensors",
+          "wan/jfj-deepthroat-W22-I2V-HN.safetensors",
+          "wan/jfj-deepthroat-W22-I2V-LN.safetensors",
+          "wan/l_wan22_lightning.safetensors",
+          "wan/reverse_suspended_congress_I2V_high.safetensors",
+          "wan/reverse_suspended_congress_I2V_low.safetensors",
+          "wan/slop_twerk_HighNoise_merged3_7_v2.safetensors",
+          "wan/slop_twerk_LowNoise_merged3_7_v2.safetensors",
+          "wan/wan21_lightning.safetensors",
+          "wan/wan22-4n4lpl4y-i2v-182epoc-low-k3nk.safetensors",
+          "wan/wan22-4n4lpl4y-i2v-222epoc-high-k3nk.safetensors",
+          "wan/wan22-ultimatedeepthroat-I2V-101epoc-low-k3nk.safetensors",
+          "wan/wan22-ultimatedeepthroat-i2v-102epoc-high-k3nk.safetensors",
+          "wan/wan22.r3v3rs3_c0wg1rl-14b-High-i2v_e70.safetensors",
+          "wan/wan22.r3v3rs3_c0wg1rl-14b-Low-i2v_e70.safetensors",
+          "wan/wan22_i2v_anal_v1_high_noise.safetensors",
+          "wan/wan22_i2v_anal_v1_low_noise.safetensors",
+          "wan/wan22_i2v_futa_cowgirl_high_noise.safetensors",
+          "wan/wan22_i2v_futa_cowgirl_low_noise.safetensors",
+          "zturbo_penis_v3_e340.safetensors"
+        ],
+        "x_node_id": "226",
+        "x_class_type": "LoraLoader",
+        "x_title": "Load LoRA",
+        "x_instance": 2
+      },
+      "LoraLoader#226.strength_model": {
+        "type": "number",
+        "title": "strength_model (LoraLoader #226)",
+        "default": 0.65,
+        "minimum": -100,
+        "maximum": 100,
+        "step": 0.01,
+        "x_node_id": "226",
+        "x_class_type": "LoraLoader",
+        "x_title": "Load LoRA",
+        "x_instance": 2
+      },
+      "LoraLoader#226.strength_clip": {
+        "type": "number",
+        "title": "strength_clip (LoraLoader #226)",
+        "default": 1,
+        "minimum": -100,
+        "maximum": 100,
+        "step": 0.01,
+        "x_node_id": "226",
+        "x_class_type": "LoraLoader",
+        "x_title": "Load LoRA",
+        "x_instance": 2
+      },
+      "LoraLoader#233.lora_name": {
+        "type": "string",
+        "title": "lora_name (LoraLoader #233)",
+        "default": "ck-shadow-circuit-IL-000012.safetensors",
+        "enum": [
+          "B-mixxxlora.safetensors",
+          "Dramatic Lighting Slider.safetensors",
+          "Matte_Skin_Illustrious_v4.safetensors",
+          "Motion_Lines_(Concept)_ILXL.safetensors",
+          "Realim_Lora_BSY_IL_V1_RA42.safetensors",
+          "Semi-realism_illustrious.safetensors",
+          "chroma-flash-heun_r01-fp32-pruned.safetensors",
+          "ck-NeurocoreShadowCircuit-ZIT_000003000.safetensors",
+          "ck-shadow-circuit-IL-000012.safetensors",
+          "ck_cyberpunk.safetensors",
+          "codex_sss_chroma-000012.safetensors",
+          "fingers_adjuster_illustrious2.0stable_v1.0.safetensors",
+          "iLLMythSmo0thL1nes.safetensors",
+          "lenovo_z.safetensors",
+          "realistic filter [IL].safetensors",
+          "rimixO.safetensors",
+          "wan/23High noise-Cumshot Aesthetics.safetensors",
+          "wan/56Low noise-Cumshot Aesthetics.safetensors",
+          "wan/DR34ML4Y_I2V_14B_HIGH.safetensors",
+          "wan/DR34ML4Y_I2V_14B_HIGH_V2.safetensors",
+          "wan/DR34ML4Y_I2V_14B_LOW.safetensors",
+          "wan/DR34ML4Y_I2V_14B_LOW_V2.safetensors",
+          "wan/NSFW-22-H-e8.safetensors",
+          "wan/NSFW-22-L-e8.safetensors",
+          "wan/P009-The-Walk-Wan2.2-i2v_Normal-H.safetensors",
+          "wan/P009-The-Walk-Wan2.2-i2v_Normal-L.safetensors",
+          "wan/PENISLORA_22_i2v_HIGH_e320.safetensors",
+          "wan/PENISLORA_22_i2v_LOW_e496.safetensors",
+          "wan/W22_NSFW_Posing_Nude_i2v_HN_v2.safetensors",
+          "wan/W22_NSFW_Posing_Nude_i2v_LN_v2.safetensors",
+          "wan/Wan2.2 - I2V - Fucking Machine - HIGH 14B.safetensors",
+          "wan/Wan2.2 - I2V - Fucking Machine - LOW 14B.safetensors",
+          "wan/Wan2.2-I2V-High-MysticXXX.safetensors",
+          "wan/Wan2.2-I2V-Low-MysticXXX.safetensors",
+          "wan/Wan_22_ComfyUI_Repackaged_wan22_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
+          "wan/Wan_22_ComfyUI_Repackaged_wan22_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors",
+          "wan/anal_insertion_HIGH_V01.safetensors",
+          "wan/anal_insertion_LOW_V01.safetensors",
+          "wan/ass_ripple_HIGH_V01.safetensors",
+          "wan/ass_ripple_LOW_V01.safetensors",
+          "wan/cum2_h_20.safetensors",
+          "wan/cum4_h_30.safetensors",
+          "wan/cum4_l_75.safetensors",
+          "wan/cum_l_70.safetensors",
+          "wan/dance_b high 250905.safetensors",
+          "wan/dance_b low 250905.safetensors",
+          "wan/derpfuckedfrombehind_000002125_high_noise.safetensors",
+          "wan/derpfuckedfrombehind_000002125_low_noise.safetensors",
+          "wan/h_wan22_lightning.safetensors",
+          "wan/jfj-deepthroat-W22-I2V-HN.safetensors",
+          "wan/jfj-deepthroat-W22-I2V-LN.safetensors",
+          "wan/l_wan22_lightning.safetensors",
+          "wan/reverse_suspended_congress_I2V_high.safetensors",
+          "wan/reverse_suspended_congress_I2V_low.safetensors",
+          "wan/slop_twerk_HighNoise_merged3_7_v2.safetensors",
+          "wan/slop_twerk_LowNoise_merged3_7_v2.safetensors",
+          "wan/wan21_lightning.safetensors",
+          "wan/wan22-4n4lpl4y-i2v-182epoc-low-k3nk.safetensors",
+          "wan/wan22-4n4lpl4y-i2v-222epoc-high-k3nk.safetensors",
+          "wan/wan22-ultimatedeepthroat-I2V-101epoc-low-k3nk.safetensors",
+          "wan/wan22-ultimatedeepthroat-i2v-102epoc-high-k3nk.safetensors",
+          "wan/wan22.r3v3rs3_c0wg1rl-14b-High-i2v_e70.safetensors",
+          "wan/wan22.r3v3rs3_c0wg1rl-14b-Low-i2v_e70.safetensors",
+          "wan/wan22_i2v_anal_v1_high_noise.safetensors",
+          "wan/wan22_i2v_anal_v1_low_noise.safetensors",
+          "wan/wan22_i2v_futa_cowgirl_high_noise.safetensors",
+          "wan/wan22_i2v_futa_cowgirl_low_noise.safetensors",
+          "zturbo_penis_v3_e340.safetensors"
+        ],
+        "x_node_id": "233",
+        "x_class_type": "LoraLoader",
+        "x_title": "Load LoRA",
+        "x_instance": 3
+      },
+      "LoraLoader#233.strength_model": {
+        "type": "number",
+        "title": "strength_model (LoraLoader #233)",
+        "default": 0.4,
+        "minimum": -100,
+        "maximum": 100,
+        "step": 0.01,
+        "x_node_id": "233",
+        "x_class_type": "LoraLoader",
+        "x_title": "Load LoRA",
+        "x_instance": 3
+      },
+      "LoraLoader#233.strength_clip": {
+        "type": "number",
+        "title": "strength_clip (LoraLoader #233)",
+        "default": 0.4,
+        "minimum": -100,
+        "maximum": 100,
+        "step": 0.01,
+        "x_node_id": "233",
+        "x_class_type": "LoraLoader",
+        "x_title": "Load LoRA",
+        "x_instance": 3
+      },
+      "LoraLoader#360.lora_name": {
+        "type": "string",
+        "title": "lora_name (LoraLoader #360)",
+        "default": "Semi-realism_illustrious.safetensors",
+        "enum": [
+          "B-mixxxlora.safetensors",
+          "Dramatic Lighting Slider.safetensors",
+          "Matte_Skin_Illustrious_v4.safetensors",
+          "Motion_Lines_(Concept)_ILXL.safetensors",
+          "Realim_Lora_BSY_IL_V1_RA42.safetensors",
+          "Semi-realism_illustrious.safetensors",
+          "chroma-flash-heun_r01-fp32-pruned.safetensors",
+          "ck-NeurocoreShadowCircuit-ZIT_000003000.safetensors",
+          "ck-shadow-circuit-IL-000012.safetensors",
+          "ck_cyberpunk.safetensors",
+          "codex_sss_chroma-000012.safetensors",
+          "fingers_adjuster_illustrious2.0stable_v1.0.safetensors",
+          "iLLMythSmo0thL1nes.safetensors",
+          "lenovo_z.safetensors",
+          "realistic filter [IL].safetensors",
+          "rimixO.safetensors",
+          "wan/23High noise-Cumshot Aesthetics.safetensors",
+          "wan/56Low noise-Cumshot Aesthetics.safetensors",
+          "wan/DR34ML4Y_I2V_14B_HIGH.safetensors",
+          "wan/DR34ML4Y_I2V_14B_HIGH_V2.safetensors",
+          "wan/DR34ML4Y_I2V_14B_LOW.safetensors",
+          "wan/DR34ML4Y_I2V_14B_LOW_V2.safetensors",
+          "wan/NSFW-22-H-e8.safetensors",
+          "wan/NSFW-22-L-e8.safetensors",
+          "wan/P009-The-Walk-Wan2.2-i2v_Normal-H.safetensors",
+          "wan/P009-The-Walk-Wan2.2-i2v_Normal-L.safetensors",
+          "wan/PENISLORA_22_i2v_HIGH_e320.safetensors",
+          "wan/PENISLORA_22_i2v_LOW_e496.safetensors",
+          "wan/W22_NSFW_Posing_Nude_i2v_HN_v2.safetensors",
+          "wan/W22_NSFW_Posing_Nude_i2v_LN_v2.safetensors",
+          "wan/Wan2.2 - I2V - Fucking Machine - HIGH 14B.safetensors",
+          "wan/Wan2.2 - I2V - Fucking Machine - LOW 14B.safetensors",
+          "wan/Wan2.2-I2V-High-MysticXXX.safetensors",
+          "wan/Wan2.2-I2V-Low-MysticXXX.safetensors",
+          "wan/Wan_22_ComfyUI_Repackaged_wan22_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
+          "wan/Wan_22_ComfyUI_Repackaged_wan22_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors",
+          "wan/anal_insertion_HIGH_V01.safetensors",
+          "wan/anal_insertion_LOW_V01.safetensors",
+          "wan/ass_ripple_HIGH_V01.safetensors",
+          "wan/ass_ripple_LOW_V01.safetensors",
+          "wan/cum2_h_20.safetensors",
+          "wan/cum4_h_30.safetensors",
+          "wan/cum4_l_75.safetensors",
+          "wan/cum_l_70.safetensors",
+          "wan/dance_b high 250905.safetensors",
+          "wan/dance_b low 250905.safetensors",
+          "wan/derpfuckedfrombehind_000002125_high_noise.safetensors",
+          "wan/derpfuckedfrombehind_000002125_low_noise.safetensors",
+          "wan/h_wan22_lightning.safetensors",
+          "wan/jfj-deepthroat-W22-I2V-HN.safetensors",
+          "wan/jfj-deepthroat-W22-I2V-LN.safetensors",
+          "wan/l_wan22_lightning.safetensors",
+          "wan/reverse_suspended_congress_I2V_high.safetensors",
+          "wan/reverse_suspended_congress_I2V_low.safetensors",
+          "wan/slop_twerk_HighNoise_merged3_7_v2.safetensors",
+          "wan/slop_twerk_LowNoise_merged3_7_v2.safetensors",
+          "wan/wan21_lightning.safetensors",
+          "wan/wan22-4n4lpl4y-i2v-182epoc-low-k3nk.safetensors",
+          "wan/wan22-4n4lpl4y-i2v-222epoc-high-k3nk.safetensors",
+          "wan/wan22-ultimatedeepthroat-I2V-101epoc-low-k3nk.safetensors",
+          "wan/wan22-ultimatedeepthroat-i2v-102epoc-high-k3nk.safetensors",
+          "wan/wan22.r3v3rs3_c0wg1rl-14b-High-i2v_e70.safetensors",
+          "wan/wan22.r3v3rs3_c0wg1rl-14b-Low-i2v_e70.safetensors",
+          "wan/wan22_i2v_anal_v1_high_noise.safetensors",
+          "wan/wan22_i2v_anal_v1_low_noise.safetensors",
+          "wan/wan22_i2v_futa_cowgirl_high_noise.safetensors",
+          "wan/wan22_i2v_futa_cowgirl_low_noise.safetensors",
+          "zturbo_penis_v3_e340.safetensors"
+        ],
+        "x_node_id": "360",
+        "x_class_type": "LoraLoader",
+        "x_title": "Load LoRA",
+        "x_instance": 4
+      },
+      "LoraLoader#360.strength_model": {
+        "type": "number",
+        "title": "strength_model (LoraLoader #360)",
+        "default": 0.4,
+        "minimum": -100,
+        "maximum": 100,
+        "step": 0.01,
+        "x_node_id": "360",
+        "x_class_type": "LoraLoader",
+        "x_title": "Load LoRA",
+        "x_instance": 4
+      },
+      "LoraLoader#360.strength_clip": {
+        "type": "number",
+        "title": "strength_clip (LoraLoader #360)",
+        "default": 0.4,
+        "minimum": -100,
+        "maximum": 100,
+        "step": 0.01,
+        "x_node_id": "360",
+        "x_class_type": "LoraLoader",
+        "x_title": "Load LoRA",
+        "x_instance": 4
+      },
+      "LoraLoader#361.lora_name": {
+        "type": "string",
+        "title": "lora_name (LoraLoader #361)",
+        "default": "B-mixxxlora.safetensors",
+        "enum": [
+          "B-mixxxlora.safetensors",
+          "Dramatic Lighting Slider.safetensors",
+          "Matte_Skin_Illustrious_v4.safetensors",
+          "Motion_Lines_(Concept)_ILXL.safetensors",
+          "Realim_Lora_BSY_IL_V1_RA42.safetensors",
+          "Semi-realism_illustrious.safetensors",
+          "chroma-flash-heun_r01-fp32-pruned.safetensors",
+          "ck-NeurocoreShadowCircuit-ZIT_000003000.safetensors",
+          "ck-shadow-circuit-IL-000012.safetensors",
+          "ck_cyberpunk.safetensors",
+          "codex_sss_chroma-000012.safetensors",
+          "fingers_adjuster_illustrious2.0stable_v1.0.safetensors",
+          "iLLMythSmo0thL1nes.safetensors",
+          "lenovo_z.safetensors",
+          "realistic filter [IL].safetensors",
+          "rimixO.safetensors",
+          "wan/23High noise-Cumshot Aesthetics.safetensors",
+          "wan/56Low noise-Cumshot Aesthetics.safetensors",
+          "wan/DR34ML4Y_I2V_14B_HIGH.safetensors",
+          "wan/DR34ML4Y_I2V_14B_HIGH_V2.safetensors",
+          "wan/DR34ML4Y_I2V_14B_LOW.safetensors",
+          "wan/DR34ML4Y_I2V_14B_LOW_V2.safetensors",
+          "wan/NSFW-22-H-e8.safetensors",
+          "wan/NSFW-22-L-e8.safetensors",
+          "wan/P009-The-Walk-Wan2.2-i2v_Normal-H.safetensors",
+          "wan/P009-The-Walk-Wan2.2-i2v_Normal-L.safetensors",
+          "wan/PENISLORA_22_i2v_HIGH_e320.safetensors",
+          "wan/PENISLORA_22_i2v_LOW_e496.safetensors",
+          "wan/W22_NSFW_Posing_Nude_i2v_HN_v2.safetensors",
+          "wan/W22_NSFW_Posing_Nude_i2v_LN_v2.safetensors",
+          "wan/Wan2.2 - I2V - Fucking Machine - HIGH 14B.safetensors",
+          "wan/Wan2.2 - I2V - Fucking Machine - LOW 14B.safetensors",
+          "wan/Wan2.2-I2V-High-MysticXXX.safetensors",
+          "wan/Wan2.2-I2V-Low-MysticXXX.safetensors",
+          "wan/Wan_22_ComfyUI_Repackaged_wan22_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
+          "wan/Wan_22_ComfyUI_Repackaged_wan22_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors",
+          "wan/anal_insertion_HIGH_V01.safetensors",
+          "wan/anal_insertion_LOW_V01.safetensors",
+          "wan/ass_ripple_HIGH_V01.safetensors",
+          "wan/ass_ripple_LOW_V01.safetensors",
+          "wan/cum2_h_20.safetensors",
+          "wan/cum4_h_30.safetensors",
+          "wan/cum4_l_75.safetensors",
+          "wan/cum_l_70.safetensors",
+          "wan/dance_b high 250905.safetensors",
+          "wan/dance_b low 250905.safetensors",
+          "wan/derpfuckedfrombehind_000002125_high_noise.safetensors",
+          "wan/derpfuckedfrombehind_000002125_low_noise.safetensors",
+          "wan/h_wan22_lightning.safetensors",
+          "wan/jfj-deepthroat-W22-I2V-HN.safetensors",
+          "wan/jfj-deepthroat-W22-I2V-LN.safetensors",
+          "wan/l_wan22_lightning.safetensors",
+          "wan/reverse_suspended_congress_I2V_high.safetensors",
+          "wan/reverse_suspended_congress_I2V_low.safetensors",
+          "wan/slop_twerk_HighNoise_merged3_7_v2.safetensors",
+          "wan/slop_twerk_LowNoise_merged3_7_v2.safetensors",
+          "wan/wan21_lightning.safetensors",
+          "wan/wan22-4n4lpl4y-i2v-182epoc-low-k3nk.safetensors",
+          "wan/wan22-4n4lpl4y-i2v-222epoc-high-k3nk.safetensors",
+          "wan/wan22-ultimatedeepthroat-I2V-101epoc-low-k3nk.safetensors",
+          "wan/wan22-ultimatedeepthroat-i2v-102epoc-high-k3nk.safetensors",
+          "wan/wan22.r3v3rs3_c0wg1rl-14b-High-i2v_e70.safetensors",
+          "wan/wan22.r3v3rs3_c0wg1rl-14b-Low-i2v_e70.safetensors",
+          "wan/wan22_i2v_anal_v1_high_noise.safetensors",
+          "wan/wan22_i2v_anal_v1_low_noise.safetensors",
+          "wan/wan22_i2v_futa_cowgirl_high_noise.safetensors",
+          "wan/wan22_i2v_futa_cowgirl_low_noise.safetensors",
+          "zturbo_penis_v3_e340.safetensors"
+        ],
+        "x_node_id": "361",
+        "x_class_type": "LoraLoader",
+        "x_title": "Load LoRA",
+        "x_instance": 5
+      },
+      "LoraLoader#361.strength_model": {
+        "type": "number",
+        "title": "strength_model (LoraLoader #361)",
+        "default": 1,
+        "minimum": -100,
+        "maximum": 100,
+        "step": 0.01,
+        "x_node_id": "361",
+        "x_class_type": "LoraLoader",
+        "x_title": "Load LoRA",
+        "x_instance": 5
+      },
+      "LoraLoader#361.strength_clip": {
+        "type": "number",
+        "title": "strength_clip (LoraLoader #361)",
+        "default": 1,
+        "minimum": -100,
+        "maximum": 100,
+        "step": 0.01,
+        "x_node_id": "361",
+        "x_class_type": "LoraLoader",
+        "x_title": "Load LoRA",
+        "x_instance": 5
+      },
+      "LoraLoader#849.lora_name": {
+        "type": "string",
+        "title": "lora_name (LoraLoader #849)",
+        "default": "iLLMythSmo0thL1nes.safetensors",
+        "enum": [
+          "B-mixxxlora.safetensors",
+          "Dramatic Lighting Slider.safetensors",
+          "Matte_Skin_Illustrious_v4.safetensors",
+          "Motion_Lines_(Concept)_ILXL.safetensors",
+          "Realim_Lora_BSY_IL_V1_RA42.safetensors",
+          "Semi-realism_illustrious.safetensors",
+          "chroma-flash-heun_r01-fp32-pruned.safetensors",
+          "ck-NeurocoreShadowCircuit-ZIT_000003000.safetensors",
+          "ck-shadow-circuit-IL-000012.safetensors",
+          "ck_cyberpunk.safetensors",
+          "codex_sss_chroma-000012.safetensors",
+          "fingers_adjuster_illustrious2.0stable_v1.0.safetensors",
+          "iLLMythSmo0thL1nes.safetensors",
+          "lenovo_z.safetensors",
+          "realistic filter [IL].safetensors",
+          "rimixO.safetensors",
+          "wan/23High noise-Cumshot Aesthetics.safetensors",
+          "wan/56Low noise-Cumshot Aesthetics.safetensors",
+          "wan/DR34ML4Y_I2V_14B_HIGH.safetensors",
+          "wan/DR34ML4Y_I2V_14B_HIGH_V2.safetensors",
+          "wan/DR34ML4Y_I2V_14B_LOW.safetensors",
+          "wan/DR34ML4Y_I2V_14B_LOW_V2.safetensors",
+          "wan/NSFW-22-H-e8.safetensors",
+          "wan/NSFW-22-L-e8.safetensors",
+          "wan/P009-The-Walk-Wan2.2-i2v_Normal-H.safetensors",
+          "wan/P009-The-Walk-Wan2.2-i2v_Normal-L.safetensors",
+          "wan/PENISLORA_22_i2v_HIGH_e320.safetensors",
+          "wan/PENISLORA_22_i2v_LOW_e496.safetensors",
+          "wan/W22_NSFW_Posing_Nude_i2v_HN_v2.safetensors",
+          "wan/W22_NSFW_Posing_Nude_i2v_LN_v2.safetensors",
+          "wan/Wan2.2 - I2V - Fucking Machine - HIGH 14B.safetensors",
+          "wan/Wan2.2 - I2V - Fucking Machine - LOW 14B.safetensors",
+          "wan/Wan2.2-I2V-High-MysticXXX.safetensors",
+          "wan/Wan2.2-I2V-Low-MysticXXX.safetensors",
+          "wan/Wan_22_ComfyUI_Repackaged_wan22_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
+          "wan/Wan_22_ComfyUI_Repackaged_wan22_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors",
+          "wan/anal_insertion_HIGH_V01.safetensors",
+          "wan/anal_insertion_LOW_V01.safetensors",
+          "wan/ass_ripple_HIGH_V01.safetensors",
+          "wan/ass_ripple_LOW_V01.safetensors",
+          "wan/cum2_h_20.safetensors",
+          "wan/cum4_h_30.safetensors",
+          "wan/cum4_l_75.safetensors",
+          "wan/cum_l_70.safetensors",
+          "wan/dance_b high 250905.safetensors",
+          "wan/dance_b low 250905.safetensors",
+          "wan/derpfuckedfrombehind_000002125_high_noise.safetensors",
+          "wan/derpfuckedfrombehind_000002125_low_noise.safetensors",
+          "wan/h_wan22_lightning.safetensors",
+          "wan/jfj-deepthroat-W22-I2V-HN.safetensors",
+          "wan/jfj-deepthroat-W22-I2V-LN.safetensors",
+          "wan/l_wan22_lightning.safetensors",
+          "wan/reverse_suspended_congress_I2V_high.safetensors",
+          "wan/reverse_suspended_congress_I2V_low.safetensors",
+          "wan/slop_twerk_HighNoise_merged3_7_v2.safetensors",
+          "wan/slop_twerk_LowNoise_merged3_7_v2.safetensors",
+          "wan/wan21_lightning.safetensors",
+          "wan/wan22-4n4lpl4y-i2v-182epoc-low-k3nk.safetensors",
+          "wan/wan22-4n4lpl4y-i2v-222epoc-high-k3nk.safetensors",
+          "wan/wan22-ultimatedeepthroat-I2V-101epoc-low-k3nk.safetensors",
+          "wan/wan22-ultimatedeepthroat-i2v-102epoc-high-k3nk.safetensors",
+          "wan/wan22.r3v3rs3_c0wg1rl-14b-High-i2v_e70.safetensors",
+          "wan/wan22.r3v3rs3_c0wg1rl-14b-Low-i2v_e70.safetensors",
+          "wan/wan22_i2v_anal_v1_high_noise.safetensors",
+          "wan/wan22_i2v_anal_v1_low_noise.safetensors",
+          "wan/wan22_i2v_futa_cowgirl_high_noise.safetensors",
+          "wan/wan22_i2v_futa_cowgirl_low_noise.safetensors",
+          "zturbo_penis_v3_e340.safetensors"
+        ],
+        "x_node_id": "849",
+        "x_class_type": "LoraLoader",
+        "x_title": "Load LoRA",
+        "x_instance": 6
+      },
+      "LoraLoader#849.strength_model": {
+        "type": "number",
+        "title": "strength_model (LoraLoader #849)",
+        "default": 0.6,
+        "minimum": -100,
+        "maximum": 100,
+        "step": 0.01,
+        "x_node_id": "849",
+        "x_class_type": "LoraLoader",
+        "x_title": "Load LoRA",
+        "x_instance": 6
+      },
+      "LoraLoader#849.strength_clip": {
+        "type": "number",
+        "title": "strength_clip (LoraLoader #849)",
+        "default": 0.6,
+        "minimum": -100,
+        "maximum": 100,
+        "step": 0.01,
+        "x_node_id": "849",
+        "x_class_type": "LoraLoader",
+        "x_title": "Load LoRA",
+        "x_instance": 6
+      },
+      "LoadImage#1029.image": {
+        "type": "string",
+        "title": "load image",
+        "default": "",
+        "widget": "media_upload",
+        "x_media_kind": "image",
+        "x_node_id": "1029",
+        "x_class_type": "LoadImage",
+        "x_title": "Load Image",
+        "x_instance": 1,
+        "enum": [
+          "ComfyUI_00007_.png",
+          "ComfyUI_temp_pvtpv_00002_.png",
+          "example.png",
+          "hibiscus-input-0385.jpg",
+          "hibiscus-input-0472_mask.png",
+          "null_frame2.png",
+          "null_frame_1280x720.png",
+          "null_frame_480x832 (1).png",
+          "null_frame_480x832.png",
+          "null_frame_720x720.png",
+          "null_frame_832x480.png",
+          "studio-apartment-output-0021.jpg",
+          "videoframe_3375.png",
+          "white_mask.png",
+          "white_mask_1280x720.png",
+          "white_mask_480x832.png",
+          "white_mask_720x1280.png",
+          "white_mask_720x720.png",
+          "white_mask_832x480.png"
+        ],
+        "x_core": true,
+        "x_node_alias": "load image"
+      },
+      "LoadImage#1030.image": {
+        "type": "string",
+        "title": "load mask",
+        "default": "",
+        "widget": "media_upload",
+        "x_media_kind": "image",
+        "x_node_id": "1030",
+        "x_class_type": "LoadImage",
+        "x_title": "Load Image",
+        "x_instance": 2,
+        "enum": [
+          "ComfyUI_00007_.png",
+          "ComfyUI_temp_pvtpv_00002_.png",
+          "example.png",
+          "hibiscus-input-0385.jpg",
+          "hibiscus-input-0472_mask.png",
+          "null_frame2.png",
+          "null_frame_1280x720.png",
+          "null_frame_480x832 (1).png",
+          "null_frame_480x832.png",
+          "null_frame_720x720.png",
+          "null_frame_832x480.png",
+          "studio-apartment-output-0021.jpg",
+          "videoframe_3375.png",
+          "white_mask.png",
+          "white_mask_1280x720.png",
+          "white_mask_480x832.png",
+          "white_mask_720x1280.png",
+          "white_mask_720x720.png",
+          "white_mask_832x480.png"
+        ],
+        "x_core": true,
+        "x_node_alias": "load mask"
+      },
+      "Image To Mask#1031.method": {
+        "type": "string",
+        "title": "method (Image To Mask)",
+        "default": "intensity",
+        "enum": [
+          "intensity",
+          "alpha"
+        ],
+        "x_node_id": "1031",
+        "x_class_type": "Image To Mask",
+        "x_title": "Image To Mask",
+        "x_instance": 1,
+        "x_core": true
+      },
+      "__node_order": [
+        "1029",
+        "112",
+        "1030",
+        "113",
+        "114",
+        "151",
+        "115",
+        "1",
+        "116",
+        "127",
+        "149",
+        "226",
+        "233",
+        "360",
+        "361",
+        "849",
+        "970",
+        "1031"
+      ],
+      "__node_meta": {
+        "1": {
+          "class_type": "CheckpointLoaderSimple",
+          "title": "Load Checkpoint",
+          "skipped": null,
+          "input_count": 1
+        },
+        "112": {
+          "class_type": "InpaintModelConditioning",
+          "title": "InpaintModelConditioning",
+          "skipped": "no_exposed_inputs",
+          "input_count": 6
+        },
+        "113": {
+          "class_type": "CLIPTextEncode",
+          "title": "positive prompt",
+          "skipped": null,
+          "input_count": 2
+        },
+        "114": {
+          "class_type": "CLIPTextEncode",
+          "title": "negative prompt",
+          "skipped": null,
+          "input_count": 2
+        },
+        "115": {
+          "class_type": "KSampler",
+          "title": "KSampler",
+          "skipped": null,
+          "input_count": 10
+        },
+        "116": {
+          "class_type": "VAEDecode",
+          "title": "VAE Decode",
+          "skipped": "no_exposed_inputs",
+          "input_count": 2
+        },
+        "127": {
+          "class_type": "InpaintStitchImproved",
+          "title": "✂️ Inpaint Stitch (Improved)",
+          "skipped": "no_exposed_inputs",
+          "input_count": 2
+        },
+        "149": {
+          "class_type": "LoraLoader",
+          "title": "Load LoRA",
+          "skipped": null,
+          "input_count": 5
+        },
+        "151": {
+          "class_type": "InpaintCropImproved",
+          "title": "✂️ Inpaint Crop (Improved)",
+          "skipped": null,
+          "input_count": 26
+        },
+        "226": {
+          "class_type": "LoraLoader",
+          "title": "Load LoRA",
+          "skipped": null,
+          "input_count": 5
+        },
+        "233": {
+          "class_type": "LoraLoader",
+          "title": "Load LoRA",
+          "skipped": null,
+          "input_count": 5
+        },
+        "360": {
+          "class_type": "LoraLoader",
+          "title": "Load LoRA",
+          "skipped": null,
+          "input_count": 5
+        },
+        "361": {
+          "class_type": "LoraLoader",
+          "title": "Load LoRA",
+          "skipped": null,
+          "input_count": 5
+        },
+        "849": {
+          "class_type": "LoraLoader",
+          "title": "Load LoRA",
+          "skipped": null,
+          "input_count": 5
+        },
+        "970": {
+          "class_type": "PreviewImage",
+          "title": "Preview Image",
+          "skipped": "no_exposed_inputs",
+          "input_count": 1
+        },
+        "1029": {
+          "class_type": "LoadImage",
+          "title": "Load Image",
+          "skipped": null,
+          "input_count": 1
+        },
+        "1030": {
+          "class_type": "LoadImage",
+          "title": "Load Image",
+          "skipped": null,
+          "input_count": 1
+        },
+        "1031": {
+          "class_type": "Image To Mask",
+          "title": "Image To Mask",
+          "skipped": null,
+          "input_count": 2
+        }
+      },
+      "__schema_version": 2,
+      "__bypass_849": {
+        "title": "Bypass Load LoRA",
+        "widget": "toggle",
+        "x_node_id": "849",
+        "type": "boolean",
+        "default": false
+      },
+      "__bypass_360": {
+        "title": "Bypass Load LoRA",
+        "widget": "toggle",
+        "x_node_id": "360",
+        "type": "boolean",
+        "default": false
+      },
+      "__bypass_361": {
+        "title": "Bypass Load LoRA",
+        "widget": "toggle",
+        "x_node_id": "361",
+        "type": "boolean",
+        "default": false
+      },
+      "__bypass_233": {
+        "title": "Bypass Load LoRA",
+        "widget": "toggle",
+        "x_node_id": "233",
+        "type": "boolean",
+        "default": false
+      },
+      "__bypass_226": {
+        "title": "Bypass Load LoRA",
+        "widget": "toggle",
+        "x_node_id": "226",
+        "type": "boolean",
+        "default": false
+      },
+      "__bypass_149": {
+        "title": "Bypass Load LoRA",
+        "widget": "toggle",
+        "x_node_id": "149",
+        "type": "boolean",
+        "default": false
+      }
+    },
+    "node_mapping": {
+      "CheckpointLoaderSimple#1.ckpt_name": {
+        "node_id": "1",
+        "field": "inputs.ckpt_name"
+      },
+      "CLIPTextEncode#113.text": {
+        "node_id": "113",
+        "field": "inputs.text"
+      },
+      "CLIPTextEncode#114.text": {
+        "node_id": "114",
+        "field": "inputs.text"
+      },
+      "KSampler#115.seed": {
+        "node_id": "115",
+        "field": "inputs.seed"
+      },
+      "KSampler#115.steps": {
+        "node_id": "115",
+        "field": "inputs.steps"
+      },
+      "KSampler#115.cfg": {
+        "node_id": "115",
+        "field": "inputs.cfg"
+      },
+      "KSampler#115.sampler_name": {
+        "node_id": "115",
+        "field": "inputs.sampler_name"
+      },
+      "KSampler#115.scheduler": {
+        "node_id": "115",
+        "field": "inputs.scheduler"
+      },
+      "KSampler#115.denoise": {
+        "node_id": "115",
+        "field": "inputs.denoise"
+      },
+      "LoraLoader#149.lora_name": {
+        "node_id": "149",
+        "field": "inputs.lora_name"
+      },
+      "LoraLoader#149.strength_model": {
+        "node_id": "149",
+        "field": "inputs.strength_model"
+      },
+      "LoraLoader#149.strength_clip": {
+        "node_id": "149",
+        "field": "inputs.strength_clip"
+      },
+      "InpaintCropImproved#151.downscale_algorithm": {
+        "node_id": "151",
+        "field": "inputs.downscale_algorithm"
+      },
+      "InpaintCropImproved#151.upscale_algorithm": {
+        "node_id": "151",
+        "field": "inputs.upscale_algorithm"
+      },
+      "InpaintCropImproved#151.preresize_mode": {
+        "node_id": "151",
+        "field": "inputs.preresize_mode"
+      },
+      "InpaintCropImproved#151.preresize_min_width": {
+        "node_id": "151",
+        "field": "inputs.preresize_min_width"
+      },
+      "InpaintCropImproved#151.preresize_min_height": {
+        "node_id": "151",
+        "field": "inputs.preresize_min_height"
+      },
+      "InpaintCropImproved#151.preresize_max_width": {
+        "node_id": "151",
+        "field": "inputs.preresize_max_width"
+      },
+      "InpaintCropImproved#151.preresize_max_height": {
+        "node_id": "151",
+        "field": "inputs.preresize_max_height"
+      },
+      "InpaintCropImproved#151.mask_expand_pixels": {
+        "node_id": "151",
+        "field": "inputs.mask_expand_pixels"
+      },
+      "InpaintCropImproved#151.mask_blend_pixels": {
+        "node_id": "151",
+        "field": "inputs.mask_blend_pixels"
+      },
+      "InpaintCropImproved#151.mask_hipass_filter": {
+        "node_id": "151",
+        "field": "inputs.mask_hipass_filter"
+      },
+      "InpaintCropImproved#151.extend_up_factor": {
+        "node_id": "151",
+        "field": "inputs.extend_up_factor"
+      },
+      "InpaintCropImproved#151.extend_down_factor": {
+        "node_id": "151",
+        "field": "inputs.extend_down_factor"
+      },
+      "InpaintCropImproved#151.extend_left_factor": {
+        "node_id": "151",
+        "field": "inputs.extend_left_factor"
+      },
+      "InpaintCropImproved#151.extend_right_factor": {
+        "node_id": "151",
+        "field": "inputs.extend_right_factor"
+      },
+      "InpaintCropImproved#151.context_from_mask_extend_factor": {
+        "node_id": "151",
+        "field": "inputs.context_from_mask_extend_factor"
+      },
+      "InpaintCropImproved#151.output_target_width": {
+        "node_id": "151",
+        "field": "inputs.output_target_width"
+      },
+      "InpaintCropImproved#151.output_target_height": {
+        "node_id": "151",
+        "field": "inputs.output_target_height"
+      },
+      "InpaintCropImproved#151.output_padding": {
+        "node_id": "151",
+        "field": "inputs.output_padding"
+      },
+      "InpaintCropImproved#151.optional_context_mask": {
+        "node_id": "151",
+        "field": "inputs.optional_context_mask"
+      },
+      "LoraLoader#226.lora_name": {
+        "node_id": "226",
+        "field": "inputs.lora_name"
+      },
+      "LoraLoader#226.strength_model": {
+        "node_id": "226",
+        "field": "inputs.strength_model"
+      },
+      "LoraLoader#226.strength_clip": {
+        "node_id": "226",
+        "field": "inputs.strength_clip"
+      },
+      "LoraLoader#233.lora_name": {
+        "node_id": "233",
+        "field": "inputs.lora_name"
+      },
+      "LoraLoader#233.strength_model": {
+        "node_id": "233",
+        "field": "inputs.strength_model"
+      },
+      "LoraLoader#233.strength_clip": {
+        "node_id": "233",
+        "field": "inputs.strength_clip"
+      },
+      "LoraLoader#360.lora_name": {
+        "node_id": "360",
+        "field": "inputs.lora_name"
+      },
+      "LoraLoader#360.strength_model": {
+        "node_id": "360",
+        "field": "inputs.strength_model"
+      },
+      "LoraLoader#360.strength_clip": {
+        "node_id": "360",
+        "field": "inputs.strength_clip"
+      },
+      "LoraLoader#361.lora_name": {
+        "node_id": "361",
+        "field": "inputs.lora_name"
+      },
+      "LoraLoader#361.strength_model": {
+        "node_id": "361",
+        "field": "inputs.strength_model"
+      },
+      "LoraLoader#361.strength_clip": {
+        "node_id": "361",
+        "field": "inputs.strength_clip"
+      },
+      "LoraLoader#849.lora_name": {
+        "node_id": "849",
+        "field": "inputs.lora_name"
+      },
+      "LoraLoader#849.strength_model": {
+        "node_id": "849",
+        "field": "inputs.strength_model"
+      },
+      "LoraLoader#849.strength_clip": {
+        "node_id": "849",
+        "field": "inputs.strength_clip"
+      },
+      "LoadImage#1029.image": {
+        "node_id": "1029",
+        "field": "inputs.image"
+      },
+      "LoadImage#1030.image": {
+        "node_id": "1030",
+        "field": "inputs.image"
+      },
+      "Image To Mask#1031.method": {
+        "node_id": "1031",
+        "field": "inputs.method"
+      }
+    },
+    "integrity": {
+      "graph_sha256": "148415c28703e5c30a417fbe9a884051d935d6bcacc8ad93a255a5e5bbad1347",
+      "input_schema_sha256": "4d63bade942d403c3b04a0c1e74e3c64bc284b55dfdf78fc80019df6acb436a6",
+      "bundle_sha256": "22c2d719807b536b6f306a674fc267e496a052c60506b669811968dad5f3fc2a"
+    },
+    "settings": {
+      "node_count": 18,
+      "input_schema_count": 58,
+      "node_mapping_count": 49
+    },
+    "source": "sweet-tea-studio",
+    "comfy_format": "api",
+    "notes": "Contains ComfyUI API graph plus Sweet Tea Studio pipe metadata."
+  }
+}

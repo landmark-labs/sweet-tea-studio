@@ -1,0 +1,950 @@
+{
+  "workflow": {
+    "1": {
+      "inputs": {
+        "lora_name": "realistic filter [IL].safetensors",
+        "strength_model": 0.25000000000000006,
+        "strength_clip": 1.0000000000000002,
+        "model": [
+          "2",
+          0
+        ],
+        "clip": [
+          "2",
+          1
+        ]
+      },
+      "class_type": "LoraLoader",
+      "_meta": {
+        "title": "Load LoRA",
+        "hiddenInControls": false
+      }
+    },
+    "2": {
+      "inputs": {
+        "lora_name": "B-mixxxlora.safetensors",
+        "strength_model": 1.0000000000000002,
+        "strength_clip": 1.0000000000000002,
+        "model": [
+          "3",
+          0
+        ],
+        "clip": [
+          "3",
+          1
+        ]
+      },
+      "class_type": "LoraLoader",
+      "_meta": {
+        "title": "Load LoRA",
+        "hiddenInControls": false
+      }
+    },
+    "3": {
+      "inputs": {
+        "lora_name": "wh40k/ILLUltraM40k.safetensors",
+        "strength_model": 1.0000000000000002,
+        "strength_clip": 1.0000000000000002,
+        "model": [
+          "23",
+          0
+        ],
+        "clip": [
+          "23",
+          1
+        ]
+      },
+      "class_type": "LoraLoader",
+      "_meta": {
+        "title": "Load LoRA",
+        "hiddenInControls": false
+      }
+    },
+    "4": {
+      "inputs": {
+        "text": "",
+        "clip": [
+          "1",
+          1
+        ]
+      },
+      "class_type": "CLIPTextEncode",
+      "_meta": {
+        "title": "CLIP Text Encode (Prompt)"
+      }
+    },
+    "9": {
+      "inputs": {
+        "text": "",
+        "clip": [
+          "1",
+          1
+        ]
+      },
+      "class_type": "CLIPTextEncode",
+      "_meta": {
+        "title": "CLIP Text Encode (Prompt)"
+      }
+    },
+    "17": {
+      "inputs": {
+        "seed": 558325815100329,
+        "steps": 30,
+        "cfg": 6,
+        "sampler_name": "euler_ancestral",
+        "scheduler": "normal",
+        "denoise": 1,
+        "model": [
+          "1",
+          0
+        ],
+        "positive": [
+          "4",
+          0
+        ],
+        "negative": [
+          "9",
+          0
+        ],
+        "latent_image": [
+          "19",
+          0
+        ]
+      },
+      "class_type": "KSampler",
+      "_meta": {
+        "title": "KSampler"
+      }
+    },
+    "18": {
+      "inputs": {
+        "samples": [
+          "17",
+          0
+        ],
+        "vae": [
+          "20",
+          2
+        ]
+      },
+      "class_type": "VAEDecode",
+      "_meta": {
+        "title": "VAE Decode"
+      }
+    },
+    "19": {
+      "inputs": {
+        "width": 512,
+        "height": 512,
+        "batch_size": 4
+      },
+      "class_type": "EmptyLatentImage",
+      "_meta": {
+        "title": "Empty Latent Image"
+      }
+    },
+    "20": {
+      "inputs": {
+        "ckpt_name": "hassakuXLIllustrious_v21fix.safetensors"
+      },
+      "class_type": "CheckpointLoaderSimple",
+      "_meta": {
+        "title": "Load Checkpoint"
+      }
+    },
+    "23": {
+      "inputs": {
+        "lora_name": "ck_cyberpunk.safetensors",
+        "strength_model": 0.22,
+        "strength_clip": 0.6,
+        "model": [
+          "20",
+          0
+        ],
+        "clip": [
+          "20",
+          1
+        ]
+      },
+      "class_type": "LoraLoader",
+      "_meta": {
+        "title": "Load LoRA",
+        "hiddenInControls": false
+      }
+    },
+    "25": {
+      "inputs": {
+        "images": [
+          "18",
+          0
+        ]
+      },
+      "class_type": "PreviewImage",
+      "_meta": {
+        "title": "Preview Image"
+      }
+    }
+  },
+  "_sweet_tea": {
+    "version": 1,
+    "name": "sts_t2i_basic",
+    "description": "wireframing pipe",
+    "exported_at": "2026-02-05T19:24:48.428766Z",
+    "input_schema": {
+      "LoraLoader.lora_name": {
+        "type": "string",
+        "title": "lora_name",
+        "default": "realistic filter [IL].safetensors",
+        "enum": [
+          "B-mixxxlora.safetensors",
+          "Dramatic Lighting Slider.safetensors",
+          "Matte_Skin_Illustrious_v4.safetensors",
+          "Motion_Lines_(Concept)_ILXL.safetensors",
+          "Realim_Lora_BSY_IL_V1_RA42.safetensors",
+          "Semi-realism_illustrious.safetensors",
+          "ck-NeurocoreShadowCircuit-ZIT_000003000.safetensors",
+          "ck-shadow-circuit-IL-000012.safetensors",
+          "ck_cyberpunk.safetensors",
+          "codex_sss_chroma-000012.safetensors",
+          "fingers_adjuster_illustrious2.0stable_v1.0.safetensors",
+          "iLLMythSmo0thL1nes.safetensors",
+          "lenovo_z.safetensors",
+          "realistic filter [IL].safetensors",
+          "rimixO.safetensors",
+          "wan/23High noise-Cumshot Aesthetics.safetensors",
+          "wan/56Low noise-Cumshot Aesthetics.safetensors",
+          "wan/DR34ML4Y_I2V_14B_HIGH.safetensors",
+          "wan/DR34ML4Y_I2V_14B_LOW.safetensors",
+          "wan/I2V-stroking_it.safetensors",
+          "wan/MasturbationCumshot_masturbation_cumshot_v1.1_e310.safetensors",
+          "wan/NSFW-22-H-e8.safetensors",
+          "wan/NSFW-22-L-e8.safetensors",
+          "wan/P009-The-Walk-Wan2.2-i2v_Normal-H.safetensors",
+          "wan/P009-The-Walk-Wan2.2-i2v_Normal-L.safetensors",
+          "wan/PENISLORA_22_i2v_HIGH_e320.safetensors",
+          "wan/PENISLORA_22_i2v_LOW_e496.safetensors",
+          "wan/Realim_Lora_BSY_IL_V1_RA42.safetensors",
+          "wan/TentaclesSex_v1.safetensors",
+          "wan/Wan2.2 - I2V - Fucking Machine - HIGH 14B.safetensors",
+          "wan/Wan_22_ComfyUI_Repackaged_wan22_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
+          "wan/Wan_22_ComfyUI_Repackaged_wan22_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors",
+          "wan/anal_insertion_HIGH_V01.safetensors",
+          "wan/anal_insertion_LOW_V01.safetensors",
+          "wan/ass_ripple_HIGH_V01.safetensors",
+          "wan/ass_ripple_LOW_V01.safetensors",
+          "wan/cum2_h_20.safetensors",
+          "wan/cum_l_70.safetensors",
+          "wan/dance_b high 250905.safetensors",
+          "wan/dance_b low 250905.safetensors",
+          "wan/derpfuckedfrombehind_000002125_high_noise.safetensors",
+          "wan/derpfuckedfrombehind_000002125_low_noise.safetensors",
+          "wan/h_wan22_lightning.safetensors",
+          "wan/jfj-deepthroat-W22-I2V-HN.safetensors",
+          "wan/jfj-deepthroat-W22-I2V-LN.safetensors",
+          "wan/l_wan22_lightning.safetensors",
+          "wan/masturbation-90.safetensors",
+          "wan/reverse_suspended_congress_I2V_high.safetensors",
+          "wan/reverse_suspended_congress_I2V_low.safetensors",
+          "wan/wan-i2v-futa-trans-cowgirl-v1.safetensors",
+          "wan/wan-t2v-i2v-anal-combined-e50.safetensors",
+          "wan/wan2.1-i2v-480p-flaccid-v1.0.safetensors",
+          "wan/wan2.1-i2v-480p-penis-arousal-v1.0.safetensors",
+          "wan/wan21_lightning.safetensors",
+          "wan/wan22-ultimatedeepthroat-I2V-101epoc-low-k3nk.safetensors",
+          "wan/wan22-ultimatedeepthroat-i2v-102epoc-high-k3nk.safetensors",
+          "wan/wan22.r3v3rs3_c0wg1rl-14b-High-i2v_e70.safetensors",
+          "wan/wan22.r3v3rs3_c0wg1rl-14b-Low-i2v_e70.safetensors",
+          "wan/wan22_i2v_anal_v1_high_noise.safetensors",
+          "wan/wan22_i2v_anal_v1_low_noise.safetensors",
+          "wan/wan22_i2v_futa_cowgirl_high_noise.safetensors",
+          "wan/wan22_i2v_futa_cowgirl_low_noise.safetensors",
+          "wan/wanLoras_wan-nsfw-e14-fixed.safetensors",
+          "wan/wan_cumshot_i2v.safetensors",
+          "zturbo_penis_v3_e340.safetensors"
+        ],
+        "x_node_id": "1",
+        "x_class_type": "LoraLoader",
+        "x_title": "Load LoRA",
+        "x_node_alias": "lora 1"
+      },
+      "LoraLoader.strength_model": {
+        "type": "number",
+        "title": "strength_model",
+        "default": 0.25000000000000006,
+        "minimum": -100,
+        "maximum": 100,
+        "step": 0.01,
+        "x_node_id": "1",
+        "x_class_type": "LoraLoader",
+        "x_title": "Load LoRA",
+        "x_node_alias": "lora 1"
+      },
+      "LoraLoader.strength_clip": {
+        "type": "number",
+        "title": "strength_clip",
+        "default": 1.0000000000000002,
+        "minimum": -100,
+        "maximum": 100,
+        "step": 0.01,
+        "x_node_id": "1",
+        "x_class_type": "LoraLoader",
+        "x_title": "Load LoRA",
+        "x_node_alias": "lora 1"
+      },
+      "LoraLoader_2.lora_name": {
+        "type": "string",
+        "title": "lora_name",
+        "default": "B-mixxxlora.safetensors",
+        "enum": [
+          "B-mixxxlora.safetensors",
+          "Dramatic Lighting Slider.safetensors",
+          "Matte_Skin_Illustrious_v4.safetensors",
+          "Motion_Lines_(Concept)_ILXL.safetensors",
+          "Realim_Lora_BSY_IL_V1_RA42.safetensors",
+          "Semi-realism_illustrious.safetensors",
+          "ck-NeurocoreShadowCircuit-ZIT_000003000.safetensors",
+          "ck-shadow-circuit-IL-000012.safetensors",
+          "ck_cyberpunk.safetensors",
+          "codex_sss_chroma-000012.safetensors",
+          "fingers_adjuster_illustrious2.0stable_v1.0.safetensors",
+          "iLLMythSmo0thL1nes.safetensors",
+          "lenovo_z.safetensors",
+          "realistic filter [IL].safetensors",
+          "rimixO.safetensors",
+          "wan/23High noise-Cumshot Aesthetics.safetensors",
+          "wan/56Low noise-Cumshot Aesthetics.safetensors",
+          "wan/DR34ML4Y_I2V_14B_HIGH.safetensors",
+          "wan/DR34ML4Y_I2V_14B_LOW.safetensors",
+          "wan/I2V-stroking_it.safetensors",
+          "wan/MasturbationCumshot_masturbation_cumshot_v1.1_e310.safetensors",
+          "wan/NSFW-22-H-e8.safetensors",
+          "wan/NSFW-22-L-e8.safetensors",
+          "wan/P009-The-Walk-Wan2.2-i2v_Normal-H.safetensors",
+          "wan/P009-The-Walk-Wan2.2-i2v_Normal-L.safetensors",
+          "wan/PENISLORA_22_i2v_HIGH_e320.safetensors",
+          "wan/PENISLORA_22_i2v_LOW_e496.safetensors",
+          "wan/Realim_Lora_BSY_IL_V1_RA42.safetensors",
+          "wan/TentaclesSex_v1.safetensors",
+          "wan/Wan2.2 - I2V - Fucking Machine - HIGH 14B.safetensors",
+          "wan/Wan_22_ComfyUI_Repackaged_wan22_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
+          "wan/Wan_22_ComfyUI_Repackaged_wan22_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors",
+          "wan/anal_insertion_HIGH_V01.safetensors",
+          "wan/anal_insertion_LOW_V01.safetensors",
+          "wan/ass_ripple_HIGH_V01.safetensors",
+          "wan/ass_ripple_LOW_V01.safetensors",
+          "wan/cum2_h_20.safetensors",
+          "wan/cum_l_70.safetensors",
+          "wan/dance_b high 250905.safetensors",
+          "wan/dance_b low 250905.safetensors",
+          "wan/derpfuckedfrombehind_000002125_high_noise.safetensors",
+          "wan/derpfuckedfrombehind_000002125_low_noise.safetensors",
+          "wan/h_wan22_lightning.safetensors",
+          "wan/jfj-deepthroat-W22-I2V-HN.safetensors",
+          "wan/jfj-deepthroat-W22-I2V-LN.safetensors",
+          "wan/l_wan22_lightning.safetensors",
+          "wan/masturbation-90.safetensors",
+          "wan/reverse_suspended_congress_I2V_high.safetensors",
+          "wan/reverse_suspended_congress_I2V_low.safetensors",
+          "wan/wan-i2v-futa-trans-cowgirl-v1.safetensors",
+          "wan/wan-t2v-i2v-anal-combined-e50.safetensors",
+          "wan/wan2.1-i2v-480p-flaccid-v1.0.safetensors",
+          "wan/wan2.1-i2v-480p-penis-arousal-v1.0.safetensors",
+          "wan/wan21_lightning.safetensors",
+          "wan/wan22-ultimatedeepthroat-I2V-101epoc-low-k3nk.safetensors",
+          "wan/wan22-ultimatedeepthroat-i2v-102epoc-high-k3nk.safetensors",
+          "wan/wan22.r3v3rs3_c0wg1rl-14b-High-i2v_e70.safetensors",
+          "wan/wan22.r3v3rs3_c0wg1rl-14b-Low-i2v_e70.safetensors",
+          "wan/wan22_i2v_anal_v1_high_noise.safetensors",
+          "wan/wan22_i2v_anal_v1_low_noise.safetensors",
+          "wan/wan22_i2v_futa_cowgirl_high_noise.safetensors",
+          "wan/wan22_i2v_futa_cowgirl_low_noise.safetensors",
+          "wan/wanLoras_wan-nsfw-e14-fixed.safetensors",
+          "wan/wan_cumshot_i2v.safetensors",
+          "zturbo_penis_v3_e340.safetensors"
+        ],
+        "x_node_id": "2",
+        "x_class_type": "LoraLoader",
+        "x_title": "Load LoRA",
+        "x_node_alias": "lora 2"
+      },
+      "LoraLoader_2.strength_model": {
+        "type": "number",
+        "title": "strength_model",
+        "default": 1.0000000000000002,
+        "minimum": -100,
+        "maximum": 100,
+        "step": 0.01,
+        "x_node_id": "2",
+        "x_class_type": "LoraLoader",
+        "x_title": "Load LoRA",
+        "x_node_alias": "lora 2"
+      },
+      "LoraLoader_2.strength_clip": {
+        "type": "number",
+        "title": "strength_clip",
+        "default": 1.0000000000000002,
+        "minimum": -100,
+        "maximum": 100,
+        "step": 0.01,
+        "x_node_id": "2",
+        "x_class_type": "LoraLoader",
+        "x_title": "Load LoRA",
+        "x_node_alias": "lora 2"
+      },
+      "LoraLoader_3.lora_name": {
+        "type": "string",
+        "title": "lora_name",
+        "default": "realistic filter [IL].safetensors",
+        "enum": [
+          "B-mixxxlora.safetensors",
+          "Dramatic Lighting Slider.safetensors",
+          "Matte_Skin_Illustrious_v4.safetensors",
+          "Motion_Lines_(Concept)_ILXL.safetensors",
+          "Realim_Lora_BSY_IL_V1_RA42.safetensors",
+          "Semi-realism_illustrious.safetensors",
+          "ck-NeurocoreShadowCircuit-ZIT_000003000.safetensors",
+          "ck-shadow-circuit-IL-000012.safetensors",
+          "ck_cyberpunk.safetensors",
+          "codex_sss_chroma-000012.safetensors",
+          "fingers_adjuster_illustrious2.0stable_v1.0.safetensors",
+          "iLLMythSmo0thL1nes.safetensors",
+          "lenovo_z.safetensors",
+          "realistic filter [IL].safetensors",
+          "rimixO.safetensors",
+          "wan/23High noise-Cumshot Aesthetics.safetensors",
+          "wan/56Low noise-Cumshot Aesthetics.safetensors",
+          "wan/DR34ML4Y_I2V_14B_HIGH.safetensors",
+          "wan/DR34ML4Y_I2V_14B_LOW.safetensors",
+          "wan/I2V-stroking_it.safetensors",
+          "wan/MasturbationCumshot_masturbation_cumshot_v1.1_e310.safetensors",
+          "wan/NSFW-22-H-e8.safetensors",
+          "wan/NSFW-22-L-e8.safetensors",
+          "wan/P009-The-Walk-Wan2.2-i2v_Normal-H.safetensors",
+          "wan/P009-The-Walk-Wan2.2-i2v_Normal-L.safetensors",
+          "wan/PENISLORA_22_i2v_HIGH_e320.safetensors",
+          "wan/PENISLORA_22_i2v_LOW_e496.safetensors",
+          "wan/Realim_Lora_BSY_IL_V1_RA42.safetensors",
+          "wan/TentaclesSex_v1.safetensors",
+          "wan/Wan2.2 - I2V - Fucking Machine - HIGH 14B.safetensors",
+          "wan/Wan_22_ComfyUI_Repackaged_wan22_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
+          "wan/Wan_22_ComfyUI_Repackaged_wan22_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors",
+          "wan/anal_insertion_HIGH_V01.safetensors",
+          "wan/anal_insertion_LOW_V01.safetensors",
+          "wan/ass_ripple_HIGH_V01.safetensors",
+          "wan/ass_ripple_LOW_V01.safetensors",
+          "wan/cum2_h_20.safetensors",
+          "wan/cum_l_70.safetensors",
+          "wan/dance_b high 250905.safetensors",
+          "wan/dance_b low 250905.safetensors",
+          "wan/derpfuckedfrombehind_000002125_high_noise.safetensors",
+          "wan/derpfuckedfrombehind_000002125_low_noise.safetensors",
+          "wan/h_wan22_lightning.safetensors",
+          "wan/jfj-deepthroat-W22-I2V-HN.safetensors",
+          "wan/jfj-deepthroat-W22-I2V-LN.safetensors",
+          "wan/l_wan22_lightning.safetensors",
+          "wan/masturbation-90.safetensors",
+          "wan/reverse_suspended_congress_I2V_high.safetensors",
+          "wan/reverse_suspended_congress_I2V_low.safetensors",
+          "wan/wan-i2v-futa-trans-cowgirl-v1.safetensors",
+          "wan/wan-t2v-i2v-anal-combined-e50.safetensors",
+          "wan/wan2.1-i2v-480p-flaccid-v1.0.safetensors",
+          "wan/wan2.1-i2v-480p-penis-arousal-v1.0.safetensors",
+          "wan/wan21_lightning.safetensors",
+          "wan/wan22-ultimatedeepthroat-I2V-101epoc-low-k3nk.safetensors",
+          "wan/wan22-ultimatedeepthroat-i2v-102epoc-high-k3nk.safetensors",
+          "wan/wan22.r3v3rs3_c0wg1rl-14b-High-i2v_e70.safetensors",
+          "wan/wan22.r3v3rs3_c0wg1rl-14b-Low-i2v_e70.safetensors",
+          "wan/wan22_i2v_anal_v1_high_noise.safetensors",
+          "wan/wan22_i2v_anal_v1_low_noise.safetensors",
+          "wan/wan22_i2v_futa_cowgirl_high_noise.safetensors",
+          "wan/wan22_i2v_futa_cowgirl_low_noise.safetensors",
+          "wan/wanLoras_wan-nsfw-e14-fixed.safetensors",
+          "wan/wan_cumshot_i2v.safetensors",
+          "zturbo_penis_v3_e340.safetensors"
+        ],
+        "x_node_id": "3",
+        "x_class_type": "LoraLoader",
+        "x_title": "Load LoRA",
+        "x_node_alias": "lora 3"
+      },
+      "LoraLoader_3.strength_model": {
+        "type": "number",
+        "title": "strength_model",
+        "default": 1.0000000000000002,
+        "minimum": -100,
+        "maximum": 100,
+        "step": 0.01,
+        "x_node_id": "3",
+        "x_class_type": "LoraLoader",
+        "x_title": "Load LoRA",
+        "x_node_alias": "lora 3"
+      },
+      "LoraLoader_3.strength_clip": {
+        "type": "number",
+        "title": "strength_clip",
+        "default": 1.0000000000000002,
+        "minimum": -100,
+        "maximum": 100,
+        "step": 0.01,
+        "x_node_id": "3",
+        "x_class_type": "LoraLoader",
+        "x_title": "Load LoRA",
+        "x_node_alias": "lora 3"
+      },
+      "CLIPTextEncode.text": {
+        "type": "string",
+        "title": "positive prompt",
+        "default": "",
+        "widget": "textarea",
+        "x_node_id": "4",
+        "x_class_type": "CLIPTextEncode",
+        "x_title": "CLIP Text Encode (Prompt)",
+        "x_core": true,
+        "x_node_alias": "positive prompt"
+      },
+      "CLIPTextEncode_2.text": {
+        "type": "string",
+        "title": "negative prompt",
+        "default": "",
+        "widget": "textarea",
+        "x_node_id": "9",
+        "x_class_type": "CLIPTextEncode",
+        "x_title": "CLIP Text Encode (Prompt)",
+        "x_core": true,
+        "x_node_alias": "negative prompt"
+      },
+      "KSampler.seed": {
+        "type": "integer",
+        "title": "seed",
+        "default": "-1",
+        "minimum": -1,
+        "maximum": 18446744073709552000,
+        "x_node_id": "17",
+        "x_class_type": "KSampler",
+        "x_title": "KSampler",
+        "x_core": true,
+        "x_node_alias": "ksampler"
+      },
+      "KSampler.steps": {
+        "type": "integer",
+        "title": "steps",
+        "default": 30,
+        "minimum": 1,
+        "maximum": 10000,
+        "x_node_id": "17",
+        "x_class_type": "KSampler",
+        "x_title": "KSampler",
+        "x_core": true,
+        "x_node_alias": "ksampler"
+      },
+      "KSampler.cfg": {
+        "type": "number",
+        "title": "cfg",
+        "default": 6,
+        "minimum": 0,
+        "maximum": 100,
+        "step": 0.1,
+        "x_node_id": "17",
+        "x_class_type": "KSampler",
+        "x_title": "KSampler",
+        "x_core": true,
+        "x_node_alias": "ksampler"
+      },
+      "KSampler.sampler_name": {
+        "type": "string",
+        "title": "sampler",
+        "default": "euler_ancestral",
+        "enum": [
+          "euler",
+          "euler_cfg_pp",
+          "euler_ancestral",
+          "euler_ancestral_cfg_pp",
+          "heun",
+          "heunpp2",
+          "dpm_2",
+          "dpm_2_ancestral",
+          "lms",
+          "dpm_fast",
+          "dpm_adaptive",
+          "dpmpp_2s_ancestral",
+          "dpmpp_2s_ancestral_cfg_pp",
+          "dpmpp_sde",
+          "dpmpp_sde_gpu",
+          "dpmpp_2m",
+          "dpmpp_2m_cfg_pp",
+          "dpmpp_2m_sde",
+          "dpmpp_2m_sde_gpu",
+          "dpmpp_2m_sde_heun",
+          "dpmpp_2m_sde_heun_gpu",
+          "dpmpp_3m_sde",
+          "dpmpp_3m_sde_gpu",
+          "ddpm",
+          "lcm",
+          "ipndm",
+          "ipndm_v",
+          "deis",
+          "res_multistep",
+          "res_multistep_cfg_pp",
+          "res_multistep_ancestral",
+          "res_multistep_ancestral_cfg_pp",
+          "gradient_estimation",
+          "gradient_estimation_cfg_pp",
+          "er_sde",
+          "seeds_2",
+          "seeds_3",
+          "sa_solver",
+          "sa_solver_pece",
+          "ddim",
+          "uni_pc",
+          "uni_pc_bh2"
+        ],
+        "x_node_id": "17",
+        "x_class_type": "KSampler",
+        "x_title": "KSampler",
+        "x_core": true,
+        "x_node_alias": "ksampler"
+      },
+      "KSampler.scheduler": {
+        "type": "string",
+        "title": "scheduler",
+        "default": "normal",
+        "enum": [
+          "simple",
+          "sgm_uniform",
+          "karras",
+          "exponential",
+          "ddim_uniform",
+          "beta",
+          "normal",
+          "linear_quadratic",
+          "kl_optimal"
+        ],
+        "x_node_id": "17",
+        "x_class_type": "KSampler",
+        "x_title": "KSampler",
+        "x_core": true,
+        "x_node_alias": "ksampler"
+      },
+      "KSampler.denoise": {
+        "type": "number",
+        "title": "denoise",
+        "default": 1,
+        "minimum": 0,
+        "maximum": 1,
+        "step": 0.01,
+        "x_node_id": "17",
+        "x_class_type": "KSampler",
+        "x_title": "KSampler",
+        "x_core": true,
+        "x_node_alias": "ksampler"
+      },
+      "EmptyLatentImage.width": {
+        "type": "integer",
+        "title": "width",
+        "default": 720,
+        "minimum": 16,
+        "maximum": 16384,
+        "x_node_id": "19",
+        "x_class_type": "EmptyLatentImage",
+        "x_title": "Empty Latent Image",
+        "x_core": true,
+        "x_node_alias": "empty latent"
+      },
+      "EmptyLatentImage.height": {
+        "type": "integer",
+        "title": "height",
+        "default": 1280,
+        "minimum": 16,
+        "maximum": 16384,
+        "x_node_id": "19",
+        "x_class_type": "EmptyLatentImage",
+        "x_title": "Empty Latent Image",
+        "x_core": true,
+        "x_node_alias": "empty latent"
+      },
+      "EmptyLatentImage.batch_size": {
+        "type": "integer",
+        "title": "batch_size",
+        "default": "1",
+        "minimum": 1,
+        "maximum": 4096,
+        "x_node_id": "19",
+        "x_class_type": "EmptyLatentImage",
+        "x_title": "Empty Latent Image",
+        "x_core": true,
+        "x_node_alias": "empty latent"
+      },
+      "CheckpointLoaderSimple.ckpt_name": {
+        "type": "string",
+        "title": "checkpoint",
+        "default": "hassakuXLIllustrious_v21fix.safetensors",
+        "enum": [
+          "aMixIllustrious_aMix.safetensors",
+          "hassakuXLIllustrious_v21fix.safetensors",
+          "waiNSFWIllustrious_v150.safetensors"
+        ],
+        "x_node_id": "20",
+        "x_class_type": "CheckpointLoaderSimple",
+        "x_title": "Load Checkpoint",
+        "x_core": true,
+        "x_node_alias": "checkpoint"
+      },
+      "LoraLoader_4.lora_name": {
+        "type": "string",
+        "title": "lora_name",
+        "default": "ck_cyberpunk.safetensors",
+        "enum": [
+          "B-mixxxlora.safetensors",
+          "Dramatic Lighting Slider.safetensors",
+          "Matte_Skin_Illustrious_v4.safetensors",
+          "Motion_Lines_(Concept)_ILXL.safetensors",
+          "Realim_Lora_BSY_IL_V1_RA42.safetensors",
+          "Semi-realism_illustrious.safetensors",
+          "ck-NeurocoreShadowCircuit-ZIT_000003000.safetensors",
+          "ck-shadow-circuit-IL-000012.safetensors",
+          "ck_cyberpunk.safetensors",
+          "codex_sss_chroma-000012.safetensors",
+          "fingers_adjuster_illustrious2.0stable_v1.0.safetensors",
+          "iLLMythSmo0thL1nes.safetensors",
+          "lenovo_z.safetensors",
+          "realistic filter [IL].safetensors",
+          "rimixO.safetensors",
+          "wan/23High noise-Cumshot Aesthetics.safetensors",
+          "wan/56Low noise-Cumshot Aesthetics.safetensors",
+          "wan/DR34ML4Y_I2V_14B_HIGH.safetensors",
+          "wan/DR34ML4Y_I2V_14B_LOW.safetensors",
+          "wan/I2V-stroking_it.safetensors",
+          "wan/MasturbationCumshot_masturbation_cumshot_v1.1_e310.safetensors",
+          "wan/NSFW-22-H-e8.safetensors",
+          "wan/NSFW-22-L-e8.safetensors",
+          "wan/P009-The-Walk-Wan2.2-i2v_Normal-H.safetensors",
+          "wan/P009-The-Walk-Wan2.2-i2v_Normal-L.safetensors",
+          "wan/PENISLORA_22_i2v_HIGH_e320.safetensors",
+          "wan/PENISLORA_22_i2v_LOW_e496.safetensors",
+          "wan/Realim_Lora_BSY_IL_V1_RA42.safetensors",
+          "wan/TentaclesSex_v1.safetensors",
+          "wan/Wan2.2 - I2V - Fucking Machine - HIGH 14B.safetensors",
+          "wan/Wan_22_ComfyUI_Repackaged_wan22_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
+          "wan/Wan_22_ComfyUI_Repackaged_wan22_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors",
+          "wan/anal_insertion_HIGH_V01.safetensors",
+          "wan/anal_insertion_LOW_V01.safetensors",
+          "wan/ass_ripple_HIGH_V01.safetensors",
+          "wan/ass_ripple_LOW_V01.safetensors",
+          "wan/cum2_h_20.safetensors",
+          "wan/cum_l_70.safetensors",
+          "wan/dance_b high 250905.safetensors",
+          "wan/dance_b low 250905.safetensors",
+          "wan/derpfuckedfrombehind_000002125_high_noise.safetensors",
+          "wan/derpfuckedfrombehind_000002125_low_noise.safetensors",
+          "wan/h_wan22_lightning.safetensors",
+          "wan/jfj-deepthroat-W22-I2V-HN.safetensors",
+          "wan/jfj-deepthroat-W22-I2V-LN.safetensors",
+          "wan/l_wan22_lightning.safetensors",
+          "wan/masturbation-90.safetensors",
+          "wan/reverse_suspended_congress_I2V_high.safetensors",
+          "wan/reverse_suspended_congress_I2V_low.safetensors",
+          "wan/wan-i2v-futa-trans-cowgirl-v1.safetensors",
+          "wan/wan-t2v-i2v-anal-combined-e50.safetensors",
+          "wan/wan2.1-i2v-480p-flaccid-v1.0.safetensors",
+          "wan/wan2.1-i2v-480p-penis-arousal-v1.0.safetensors",
+          "wan/wan21_lightning.safetensors",
+          "wan/wan22-ultimatedeepthroat-I2V-101epoc-low-k3nk.safetensors",
+          "wan/wan22-ultimatedeepthroat-i2v-102epoc-high-k3nk.safetensors",
+          "wan/wan22.r3v3rs3_c0wg1rl-14b-High-i2v_e70.safetensors",
+          "wan/wan22.r3v3rs3_c0wg1rl-14b-Low-i2v_e70.safetensors",
+          "wan/wan22_i2v_anal_v1_high_noise.safetensors",
+          "wan/wan22_i2v_anal_v1_low_noise.safetensors",
+          "wan/wan22_i2v_futa_cowgirl_high_noise.safetensors",
+          "wan/wan22_i2v_futa_cowgirl_low_noise.safetensors",
+          "wan/wanLoras_wan-nsfw-e14-fixed.safetensors",
+          "wan/wan_cumshot_i2v.safetensors",
+          "zturbo_penis_v3_e340.safetensors"
+        ],
+        "x_node_id": "23",
+        "x_class_type": "LoraLoader",
+        "x_title": "Load LoRA",
+        "x_node_alias": "lora 4"
+      },
+      "LoraLoader_4.strength_model": {
+        "type": "number",
+        "title": "strength_model",
+        "default": 0.22,
+        "minimum": -100,
+        "maximum": 100,
+        "step": 0.01,
+        "x_node_id": "23",
+        "x_class_type": "LoraLoader",
+        "x_title": "Load LoRA",
+        "x_node_alias": "lora 4"
+      },
+      "LoraLoader_4.strength_clip": {
+        "type": "number",
+        "title": "strength_clip",
+        "default": 0.6,
+        "minimum": -100,
+        "maximum": 100,
+        "step": 0.01,
+        "x_node_id": "23",
+        "x_class_type": "LoraLoader",
+        "x_title": "Load LoRA",
+        "x_node_alias": "lora 4"
+      },
+      "__bypass_1": {
+        "title": "Bypass Load LoRA",
+        "widget": "toggle",
+        "x_node_id": "1",
+        "type": "boolean",
+        "default": true,
+        "x_node_alias": "lora 1"
+      },
+      "__bypass_2": {
+        "title": "Bypass Load LoRA",
+        "widget": "toggle",
+        "x_node_id": "2",
+        "type": "boolean",
+        "default": true,
+        "x_node_alias": "lora 2"
+      },
+      "__bypass_3": {
+        "title": "Bypass Load LoRA",
+        "widget": "toggle",
+        "x_node_id": "3",
+        "type": "boolean",
+        "default": true,
+        "x_node_alias": "lora 3"
+      },
+      "__bypass_23": {
+        "title": "Bypass Load LoRA",
+        "widget": "toggle",
+        "x_node_id": "23",
+        "type": "boolean",
+        "default": true,
+        "x_node_alias": "lora 4"
+      },
+      "__node_order": [
+        "4",
+        "9",
+        "17",
+        "18",
+        "19",
+        "20",
+        "1",
+        "2",
+        "3",
+        "23",
+        "25"
+      ]
+    },
+    "node_mapping": {
+      "LoraLoader.lora_name": {
+        "node_id": "1",
+        "field": "inputs.lora_name"
+      },
+      "LoraLoader.strength_model": {
+        "node_id": "1",
+        "field": "inputs.strength_model"
+      },
+      "LoraLoader.strength_clip": {
+        "node_id": "1",
+        "field": "inputs.strength_clip"
+      },
+      "LoraLoader_2.lora_name": {
+        "node_id": "2",
+        "field": "inputs.lora_name"
+      },
+      "LoraLoader_2.strength_model": {
+        "node_id": "2",
+        "field": "inputs.strength_model"
+      },
+      "LoraLoader_2.strength_clip": {
+        "node_id": "2",
+        "field": "inputs.strength_clip"
+      },
+      "LoraLoader_3.lora_name": {
+        "node_id": "3",
+        "field": "inputs.lora_name"
+      },
+      "LoraLoader_3.strength_model": {
+        "node_id": "3",
+        "field": "inputs.strength_model"
+      },
+      "LoraLoader_3.strength_clip": {
+        "node_id": "3",
+        "field": "inputs.strength_clip"
+      },
+      "CLIPTextEncode.text": {
+        "node_id": "4",
+        "field": "inputs.text"
+      },
+      "CLIPTextEncode_2.text": {
+        "node_id": "9",
+        "field": "inputs.text"
+      },
+      "KSampler.seed": {
+        "node_id": "17",
+        "field": "inputs.seed"
+      },
+      "KSampler.steps": {
+        "node_id": "17",
+        "field": "inputs.steps"
+      },
+      "KSampler.cfg": {
+        "node_id": "17",
+        "field": "inputs.cfg"
+      },
+      "KSampler.sampler_name": {
+        "node_id": "17",
+        "field": "inputs.sampler_name"
+      },
+      "KSampler.scheduler": {
+        "node_id": "17",
+        "field": "inputs.scheduler"
+      },
+      "KSampler.denoise": {
+        "node_id": "17",
+        "field": "inputs.denoise"
+      },
+      "EmptyLatentImage.width": {
+        "node_id": "19",
+        "field": "inputs.width"
+      },
+      "EmptyLatentImage.height": {
+        "node_id": "19",
+        "field": "inputs.height"
+      },
+      "EmptyLatentImage.batch_size": {
+        "node_id": "19",
+        "field": "inputs.batch_size"
+      },
+      "CheckpointLoaderSimple.ckpt_name": {
+        "node_id": "20",
+        "field": "inputs.ckpt_name"
+      },
+      "LoraLoader_4.lora_name": {
+        "node_id": "23",
+        "field": "inputs.lora_name"
+      },
+      "LoraLoader_4.strength_model": {
+        "node_id": "23",
+        "field": "inputs.strength_model"
+      },
+      "LoraLoader_4.strength_clip": {
+        "node_id": "23",
+        "field": "inputs.strength_clip"
+      }
+    },
+    "integrity": {
+      "graph_sha256": "1a1793d05b15ecb74c7ed3f168d90a8c6647c11fd7cc7390ecae840e3534fc98",
+      "input_schema_sha256": "dfadc5a35ca74fc0b80c13c940986af33b4e4ea3db35de96fe7ea95fb16376a6",
+      "bundle_sha256": "1ca35672ff9332b0388906299127d96b8d56b5afe92a648cced3b47716eb1add"
+    },
+    "settings": {
+      "node_count": 11,
+      "input_schema_count": 29,
+      "node_mapping_count": 24
+    },
+    "source": "sweet-tea-studio",
+    "comfy_format": "api",
+    "notes": "Contains ComfyUI API graph plus Sweet Tea Studio pipe metadata."
+  }
+}

@@ -165,3 +165,20 @@ export const filterPromptRehydrationSnapshot = (
   if (Object.keys(fields).length === 0) return null;
   return { version: 1, fields };
 };
+
+export const normalizePromptRehydrationSnapshot = (
+  snapshot: PromptRehydrationSnapshotV1 | null | undefined
+): PromptRehydrationSnapshotV1 | null => {
+  if (!snapshot || snapshot.version !== 1 || !snapshot.fields || typeof snapshot.fields !== "object") {
+    return null;
+  }
+
+  const fields: Record<string, PromptRehydrationItemV1[]> = {};
+  Object.entries(snapshot.fields).forEach(([fieldKey, items]) => {
+    if (!Array.isArray(items) || items.length === 0) return;
+    fields[fieldKey] = items;
+  });
+
+  if (Object.keys(fields).length === 0) return null;
+  return { version: 1, fields };
+};

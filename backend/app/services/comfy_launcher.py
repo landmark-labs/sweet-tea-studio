@@ -54,7 +54,7 @@ class ComfyUILauncher:
             pass
         self._config = self._load_config_from_disk() or self._config
 
-    def get_logs(self, lines: int = 100) -> str:
+    def get_logs(self, lines: int = 500) -> str:
         """Get the tail of the log file."""
         if not self._log_file or not self._log_file.exists():
             # Fallback to temp dir guess if not yet launched
@@ -76,7 +76,7 @@ class ComfyUILauncher:
                 
                 f.seek(0, 2)
                 fsize = f.tell()
-                f.seek(max(fsize - 100000, 0), 0) # Read last 100KB
+                f.seek(max(fsize - 300000, 0), 0) # Read last 300KB
                 lines_data = f.readlines()
                 return "".join(lines_data[-n:])
         except Exception:

@@ -47,21 +47,33 @@ export default function Projects() {
     const [isEmptyingTrash, setIsEmptyingTrash] = useState<string | null>(null);
 
     const reservedFolders = new Set(["input", "output", "masks"]);
+    const contextProjects = generation?.projects ?? [];
 
-    const fetchProjects = async () => {
+    const fetchProjects = async (options?: { background?: boolean }) => {
+        if (!options?.background) {
+            setIsLoading(true);
+        }
         try {
             const data = await api.getProjects(showArchived);
             setProjects(data);
         } catch (e) {
             console.error("Failed to fetch projects:", e);
         } finally {
-            setIsLoading(false);
+            if (!options?.background) {
+                setIsLoading(false);
+            }
         }
     };
 
     useEffect(() => {
-        fetchProjects();
-    }, [showArchived]);
+        if (!showArchived && contextProjects.length > 0) {
+            setProjects(contextProjects);
+            setIsLoading(false);
+            void fetchProjects({ background: true });
+            return;
+        }
+        void fetchProjects();
+    }, [showArchived, contextProjects]);
 
     const handleCreateProject = async () => {
         if (!newProjectName.trim()) return;

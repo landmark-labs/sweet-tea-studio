@@ -1,0 +1,2477 @@
+{
+  "workflow": {
+    "2": {
+      "inputs": {
+        "a": [
+          "26",
+          0
+        ],
+        "b": [
+          "32",
+          0
+        ],
+        "operation": "multiply"
+      },
+      "class_type": "easy mathInt",
+      "_meta": {
+        "title": "W",
+        "hiddenInControls": true
+      }
+    },
+    "3": {
+      "inputs": {
+        "a": [
+          "2",
+          0
+        ],
+        "b": [
+          "19",
+          0
+        ],
+        "operation": "divide"
+      },
+      "class_type": "easy mathInt",
+      "_meta": {
+        "title": "W",
+        "hiddenInControls": true
+      }
+    },
+    "6": {
+      "inputs": {
+        "a": [
+          "3",
+          0
+        ],
+        "b": [
+          "17",
+          0
+        ],
+        "operation": "divide"
+      },
+      "class_type": "easy mathInt",
+      "_meta": {
+        "title": "W",
+        "hiddenInControls": true
+      }
+    },
+    "9": {
+      "inputs": {
+        "a": [
+          "40",
+          0
+        ],
+        "b": [
+          "19",
+          0
+        ],
+        "operation": "divide"
+      },
+      "class_type": "easy mathInt",
+      "_meta": {
+        "title": "H",
+        "hiddenInControls": true
+      }
+    },
+    "15": {
+      "inputs": {
+        "a": [
+          "9",
+          0
+        ],
+        "b": [
+          "17",
+          0
+        ],
+        "operation": "divide"
+      },
+      "class_type": "easy mathInt",
+      "_meta": {
+        "title": "H",
+        "hiddenInControls": true
+      }
+    },
+    "17": {
+      "inputs": {
+        "integer": 1
+      },
+      "class_type": "InteractiveInteger",
+      "_meta": {
+        "title": "SQRT TILE COUNT",
+        "hiddenInControls": true
+      }
+    },
+    "19": {
+      "inputs": {
+        "integer": 1
+      },
+      "class_type": "InteractiveInteger",
+      "_meta": {
+        "title": "SCALE DENOMINATOR",
+        "hiddenInControls": true
+      }
+    },
+    "24": {
+      "inputs": {
+        "pyrUp_iters": 3,
+        "resolution": [
+          "25",
+          0
+        ],
+        "image": [
+          "95",
+          0
+        ]
+      },
+      "class_type": "TilePreprocessor",
+      "_meta": {
+        "title": "Tile"
+      }
+    },
+    "25": {
+      "inputs": {
+        "boolean": [
+          "70",
+          0
+        ],
+        "on_true": [
+          "26",
+          0
+        ],
+        "on_false": [
+          "26",
+          1
+        ]
+      },
+      "class_type": "easy ifElse",
+      "_meta": {
+        "title": "If else",
+        "hiddenInControls": true
+      }
+    },
+    "26": {
+      "inputs": {
+        "image": [
+          "95",
+          0
+        ]
+      },
+      "class_type": "Get Image Size",
+      "_meta": {
+        "title": "Get Image Size",
+        "hiddenInControls": true
+      }
+    },
+    "30": {
+      "inputs": {
+        "control_net_name": "tile.safetensors"
+      },
+      "class_type": "ControlNetLoader",
+      "_meta": {
+        "title": "Load ControlNet Model",
+        "hiddenInControls": true
+      }
+    },
+    "32": {
+      "inputs": {
+        "integer": 1
+      },
+      "class_type": "InteractiveInteger",
+      "_meta": {
+        "title": "SCALE NUMERATOR",
+        "hiddenInControls": true
+      }
+    },
+    "36": {
+      "inputs": {
+        "text": "shoes, footwear, (1girl, breasts, female, vagina, pussy, vaginal, vaginal penetration:1.05), pubic hair, extra fingers, missing fingers, extra toes, missing toes, big nose, veins, bad anatomy, bad hands, extra digits, fewer, extra, missing, watermark, censored, veiny",
+        "clip": [
+          "91",
+          1
+        ]
+      },
+      "class_type": "CLIPTextEncode",
+      "_meta": {
+        "title": "STEP 2 NEG"
+      }
+    },
+    "39": {
+      "inputs": {
+        "text": "(realistic, photorealistic:1.05), (solo, 1boy:1.01), (pink fishnet, otoko no ko, androgynous, pixie cut, very pale, pale skin, tareme:1.05), (Illustration of a horny femboy:1.01), (dynamic view, unique angle, visual tension:1.025), (action, intense, movement:1.025), (from below:1.015), (standing, arms at sides, looking down at viewer, legs together:1.025), (parted lips, lidded eyes, slight smile:1.015), (covered penis:1.0), (big bulge:1.0), (small feet, small hands, tall, long legs, slim legs, big butt, tiny breasts, pointy breasts:1.01), (blonde hair, blue eyes, thick lips:1.025), (shirtless, latex shorts, lowleg, pink shorts, micro shorts, pink suspenders, pink straps, skintight, fishnet thighhighs, pink fishnet:1.025), (white background:1.05)",
+        "clip": [
+          "91",
+          1
+        ]
+      },
+      "class_type": "CLIPTextEncode",
+      "_meta": {
+        "title": "STEP 2 POS"
+      }
+    },
+    "40": {
+      "inputs": {
+        "a": [
+          "26",
+          1
+        ],
+        "b": [
+          "32",
+          0
+        ],
+        "operation": "multiply"
+      },
+      "class_type": "easy mathInt",
+      "_meta": {
+        "title": "H",
+        "hiddenInControls": true
+      }
+    },
+    "52": {
+      "inputs": {
+        "detect_hand": "enable",
+        "detect_body": "enable",
+        "detect_face": "enable",
+        "resolution": [
+          "25",
+          0
+        ],
+        "scale_stick_for_xinsr_cn": "disable",
+        "image": [
+          "95",
+          0
+        ]
+      },
+      "class_type": "OpenposePreprocessor",
+      "_meta": {
+        "title": "OpenPose Pose"
+      }
+    },
+    "62": {
+      "inputs": {
+        "strength": 0.2,
+        "start_percent": 0.2,
+        "end_percent": 0.8,
+        "positive": [
+          "68",
+          0
+        ],
+        "negative": [
+          "68",
+          1
+        ],
+        "control_net": [
+          "30",
+          0
+        ],
+        "image": [
+          "24",
+          0
+        ],
+        "vae": [
+          "85",
+          2
+        ]
+      },
+      "class_type": "ControlNetApplyAdvanced",
+      "_meta": {
+        "title": "Apply ControlNet"
+      }
+    },
+    "64": {
+      "inputs": {
+        "upscale_by": 1,
+        "seed": 686710788388906,
+        "steps": 30,
+        "cfg": 6,
+        "sampler_name": "euler_ancestral",
+        "scheduler": "normal",
+        "denoise": 0.8,
+        "mode_type": "Linear",
+        "tile_width": [
+          "6",
+          0
+        ],
+        "tile_height": [
+          "15",
+          0
+        ],
+        "mask_blur": 0,
+        "tile_padding": 0,
+        "seam_fix_mode": "None",
+        "seam_fix_denoise": 0,
+        "seam_fix_width": 0,
+        "seam_fix_mask_blur": 0,
+        "seam_fix_padding": 0,
+        "force_uniform_tiles": true,
+        "tiled_decode": false,
+        "lock_padding": true,
+        "noise_mask_blur": 0,
+        "blend_mode": "normalized",
+        "image": [
+          "95",
+          0
+        ],
+        "model": [
+          "91",
+          0
+        ],
+        "positive": [
+          "62",
+          0
+        ],
+        "negative": [
+          "62",
+          1
+        ],
+        "vae": [
+          "85",
+          2
+        ],
+        "upscale_model": [
+          "93",
+          0
+        ]
+      },
+      "class_type": "UltimateSDUpscalePoseTiled",
+      "_meta": {
+        "title": "Ultimate SD Upscale (Pose Tiled ControlNet)"
+      }
+    },
+    "68": {
+      "inputs": {
+        "strength": 0.6,
+        "start_percent": 0.05,
+        "end_percent": 0.95,
+        "positive": [
+          "39",
+          0
+        ],
+        "negative": [
+          "36",
+          0
+        ],
+        "control_net": [
+          "69",
+          0
+        ],
+        "image": [
+          "52",
+          0
+        ],
+        "vae": [
+          "85",
+          2
+        ]
+      },
+      "class_type": "ControlNetApplyAdvanced",
+      "_meta": {
+        "title": "Apply ControlNet"
+      }
+    },
+    "69": {
+      "inputs": {
+        "control_net_name": "openpose.safetensors"
+      },
+      "class_type": "ControlNetLoader",
+      "_meta": {
+        "title": "Load ControlNet Model",
+        "hiddenInControls": true
+      }
+    },
+    "70": {
+      "inputs": {
+        "comparison": "a < b",
+        "a": [
+          "26",
+          0
+        ],
+        "b": [
+          "26",
+          1
+        ]
+      },
+      "class_type": "easy compare",
+      "_meta": {
+        "title": "Compare",
+        "hiddenInControls": true
+      }
+    },
+    "85": {
+      "inputs": {
+        "ckpt_name": "hassakuXLIllustrious_v21fix.safetensors"
+      },
+      "class_type": "CheckpointLoaderSimple",
+      "_meta": {
+        "title": "Load Checkpoint"
+      }
+    },
+    "86": {
+      "inputs": {
+        "lora_name": "ck-shadow-circuit-IL-000012.safetensors",
+        "strength_model": 0.4,
+        "strength_clip": 0.4,
+        "model": [
+          "85",
+          0
+        ],
+        "clip": [
+          "85",
+          1
+        ]
+      },
+      "class_type": "LoraLoader",
+      "_meta": {
+        "title": "Load LoRA"
+      }
+    },
+    "87": {
+      "inputs": {
+        "lora_name": "fingers_adjuster_illustrious2.0stable_v1.0.safetensors",
+        "strength_model": 0.65,
+        "strength_clip": 1,
+        "model": [
+          "86",
+          0
+        ],
+        "clip": [
+          "86",
+          1
+        ]
+      },
+      "class_type": "LoraLoader",
+      "_meta": {
+        "title": "Load LoRA"
+      }
+    },
+    "88": {
+      "inputs": {
+        "lora_name": "B-mixxxlora.safetensors",
+        "strength_model": 1,
+        "strength_clip": 1,
+        "model": [
+          "87",
+          0
+        ],
+        "clip": [
+          "87",
+          1
+        ]
+      },
+      "class_type": "LoraLoader",
+      "_meta": {
+        "title": "Load LoRA"
+      }
+    },
+    "89": {
+      "inputs": {
+        "lora_name": "Semi-realism_illustrious.safetensors",
+        "strength_model": 0.4,
+        "strength_clip": 0.4,
+        "model": [
+          "88",
+          0
+        ],
+        "clip": [
+          "88",
+          1
+        ]
+      },
+      "class_type": "LoraLoader",
+      "_meta": {
+        "title": "Load LoRA"
+      }
+    },
+    "90": {
+      "inputs": {
+        "lora_name": "iLLMythSmo0thL1nes.safetensors",
+        "strength_model": 0.6,
+        "strength_clip": 0.6,
+        "model": [
+          "89",
+          0
+        ],
+        "clip": [
+          "89",
+          1
+        ]
+      },
+      "class_type": "LoraLoader",
+      "_meta": {
+        "title": "Load LoRA"
+      }
+    },
+    "91": {
+      "inputs": {
+        "lora_name": "realistic filter [IL].safetensors",
+        "strength_model": 0.6,
+        "strength_clip": 0.6,
+        "model": [
+          "90",
+          0
+        ],
+        "clip": [
+          "90",
+          1
+        ]
+      },
+      "class_type": "LoraLoader",
+      "_meta": {
+        "title": "Load LoRA"
+      }
+    },
+    "93": {
+      "inputs": {
+        "model_name": "4x-ultrasharp.pth"
+      },
+      "class_type": "UpscaleModelLoader",
+      "_meta": {
+        "title": "Load Upscale Model",
+        "hiddenInControls": true
+      }
+    },
+    "95": {
+      "inputs": {
+        "image": "hibiscus-input-0385.jpg"
+      },
+      "class_type": "LoadImage",
+      "_meta": {
+        "title": "Load Image"
+      }
+    },
+    "96": {
+      "inputs": {
+        "images": [
+          "64",
+          0
+        ]
+      },
+      "class_type": "PreviewImage",
+      "_meta": {
+        "title": "Preview Image",
+        "hiddenInControls": true
+      }
+    }
+  },
+  "_sweet_tea": {
+    "version": 1,
+    "name": "sts_i2i_resample_x1.0",
+    "description": "no upscale image-to-image",
+    "exported_at": "2026-02-05T19:24:49.940360Z",
+    "input_schema": {
+      "easy mathInt#2.operation": {
+        "type": "string",
+        "title": "operation (easy mathInt)",
+        "default": "multiply",
+        "enum": [
+          "add",
+          "subtract",
+          "multiply",
+          "divide",
+          "modulo",
+          "power"
+        ],
+        "x_node_id": "2",
+        "x_class_type": "easy mathInt",
+        "x_title": "W",
+        "x_instance": 1
+      },
+      "easy mathInt#3.operation": {
+        "type": "string",
+        "title": "operation (easy mathInt #3)",
+        "default": "divide",
+        "enum": [
+          "add",
+          "subtract",
+          "multiply",
+          "divide",
+          "modulo",
+          "power"
+        ],
+        "x_node_id": "3",
+        "x_class_type": "easy mathInt",
+        "x_title": "W",
+        "x_instance": 2
+      },
+      "easy mathInt#6.operation": {
+        "type": "string",
+        "title": "operation (easy mathInt #6)",
+        "default": "divide",
+        "enum": [
+          "add",
+          "subtract",
+          "multiply",
+          "divide",
+          "modulo",
+          "power"
+        ],
+        "x_node_id": "6",
+        "x_class_type": "easy mathInt",
+        "x_title": "W",
+        "x_instance": 3
+      },
+      "easy mathInt#9.operation": {
+        "type": "string",
+        "title": "operation (easy mathInt #9)",
+        "default": "divide",
+        "enum": [
+          "add",
+          "subtract",
+          "multiply",
+          "divide",
+          "modulo",
+          "power"
+        ],
+        "x_node_id": "9",
+        "x_class_type": "easy mathInt",
+        "x_title": "H",
+        "x_instance": 4
+      },
+      "easy mathInt#15.operation": {
+        "type": "string",
+        "title": "operation (easy mathInt #15)",
+        "default": "divide",
+        "enum": [
+          "add",
+          "subtract",
+          "multiply",
+          "divide",
+          "modulo",
+          "power"
+        ],
+        "x_node_id": "15",
+        "x_class_type": "easy mathInt",
+        "x_title": "H",
+        "x_instance": 5
+      },
+      "InteractiveInteger#17.integer": {
+        "type": "integer",
+        "title": "integer (InteractiveInteger)",
+        "default": 1,
+        "minimum": null,
+        "maximum": null,
+        "x_node_id": "17",
+        "x_class_type": "InteractiveInteger",
+        "x_title": "SQRT TILE COUNT",
+        "x_instance": 1
+      },
+      "InteractiveInteger#19.integer": {
+        "type": "integer",
+        "title": "integer (InteractiveInteger #19)",
+        "default": 1,
+        "minimum": null,
+        "maximum": null,
+        "x_node_id": "19",
+        "x_class_type": "InteractiveInteger",
+        "x_title": "SCALE DENOMINATOR",
+        "x_instance": 2
+      },
+      "TilePreprocessor#24.pyrUp_iters": {
+        "type": "integer",
+        "title": "pyrUp_iters",
+        "default": 3,
+        "minimum": 1,
+        "maximum": 10,
+        "x_node_id": "24",
+        "x_class_type": "TilePreprocessor",
+        "x_title": "Tile",
+        "x_instance": 1,
+        "x_node_alias": "tile preprocessor"
+      },
+      "ControlNetLoader#30.control_net_name": {
+        "type": "string",
+        "title": "control_net_name",
+        "default": "tile.safetensors",
+        "enum": [
+          "canny.safetensors",
+          "flux_canny.safetensors",
+          "flux_openpose.safetensors",
+          "openpose.safetensors",
+          "softedge.safetensors",
+          "tile.safetensors"
+        ],
+        "x_node_id": "30",
+        "x_class_type": "ControlNetLoader",
+        "x_title": "Load ControlNet Model",
+        "x_instance": 1,
+        "x_node_alias": "load tile controlnet"
+      },
+      "InteractiveInteger#32.integer": {
+        "type": "integer",
+        "title": "integer (InteractiveInteger #32)",
+        "default": 1,
+        "minimum": null,
+        "maximum": null,
+        "x_node_id": "32",
+        "x_class_type": "InteractiveInteger",
+        "x_title": "SCALE NUMERATOR",
+        "x_instance": 3
+      },
+      "CLIPTextEncode#36.text": {
+        "type": "string",
+        "title": "negative prompt",
+        "default": "",
+        "widget": "textarea",
+        "x_node_id": "36",
+        "x_class_type": "CLIPTextEncode",
+        "x_title": "STEP 2 NEG",
+        "x_instance": 1,
+        "x_node_alias": "negative prompt",
+        "x_core": true
+      },
+      "CLIPTextEncode#39.text": {
+        "type": "string",
+        "title": "positive prompt",
+        "default": "",
+        "widget": "textarea",
+        "x_node_id": "39",
+        "x_class_type": "CLIPTextEncode",
+        "x_title": "STEP 2 POS",
+        "x_instance": 2,
+        "x_node_alias": "positive prompt",
+        "x_core": true
+      },
+      "easy mathInt#40.operation": {
+        "type": "string",
+        "title": "operation (easy mathInt #40)",
+        "default": "multiply",
+        "enum": [
+          "add",
+          "subtract",
+          "multiply",
+          "divide",
+          "modulo",
+          "power"
+        ],
+        "x_node_id": "40",
+        "x_class_type": "easy mathInt",
+        "x_title": "H",
+        "x_instance": 6
+      },
+      "OpenposePreprocessor#52.detect_hand": {
+        "type": "string",
+        "title": "detect_hand",
+        "default": "enable",
+        "enum": [
+          "enable",
+          "disable"
+        ],
+        "x_node_id": "52",
+        "x_class_type": "OpenposePreprocessor",
+        "x_title": "OpenPose Pose",
+        "x_instance": 1,
+        "x_node_alias": "openpose preprocessor"
+      },
+      "OpenposePreprocessor#52.detect_body": {
+        "type": "string",
+        "title": "detect_body",
+        "default": "enable",
+        "enum": [
+          "enable",
+          "disable"
+        ],
+        "x_node_id": "52",
+        "x_class_type": "OpenposePreprocessor",
+        "x_title": "OpenPose Pose",
+        "x_instance": 1,
+        "x_node_alias": "openpose preprocessor"
+      },
+      "OpenposePreprocessor#52.detect_face": {
+        "type": "string",
+        "title": "detect_face",
+        "default": "enable",
+        "enum": [
+          "enable",
+          "disable"
+        ],
+        "x_node_id": "52",
+        "x_class_type": "OpenposePreprocessor",
+        "x_title": "OpenPose Pose",
+        "x_instance": 1,
+        "x_node_alias": "openpose preprocessor"
+      },
+      "OpenposePreprocessor#52.scale_stick_for_xinsr_cn": {
+        "type": "string",
+        "title": "scale_stick_for_xinsr_cn",
+        "default": "disable",
+        "enum": [
+          "disable",
+          "enable"
+        ],
+        "x_node_id": "52",
+        "x_class_type": "OpenposePreprocessor",
+        "x_title": "OpenPose Pose",
+        "x_instance": 1,
+        "x_node_alias": "openpose preprocessor"
+      },
+      "ControlNetApplyAdvanced#62.strength": {
+        "type": "number",
+        "title": "strength",
+        "default": 0.2,
+        "minimum": 0,
+        "maximum": 10,
+        "step": 0.01,
+        "x_node_id": "62",
+        "x_class_type": "ControlNetApplyAdvanced",
+        "x_title": "Apply ControlNet",
+        "x_instance": 1,
+        "x_node_alias": "tile controlnet",
+        "x_core": true
+      },
+      "ControlNetApplyAdvanced#62.start_percent": {
+        "type": "number",
+        "title": "start_percent",
+        "default": 0.2,
+        "minimum": 0,
+        "maximum": 1,
+        "step": 0.001,
+        "x_node_id": "62",
+        "x_class_type": "ControlNetApplyAdvanced",
+        "x_title": "Apply ControlNet",
+        "x_instance": 1,
+        "x_node_alias": "tile controlnet",
+        "x_core": true
+      },
+      "ControlNetApplyAdvanced#62.end_percent": {
+        "type": "number",
+        "title": "end_percent",
+        "default": 0.8,
+        "minimum": 0,
+        "maximum": 1,
+        "step": 0.001,
+        "x_node_id": "62",
+        "x_class_type": "ControlNetApplyAdvanced",
+        "x_title": "Apply ControlNet",
+        "x_instance": 1,
+        "x_node_alias": "tile controlnet",
+        "x_core": true
+      },
+      "UltimateSDUpscalePoseTiled#64.upscale_by": {
+        "type": "number",
+        "title": "upscale_by",
+        "default": 1,
+        "minimum": 0.05,
+        "maximum": 4,
+        "step": 0.05,
+        "x_node_id": "64",
+        "x_class_type": "UltimateSDUpscalePoseTiled",
+        "x_title": "Ultimate SD Upscale (Pose Tiled ControlNet)",
+        "x_instance": 1,
+        "x_node_alias": "sampler",
+        "__hidden": true,
+        "x_core": true
+      },
+      "UltimateSDUpscalePoseTiled#64.seed": {
+        "type": "integer",
+        "title": "seed",
+        "default": -1,
+        "minimum": -1,
+        "maximum": 18446744073709552000,
+        "x_node_id": "64",
+        "x_class_type": "UltimateSDUpscalePoseTiled",
+        "x_title": "Ultimate SD Upscale (Pose Tiled ControlNet)",
+        "x_instance": 1,
+        "x_node_alias": "sampler",
+        "x_core": true
+      },
+      "UltimateSDUpscalePoseTiled#64.steps": {
+        "type": "integer",
+        "title": "steps",
+        "default": 30,
+        "minimum": 1,
+        "maximum": 10000,
+        "x_node_id": "64",
+        "x_class_type": "UltimateSDUpscalePoseTiled",
+        "x_title": "Ultimate SD Upscale (Pose Tiled ControlNet)",
+        "x_instance": 1,
+        "x_node_alias": "sampler",
+        "x_core": true
+      },
+      "UltimateSDUpscalePoseTiled#64.cfg": {
+        "type": "number",
+        "title": "cfg",
+        "default": 6,
+        "minimum": 0,
+        "maximum": 100,
+        "step": 0.01,
+        "x_node_id": "64",
+        "x_class_type": "UltimateSDUpscalePoseTiled",
+        "x_title": "Ultimate SD Upscale (Pose Tiled ControlNet)",
+        "x_instance": 1,
+        "x_node_alias": "sampler",
+        "x_core": true
+      },
+      "UltimateSDUpscalePoseTiled#64.sampler_name": {
+        "type": "string",
+        "title": "sampler_name",
+        "default": "euler_ancestral",
+        "enum": [
+          "euler",
+          "euler_cfg_pp",
+          "euler_ancestral",
+          "euler_ancestral_cfg_pp",
+          "heun",
+          "heunpp2",
+          "exp_heun_2_x0",
+          "exp_heun_2_x0_sde",
+          "dpm_2",
+          "dpm_2_ancestral",
+          "lms",
+          "dpm_fast",
+          "dpm_adaptive",
+          "dpmpp_2s_ancestral",
+          "dpmpp_2s_ancestral_cfg_pp",
+          "dpmpp_sde",
+          "dpmpp_sde_gpu",
+          "dpmpp_2m",
+          "dpmpp_2m_cfg_pp",
+          "dpmpp_2m_sde",
+          "dpmpp_2m_sde_gpu",
+          "dpmpp_2m_sde_heun",
+          "dpmpp_2m_sde_heun_gpu",
+          "dpmpp_3m_sde",
+          "dpmpp_3m_sde_gpu",
+          "ddpm",
+          "lcm",
+          "ipndm",
+          "ipndm_v",
+          "deis",
+          "res_multistep",
+          "res_multistep_cfg_pp",
+          "res_multistep_ancestral",
+          "res_multistep_ancestral_cfg_pp",
+          "gradient_estimation",
+          "gradient_estimation_cfg_pp",
+          "er_sde",
+          "seeds_2",
+          "seeds_3",
+          "sa_solver",
+          "sa_solver_pece",
+          "ddim",
+          "uni_pc",
+          "uni_pc_bh2",
+          "legacy_rk",
+          "rk",
+          "rk_beta",
+          "deis_3m_ode",
+          "deis_2m_ode",
+          "deis_3m",
+          "deis_2m",
+          "res_6s_ode",
+          "res_5s_ode",
+          "res_3s_ode",
+          "res_2s_ode",
+          "res_3m_ode",
+          "res_2m_ode",
+          "res_6s",
+          "res_5s",
+          "res_3s",
+          "res_2s",
+          "res_3m",
+          "res_2m"
+        ],
+        "x_node_id": "64",
+        "x_class_type": "UltimateSDUpscalePoseTiled",
+        "x_title": "Ultimate SD Upscale (Pose Tiled ControlNet)",
+        "x_instance": 1,
+        "x_node_alias": "sampler",
+        "x_core": true
+      },
+      "UltimateSDUpscalePoseTiled#64.scheduler": {
+        "type": "string",
+        "title": "scheduler",
+        "default": "normal",
+        "enum": [
+          "simple",
+          "sgm_uniform",
+          "karras",
+          "exponential",
+          "ddim_uniform",
+          "beta",
+          "normal",
+          "linear_quadratic",
+          "kl_optimal",
+          "bong_tangent",
+          "beta57"
+        ],
+        "x_node_id": "64",
+        "x_class_type": "UltimateSDUpscalePoseTiled",
+        "x_title": "Ultimate SD Upscale (Pose Tiled ControlNet)",
+        "x_instance": 1,
+        "x_node_alias": "sampler",
+        "x_core": true
+      },
+      "UltimateSDUpscalePoseTiled#64.denoise": {
+        "type": "number",
+        "title": "denoise",
+        "default": 0.8,
+        "minimum": 0,
+        "maximum": 1,
+        "step": 0.01,
+        "x_node_id": "64",
+        "x_class_type": "UltimateSDUpscalePoseTiled",
+        "x_title": "Ultimate SD Upscale (Pose Tiled ControlNet)",
+        "x_instance": 1,
+        "x_node_alias": "sampler",
+        "x_core": true
+      },
+      "UltimateSDUpscalePoseTiled#64.mode_type": {
+        "type": "string",
+        "title": "mode_type",
+        "default": "Linear",
+        "enum": [
+          "Linear",
+          "Chess",
+          "None"
+        ],
+        "x_node_id": "64",
+        "x_class_type": "UltimateSDUpscalePoseTiled",
+        "x_title": "Ultimate SD Upscale (Pose Tiled ControlNet)",
+        "x_instance": 1,
+        "x_node_alias": "sampler",
+        "__hidden": true,
+        "x_core": true
+      },
+      "UltimateSDUpscalePoseTiled#64.mask_blur": {
+        "type": "integer",
+        "title": "mask_blur",
+        "default": 0,
+        "minimum": 0,
+        "maximum": 64,
+        "x_node_id": "64",
+        "x_class_type": "UltimateSDUpscalePoseTiled",
+        "x_title": "Ultimate SD Upscale (Pose Tiled ControlNet)",
+        "x_instance": 1,
+        "x_node_alias": "sampler",
+        "x_core": true
+      },
+      "UltimateSDUpscalePoseTiled#64.tile_padding": {
+        "type": "integer",
+        "title": "tile_padding",
+        "default": 0,
+        "minimum": 0,
+        "maximum": 8192,
+        "x_node_id": "64",
+        "x_class_type": "UltimateSDUpscalePoseTiled",
+        "x_title": "Ultimate SD Upscale (Pose Tiled ControlNet)",
+        "x_instance": 1,
+        "x_node_alias": "sampler",
+        "x_core": true
+      },
+      "UltimateSDUpscalePoseTiled#64.seam_fix_mode": {
+        "type": "string",
+        "title": "seam_fix_mode",
+        "default": "None",
+        "enum": [
+          "None",
+          "Band Pass",
+          "Half Tile",
+          "Half Tile + Intersections"
+        ],
+        "x_node_id": "64",
+        "x_class_type": "UltimateSDUpscalePoseTiled",
+        "x_title": "Ultimate SD Upscale (Pose Tiled ControlNet)",
+        "x_instance": 1,
+        "x_node_alias": "sampler",
+        "__hidden": true,
+        "x_core": true
+      },
+      "UltimateSDUpscalePoseTiled#64.seam_fix_denoise": {
+        "type": "number",
+        "title": "seam_fix_denoise",
+        "default": 0,
+        "minimum": 0,
+        "maximum": 1,
+        "step": 0.01,
+        "x_node_id": "64",
+        "x_class_type": "UltimateSDUpscalePoseTiled",
+        "x_title": "Ultimate SD Upscale (Pose Tiled ControlNet)",
+        "x_instance": 1,
+        "x_node_alias": "sampler",
+        "__hidden": true,
+        "x_core": true
+      },
+      "UltimateSDUpscalePoseTiled#64.seam_fix_width": {
+        "type": "integer",
+        "title": "seam_fix_width",
+        "default": 0,
+        "minimum": 0,
+        "maximum": 8192,
+        "x_node_id": "64",
+        "x_class_type": "UltimateSDUpscalePoseTiled",
+        "x_title": "Ultimate SD Upscale (Pose Tiled ControlNet)",
+        "x_instance": 1,
+        "x_node_alias": "sampler",
+        "__hidden": true,
+        "x_core": true
+      },
+      "UltimateSDUpscalePoseTiled#64.seam_fix_mask_blur": {
+        "type": "integer",
+        "title": "seam_fix_mask_blur",
+        "default": 0,
+        "minimum": 0,
+        "maximum": 64,
+        "x_node_id": "64",
+        "x_class_type": "UltimateSDUpscalePoseTiled",
+        "x_title": "Ultimate SD Upscale (Pose Tiled ControlNet)",
+        "x_instance": 1,
+        "x_node_alias": "sampler",
+        "__hidden": true,
+        "x_core": true
+      },
+      "UltimateSDUpscalePoseTiled#64.seam_fix_padding": {
+        "type": "integer",
+        "title": "seam_fix_padding",
+        "default": 0,
+        "minimum": 0,
+        "maximum": 8192,
+        "x_node_id": "64",
+        "x_class_type": "UltimateSDUpscalePoseTiled",
+        "x_title": "Ultimate SD Upscale (Pose Tiled ControlNet)",
+        "x_instance": 1,
+        "x_node_alias": "sampler",
+        "__hidden": true,
+        "x_core": true
+      },
+      "UltimateSDUpscalePoseTiled#64.noise_mask_blur": {
+        "type": "integer",
+        "title": "noise_mask_blur",
+        "default": 0,
+        "minimum": -1,
+        "maximum": 256,
+        "x_node_id": "64",
+        "x_class_type": "UltimateSDUpscalePoseTiled",
+        "x_title": "Ultimate SD Upscale (Pose Tiled ControlNet)",
+        "x_instance": 1,
+        "x_node_alias": "sampler",
+        "x_core": true
+      },
+      "UltimateSDUpscalePoseTiled#64.blend_mode": {
+        "type": "string",
+        "title": "blend_mode",
+        "default": "normalized",
+        "enum": [
+          "sequential",
+          "normalized"
+        ],
+        "x_node_id": "64",
+        "x_class_type": "UltimateSDUpscalePoseTiled",
+        "x_title": "Ultimate SD Upscale (Pose Tiled ControlNet)",
+        "x_instance": 1,
+        "x_node_alias": "sampler",
+        "x_core": true
+      },
+      "ControlNetApplyAdvanced#68.strength": {
+        "type": "number",
+        "title": "strength",
+        "default": 0.6,
+        "minimum": 0,
+        "maximum": 10,
+        "step": 0.01,
+        "x_node_id": "68",
+        "x_class_type": "ControlNetApplyAdvanced",
+        "x_title": "Apply ControlNet",
+        "x_instance": 2,
+        "x_node_alias": "openpose controlnet",
+        "x_core": true
+      },
+      "ControlNetApplyAdvanced#68.start_percent": {
+        "type": "number",
+        "title": "start_percent",
+        "default": 0.05,
+        "minimum": 0,
+        "maximum": 1,
+        "step": 0.001,
+        "x_node_id": "68",
+        "x_class_type": "ControlNetApplyAdvanced",
+        "x_title": "Apply ControlNet",
+        "x_instance": 2,
+        "x_node_alias": "openpose controlnet",
+        "x_core": true
+      },
+      "ControlNetApplyAdvanced#68.end_percent": {
+        "type": "number",
+        "title": "end_percent",
+        "default": 0.95,
+        "minimum": 0,
+        "maximum": 1,
+        "step": 0.001,
+        "x_node_id": "68",
+        "x_class_type": "ControlNetApplyAdvanced",
+        "x_title": "Apply ControlNet",
+        "x_instance": 2,
+        "x_node_alias": "openpose controlnet",
+        "x_core": true
+      },
+      "ControlNetLoader#69.control_net_name": {
+        "type": "string",
+        "title": "control_net_name",
+        "default": "openpose.safetensors",
+        "enum": [
+          "canny.safetensors",
+          "flux_canny.safetensors",
+          "flux_openpose.safetensors",
+          "openpose.safetensors",
+          "softedge.safetensors",
+          "tile.safetensors"
+        ],
+        "x_node_id": "69",
+        "x_class_type": "ControlNetLoader",
+        "x_title": "Load ControlNet Model",
+        "x_instance": 2,
+        "x_node_alias": "load openpose controlnet"
+      },
+      "easy compare#70.comparison": {
+        "type": "string",
+        "title": "comparison (easy compare)",
+        "default": "a < b",
+        "enum": [
+          "a == b",
+          "a != b",
+          "a < b",
+          "a > b",
+          "a <= b",
+          "a >= b",
+          "a > 0",
+          "a <= 0",
+          "b > 0",
+          "b <= 0"
+        ],
+        "x_node_id": "70",
+        "x_class_type": "easy compare",
+        "x_title": "Compare",
+        "x_instance": 1
+      },
+      "CheckpointLoaderSimple#85.ckpt_name": {
+        "type": "string",
+        "title": "ckpt_name (CheckpointLoaderSimple)",
+        "default": "hassakuXLIllustrious_v21fix.safetensors",
+        "enum": [
+          "aMixIllustrious_aMix.safetensors",
+          "hassakuXLIllustrious_v21fix.safetensors",
+          "waiNSFWIllustrious_v150.safetensors"
+        ],
+        "x_node_id": "85",
+        "x_class_type": "CheckpointLoaderSimple",
+        "x_title": "Load Checkpoint",
+        "x_instance": 1,
+        "x_node_alias": "load checkpoint"
+      },
+      "LoraLoader#86.lora_name": {
+        "type": "string",
+        "title": "lora_name",
+        "default": "ck-shadow-circuit-IL-000012.safetensors",
+        "enum": [
+          "B-mixxxlora.safetensors",
+          "Dramatic Lighting Slider.safetensors",
+          "Matte_Skin_Illustrious_v4.safetensors",
+          "Motion_Lines_(Concept)_ILXL.safetensors",
+          "Realim_Lora_BSY_IL_V1_RA42.safetensors",
+          "Semi-realism_illustrious.safetensors",
+          "chroma-flash-heun_r01-fp32-pruned.safetensors",
+          "ck-NeurocoreShadowCircuit-ZIT_000003000.safetensors",
+          "ck-shadow-circuit-IL-000012.safetensors",
+          "ck_cyberpunk.safetensors",
+          "codex_sss_chroma-000012.safetensors",
+          "fingers_adjuster_illustrious2.0stable_v1.0.safetensors",
+          "iLLMythSmo0thL1nes.safetensors",
+          "lenovo_z.safetensors",
+          "realistic filter [IL].safetensors",
+          "rimixO.safetensors",
+          "wan/23High noise-Cumshot Aesthetics.safetensors",
+          "wan/56Low noise-Cumshot Aesthetics.safetensors",
+          "wan/DR34ML4Y_I2V_14B_HIGH.safetensors",
+          "wan/DR34ML4Y_I2V_14B_HIGH_V2.safetensors",
+          "wan/DR34ML4Y_I2V_14B_LOW.safetensors",
+          "wan/DR34ML4Y_I2V_14B_LOW_V2.safetensors",
+          "wan/NSFW-22-H-e8.safetensors",
+          "wan/NSFW-22-L-e8.safetensors",
+          "wan/P009-The-Walk-Wan2.2-i2v_Normal-H.safetensors",
+          "wan/P009-The-Walk-Wan2.2-i2v_Normal-L.safetensors",
+          "wan/PENISLORA_22_i2v_HIGH_e320.safetensors",
+          "wan/PENISLORA_22_i2v_LOW_e496.safetensors",
+          "wan/W22_NSFW_Posing_Nude_i2v_HN_v2.safetensors",
+          "wan/W22_NSFW_Posing_Nude_i2v_LN_v2.safetensors",
+          "wan/Wan2.2 - I2V - Fucking Machine - HIGH 14B.safetensors",
+          "wan/Wan2.2 - I2V - Fucking Machine - LOW 14B.safetensors",
+          "wan/Wan2.2-I2V-High-MysticXXX.safetensors",
+          "wan/Wan2.2-I2V-Low-MysticXXX.safetensors",
+          "wan/Wan_22_ComfyUI_Repackaged_wan22_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
+          "wan/Wan_22_ComfyUI_Repackaged_wan22_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors",
+          "wan/anal_insertion_HIGH_V01.safetensors",
+          "wan/anal_insertion_LOW_V01.safetensors",
+          "wan/ass_ripple_HIGH_V01.safetensors",
+          "wan/ass_ripple_LOW_V01.safetensors",
+          "wan/cum2_h_20.safetensors",
+          "wan/cum4_h_30.safetensors",
+          "wan/cum4_l_75.safetensors",
+          "wan/cum_l_70.safetensors",
+          "wan/dance_b high 250905.safetensors",
+          "wan/dance_b low 250905.safetensors",
+          "wan/derpfuckedfrombehind_000002125_high_noise.safetensors",
+          "wan/derpfuckedfrombehind_000002125_low_noise.safetensors",
+          "wan/h_wan22_lightning.safetensors",
+          "wan/jfj-deepthroat-W22-I2V-HN.safetensors",
+          "wan/jfj-deepthroat-W22-I2V-LN.safetensors",
+          "wan/l_wan22_lightning.safetensors",
+          "wan/reverse_suspended_congress_I2V_high.safetensors",
+          "wan/reverse_suspended_congress_I2V_low.safetensors",
+          "wan/slop_twerk_HighNoise_merged3_7_v2.safetensors",
+          "wan/slop_twerk_LowNoise_merged3_7_v2.safetensors",
+          "wan/wan21_lightning.safetensors",
+          "wan/wan22-4n4lpl4y-i2v-182epoc-low-k3nk.safetensors",
+          "wan/wan22-4n4lpl4y-i2v-222epoc-high-k3nk.safetensors",
+          "wan/wan22-ultimatedeepthroat-I2V-101epoc-low-k3nk.safetensors",
+          "wan/wan22-ultimatedeepthroat-i2v-102epoc-high-k3nk.safetensors",
+          "wan/wan22.r3v3rs3_c0wg1rl-14b-High-i2v_e70.safetensors",
+          "wan/wan22.r3v3rs3_c0wg1rl-14b-Low-i2v_e70.safetensors",
+          "wan/wan22_i2v_anal_v1_high_noise.safetensors",
+          "wan/wan22_i2v_anal_v1_low_noise.safetensors",
+          "wan/wan22_i2v_futa_cowgirl_high_noise.safetensors",
+          "wan/wan22_i2v_futa_cowgirl_low_noise.safetensors",
+          "zturbo_penis_v3_e340.safetensors"
+        ],
+        "x_node_id": "86",
+        "x_class_type": "LoraLoader",
+        "x_title": "Load LoRA",
+        "x_instance": 1,
+        "x_node_alias": "lora"
+      },
+      "LoraLoader#86.strength_model": {
+        "type": "number",
+        "title": "strength_model",
+        "default": 0.4,
+        "minimum": -100,
+        "maximum": 100,
+        "step": 0.01,
+        "x_node_id": "86",
+        "x_class_type": "LoraLoader",
+        "x_title": "Load LoRA",
+        "x_instance": 1,
+        "x_node_alias": "lora"
+      },
+      "LoraLoader#86.strength_clip": {
+        "type": "number",
+        "title": "strength_clip",
+        "default": 0.4,
+        "minimum": -100,
+        "maximum": 100,
+        "step": 0.01,
+        "x_node_id": "86",
+        "x_class_type": "LoraLoader",
+        "x_title": "Load LoRA",
+        "x_instance": 1,
+        "x_node_alias": "lora"
+      },
+      "LoraLoader#87.lora_name": {
+        "type": "string",
+        "title": "lora_name",
+        "default": "fingers_adjuster_illustrious2.0stable_v1.0.safetensors",
+        "enum": [
+          "B-mixxxlora.safetensors",
+          "Dramatic Lighting Slider.safetensors",
+          "Matte_Skin_Illustrious_v4.safetensors",
+          "Motion_Lines_(Concept)_ILXL.safetensors",
+          "Realim_Lora_BSY_IL_V1_RA42.safetensors",
+          "Semi-realism_illustrious.safetensors",
+          "chroma-flash-heun_r01-fp32-pruned.safetensors",
+          "ck-NeurocoreShadowCircuit-ZIT_000003000.safetensors",
+          "ck-shadow-circuit-IL-000012.safetensors",
+          "ck_cyberpunk.safetensors",
+          "codex_sss_chroma-000012.safetensors",
+          "fingers_adjuster_illustrious2.0stable_v1.0.safetensors",
+          "iLLMythSmo0thL1nes.safetensors",
+          "lenovo_z.safetensors",
+          "realistic filter [IL].safetensors",
+          "rimixO.safetensors",
+          "wan/23High noise-Cumshot Aesthetics.safetensors",
+          "wan/56Low noise-Cumshot Aesthetics.safetensors",
+          "wan/DR34ML4Y_I2V_14B_HIGH.safetensors",
+          "wan/DR34ML4Y_I2V_14B_HIGH_V2.safetensors",
+          "wan/DR34ML4Y_I2V_14B_LOW.safetensors",
+          "wan/DR34ML4Y_I2V_14B_LOW_V2.safetensors",
+          "wan/NSFW-22-H-e8.safetensors",
+          "wan/NSFW-22-L-e8.safetensors",
+          "wan/P009-The-Walk-Wan2.2-i2v_Normal-H.safetensors",
+          "wan/P009-The-Walk-Wan2.2-i2v_Normal-L.safetensors",
+          "wan/PENISLORA_22_i2v_HIGH_e320.safetensors",
+          "wan/PENISLORA_22_i2v_LOW_e496.safetensors",
+          "wan/W22_NSFW_Posing_Nude_i2v_HN_v2.safetensors",
+          "wan/W22_NSFW_Posing_Nude_i2v_LN_v2.safetensors",
+          "wan/Wan2.2 - I2V - Fucking Machine - HIGH 14B.safetensors",
+          "wan/Wan2.2 - I2V - Fucking Machine - LOW 14B.safetensors",
+          "wan/Wan2.2-I2V-High-MysticXXX.safetensors",
+          "wan/Wan2.2-I2V-Low-MysticXXX.safetensors",
+          "wan/Wan_22_ComfyUI_Repackaged_wan22_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
+          "wan/Wan_22_ComfyUI_Repackaged_wan22_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors",
+          "wan/anal_insertion_HIGH_V01.safetensors",
+          "wan/anal_insertion_LOW_V01.safetensors",
+          "wan/ass_ripple_HIGH_V01.safetensors",
+          "wan/ass_ripple_LOW_V01.safetensors",
+          "wan/cum2_h_20.safetensors",
+          "wan/cum4_h_30.safetensors",
+          "wan/cum4_l_75.safetensors",
+          "wan/cum_l_70.safetensors",
+          "wan/dance_b high 250905.safetensors",
+          "wan/dance_b low 250905.safetensors",
+          "wan/derpfuckedfrombehind_000002125_high_noise.safetensors",
+          "wan/derpfuckedfrombehind_000002125_low_noise.safetensors",
+          "wan/h_wan22_lightning.safetensors",
+          "wan/jfj-deepthroat-W22-I2V-HN.safetensors",
+          "wan/jfj-deepthroat-W22-I2V-LN.safetensors",
+          "wan/l_wan22_lightning.safetensors",
+          "wan/reverse_suspended_congress_I2V_high.safetensors",
+          "wan/reverse_suspended_congress_I2V_low.safetensors",
+          "wan/slop_twerk_HighNoise_merged3_7_v2.safetensors",
+          "wan/slop_twerk_LowNoise_merged3_7_v2.safetensors",
+          "wan/wan21_lightning.safetensors",
+          "wan/wan22-4n4lpl4y-i2v-182epoc-low-k3nk.safetensors",
+          "wan/wan22-4n4lpl4y-i2v-222epoc-high-k3nk.safetensors",
+          "wan/wan22-ultimatedeepthroat-I2V-101epoc-low-k3nk.safetensors",
+          "wan/wan22-ultimatedeepthroat-i2v-102epoc-high-k3nk.safetensors",
+          "wan/wan22.r3v3rs3_c0wg1rl-14b-High-i2v_e70.safetensors",
+          "wan/wan22.r3v3rs3_c0wg1rl-14b-Low-i2v_e70.safetensors",
+          "wan/wan22_i2v_anal_v1_high_noise.safetensors",
+          "wan/wan22_i2v_anal_v1_low_noise.safetensors",
+          "wan/wan22_i2v_futa_cowgirl_high_noise.safetensors",
+          "wan/wan22_i2v_futa_cowgirl_low_noise.safetensors",
+          "zturbo_penis_v3_e340.safetensors"
+        ],
+        "x_node_id": "87",
+        "x_class_type": "LoraLoader",
+        "x_title": "Load LoRA",
+        "x_instance": 2,
+        "x_node_alias": "lora"
+      },
+      "LoraLoader#87.strength_model": {
+        "type": "number",
+        "title": "strength_model",
+        "default": 0.65,
+        "minimum": -100,
+        "maximum": 100,
+        "step": 0.01,
+        "x_node_id": "87",
+        "x_class_type": "LoraLoader",
+        "x_title": "Load LoRA",
+        "x_instance": 2,
+        "x_node_alias": "lora"
+      },
+      "LoraLoader#87.strength_clip": {
+        "type": "number",
+        "title": "strength_clip",
+        "default": 1,
+        "minimum": -100,
+        "maximum": 100,
+        "step": 0.01,
+        "x_node_id": "87",
+        "x_class_type": "LoraLoader",
+        "x_title": "Load LoRA",
+        "x_instance": 2,
+        "x_node_alias": "lora"
+      },
+      "LoraLoader#88.lora_name": {
+        "type": "string",
+        "title": "lora_name",
+        "default": "B-mixxxlora.safetensors",
+        "enum": [
+          "B-mixxxlora.safetensors",
+          "Dramatic Lighting Slider.safetensors",
+          "Matte_Skin_Illustrious_v4.safetensors",
+          "Motion_Lines_(Concept)_ILXL.safetensors",
+          "Realim_Lora_BSY_IL_V1_RA42.safetensors",
+          "Semi-realism_illustrious.safetensors",
+          "chroma-flash-heun_r01-fp32-pruned.safetensors",
+          "ck-NeurocoreShadowCircuit-ZIT_000003000.safetensors",
+          "ck-shadow-circuit-IL-000012.safetensors",
+          "ck_cyberpunk.safetensors",
+          "codex_sss_chroma-000012.safetensors",
+          "fingers_adjuster_illustrious2.0stable_v1.0.safetensors",
+          "iLLMythSmo0thL1nes.safetensors",
+          "lenovo_z.safetensors",
+          "realistic filter [IL].safetensors",
+          "rimixO.safetensors",
+          "wan/23High noise-Cumshot Aesthetics.safetensors",
+          "wan/56Low noise-Cumshot Aesthetics.safetensors",
+          "wan/DR34ML4Y_I2V_14B_HIGH.safetensors",
+          "wan/DR34ML4Y_I2V_14B_HIGH_V2.safetensors",
+          "wan/DR34ML4Y_I2V_14B_LOW.safetensors",
+          "wan/DR34ML4Y_I2V_14B_LOW_V2.safetensors",
+          "wan/NSFW-22-H-e8.safetensors",
+          "wan/NSFW-22-L-e8.safetensors",
+          "wan/P009-The-Walk-Wan2.2-i2v_Normal-H.safetensors",
+          "wan/P009-The-Walk-Wan2.2-i2v_Normal-L.safetensors",
+          "wan/PENISLORA_22_i2v_HIGH_e320.safetensors",
+          "wan/PENISLORA_22_i2v_LOW_e496.safetensors",
+          "wan/W22_NSFW_Posing_Nude_i2v_HN_v2.safetensors",
+          "wan/W22_NSFW_Posing_Nude_i2v_LN_v2.safetensors",
+          "wan/Wan2.2 - I2V - Fucking Machine - HIGH 14B.safetensors",
+          "wan/Wan2.2 - I2V - Fucking Machine - LOW 14B.safetensors",
+          "wan/Wan2.2-I2V-High-MysticXXX.safetensors",
+          "wan/Wan2.2-I2V-Low-MysticXXX.safetensors",
+          "wan/Wan_22_ComfyUI_Repackaged_wan22_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
+          "wan/Wan_22_ComfyUI_Repackaged_wan22_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors",
+          "wan/anal_insertion_HIGH_V01.safetensors",
+          "wan/anal_insertion_LOW_V01.safetensors",
+          "wan/ass_ripple_HIGH_V01.safetensors",
+          "wan/ass_ripple_LOW_V01.safetensors",
+          "wan/cum2_h_20.safetensors",
+          "wan/cum4_h_30.safetensors",
+          "wan/cum4_l_75.safetensors",
+          "wan/cum_l_70.safetensors",
+          "wan/dance_b high 250905.safetensors",
+          "wan/dance_b low 250905.safetensors",
+          "wan/derpfuckedfrombehind_000002125_high_noise.safetensors",
+          "wan/derpfuckedfrombehind_000002125_low_noise.safetensors",
+          "wan/h_wan22_lightning.safetensors",
+          "wan/jfj-deepthroat-W22-I2V-HN.safetensors",
+          "wan/jfj-deepthroat-W22-I2V-LN.safetensors",
+          "wan/l_wan22_lightning.safetensors",
+          "wan/reverse_suspended_congress_I2V_high.safetensors",
+          "wan/reverse_suspended_congress_I2V_low.safetensors",
+          "wan/slop_twerk_HighNoise_merged3_7_v2.safetensors",
+          "wan/slop_twerk_LowNoise_merged3_7_v2.safetensors",
+          "wan/wan21_lightning.safetensors",
+          "wan/wan22-4n4lpl4y-i2v-182epoc-low-k3nk.safetensors",
+          "wan/wan22-4n4lpl4y-i2v-222epoc-high-k3nk.safetensors",
+          "wan/wan22-ultimatedeepthroat-I2V-101epoc-low-k3nk.safetensors",
+          "wan/wan22-ultimatedeepthroat-i2v-102epoc-high-k3nk.safetensors",
+          "wan/wan22.r3v3rs3_c0wg1rl-14b-High-i2v_e70.safetensors",
+          "wan/wan22.r3v3rs3_c0wg1rl-14b-Low-i2v_e70.safetensors",
+          "wan/wan22_i2v_anal_v1_high_noise.safetensors",
+          "wan/wan22_i2v_anal_v1_low_noise.safetensors",
+          "wan/wan22_i2v_futa_cowgirl_high_noise.safetensors",
+          "wan/wan22_i2v_futa_cowgirl_low_noise.safetensors",
+          "zturbo_penis_v3_e340.safetensors"
+        ],
+        "x_node_id": "88",
+        "x_class_type": "LoraLoader",
+        "x_title": "Load LoRA",
+        "x_instance": 3,
+        "x_node_alias": "lora"
+      },
+      "LoraLoader#88.strength_model": {
+        "type": "number",
+        "title": "strength_model",
+        "default": 1,
+        "minimum": -100,
+        "maximum": 100,
+        "step": 0.01,
+        "x_node_id": "88",
+        "x_class_type": "LoraLoader",
+        "x_title": "Load LoRA",
+        "x_instance": 3,
+        "x_node_alias": "lora"
+      },
+      "LoraLoader#88.strength_clip": {
+        "type": "number",
+        "title": "strength_clip",
+        "default": 1,
+        "minimum": -100,
+        "maximum": 100,
+        "step": 0.01,
+        "x_node_id": "88",
+        "x_class_type": "LoraLoader",
+        "x_title": "Load LoRA",
+        "x_instance": 3,
+        "x_node_alias": "lora"
+      },
+      "LoraLoader#89.lora_name": {
+        "type": "string",
+        "title": "lora_name",
+        "default": "Semi-realism_illustrious.safetensors",
+        "enum": [
+          "B-mixxxlora.safetensors",
+          "Dramatic Lighting Slider.safetensors",
+          "Matte_Skin_Illustrious_v4.safetensors",
+          "Motion_Lines_(Concept)_ILXL.safetensors",
+          "Realim_Lora_BSY_IL_V1_RA42.safetensors",
+          "Semi-realism_illustrious.safetensors",
+          "chroma-flash-heun_r01-fp32-pruned.safetensors",
+          "ck-NeurocoreShadowCircuit-ZIT_000003000.safetensors",
+          "ck-shadow-circuit-IL-000012.safetensors",
+          "ck_cyberpunk.safetensors",
+          "codex_sss_chroma-000012.safetensors",
+          "fingers_adjuster_illustrious2.0stable_v1.0.safetensors",
+          "iLLMythSmo0thL1nes.safetensors",
+          "lenovo_z.safetensors",
+          "realistic filter [IL].safetensors",
+          "rimixO.safetensors",
+          "wan/23High noise-Cumshot Aesthetics.safetensors",
+          "wan/56Low noise-Cumshot Aesthetics.safetensors",
+          "wan/DR34ML4Y_I2V_14B_HIGH.safetensors",
+          "wan/DR34ML4Y_I2V_14B_HIGH_V2.safetensors",
+          "wan/DR34ML4Y_I2V_14B_LOW.safetensors",
+          "wan/DR34ML4Y_I2V_14B_LOW_V2.safetensors",
+          "wan/NSFW-22-H-e8.safetensors",
+          "wan/NSFW-22-L-e8.safetensors",
+          "wan/P009-The-Walk-Wan2.2-i2v_Normal-H.safetensors",
+          "wan/P009-The-Walk-Wan2.2-i2v_Normal-L.safetensors",
+          "wan/PENISLORA_22_i2v_HIGH_e320.safetensors",
+          "wan/PENISLORA_22_i2v_LOW_e496.safetensors",
+          "wan/W22_NSFW_Posing_Nude_i2v_HN_v2.safetensors",
+          "wan/W22_NSFW_Posing_Nude_i2v_LN_v2.safetensors",
+          "wan/Wan2.2 - I2V - Fucking Machine - HIGH 14B.safetensors",
+          "wan/Wan2.2 - I2V - Fucking Machine - LOW 14B.safetensors",
+          "wan/Wan2.2-I2V-High-MysticXXX.safetensors",
+          "wan/Wan2.2-I2V-Low-MysticXXX.safetensors",
+          "wan/Wan_22_ComfyUI_Repackaged_wan22_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
+          "wan/Wan_22_ComfyUI_Repackaged_wan22_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors",
+          "wan/anal_insertion_HIGH_V01.safetensors",
+          "wan/anal_insertion_LOW_V01.safetensors",
+          "wan/ass_ripple_HIGH_V01.safetensors",
+          "wan/ass_ripple_LOW_V01.safetensors",
+          "wan/cum2_h_20.safetensors",
+          "wan/cum4_h_30.safetensors",
+          "wan/cum4_l_75.safetensors",
+          "wan/cum_l_70.safetensors",
+          "wan/dance_b high 250905.safetensors",
+          "wan/dance_b low 250905.safetensors",
+          "wan/derpfuckedfrombehind_000002125_high_noise.safetensors",
+          "wan/derpfuckedfrombehind_000002125_low_noise.safetensors",
+          "wan/h_wan22_lightning.safetensors",
+          "wan/jfj-deepthroat-W22-I2V-HN.safetensors",
+          "wan/jfj-deepthroat-W22-I2V-LN.safetensors",
+          "wan/l_wan22_lightning.safetensors",
+          "wan/reverse_suspended_congress_I2V_high.safetensors",
+          "wan/reverse_suspended_congress_I2V_low.safetensors",
+          "wan/slop_twerk_HighNoise_merged3_7_v2.safetensors",
+          "wan/slop_twerk_LowNoise_merged3_7_v2.safetensors",
+          "wan/wan21_lightning.safetensors",
+          "wan/wan22-4n4lpl4y-i2v-182epoc-low-k3nk.safetensors",
+          "wan/wan22-4n4lpl4y-i2v-222epoc-high-k3nk.safetensors",
+          "wan/wan22-ultimatedeepthroat-I2V-101epoc-low-k3nk.safetensors",
+          "wan/wan22-ultimatedeepthroat-i2v-102epoc-high-k3nk.safetensors",
+          "wan/wan22.r3v3rs3_c0wg1rl-14b-High-i2v_e70.safetensors",
+          "wan/wan22.r3v3rs3_c0wg1rl-14b-Low-i2v_e70.safetensors",
+          "wan/wan22_i2v_anal_v1_high_noise.safetensors",
+          "wan/wan22_i2v_anal_v1_low_noise.safetensors",
+          "wan/wan22_i2v_futa_cowgirl_high_noise.safetensors",
+          "wan/wan22_i2v_futa_cowgirl_low_noise.safetensors",
+          "zturbo_penis_v3_e340.safetensors"
+        ],
+        "x_node_id": "89",
+        "x_class_type": "LoraLoader",
+        "x_title": "Load LoRA",
+        "x_instance": 4,
+        "x_node_alias": "lora 4"
+      },
+      "LoraLoader#89.strength_model": {
+        "type": "number",
+        "title": "strength_model",
+        "default": 0.4,
+        "minimum": -100,
+        "maximum": 100,
+        "step": 0.01,
+        "x_node_id": "89",
+        "x_class_type": "LoraLoader",
+        "x_title": "Load LoRA",
+        "x_instance": 4,
+        "x_node_alias": "lora 4"
+      },
+      "LoraLoader#89.strength_clip": {
+        "type": "number",
+        "title": "strength_clip",
+        "default": 0.4,
+        "minimum": -100,
+        "maximum": 100,
+        "step": 0.01,
+        "x_node_id": "89",
+        "x_class_type": "LoraLoader",
+        "x_title": "Load LoRA",
+        "x_instance": 4,
+        "x_node_alias": "lora 4"
+      },
+      "LoraLoader#90.lora_name": {
+        "type": "string",
+        "title": "lora_name",
+        "default": "realistic filter [IL].safetensors",
+        "enum": [
+          "B-mixxxlora.safetensors",
+          "Dramatic Lighting Slider.safetensors",
+          "Matte_Skin_Illustrious_v4.safetensors",
+          "Motion_Lines_(Concept)_ILXL.safetensors",
+          "Realim_Lora_BSY_IL_V1_RA42.safetensors",
+          "Semi-realism_illustrious.safetensors",
+          "chroma-flash-heun_r01-fp32-pruned.safetensors",
+          "ck-NeurocoreShadowCircuit-ZIT_000003000.safetensors",
+          "ck-shadow-circuit-IL-000012.safetensors",
+          "ck_cyberpunk.safetensors",
+          "codex_sss_chroma-000012.safetensors",
+          "fingers_adjuster_illustrious2.0stable_v1.0.safetensors",
+          "iLLMythSmo0thL1nes.safetensors",
+          "lenovo_z.safetensors",
+          "realistic filter [IL].safetensors",
+          "rimixO.safetensors",
+          "wan/23High noise-Cumshot Aesthetics.safetensors",
+          "wan/56Low noise-Cumshot Aesthetics.safetensors",
+          "wan/DR34ML4Y_I2V_14B_HIGH.safetensors",
+          "wan/DR34ML4Y_I2V_14B_HIGH_V2.safetensors",
+          "wan/DR34ML4Y_I2V_14B_LOW.safetensors",
+          "wan/DR34ML4Y_I2V_14B_LOW_V2.safetensors",
+          "wan/NSFW-22-H-e8.safetensors",
+          "wan/NSFW-22-L-e8.safetensors",
+          "wan/P009-The-Walk-Wan2.2-i2v_Normal-H.safetensors",
+          "wan/P009-The-Walk-Wan2.2-i2v_Normal-L.safetensors",
+          "wan/PENISLORA_22_i2v_HIGH_e320.safetensors",
+          "wan/PENISLORA_22_i2v_LOW_e496.safetensors",
+          "wan/W22_NSFW_Posing_Nude_i2v_HN_v2.safetensors",
+          "wan/W22_NSFW_Posing_Nude_i2v_LN_v2.safetensors",
+          "wan/Wan2.2 - I2V - Fucking Machine - HIGH 14B.safetensors",
+          "wan/Wan2.2 - I2V - Fucking Machine - LOW 14B.safetensors",
+          "wan/Wan2.2-I2V-High-MysticXXX.safetensors",
+          "wan/Wan2.2-I2V-Low-MysticXXX.safetensors",
+          "wan/Wan_22_ComfyUI_Repackaged_wan22_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
+          "wan/Wan_22_ComfyUI_Repackaged_wan22_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors",
+          "wan/anal_insertion_HIGH_V01.safetensors",
+          "wan/anal_insertion_LOW_V01.safetensors",
+          "wan/ass_ripple_HIGH_V01.safetensors",
+          "wan/ass_ripple_LOW_V01.safetensors",
+          "wan/cum2_h_20.safetensors",
+          "wan/cum4_h_30.safetensors",
+          "wan/cum4_l_75.safetensors",
+          "wan/cum_l_70.safetensors",
+          "wan/dance_b high 250905.safetensors",
+          "wan/dance_b low 250905.safetensors",
+          "wan/derpfuckedfrombehind_000002125_high_noise.safetensors",
+          "wan/derpfuckedfrombehind_000002125_low_noise.safetensors",
+          "wan/h_wan22_lightning.safetensors",
+          "wan/jfj-deepthroat-W22-I2V-HN.safetensors",
+          "wan/jfj-deepthroat-W22-I2V-LN.safetensors",
+          "wan/l_wan22_lightning.safetensors",
+          "wan/reverse_suspended_congress_I2V_high.safetensors",
+          "wan/reverse_suspended_congress_I2V_low.safetensors",
+          "wan/slop_twerk_HighNoise_merged3_7_v2.safetensors",
+          "wan/slop_twerk_LowNoise_merged3_7_v2.safetensors",
+          "wan/wan21_lightning.safetensors",
+          "wan/wan22-4n4lpl4y-i2v-182epoc-low-k3nk.safetensors",
+          "wan/wan22-4n4lpl4y-i2v-222epoc-high-k3nk.safetensors",
+          "wan/wan22-ultimatedeepthroat-I2V-101epoc-low-k3nk.safetensors",
+          "wan/wan22-ultimatedeepthroat-i2v-102epoc-high-k3nk.safetensors",
+          "wan/wan22.r3v3rs3_c0wg1rl-14b-High-i2v_e70.safetensors",
+          "wan/wan22.r3v3rs3_c0wg1rl-14b-Low-i2v_e70.safetensors",
+          "wan/wan22_i2v_anal_v1_high_noise.safetensors",
+          "wan/wan22_i2v_anal_v1_low_noise.safetensors",
+          "wan/wan22_i2v_futa_cowgirl_high_noise.safetensors",
+          "wan/wan22_i2v_futa_cowgirl_low_noise.safetensors",
+          "zturbo_penis_v3_e340.safetensors"
+        ],
+        "x_node_id": "90",
+        "x_class_type": "LoraLoader",
+        "x_title": "Load LoRA",
+        "x_instance": 5,
+        "x_node_alias": "lora 5"
+      },
+      "LoraLoader#90.strength_model": {
+        "type": "number",
+        "title": "strength_model",
+        "default": 0.6,
+        "minimum": -100,
+        "maximum": 100,
+        "step": 0.01,
+        "x_node_id": "90",
+        "x_class_type": "LoraLoader",
+        "x_title": "Load LoRA",
+        "x_instance": 5,
+        "x_node_alias": "lora 5"
+      },
+      "LoraLoader#90.strength_clip": {
+        "type": "number",
+        "title": "strength_clip",
+        "default": 0.6,
+        "minimum": -100,
+        "maximum": 100,
+        "step": 0.01,
+        "x_node_id": "90",
+        "x_class_type": "LoraLoader",
+        "x_title": "Load LoRA",
+        "x_instance": 5,
+        "x_node_alias": "lora 5"
+      },
+      "LoraLoader#91.lora_name": {
+        "type": "string",
+        "title": "lora_name",
+        "default": "iLLMythSmo0thL1nes.safetensors",
+        "enum": [
+          "B-mixxxlora.safetensors",
+          "Dramatic Lighting Slider.safetensors",
+          "Matte_Skin_Illustrious_v4.safetensors",
+          "Motion_Lines_(Concept)_ILXL.safetensors",
+          "Realim_Lora_BSY_IL_V1_RA42.safetensors",
+          "Semi-realism_illustrious.safetensors",
+          "chroma-flash-heun_r01-fp32-pruned.safetensors",
+          "ck-NeurocoreShadowCircuit-ZIT_000003000.safetensors",
+          "ck-shadow-circuit-IL-000012.safetensors",
+          "ck_cyberpunk.safetensors",
+          "codex_sss_chroma-000012.safetensors",
+          "fingers_adjuster_illustrious2.0stable_v1.0.safetensors",
+          "iLLMythSmo0thL1nes.safetensors",
+          "lenovo_z.safetensors",
+          "realistic filter [IL].safetensors",
+          "rimixO.safetensors",
+          "wan/23High noise-Cumshot Aesthetics.safetensors",
+          "wan/56Low noise-Cumshot Aesthetics.safetensors",
+          "wan/DR34ML4Y_I2V_14B_HIGH.safetensors",
+          "wan/DR34ML4Y_I2V_14B_HIGH_V2.safetensors",
+          "wan/DR34ML4Y_I2V_14B_LOW.safetensors",
+          "wan/DR34ML4Y_I2V_14B_LOW_V2.safetensors",
+          "wan/NSFW-22-H-e8.safetensors",
+          "wan/NSFW-22-L-e8.safetensors",
+          "wan/P009-The-Walk-Wan2.2-i2v_Normal-H.safetensors",
+          "wan/P009-The-Walk-Wan2.2-i2v_Normal-L.safetensors",
+          "wan/PENISLORA_22_i2v_HIGH_e320.safetensors",
+          "wan/PENISLORA_22_i2v_LOW_e496.safetensors",
+          "wan/W22_NSFW_Posing_Nude_i2v_HN_v2.safetensors",
+          "wan/W22_NSFW_Posing_Nude_i2v_LN_v2.safetensors",
+          "wan/Wan2.2 - I2V - Fucking Machine - HIGH 14B.safetensors",
+          "wan/Wan2.2 - I2V - Fucking Machine - LOW 14B.safetensors",
+          "wan/Wan2.2-I2V-High-MysticXXX.safetensors",
+          "wan/Wan2.2-I2V-Low-MysticXXX.safetensors",
+          "wan/Wan_22_ComfyUI_Repackaged_wan22_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
+          "wan/Wan_22_ComfyUI_Repackaged_wan22_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors",
+          "wan/anal_insertion_HIGH_V01.safetensors",
+          "wan/anal_insertion_LOW_V01.safetensors",
+          "wan/ass_ripple_HIGH_V01.safetensors",
+          "wan/ass_ripple_LOW_V01.safetensors",
+          "wan/cum2_h_20.safetensors",
+          "wan/cum4_h_30.safetensors",
+          "wan/cum4_l_75.safetensors",
+          "wan/cum_l_70.safetensors",
+          "wan/dance_b high 250905.safetensors",
+          "wan/dance_b low 250905.safetensors",
+          "wan/derpfuckedfrombehind_000002125_high_noise.safetensors",
+          "wan/derpfuckedfrombehind_000002125_low_noise.safetensors",
+          "wan/h_wan22_lightning.safetensors",
+          "wan/jfj-deepthroat-W22-I2V-HN.safetensors",
+          "wan/jfj-deepthroat-W22-I2V-LN.safetensors",
+          "wan/l_wan22_lightning.safetensors",
+          "wan/reverse_suspended_congress_I2V_high.safetensors",
+          "wan/reverse_suspended_congress_I2V_low.safetensors",
+          "wan/slop_twerk_HighNoise_merged3_7_v2.safetensors",
+          "wan/slop_twerk_LowNoise_merged3_7_v2.safetensors",
+          "wan/wan21_lightning.safetensors",
+          "wan/wan22-4n4lpl4y-i2v-182epoc-low-k3nk.safetensors",
+          "wan/wan22-4n4lpl4y-i2v-222epoc-high-k3nk.safetensors",
+          "wan/wan22-ultimatedeepthroat-I2V-101epoc-low-k3nk.safetensors",
+          "wan/wan22-ultimatedeepthroat-i2v-102epoc-high-k3nk.safetensors",
+          "wan/wan22.r3v3rs3_c0wg1rl-14b-High-i2v_e70.safetensors",
+          "wan/wan22.r3v3rs3_c0wg1rl-14b-Low-i2v_e70.safetensors",
+          "wan/wan22_i2v_anal_v1_high_noise.safetensors",
+          "wan/wan22_i2v_anal_v1_low_noise.safetensors",
+          "wan/wan22_i2v_futa_cowgirl_high_noise.safetensors",
+          "wan/wan22_i2v_futa_cowgirl_low_noise.safetensors",
+          "zturbo_penis_v3_e340.safetensors"
+        ],
+        "x_node_id": "91",
+        "x_class_type": "LoraLoader",
+        "x_title": "Load LoRA",
+        "x_instance": 6,
+        "x_node_alias": "lora 6"
+      },
+      "LoraLoader#91.strength_model": {
+        "type": "number",
+        "title": "strength_model",
+        "default": 0.6,
+        "minimum": -100,
+        "maximum": 100,
+        "step": 0.01,
+        "x_node_id": "91",
+        "x_class_type": "LoraLoader",
+        "x_title": "Load LoRA",
+        "x_instance": 6,
+        "x_node_alias": "lora 6"
+      },
+      "LoraLoader#91.strength_clip": {
+        "type": "number",
+        "title": "strength_clip",
+        "default": 0.6,
+        "minimum": -100,
+        "maximum": 100,
+        "step": 0.01,
+        "x_node_id": "91",
+        "x_class_type": "LoraLoader",
+        "x_title": "Load LoRA",
+        "x_instance": 6,
+        "x_node_alias": "lora 6"
+      },
+      "LoadImage#95.image": {
+        "type": "string",
+        "title": "image",
+        "default": "",
+        "widget": "media_upload",
+        "x_media_kind": "image",
+        "x_node_id": "95",
+        "x_class_type": "LoadImage",
+        "x_title": "Load Image",
+        "x_instance": 1,
+        "enum": [
+          "ComfyUI_00007_.png",
+          "example.png",
+          "hibiscus-input-0385.jpg",
+          "null_frame2.png",
+          "null_frame_1280x720.png",
+          "null_frame_480x832 (1).png",
+          "null_frame_480x832.png",
+          "null_frame_720x720.png",
+          "null_frame_832x480.png",
+          "studio-apartment-output-0021.jpg",
+          "videoframe_3375.png",
+          "white_mask.png",
+          "white_mask_1280x720.png",
+          "white_mask_480x832.png",
+          "white_mask_720x1280.png",
+          "white_mask_720x720.png",
+          "white_mask_832x480.png"
+        ],
+        "x_node_alias": "load image",
+        "x_core": true
+      },
+      "__node_order": [
+        "95",
+        "39",
+        "36",
+        "64",
+        "62",
+        "68",
+        "2",
+        "3",
+        "6",
+        "9",
+        "15",
+        "17",
+        "19",
+        "24",
+        "25",
+        "26",
+        "30",
+        "32",
+        "40",
+        "52",
+        "69",
+        "70",
+        "85",
+        "86",
+        "87",
+        "88",
+        "89",
+        "90",
+        "91",
+        "93",
+        "96"
+      ],
+      "__node_meta": {
+        "2": {
+          "class_type": "easy mathInt",
+          "title": "W",
+          "skipped": null,
+          "input_count": 3
+        },
+        "3": {
+          "class_type": "easy mathInt",
+          "title": "W",
+          "skipped": null,
+          "input_count": 3
+        },
+        "6": {
+          "class_type": "easy mathInt",
+          "title": "W",
+          "skipped": null,
+          "input_count": 3
+        },
+        "9": {
+          "class_type": "easy mathInt",
+          "title": "H",
+          "skipped": null,
+          "input_count": 3
+        },
+        "15": {
+          "class_type": "easy mathInt",
+          "title": "H",
+          "skipped": null,
+          "input_count": 3
+        },
+        "17": {
+          "class_type": "InteractiveInteger",
+          "title": "SQRT TILE COUNT",
+          "skipped": null,
+          "input_count": 1
+        },
+        "19": {
+          "class_type": "InteractiveInteger",
+          "title": "SCALE DENOMINATOR",
+          "skipped": null,
+          "input_count": 1
+        },
+        "24": {
+          "class_type": "TilePreprocessor",
+          "title": "Tile",
+          "skipped": null,
+          "input_count": 3
+        },
+        "25": {
+          "class_type": "easy ifElse",
+          "title": "If else",
+          "skipped": "no_exposed_inputs",
+          "input_count": 3
+        },
+        "26": {
+          "class_type": "Get Image Size",
+          "title": "Get Image Size",
+          "skipped": "no_exposed_inputs",
+          "input_count": 1
+        },
+        "30": {
+          "class_type": "ControlNetLoader",
+          "title": "Load ControlNet Model",
+          "skipped": null,
+          "input_count": 1
+        },
+        "32": {
+          "class_type": "InteractiveInteger",
+          "title": "SCALE NUMERATOR",
+          "skipped": null,
+          "input_count": 1
+        },
+        "36": {
+          "class_type": "CLIPTextEncode",
+          "title": "STEP 2 NEG",
+          "skipped": null,
+          "input_count": 2
+        },
+        "39": {
+          "class_type": "CLIPTextEncode",
+          "title": "STEP 2 POS",
+          "skipped": null,
+          "input_count": 2
+        },
+        "40": {
+          "class_type": "easy mathInt",
+          "title": "H",
+          "skipped": null,
+          "input_count": 3
+        },
+        "52": {
+          "class_type": "OpenposePreprocessor",
+          "title": "OpenPose Pose",
+          "skipped": null,
+          "input_count": 6
+        },
+        "62": {
+          "class_type": "ControlNetApplyAdvanced",
+          "title": "Apply ControlNet",
+          "skipped": null,
+          "input_count": 8
+        },
+        "64": {
+          "class_type": "UltimateSDUpscalePoseTiled",
+          "title": "Ultimate SD Upscale (Pose Tiled ControlNet)",
+          "skipped": null,
+          "input_count": 30
+        },
+        "68": {
+          "class_type": "ControlNetApplyAdvanced",
+          "title": "Apply ControlNet",
+          "skipped": null,
+          "input_count": 8
+        },
+        "69": {
+          "class_type": "ControlNetLoader",
+          "title": "Load ControlNet Model",
+          "skipped": null,
+          "input_count": 1
+        },
+        "70": {
+          "class_type": "easy compare",
+          "title": "Compare",
+          "skipped": null,
+          "input_count": 3
+        },
+        "85": {
+          "class_type": "CheckpointLoaderSimple",
+          "title": "Load Checkpoint",
+          "skipped": null,
+          "input_count": 1
+        },
+        "86": {
+          "class_type": "LoraLoader",
+          "title": "Load LoRA",
+          "skipped": null,
+          "input_count": 5
+        },
+        "87": {
+          "class_type": "LoraLoader",
+          "title": "Load LoRA",
+          "skipped": null,
+          "input_count": 5
+        },
+        "88": {
+          "class_type": "LoraLoader",
+          "title": "Load LoRA",
+          "skipped": null,
+          "input_count": 5
+        },
+        "89": {
+          "class_type": "LoraLoader",
+          "title": "Load LoRA",
+          "skipped": null,
+          "input_count": 5
+        },
+        "90": {
+          "class_type": "LoraLoader",
+          "title": "Load LoRA",
+          "skipped": null,
+          "input_count": 5
+        },
+        "91": {
+          "class_type": "LoraLoader",
+          "title": "Load LoRA",
+          "skipped": null,
+          "input_count": 5
+        },
+        "93": {
+          "class_type": "UpscaleModelLoader",
+          "title": "Load Upscale Model",
+          "skipped": "no_exposed_inputs",
+          "input_count": 1
+        },
+        "95": {
+          "class_type": "LoadImage",
+          "title": "Load Image",
+          "skipped": null,
+          "input_count": 1
+        },
+        "96": {
+          "class_type": "PreviewImage",
+          "title": "Preview Image",
+          "skipped": "no_exposed_inputs",
+          "input_count": 1
+        }
+      },
+      "__schema_version": 2,
+      "__bypass_68": {
+        "title": "Bypass Apply ControlNet",
+        "widget": "toggle",
+        "x_node_id": "68",
+        "type": "boolean",
+        "default": false,
+        "x_core": true
+      },
+      "__bypass_62": {
+        "title": "Bypass Apply ControlNet",
+        "widget": "toggle",
+        "x_node_id": "62",
+        "type": "boolean",
+        "default": false,
+        "x_core": true
+      },
+      "__bypass_87": {
+        "title": "Bypass Load LoRA",
+        "widget": "toggle",
+        "x_node_id": "87",
+        "type": "boolean",
+        "default": false,
+        "x_node_alias": "lora"
+      },
+      "__bypass_88": {
+        "title": "Bypass Load LoRA",
+        "widget": "toggle",
+        "x_node_id": "88",
+        "type": "boolean",
+        "default": false,
+        "x_node_alias": "lora"
+      },
+      "__bypass_89": {
+        "title": "Bypass Load LoRA",
+        "widget": "toggle",
+        "x_node_id": "89",
+        "type": "boolean",
+        "default": false,
+        "x_node_alias": "lora 4"
+      },
+      "__bypass_90": {
+        "title": "Bypass Load LoRA",
+        "widget": "toggle",
+        "x_node_id": "90",
+        "type": "boolean",
+        "default": false,
+        "x_node_alias": "lora 5"
+      },
+      "__bypass_91": {
+        "title": "Bypass Load LoRA",
+        "widget": "toggle",
+        "x_node_id": "91",
+        "type": "boolean",
+        "default": true,
+        "x_node_alias": "lora 6"
+      },
+      "__bypass_86": {
+        "title": "Bypass Load LoRA",
+        "widget": "toggle",
+        "x_node_id": "86",
+        "type": "boolean",
+        "default": false,
+        "x_node_alias": "lora"
+      }
+    },
+    "node_mapping": {
+      "easy mathInt#2.operation": {
+        "node_id": "2",
+        "field": "inputs.operation"
+      },
+      "easy mathInt#3.operation": {
+        "node_id": "3",
+        "field": "inputs.operation"
+      },
+      "easy mathInt#6.operation": {
+        "node_id": "6",
+        "field": "inputs.operation"
+      },
+      "easy mathInt#9.operation": {
+        "node_id": "9",
+        "field": "inputs.operation"
+      },
+      "easy mathInt#15.operation": {
+        "node_id": "15",
+        "field": "inputs.operation"
+      },
+      "InteractiveInteger#17.integer": {
+        "node_id": "17",
+        "field": "inputs.integer"
+      },
+      "InteractiveInteger#19.integer": {
+        "node_id": "19",
+        "field": "inputs.integer"
+      },
+      "TilePreprocessor#24.pyrUp_iters": {
+        "node_id": "24",
+        "field": "inputs.pyrUp_iters"
+      },
+      "ControlNetLoader#30.control_net_name": {
+        "node_id": "30",
+        "field": "inputs.control_net_name"
+      },
+      "InteractiveInteger#32.integer": {
+        "node_id": "32",
+        "field": "inputs.integer"
+      },
+      "CLIPTextEncode#36.text": {
+        "node_id": "36",
+        "field": "inputs.text"
+      },
+      "CLIPTextEncode#39.text": {
+        "node_id": "39",
+        "field": "inputs.text"
+      },
+      "easy mathInt#40.operation": {
+        "node_id": "40",
+        "field": "inputs.operation"
+      },
+      "OpenposePreprocessor#52.detect_hand": {
+        "node_id": "52",
+        "field": "inputs.detect_hand"
+      },
+      "OpenposePreprocessor#52.detect_body": {
+        "node_id": "52",
+        "field": "inputs.detect_body"
+      },
+      "OpenposePreprocessor#52.detect_face": {
+        "node_id": "52",
+        "field": "inputs.detect_face"
+      },
+      "OpenposePreprocessor#52.scale_stick_for_xinsr_cn": {
+        "node_id": "52",
+        "field": "inputs.scale_stick_for_xinsr_cn"
+      },
+      "ControlNetApplyAdvanced#62.strength": {
+        "node_id": "62",
+        "field": "inputs.strength"
+      },
+      "ControlNetApplyAdvanced#62.start_percent": {
+        "node_id": "62",
+        "field": "inputs.start_percent"
+      },
+      "ControlNetApplyAdvanced#62.end_percent": {
+        "node_id": "62",
+        "field": "inputs.end_percent"
+      },
+      "UltimateSDUpscalePoseTiled#64.upscale_by": {
+        "node_id": "64",
+        "field": "inputs.upscale_by"
+      },
+      "UltimateSDUpscalePoseTiled#64.seed": {
+        "node_id": "64",
+        "field": "inputs.seed"
+      },
+      "UltimateSDUpscalePoseTiled#64.steps": {
+        "node_id": "64",
+        "field": "inputs.steps"
+      },
+      "UltimateSDUpscalePoseTiled#64.cfg": {
+        "node_id": "64",
+        "field": "inputs.cfg"
+      },
+      "UltimateSDUpscalePoseTiled#64.sampler_name": {
+        "node_id": "64",
+        "field": "inputs.sampler_name"
+      },
+      "UltimateSDUpscalePoseTiled#64.scheduler": {
+        "node_id": "64",
+        "field": "inputs.scheduler"
+      },
+      "UltimateSDUpscalePoseTiled#64.denoise": {
+        "node_id": "64",
+        "field": "inputs.denoise"
+      },
+      "UltimateSDUpscalePoseTiled#64.mode_type": {
+        "node_id": "64",
+        "field": "inputs.mode_type"
+      },
+      "UltimateSDUpscalePoseTiled#64.mask_blur": {
+        "node_id": "64",
+        "field": "inputs.mask_blur"
+      },
+      "UltimateSDUpscalePoseTiled#64.tile_padding": {
+        "node_id": "64",
+        "field": "inputs.tile_padding"
+      },
+      "UltimateSDUpscalePoseTiled#64.seam_fix_mode": {
+        "node_id": "64",
+        "field": "inputs.seam_fix_mode"
+      },
+      "UltimateSDUpscalePoseTiled#64.seam_fix_denoise": {
+        "node_id": "64",
+        "field": "inputs.seam_fix_denoise"
+      },
+      "UltimateSDUpscalePoseTiled#64.seam_fix_width": {
+        "node_id": "64",
+        "field": "inputs.seam_fix_width"
+      },
+      "UltimateSDUpscalePoseTiled#64.seam_fix_mask_blur": {
+        "node_id": "64",
+        "field": "inputs.seam_fix_mask_blur"
+      },
+      "UltimateSDUpscalePoseTiled#64.seam_fix_padding": {
+        "node_id": "64",
+        "field": "inputs.seam_fix_padding"
+      },
+      "UltimateSDUpscalePoseTiled#64.noise_mask_blur": {
+        "node_id": "64",
+        "field": "inputs.noise_mask_blur"
+      },
+      "UltimateSDUpscalePoseTiled#64.blend_mode": {
+        "node_id": "64",
+        "field": "inputs.blend_mode"
+      },
+      "ControlNetApplyAdvanced#68.strength": {
+        "node_id": "68",
+        "field": "inputs.strength"
+      },
+      "ControlNetApplyAdvanced#68.start_percent": {
+        "node_id": "68",
+        "field": "inputs.start_percent"
+      },
+      "ControlNetApplyAdvanced#68.end_percent": {
+        "node_id": "68",
+        "field": "inputs.end_percent"
+      },
+      "ControlNetLoader#69.control_net_name": {
+        "node_id": "69",
+        "field": "inputs.control_net_name"
+      },
+      "easy compare#70.comparison": {
+        "node_id": "70",
+        "field": "inputs.comparison"
+      },
+      "CheckpointLoaderSimple#85.ckpt_name": {
+        "node_id": "85",
+        "field": "inputs.ckpt_name"
+      },
+      "LoraLoader#86.lora_name": {
+        "node_id": "86",
+        "field": "inputs.lora_name"
+      },
+      "LoraLoader#86.strength_model": {
+        "node_id": "86",
+        "field": "inputs.strength_model"
+      },
+      "LoraLoader#86.strength_clip": {
+        "node_id": "86",
+        "field": "inputs.strength_clip"
+      },
+      "LoraLoader#87.lora_name": {
+        "node_id": "87",
+        "field": "inputs.lora_name"
+      },
+      "LoraLoader#87.strength_model": {
+        "node_id": "87",
+        "field": "inputs.strength_model"
+      },
+      "LoraLoader#87.strength_clip": {
+        "node_id": "87",
+        "field": "inputs.strength_clip"
+      },
+      "LoraLoader#88.lora_name": {
+        "node_id": "88",
+        "field": "inputs.lora_name"
+      },
+      "LoraLoader#88.strength_model": {
+        "node_id": "88",
+        "field": "inputs.strength_model"
+      },
+      "LoraLoader#88.strength_clip": {
+        "node_id": "88",
+        "field": "inputs.strength_clip"
+      },
+      "LoraLoader#89.lora_name": {
+        "node_id": "89",
+        "field": "inputs.lora_name"
+      },
+      "LoraLoader#89.strength_model": {
+        "node_id": "89",
+        "field": "inputs.strength_model"
+      },
+      "LoraLoader#89.strength_clip": {
+        "node_id": "89",
+        "field": "inputs.strength_clip"
+      },
+      "LoraLoader#90.lora_name": {
+        "node_id": "90",
+        "field": "inputs.lora_name"
+      },
+      "LoraLoader#90.strength_model": {
+        "node_id": "90",
+        "field": "inputs.strength_model"
+      },
+      "LoraLoader#90.strength_clip": {
+        "node_id": "90",
+        "field": "inputs.strength_clip"
+      },
+      "LoraLoader#91.lora_name": {
+        "node_id": "91",
+        "field": "inputs.lora_name"
+      },
+      "LoraLoader#91.strength_model": {
+        "node_id": "91",
+        "field": "inputs.strength_model"
+      },
+      "LoraLoader#91.strength_clip": {
+        "node_id": "91",
+        "field": "inputs.strength_clip"
+      },
+      "LoadImage#95.image": {
+        "node_id": "95",
+        "field": "inputs.image"
+      }
+    },
+    "integrity": {
+      "graph_sha256": "f188f9508be667f81d9d7bb626c5d592923cede4d5a860af1bb17cafe99a1648",
+      "input_schema_sha256": "3b9445e0f8fc33570d25443ffd5bc427690fc16922a9e7c5262beef79ce5837e",
+      "bundle_sha256": "789ab6beed77a0b28d8c78c51138511797eb17ac81129ba09efc2c6eba1c8779"
+    },
+    "settings": {
+      "node_count": 31,
+      "input_schema_count": 73,
+      "node_mapping_count": 62
+    },
+    "source": "sweet-tea-studio",
+    "comfy_format": "api",
+    "notes": "Contains ComfyUI API graph plus Sweet Tea Studio pipe metadata."
+  }
+}

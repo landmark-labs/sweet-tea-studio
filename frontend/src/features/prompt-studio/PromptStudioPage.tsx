@@ -20,6 +20,7 @@ import { CanvasPayload, PromptItem, type PromptRehydrationSnapshotV1, type Promp
 import { stripDarkVariantClasses } from "@/lib/utils";
 import { getBasename, normalizePath } from "@/lib/pathUtils";
 import { useUndoRedo } from "@/lib/undoRedo";
+import { useUndoToast } from "@/components/ui/undo-toast";
 import { ProjectGallery } from "@/components/ProjectGallery";
 import { MediaTray } from "@/components/MediaTray";
 import { useGenerationFeedStore, usePromptLibraryStore } from "@/lib/stores/promptDataStore";
@@ -33,6 +34,7 @@ import {
   filterParamsForSchema,
   filterPromptRehydrationSnapshot,
   isPersistableSchemaKey,
+  normalizePromptRehydrationSnapshot,
   normalizeParamsWithDefaults,
   persistPromptStudioRehydrationSnapshot,
   readPromptStudioRehydrationSnapshot,
@@ -94,6 +96,7 @@ export default function PromptStudio() {
   const isRunning = generationState === "running";
   // Include lastJobId in busy check - if we have an active job, we're busy even if state updates lagged
   const isBusy = isQueuing || isRunning || lastJobId !== null;
+  const { showUndoToast } = useUndoToast();
 
   const [batchSize, setBatchSize] = useState<number>(() => {
     const saved = localStorage.getItem("ds_batch_size");
@@ -271,7 +274,11 @@ export default function PromptStudio() {
   const pendingSaveRef = useRef<NodeJS.Timeout | null>(null);
   const allowEmptySnippetSyncRef = useRef(false);
   const persistHandleRef = useRef<{ id: number | NodeJS.Timeout; type: "idle" | "timeout" } | null>(null);
-  const pendingPersistRef = useRef<{ workflowId: string; data: any } | null>(null);
+  const pendingPersistRef = useRef<{
+    workflowId: string;
+    data: any;
+    rehydrationSnapshot: PromptRehydrationSnapshotV1 | null;
+  } | null>(null);
   const workflowParamsCacheRef = useRef<Record<string, Record<string, unknown>>>({});
   const persistPipeParams = useCallback((workflowId: string, data: Record<string, unknown>) => {
     if (!workflowId) return;
@@ -297,8 +304,10 @@ export default function PromptStudio() {
   } | null>(null);
   const [canvasGallerySyncKey, setCanvasGallerySyncKey] = useState(0);
   const promptRehydrationSnapshotRef = useRef<PromptRehydrationSnapshotV1 | null>(null);
+  const promptRehydrationWorkflowIdRef = useRef<string | null>(null);
   const handlePromptRehydrationSnapshot = useCallback((snapshot: PromptRehydrationSnapshotV1) => {
     promptRehydrationSnapshotRef.current = snapshot;
+    promptRehydrationWorkflowIdRef.current = selectedWorkflowIdRef.current;
   }, []);
   const [activeRehydrationSnapshot, setActiveRehydrationSnapshot] = useState<PromptRehydrationSnapshotV1 | null>(null);
   const [activeRehydrationKey, setActiveRehydrationKey] = useState(0);
@@ -629,6 +638,17 @@ export default function PromptStudio() {
             }
           }
         }
+
+        showUndoToast(
+          validIds.length === 1 ? "image deleted" : `${validIds.length} images deleted`,
+          validIds,
+          async (idsToRestore) => {
+            if (idsToRestore.length === 0) return;
+            await api.restoreImages(idsToRestore);
+            await loadGalleryRef.current();
+            setGalleryRefresh((prev) => prev + 1);
+          }
+        );
       }
 
       // If there was a path-based delete, refresh the gallery to remove the deleted item
@@ -648,6 +668,7 @@ export default function PromptStudio() {
     normalizePathForCompare,
     previewPath,
     projectGalleryImages,
+    showUndoToast,
     viewerSource,
   ]);
 
@@ -750,7 +771,7 @@ export default function PromptStudio() {
   const selectedEngineHealth = engineHealth.find((h) => String(h.engine_id) === selectedEngineId);
   const engineOffline = Boolean(selectedEngineHealth && !selectedEngineHealth.healthy);
 
-  const projectFolders = (selectedProject?.config_json as { folders?: string[] })?.folders || ["inputs", "output", "masks"];
+  const projectFolders = (selectedProject?.config_json as { folders?: string[] })?.folders || ["input", "output", "masks"];
   const [generationTarget, setGenerationTarget] = useState<string>(
     localStorage.getItem("ds_generation_target") || ""
   );
@@ -798,19 +819,20 @@ export default function PromptStudio() {
         return;
       }
 
-      const validFolders = (selectedProject.config_json as { folders?: string[] })?.folders || ["inputs", "output", "masks"];
+      const validFolders = (selectedProject.config_json as { folders?: string[] })?.folders || ["input", "output", "masks"];
+      const fallbackFolder = validFolders.includes("input")
+        ? "input"
+        : (validFolders[0] || "");
 
-      // If current target is empty or not in the new project's folder list (and isn't engine default "")
-      // then we reset to output.
-      // Note: we treat "" as engine-default which is always valid? Actually the UI treats "" as Default.
-      // If custom folders are defined, we might want to ensure we match them.
+      if (!fallbackFolder) {
+        if (generationTarget !== "") {
+          setGenerationTarget("");
+        }
+        return;
+      }
 
-      // If we have a target but it's not in the new list, switch to output
-      if (generationTarget && generationTarget !== "output" && !validFolders.includes(generationTarget)) {
-        setGenerationTarget("output");
-      } else if (!generationTarget) {
-        // If nothing selected (and no persistent value loaded), default to output
-        setGenerationTarget("output");
+      if (!generationTarget || !validFolders.includes(generationTarget)) {
+        setGenerationTarget(fallbackFolder);
       }
     } else {
       // Draft mode - no restrictions, but maybe default to "" (engine default) or keep as is?
@@ -1073,6 +1095,7 @@ export default function PromptStudio() {
     if (isWorkflowSwitch && pendingPersistRef.current) {
       const pending = pendingPersistRef.current;
       persistPipeParams(pending.workflowId, pending.data);
+      persistPromptStudioRehydrationSnapshot(pending.workflowId, pending.rehydrationSnapshot);
       pendingPersistRef.current = null;
       if (persistHandleRef.current) {
         const handle = persistHandleRef.current;
@@ -1130,7 +1153,7 @@ export default function PromptStudio() {
     return () => {
       cancelled = true;
     };
-  }, [selectedWorkflow, visibleSchema, setFormData, store, pendingLoadParams, loadCachedPipeParams, persistPipeParams]);
+  }, [selectedWorkflow, visibleSchema, setFormData, store, pendingLoadParams, loadCachedPipeParams, persistPipeParams, persistPromptStudioRehydrationSnapshot]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { registerStateChange } = useUndoRedo();
@@ -1139,6 +1162,7 @@ export default function PromptStudio() {
     const pending = pendingPersistRef.current;
     if (!pending) return;
     persistPipeParams(pending.workflowId, pending.data);
+    persistPromptStudioRehydrationSnapshot(pending.workflowId, pending.rehydrationSnapshot);
     pendingPersistRef.current = null;
     if (persistHandleRef.current) {
       const handle = persistHandleRef.current;
@@ -1149,7 +1173,7 @@ export default function PromptStudio() {
       }
       persistHandleRef.current = null;
     }
-  }, [persistPipeParams]);
+  }, [persistPipeParams, persistPromptStudioRehydrationSnapshot]);
 
   const persistForm = useCallback((data: any) => {
     const currentData = store.get(formDataAtom) || {};
@@ -1167,8 +1191,12 @@ export default function PromptStudio() {
     setFormData(data);
     if (selectedWorkflowId) {
       const workflowId = selectedWorkflowId;
+      const rehydrationSnapshot =
+        promptRehydrationWorkflowIdRef.current === workflowId
+          ? normalizePromptRehydrationSnapshot(promptRehydrationSnapshotRef.current)
+          : null;
       workflowParamsCacheRef.current[workflowId] = data;
-      pendingPersistRef.current = { workflowId, data };
+      pendingPersistRef.current = { workflowId, data, rehydrationSnapshot };
       if (persistHandleRef.current) {
         const handle = persistHandleRef.current;
         if (handle.type === "idle" && typeof window.cancelIdleCallback === "function") {
@@ -1182,6 +1210,7 @@ export default function PromptStudio() {
         const pending = pendingPersistRef.current;
         if (!pending) return;
         persistPipeParams(pending.workflowId, pending.data);
+        persistPromptStudioRehydrationSnapshot(pending.workflowId, pending.rehydrationSnapshot);
         pendingPersistRef.current = null;
         persistHandleRef.current = null;
       };
@@ -1193,7 +1222,7 @@ export default function PromptStudio() {
         persistHandleRef.current = { id, type: "timeout" };
       }
     }
-  }, [selectedWorkflowId, setFormData, store, persistPipeParams]);
+  }, [selectedWorkflowId, setFormData, store, persistPipeParams, persistPromptStudioRehydrationSnapshot, normalizePromptRehydrationSnapshot]);
 
   useEffect(() => {
     return () => {
@@ -1215,6 +1244,11 @@ export default function PromptStudio() {
         const latest = store.get(formDataAtom);
         if (latest) {
           persistPipeParams(workflowId, latest as Record<string, unknown>);
+          const rehydrationSnapshot =
+            promptRehydrationWorkflowIdRef.current === workflowId
+              ? normalizePromptRehydrationSnapshot(promptRehydrationSnapshotRef.current)
+              : null;
+          persistPromptStudioRehydrationSnapshot(workflowId, rehydrationSnapshot);
         }
       }
     };
@@ -1228,7 +1262,7 @@ export default function PromptStudio() {
       window.removeEventListener("beforeunload", handleBeforeUnload);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [store, flushPendingPersist, persistPipeParams]);
+  }, [store, flushPendingPersist, persistPipeParams, persistPromptStudioRehydrationSnapshot, normalizePromptRehydrationSnapshot]);
 
   const pendingHistoryRef = useRef<{ prev: any; next: any; category: "text" | "structure"; skip: boolean } | null>(null);
   const historyTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -2031,12 +2065,20 @@ export default function PromptStudio() {
       // Check if job already failed (race condition: error broadcast before WS connected)
       try {
         const job = await api.getJob(lastJobId);
-        if (job.status === "failed" && job.error) {
-          logWs(`[WS] Job already failed before connection: ${job.error}`);
-          setGenerationState("failed");
-          setStatusLabel("failed");
-          setError(job.error);
-          updateFeed(lastJobId, { status: "failed", previewBlob: null });
+        if (job.status === "failed" || job.status === "cancelled") {
+          logWs(`[WS] Job already ended before connection: ${job.status}`);
+          const endedState = mapStatusToGenerationState(job.status);
+          const statusText = job.status;
+          setStatusLabel(statusText);
+          if (job.error) {
+            setError(job.error);
+          }
+          updateFeed(lastJobId, { status: statusText, previewBlob: null });
+          batchCancelledRef.current = job.status === "cancelled";
+          setGenerationState(endedState);
+          setLastJobId(null);
+          batchStateRef.current = null;
+          setBatchProgress(null);
         } else if (job.status === "completed") {
           logWs(`[WS] Job already completed before connection`);
           updateFeed(lastJobId, { status: "completed", progress: 100, previewBlob: null });
@@ -2052,6 +2094,7 @@ export default function PromptStudio() {
           setGenerationState("completed");
           setStatusLabel("");
           setProgress(100);
+          setLastJobId(null);
           batchStateRef.current = null;
           setBatchProgress(null); // Batch complete
         }
@@ -2091,6 +2134,7 @@ export default function PromptStudio() {
           batchCancelledRef.current = data.status === "cancelled";
           batchStateRef.current = null;
           setBatchProgress(null);
+          setLastJobId(null);
         }
         updateFeed(lastJobId, statusUpdates);
       } else if (data.type === "progress") {
@@ -2367,6 +2411,13 @@ export default function PromptStudio() {
             setStatusLabel("");
             setProgress(100);
             setGalleryRefresh(prev => prev + 1);
+            if (hasMoreBatchJobs()) {
+              void startNextBatchJobRef.current();
+            } else {
+              setLastJobId(null);
+              batchStateRef.current = null;
+              setBatchProgress(null);
+            }
           } else if (job.status === "failed" || job.status === "cancelled") {
             setGenerationState(mapStatusToGenerationState(job.status));
             setStatusLabel(job.status);
@@ -2375,6 +2426,7 @@ export default function PromptStudio() {
             batchCancelledRef.current = job.status === "cancelled";
             batchStateRef.current = null;
             setBatchProgress(null);
+            setLastJobId(null);
           } else {
             // Job might still be running, poll again
             setError("Connection lost - checking status...");
@@ -2385,6 +2437,9 @@ export default function PromptStudio() {
           setGenerationState("failed");
           setStatusLabel("failed");
           updateFeed(lastJobId, { status: "failed", previewBlob: null });
+          setLastJobId(null);
+          batchStateRef.current = null;
+          setBatchProgress(null);
         }
       }, 1500);
     };
@@ -2415,10 +2470,22 @@ export default function PromptStudio() {
             setStatusLabel("");
             setProgress(100);
             setGalleryRefresh(prev => prev + 1);
+            if (hasMoreBatchJobs()) {
+              void startNextBatchJobRef.current();
+            } else {
+              setLastJobId(null);
+              batchStateRef.current = null;
+              setBatchProgress(null);
+            }
           } else if (job.status === "failed" || job.status === "cancelled") {
             setGenerationState(nextState);
             setStatusLabel(job.status);
             if (job.error) setError(job.error);
+            updateFeed(lastJobId, { status: job.status, previewBlob: null });
+            batchCancelledRef.current = job.status === "cancelled";
+            batchStateRef.current = null;
+            setBatchProgress(null);
+            setLastJobId(null);
           } else if (job.status === "processing" || job.status === "running") {
             setGenerationState("running");
             setStatusLabel("processing");
@@ -2640,6 +2707,13 @@ export default function PromptStudio() {
       if (rehydration) {
         cleanParams.__st_prompt_rehydration = rehydration;
       }
+      const snapshotForPersist =
+        (promptRehydrationWorkflowIdRef.current === selectedWorkflowId
+          ? normalizePromptRehydrationSnapshot(promptRehydrationSnapshotRef.current)
+          : null) || rehydration;
+      if (snapshotForPersist) {
+        persistPromptStudioRehydrationSnapshot(selectedWorkflowId, snapshotForPersist);
+      }
 
       const job = await api.createJob(
         parseInt(selectedEngineId),
@@ -2666,6 +2740,9 @@ export default function PromptStudio() {
       setError(err instanceof Error ? err.message : "Failed to create job");
       setGenerationState("failed");
       setStatusLabel("failed");
+      setLastJobId(null);
+      batchStateRef.current = null;
+      setBatchProgress(null);
       return null;
     }
   };
@@ -2803,6 +2880,10 @@ export default function PromptStudio() {
     setBatchProgress(null);
 
     if (!lastJobId) {
+      const active = generationFeed[0];
+      if (active && ["queued", "processing", "running", "saving", "initiating"].includes(active.status)) {
+        updateFeed(active.jobId, { status: "cancelled", previewBlob: null });
+      }
       setGenerationState("cancelled");
       setStatusLabel("cancelled");
       setBatchProgress(null);
@@ -2810,6 +2891,7 @@ export default function PromptStudio() {
     }
     try {
       await api.cancelJob(lastJobId);
+      updateFeed(lastJobId, { status: "cancelled", previewBlob: null });
       setGenerationState("cancelled");
       setStatusLabel("cancelled");
       setLastJobId(null);
@@ -3047,14 +3129,13 @@ export default function PromptStudio() {
               <div className="flex-1">
                 <label className="text-xs font-medium text-muted-foreground">destination</label>
                 <Select
-                  value={generationTarget || "engine-default"}
-                  onValueChange={(value) => setGenerationTarget(value === "engine-default" ? "" : value)}
+                  value={generationTarget}
+                  onValueChange={(value) => setGenerationTarget(value)}
                 >
                   <SelectTrigger className="h-7 text-xs">
-                    <SelectValue placeholder="output" />
+                    <SelectValue placeholder="input" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="engine-default">default output</SelectItem>
                     {projectFolders.map((folder) => (
                       <SelectItem key={folder} value={folder}>
                         /{folder}

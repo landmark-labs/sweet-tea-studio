@@ -30,7 +30,7 @@ export default function PromptLibrary() {
             setVlmError("Service unreachable");
         });
         // Load workflows for pipe name lookup
-        api.getWorkflows().then(setWorkflows).catch(console.error);
+        api.getWorkflows(true).then(setWorkflows).catch(console.error);
     }, []);
 
     const loadPrompts = async (query?: string) => {

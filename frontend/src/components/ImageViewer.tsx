@@ -31,6 +31,7 @@ interface ImageViewerProps {
 }
 
 const METADATA_CACHE_LIMIT = 200;
+const PREFETCH_CACHE_LIMIT = 120;
 
 export const ImageViewer = React.memo(function ImageViewer({
     images,
@@ -99,6 +100,14 @@ export const ImageViewer = React.memo(function ImageViewer({
             }
         }
         return pathStr;
+    }, []);
+
+    const resolveMediaUrl = React.useCallback((pathStr?: string | null): string => {
+        if (!pathStr) return "";
+        if (pathStr.startsWith("http") || (pathStr.includes("/api/") && pathStr.includes("path="))) {
+            return pathStr;
+        }
+        return `${IMAGE_API_BASE}/gallery/image/path?path=${encodeURIComponent(pathStr)}`;
     }, []);
 
     // Create a "locked" image object from selectedImagePath for display in locked mode
@@ -237,6 +246,8 @@ export const ImageViewer = React.memo(function ImageViewer({
         parameters: Record<string, unknown>;
         source: string;
     }>());
+    const metadataPrefetchInFlightRef = React.useRef(new Set<string>());
+    const prefetchCacheRef = React.useRef(new Map<string, "image" | "video">());
     const metadataAbortRef = React.useRef<AbortController | null>(null);
     const metadataRequestIdRef = React.useRef(0);
 
@@ -314,6 +325,92 @@ export const ImageViewer = React.memo(function ImageViewer({
             }
         };
     }, [imagePath]);
+
+    const cacheMetadata = React.useCallback((cacheKey: string, nextMetadata: {
+        prompt?: string | null;
+        negative_prompt?: string | null;
+        parameters: Record<string, unknown>;
+        source: string;
+    }) => {
+        metadataCacheRef.current.set(cacheKey, nextMetadata);
+        if (metadataCacheRef.current.size > METADATA_CACHE_LIMIT) {
+            const oldestKey = metadataCacheRef.current.keys().next().value;
+            if (oldestKey) metadataCacheRef.current.delete(oldestKey);
+        }
+    }, []);
+
+    const markPrefetched = React.useCallback((url: string, kind: "image" | "video"): boolean => {
+        if (!url) return false;
+        const cache = prefetchCacheRef.current;
+        if (cache.has(url)) return false;
+        cache.set(url, kind);
+        if (cache.size > PREFETCH_CACHE_LIMIT) {
+            const oldestKey = cache.keys().next().value;
+            if (oldestKey) cache.delete(oldestKey);
+        }
+        return true;
+    }, []);
+
+    const prefetchMetadata = React.useCallback((pathStr?: string | null) => {
+        const rawPath = extractRawPath(pathStr);
+        if (!rawPath) return;
+        if (metadataCacheRef.current.has(rawPath)) return;
+        if (metadataPrefetchInFlightRef.current.has(rawPath)) return;
+
+        metadataPrefetchInFlightRef.current.add(rawPath);
+        void api.getImageMetadata(rawPath)
+            .then((data) => {
+                const nextMetadata = {
+                    prompt: data.prompt,
+                    negative_prompt: data.negative_prompt,
+                    parameters: data.parameters,
+                    source: data.source,
+                };
+                cacheMetadata(rawPath, nextMetadata);
+            })
+            .catch(() => {
+                // Ignore background prefetch failures.
+            })
+            .finally(() => {
+                metadataPrefetchInFlightRef.current.delete(rawPath);
+            });
+    }, [cacheMetadata, extractRawPath]);
+
+    const prefetchMedia = React.useCallback((item?: ApiImage) => {
+        if (!item?.path) return;
+        const url = resolveMediaUrl(item.path);
+        if (!url) return;
+
+        const isVideoItem = isVideoFile(item.path, item.filename);
+        if (!markPrefetched(url, isVideoItem ? "video" : "image")) return;
+
+        if (isVideoItem) {
+            const video = document.createElement("video");
+            video.preload = "metadata";
+            video.src = url;
+            video.load();
+            return;
+        }
+
+        const img = new Image();
+        img.decoding = "async";
+        img.src = url;
+    }, [markPrefetched, resolveMediaUrl]);
+
+    React.useEffect(() => {
+        if (displayImages.length <= 1) return;
+        if (typeof window === "undefined") return;
+
+        const centerIndex = effectiveIndex >= 0 ? effectiveIndex : 0;
+        const neighbors = [centerIndex - 2, centerIndex - 1, centerIndex + 1, centerIndex + 2];
+
+        neighbors.forEach((idx) => {
+            if (idx < 0 || idx >= displayImages.length) return;
+            const item = displayImages[idx];
+            prefetchMedia(item);
+            prefetchMetadata(item?.path);
+        });
+    }, [displayImages, effectiveIndex, prefetchMedia, prefetchMetadata]);
 
     // Use PNG metadata as the authoritative source for prompts display
     const currentMetadata = pngMetadata ? {
@@ -467,14 +564,8 @@ export const ImageViewer = React.memo(function ImageViewer({
 
     // Compute image display URL - avoid double-encoding if already an API URL
     const imageUrl = React.useMemo(() => {
-        if (!imagePath) return "";
-        // If the path is already an API URL (including /sts-api prefixes), use it directly
-        if (imagePath.startsWith("http") || (imagePath.includes("/api/") && imagePath.includes("path="))) {
-            return imagePath;
-        }
-        // Otherwise, construct the API URL
-        return `${IMAGE_API_BASE}/gallery/image/path?path=${encodeURIComponent(imagePath)}`;
-    }, [imagePath]);
+        return resolveMediaUrl(imagePath);
+    }, [imagePath, resolveMediaUrl]);
 
     const mediaSrc = React.useMemo(() => {
         if (!imageUrl) return "";
