@@ -379,7 +379,10 @@ export const ProjectGallery = React.memo(function ProjectGallery({
 
             // Skip polling if tab is hidden or panel is collapsed
             const isHidden = typeof document !== "undefined" && document.visibilityState === "hidden";
-            if (!isHidden && !collapsed) {
+            const activeEl = typeof document !== "undefined" ? document.activeElement : null;
+            const tagName = activeEl?.tagName?.toLowerCase();
+            const isTyping = tagName === "input" || tagName === "textarea" || activeEl?.hasAttribute("contenteditable");
+            if (!isHidden && !collapsed && !isTyping) {
                 await loadImages(false); // Background update
             }
 
