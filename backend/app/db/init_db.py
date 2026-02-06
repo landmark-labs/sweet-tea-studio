@@ -9,6 +9,7 @@ from app.models.workflow import WorkflowTemplate
 from app.models.job import Job
 from app.models.image import Image
 from app.models.prompt import Prompt
+from app.models.caption import CaptionVersion
 from app.models.tag import Tag, TagSyncState
 from app.models.project import Project
 from app.models.snippet import Snippet
@@ -167,6 +168,10 @@ def init_db():
     # Add cached stats columns to projects (image_count, last_activity)
     from app.db.migrations.add_cached_stats_to_projects import migrate as migrate_cached_stats
     migrate_cached_stats()
+
+    # Add caption_versions table for caption history/versioning.
+    from app.db.migrations.create_caption_versions_table import migrate as migrate_caption_versions
+    migrate_caption_versions()
     
     # Backfill __node_order for existing workflows
     from app.db.migrations.backfill_node_order import migrate as migrate_node_order

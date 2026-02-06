@@ -20,7 +20,7 @@ import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/h
 import { ProjectSidebar } from "@/components/ProjectSidebar";
 import { VirtualGrid } from "@/components/VirtualGrid";
 import { MoveImagesDialog } from "@/components/MoveImagesDialog";
-import { buildMediaUrl, buildThumbnailUrl } from "@/features/gallery/utils";
+import { MediaMetadataDialog } from "@/components/MediaMetadataDialog";
 import { GalleryCardContent } from "@/features/gallery/components/GalleryCardContent";
 import { useMediaTrayStore } from "@/lib/stores/mediaTrayStore";
 import { useUndoToast } from "@/components/ui/undo-toast";
@@ -62,6 +62,7 @@ export default function Gallery() {
     const [gridResetKey, setGridResetKey] = useState(0);
     const [moveDialogOpen, setMoveDialogOpen] = useState(false);
     const [moveTargetIds, setMoveTargetIds] = useState<number[]>([]);
+    const [metadataTarget, setMetadataTarget] = useState<{ path: string; imageId: number | null } | null>(null);
 
     const searchRef = useRef(search);
     const selectedProjectIdRef = useRef(selectedProjectId);
@@ -794,153 +795,167 @@ export default function Gallery() {
                                             : "No images generated yet. Go to New Generation to create some!"}
                                 </div>
                             )}
-                            renderItem={(item) => (
-                                <ContextMenu>
-                                    <ContextMenuTrigger>
-                                        <Card
-                                            className={cn(
-                                                "group overflow-hidden flex flex-col relative transition-all duration-200 select-none h-full",
-                                                selectedIds.has(item.image.id) ? "ring-2 ring-blue-500 shadow-lg scale-[0.98] bg-blue-50/50" : ""
-                                            )}
-                                            onClick={(e) => handleCardClick(item, e)}
-                                            onDoubleClick={() => handleCardDoubleClick(item)}
-                                        >
-                                            <GalleryCardContent
-                                                item={item}
-                                                isSelected={selectedIds.has(item.image.id)}
-                                                handleImageError={handleImageError}
-                                            />
-                                            <div className="absolute inset-x-0 top-0 aspect-square flex items-center justify-center pointer-events-none">
-                                                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                                                    <Button
-                                                        className="pointer-events-auto"
-                                                        variant="secondary"
-                                                        size="icon"
-                                                        onClick={(e) => { e.stopPropagation(); handleDownload(item); }}
-                                                        title="Download"
-                                                    >
-                                                        <Download className="w-4 h-4" />
-                                                    </Button>
-
-                                                    <Button
-                                                        className="pointer-events-auto"
-                                                        variant="secondary"
-                                                        size="icon"
-                                                        onClick={(e) => { e.stopPropagation(); handleRegenerate(item); }}
-                                                        title="Regenerate"
-                                                    >
-                                                        <RotateCcw className="w-4 h-4" />
-                                                    </Button>
-                                                    <Button
-                                                        className="pointer-events-auto"
-                                                        variant="destructive"
-                                                        size="icon"
-                                                        onClick={(e) => { e.stopPropagation(); handleDelete(item.image.id); }}
-                                                        title="Delete"
-                                                    >
-                                                        <Trash2 className="w-4 h-4" />
-                                                    </Button>
-                                                </div>
-                                            </div>
-
-                                            <CardContent
-                                                className="p-4 text-xs space-y-2 bg-card flex-1 relative z-10 overflow-hidden"
-                                                style={{ minHeight: CARD_META_HEIGHT - 40 }}
-                                                onClick={() => { }}
+                            renderItem={(item) => {
+                                const { positive, negative } = resolvePromptsForGalleryItem({
+                                    prompt: item.prompt,
+                                    negative_prompt: item.negative_prompt,
+                                    job_params: item.job_params,
+                                });
+                                const caption = item.caption || "";
+                                return (
+                                    <ContextMenu>
+                                        <ContextMenuTrigger>
+                                            <Card
+                                                className={cn(
+                                                    "group overflow-hidden flex flex-col relative transition-all duration-200 select-none h-full",
+                                                    selectedIds.has(item.image.id) ? "ring-2 ring-blue-500 shadow-lg scale-[0.98] bg-blue-50/50" : ""
+                                                )}
+                                                onClick={(e) => handleCardClick(item, e)}
+                                                onDoubleClick={() => handleCardDoubleClick(item)}
                                             >
-                                                <div className="flex items-center gap-2 flex-wrap">
-                                                    {item.workflow_name && (
-                                                        <span className="px-1.5 py-0.5 bg-purple-50 text-purple-600 border border-purple-100 rounded text-[10px] font-medium">
-                                                            {item.workflow_name}
-                                                        </span>
-                                                    )}
-                                                    {item.width && item.height && (
-                                                        <span className="px-1.5 py-0.5 bg-muted/40 text-muted-foreground border border-border rounded text-[10px]">
-                                                            {item.width}A-{item.height}
-                                                        </span>
-                                                    )}
-                                                </div>
-                                                <div className="flex items-center gap-2 text-muted-foreground">
-                                                    <Calendar className="w-3 h-3" />
-                                                    <span>{new Date(item.created_at).toLocaleString()}</span>
-                                                </div>
-
-                                                {item.caption && (
-                                                    <p className="text-muted-foreground line-clamp-2">{item.caption}</p>
-                                                )}
-
-                                                {item.prompt_tags && item.prompt_tags.length > 0 && (
-                                                    <div className="flex flex-wrap gap-1 mt-1">
-                                                        {item.prompt_tags.slice(0, 6).map((tag) => (
-                                                            <span key={tag} className="px-1.5 py-0.5 bg-indigo-50 text-indigo-600 border border-indigo-100 rounded">#{tag}</span>
-                                                        ))}
-                                                    </div>
-                                                )}
-
-                                                {(() => {
-                                                    const { positive, negative } = resolvePromptsForGalleryItem({
-                                                        prompt: item.prompt,
-                                                        negative_prompt: item.negative_prompt,
-                                                        job_params: item.job_params,
-                                                    });
-                                                    return (
-                                                        <div className="mt-2 space-y-2">
-                                                            {positive && (
-                                                                <div className="group/prompt">
-                                                                    <div className="flex items-center justify-between mb-1">
-                                                                        <span className="font-semibold text-green-600 block text-[10px] uppercase">Positive</span>
-                                                                        <Button variant="ghost" size="icon" className="h-4 w-4 opacity-0 group-hover/prompt:opacity-100" onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(positive); }}>
-                                                                            <Copy className="h-3 w-3 text-muted-foreground" />
-                                                                        </Button>
-                                                                    </div>
-                                                                    <HoverCard openDelay={200}>
-                                                                        <HoverCardTrigger asChild>
-                                                                            <p className="line-clamp-6 text-foreground/80 leading-relaxed cursor-help select-text">{positive}</p>
-                                                                        </HoverCardTrigger>
-                                                                        <HoverCardContent className="w-[500px] max-h-[60vh] overflow-y-auto p-4 z-[100]" align="start">
-                                                                            <div className="space-y-4">
-                                                                                <div>
-                                                                                    <div className="flex items-center gap-2 mb-1">
-                                                                                        <span className="font-semibold text-green-600 text-xs uppercase">Positive Prompt</span>
-                                                                                    </div>
-                                                                                    <p className="text-sm text-foreground/80 whitespace-pre-wrap font-mono text-[11px] leading-relaxed select-text">{positive}</p>
-                                                                                </div>
-                                                                                {negative && (
-                                                                                    <div className="border-t pt-3">
-                                                                                        <div className="flex items-center gap-2 mb-1">
-                                                                                            <span className="font-semibold text-red-500 text-xs uppercase">Negative Prompt</span>
-                                                                                        </div>
-                                                                                        <p className="text-sm text-muted-foreground whitespace-pre-wrap font-mono text-[11px] leading-relaxed select-text">{negative}</p>
-                                                                                    </div>
-                                                                                )}
-                                                                            </div>
-                                                                        </HoverCardContent>
-                                                                    </HoverCard>
-                                                                </div>
-                                                            )}
-                                                            {!positive && !negative && (
-                                                                <div className="flex flex-wrap gap-1 mt-2">
-                                                                    {Object.entries(item.job_params).slice(0, 4).map(([k, v]) => (
-                                                                        <span key={k} className="px-1.5 py-0.5 bg-muted/40 rounded text-muted-foreground border border-border">{k}: {String(v)}</span>
-                                                                    ))}
-                                                                </div>
-                                                            )}
+                                                <GalleryCardContent
+                                                    item={item}
+                                                    isSelected={selectedIds.has(item.image.id)}
+                                                    handleImageError={handleImageError}
+                                                />
+                                                <div className="absolute inset-x-0 top-0 aspect-square pointer-events-none">
+                                                    <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                        <div className="h-full flex flex-col justify-between p-3">
+                                                            <div className="flex items-center justify-center gap-2">
+                                                                <Button
+                                                                    className="pointer-events-auto"
+                                                                    variant="secondary"
+                                                                    size="icon"
+                                                                    onClick={(e) => { e.stopPropagation(); handleDownload(item); }}
+                                                                    title="Download"
+                                                                >
+                                                                    <Download className="w-4 h-4" />
+                                                                </Button>
+                                                                <Button
+                                                                    className="pointer-events-auto"
+                                                                    variant="secondary"
+                                                                    size="icon"
+                                                                    onClick={(e) => { e.stopPropagation(); handleRegenerate(item); }}
+                                                                    title="Regenerate"
+                                                                >
+                                                                    <RotateCcw className="w-4 h-4" />
+                                                                </Button>
+                                                                <Button
+                                                                    className="pointer-events-auto"
+                                                                    variant="destructive"
+                                                                    size="icon"
+                                                                    onClick={(e) => { e.stopPropagation(); handleDelete(item.image.id); }}
+                                                                    title="Delete"
+                                                                >
+                                                                    <Trash2 className="w-4 h-4" />
+                                                                </Button>
+                                                            </div>
+                                                            <div className="space-y-1 text-[10px] text-white">
+                                                                <p className="line-clamp-2"><span className="font-semibold text-emerald-300">positive:</span> {positive || "none"}</p>
+                                                                <p className="line-clamp-2"><span className="font-semibold text-rose-300">negative:</span> {negative || "none"}</p>
+                                                                <p className="line-clamp-2"><span className="font-semibold text-sky-300">caption:</span> {caption || "none"}</p>
+                                                            </div>
                                                         </div>
-                                                    );
-                                                })()}
-                                            </CardContent>
-                                        </Card>
-                                    </ContextMenuTrigger>
-                                    <ContextMenuContent>
-                                        <ContextMenuItem onSelect={() => handleDownload(item)}>download</ContextMenuItem>
-                                        <ContextMenuItem onSelect={() => handleRegenerate(item)}>regenerate</ContextMenuItem>
-                                        <ContextMenuItem onSelect={() => addToMediaTray({ path: item.image.path, filename: item.image.filename })}>add to media tray</ContextMenuItem>
-                                        <ContextMenuItem onSelect={() => { setMoveTargetIds([item.image.id]); setMoveDialogOpen(true); }}>move</ContextMenuItem>
-                                        <ContextMenuSeparator />
-                                        <ContextMenuItem className="text-red-600" onSelect={() => handleDelete(item.image.id)}>delete</ContextMenuItem>
-                                    </ContextMenuContent>
-                                </ContextMenu>
-                            )}
+                                                    </div>
+                                                </div>
+
+                                                <CardContent
+                                                    className="p-4 text-xs space-y-2 bg-card flex-1 relative z-10 overflow-hidden"
+                                                    style={{ minHeight: CARD_META_HEIGHT - 40 }}
+                                                    onClick={() => { }}
+                                                >
+                                                    <div className="flex items-center gap-2 flex-wrap">
+                                                        {item.workflow_name && (
+                                                            <span className="px-1.5 py-0.5 bg-purple-50 text-purple-600 border border-purple-100 rounded text-[10px] font-medium">
+                                                                {item.workflow_name}
+                                                            </span>
+                                                        )}
+                                                        {item.width && item.height && (
+                                                            <span className="px-1.5 py-0.5 bg-muted/40 text-muted-foreground border border-border rounded text-[10px]">
+                                                                {item.width}A-{item.height}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex items-center gap-2 text-muted-foreground">
+                                                        <Calendar className="w-3 h-3" />
+                                                        <span>{new Date(item.created_at).toLocaleString()}</span>
+                                                    </div>
+
+                                                    {item.caption && (
+                                                        <p className="text-muted-foreground line-clamp-2">{item.caption}</p>
+                                                    )}
+
+                                                    {item.prompt_tags && item.prompt_tags.length > 0 && (
+                                                        <div className="flex flex-wrap gap-1 mt-1">
+                                                            {item.prompt_tags.slice(0, 6).map((tag) => (
+                                                                <span key={tag} className="px-1.5 py-0.5 bg-indigo-50 text-indigo-600 border border-indigo-100 rounded">#{tag}</span>
+                                                            ))}
+                                                        </div>
+                                                    )}
+
+                                                    <div className="mt-2 space-y-2">
+                                                        {positive && (
+                                                            <div className="group/prompt">
+                                                                <div className="flex items-center justify-between mb-1">
+                                                                    <span className="font-semibold text-green-600 block text-[10px] uppercase">Positive</span>
+                                                                    <Button variant="ghost" size="icon" className="h-4 w-4 opacity-0 group-hover/prompt:opacity-100" onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(positive); }}>
+                                                                        <Copy className="h-3 w-3 text-muted-foreground" />
+                                                                    </Button>
+                                                                </div>
+                                                                <HoverCard openDelay={200}>
+                                                                    <HoverCardTrigger asChild>
+                                                                        <p className="line-clamp-6 text-foreground/80 leading-relaxed cursor-help select-text">{positive}</p>
+                                                                    </HoverCardTrigger>
+                                                                    <HoverCardContent className="w-[500px] max-h-[60vh] overflow-y-auto p-4 z-[100]" align="start">
+                                                                        <div className="space-y-4">
+                                                                            <div>
+                                                                                <div className="flex items-center gap-2 mb-1">
+                                                                                    <span className="font-semibold text-green-600 text-xs uppercase">Positive Prompt</span>
+                                                                                </div>
+                                                                                <p className="text-sm text-foreground/80 whitespace-pre-wrap font-mono text-[11px] leading-relaxed select-text">{positive}</p>
+                                                                            </div>
+                                                                            {negative && (
+                                                                                <div className="border-t pt-3">
+                                                                                    <div className="flex items-center gap-2 mb-1">
+                                                                                        <span className="font-semibold text-red-500 text-xs uppercase">Negative Prompt</span>
+                                                                                    </div>
+                                                                                    <p className="text-sm text-muted-foreground whitespace-pre-wrap font-mono text-[11px] leading-relaxed select-text">{negative}</p>
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                    </HoverCardContent>
+                                                                </HoverCard>
+                                                            </div>
+                                                        )}
+                                                        {!positive && !negative && (
+                                                            <div className="flex flex-wrap gap-1 mt-2">
+                                                                {Object.entries(item.job_params).slice(0, 4).map(([k, v]) => (
+                                                                    <span key={k} className="px-1.5 py-0.5 bg-muted/40 rounded text-muted-foreground border border-border">{k}: {String(v)}</span>
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </CardContent>
+                                            </Card>
+                                        </ContextMenuTrigger>
+                                        <ContextMenuContent>
+                                            <ContextMenuItem onSelect={() => handleDownload(item)}>download</ContextMenuItem>
+                                            <ContextMenuItem onSelect={() => handleRegenerate(item)}>regenerate</ContextMenuItem>
+                                            <ContextMenuItem
+                                                onSelect={() =>
+                                                    setMetadataTarget({ path: item.image.path, imageId: item.image.id })
+                                                }
+                                            >
+                                                metadata
+                                            </ContextMenuItem>
+                                            <ContextMenuItem onSelect={() => addToMediaTray({ path: item.image.path, filename: item.image.filename })}>add to media tray</ContextMenuItem>
+                                            <ContextMenuItem onSelect={() => { setMoveTargetIds([item.image.id]); setMoveDialogOpen(true); }}>move</ContextMenuItem>
+                                            <ContextMenuSeparator />
+                                            <ContextMenuItem className="text-red-600" onSelect={() => handleDelete(item.image.id)}>delete</ContextMenuItem>
+                                        </ContextMenuContent>
+                                    </ContextMenu>
+                                );
+                            }}
                         />
 
                         {isLoadingMore && (
@@ -1088,6 +1103,33 @@ export default function Gallery() {
                     setSelectedIds(new Set());
                     setSelectionMode(false);
                     loadGallery(search, selectedProjectId);
+                }}
+            />
+
+            <MediaMetadataDialog
+                open={metadataTarget !== null}
+                onOpenChange={(nextOpen) => {
+                    if (!nextOpen) setMetadataTarget(null);
+                }}
+                mediaPath={metadataTarget?.path || null}
+                imageId={metadataTarget?.imageId ?? null}
+                onUpdated={({ caption }) => {
+                    if (!metadataTarget) return;
+                    setItems((prev) =>
+                        prev.map((entry) => {
+                            const sameId = metadataTarget.imageId && entry.image.id === metadataTarget.imageId;
+                            const samePath = entry.image.path === metadataTarget.path;
+                            if (!sameId && !samePath) return entry;
+                            return {
+                                ...entry,
+                                caption: caption || undefined,
+                                image: {
+                                    ...entry.image,
+                                    caption: caption || undefined,
+                                },
+                            };
+                        })
+                    );
                 }}
             />
         </div >

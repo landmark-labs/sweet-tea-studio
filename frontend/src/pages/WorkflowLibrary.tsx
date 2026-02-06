@@ -26,6 +26,42 @@ const arraysEqual = (a: string[], b: string[]) => {
     return a.every((val, idx) => val === b[idx]);
 };
 
+const isSchemaTextField = (field: any): boolean => {
+    if (!field || typeof field !== "object") return false;
+    const widget = String(field.widget || "").toLowerCase();
+    const type = String(field.type || "").toLowerCase();
+    return (
+        widget === "text" ||
+        widget === "textarea" ||
+        type === "string" ||
+        type === "string_literal"
+    );
+};
+
+const normalizeCaptionSourceSelection = (schema: any) => {
+    if (!schema || typeof schema !== "object") return schema;
+    const next = { ...schema };
+    const selected = Object.entries(next)
+        .filter(([key, field]) => {
+            if (key.startsWith("__")) return false;
+            if (!isSchemaTextField(field)) return false;
+            return (field as any)?.x_use_media_caption === true;
+        })
+        .map(([key]) => key);
+
+    if (selected.length <= 1) return next;
+    const keep = selected[0];
+    for (const key of selected.slice(1)) {
+        if (next[key] && typeof next[key] === "object") {
+            delete next[key].x_use_media_caption;
+        }
+    }
+    if (keep && next[keep] && typeof next[keep] === "object") {
+        next[keep].x_use_media_caption = true;
+    }
+    return next;
+};
+
 // --- Types ---
 type RenderNode = {
     id: string;
@@ -88,8 +124,14 @@ const NodeCard = ({ node, schemaEdits, setSchemaEdits }: NodeCardProps) => {
     };
 
     const paramCount = node.active.length + node.hidden.length;
+    const activeCaptionSourceKey = Object.entries(schemaEdits || {}).find(
+        ([key, field]) =>
+            !key.startsWith("__") &&
+            isSchemaTextField(field) &&
+            (field as any)?.x_use_media_caption === true
+    )?.[0] || null;
 
-    const wrapWithTooltip = (content: JSX.Element, tooltip?: string) => {
+    const wrapWithTooltip = (content: React.ReactElement, tooltip?: string) => {
         if (!tooltip) return content;
         return (
             <TooltipProvider delayDuration={200}>
@@ -210,6 +252,8 @@ const NodeCard = ({ node, schemaEdits, setSchemaEdits }: NodeCardProps) => {
                             <TableBody>
                                 {node.active.map(([key, field]: [string, any]) => {
                                     const tooltip = resolveParamTooltip(field);
+                                    const canUseCaption = isSchemaTextField(field);
+                                    const usesCaption = activeCaptionSourceKey === key;
                                     return (
                                         <TableRow key={key} className="hover:bg-muted/30">
                                             <TableCell className="py-2">
@@ -280,11 +324,41 @@ const NodeCard = ({ node, schemaEdits, setSchemaEdits }: NodeCardProps) => {
                                             )}
                                         </TableCell>
                                         <TableCell className="text-right py-2">
-                                            <Button variant="ghost" size="sm" className="h-6 text-xs text-red-500 hover:text-red-700" onClick={() => {
-                                                const s = { ...schemaEdits };
-                                                s[key].__hidden = true;
-                                                setSchemaEdits(s);
-                                            }}>Hide</Button>
+                                            <div className="flex items-center justify-end gap-1">
+                                                {canUseCaption && (
+                                                    <Button
+                                                        variant={usesCaption ? "secondary" : "ghost"}
+                                                        size="sm"
+                                                        className={cn(
+                                                            "h-6 text-xs px-2",
+                                                            usesCaption
+                                                                ? "text-sky-700 dark:text-sky-300"
+                                                                : "text-muted-foreground"
+                                                        )}
+                                                        onClick={() => {
+                                                            const s = { ...schemaEdits };
+                                                            Object.entries(s).forEach(([schemaKey, schemaField]) => {
+                                                                if (schemaKey.startsWith("__")) return;
+                                                                if (!isSchemaTextField(schemaField)) return;
+                                                                if ((schemaField as any)?.x_use_media_caption) {
+                                                                    delete (s[schemaKey] as any).x_use_media_caption;
+                                                                }
+                                                            });
+                                                            if (!usesCaption) {
+                                                                s[key].x_use_media_caption = true;
+                                                            }
+                                                            setSchemaEdits(s);
+                                                        }}
+                                                    >
+                                                        {usesCaption ? "caption source" : "use caption"}
+                                                    </Button>
+                                                )}
+                                                <Button variant="ghost" size="sm" className="h-6 text-xs text-red-500 hover:text-red-700" onClick={() => {
+                                                    const s = { ...schemaEdits };
+                                                    s[key].__hidden = true;
+                                                    setSchemaEdits(s);
+                                                }}>Hide</Button>
+                                            </div>
                                         </TableCell>
                                         </TableRow>
                                     );
@@ -730,7 +804,7 @@ export default function WorkflowLibrary() {
 
     // --- Edit Logic ---
     const handleEdit = (w: WorkflowTemplate) => {
-        const edits = JSON.parse(JSON.stringify(w.input_schema));
+        const edits = normalizeCaptionSourceSelection(JSON.parse(JSON.stringify(w.input_schema)));
         const orderedIds = getNodeDisplayOrder(w.graph_json, edits);
         edits.__node_order = orderedIds;
         setEditingWorkflow(w);
@@ -759,10 +833,11 @@ export default function WorkflowLibrary() {
             return;
         }
 
+        const normalizedSchemaEdits = normalizeCaptionSourceSelection(schemaEdits);
         const payload: WorkflowTemplate = {
             ...editingWorkflow,
             name: editName.trim(),
-            input_schema: schemaEdits
+            input_schema: normalizedSchemaEdits
         };
 
         setIsSaving(true);
@@ -791,7 +866,7 @@ export default function WorkflowLibrary() {
             setWorkflows(prev => prev.map(w => w.id === updated.id ? updated : w));
             setEditingWorkflow(updated);
 
-            const edits = JSON.parse(JSON.stringify(updated.input_schema));
+            const edits = normalizeCaptionSourceSelection(JSON.parse(JSON.stringify(updated.input_schema)));
             const orderedIds = getNodeDisplayOrder(updated.graph_json, edits);
             edits.__node_order = orderedIds;
             setSchemaEdits(edits);
@@ -872,6 +947,15 @@ export default function WorkflowLibrary() {
 
             setEditingWorkflow({ ...editingWorkflow, graph_json: updatedGraph });
         };
+        const activeCaptionFieldKey = Object.entries(schemaEdits || {}).find(
+            ([key, field]) =>
+                !key.startsWith("__") &&
+                isSchemaTextField(field) &&
+                (field as any)?.x_use_media_caption === true
+        )?.[0] || null;
+        const activeCaptionFieldTitle = activeCaptionFieldKey
+            ? String(schemaEdits?.[activeCaptionFieldKey]?.title || activeCaptionFieldKey)
+            : null;
 
         return (
             <div className="container mx-auto p-4 h-[calc(100vh-4rem)] flex flex-row gap-4">
@@ -909,6 +993,18 @@ export default function WorkflowLibrary() {
                             className="text-sm resize-none"
                         />
                         <div className="text-[10px] text-muted-foreground text-right">{(editingWorkflow.description || "").length}/500</div>
+                    </div>
+
+                    <div className="space-y-1 mb-4 rounded-md border border-border bg-muted/20 p-2">
+                        <Label className="text-sm">use media caption</Label>
+                        <p className="text-[11px] text-muted-foreground">
+                            {activeCaptionFieldTitle
+                                ? `target field: ${activeCaptionFieldTitle}`
+                                : "no field selected"}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground">
+                            choose a text field below using "use caption"
+                        </p>
                     </div>
 
 

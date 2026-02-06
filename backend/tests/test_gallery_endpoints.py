@@ -1,8 +1,10 @@
 import os
 import tempfile
+import json
 
-from sqlmodel import Session
+from sqlmodel import Session, select
 
+from app.models.caption import CaptionVersion
 from app.models.image import Image
 from app.models.job import Job
 from app.models.prompt import Prompt
@@ -207,3 +209,120 @@ def test_matches_naming_convention():
     assert _matches_naming_convention("IMG_20240101.jpg") is False
     assert _matches_naming_convention("screenshot-2024.png") is False
     assert _matches_naming_convention("just-one-dash.png") is False
+
+
+def test_update_image_caption_versions(client, session):
+    prompt = Prompt(workflow_id=1, name="Caption Update", positive_text="caption test")
+    session.add(prompt)
+    session.commit()
+    session.refresh(prompt)
+
+    job = create_job(session, prompt, {"prompt": "caption prompt"})
+
+    fd, media_path = tempfile.mkstemp(suffix=".png")
+    os.close(fd)
+    try:
+        # Minimal valid PNG bytes
+        with open(media_path, "wb") as f:
+            f.write(
+                bytes.fromhex(
+                    "89504E470D0A1A0A0000000D4948445200000001000000010802000000907753DE0000000C4944415408D763F8FFFF3F0005FE02FEA557A9020000000049454E44AE426082"
+                )
+            )
+
+        image = Image(job_id=job.id, path=media_path, filename=os.path.basename(media_path), format="png")
+        session.add(image)
+        session.commit()
+        session.refresh(image)
+
+        first = client.patch(
+            f"/api/v1/gallery/{image.id}",
+            json={"caption": "first caption", "source": "manual"},
+        )
+        assert first.status_code == 200
+        first_payload = first.json()
+        assert first_payload["caption"] == "first caption"
+        assert first_payload["caption_storage"] in {"embedded", "sidecar"}
+        assert len(first_payload["caption_versions"]) == 1
+        assert first_payload["caption_versions"][0]["is_active"] is True
+
+        second = client.patch(
+            f"/api/v1/gallery/{image.id}",
+            json={"caption": "second caption", "source": "manual"},
+        )
+        assert second.status_code == 200
+        second_payload = second.json()
+        assert second_payload["caption"] == "second caption"
+        assert len(second_payload["caption_versions"]) == 2
+        assert second_payload["caption_versions"][0]["caption"] == "second caption"
+        assert second_payload["caption_versions"][0]["is_active"] is True
+
+        history = client.get(f"/api/v1/gallery/{image.id}/captions")
+        assert history.status_code == 200
+        history_rows = history.json()
+        assert len(history_rows) == 2
+        assert sum(1 for row in history_rows if row["is_active"]) == 1
+
+        with Session(session.get_bind()) as verify_session:
+            updated_image = verify_session.get(Image, image.id)
+            assert updated_image.caption == "second caption"
+            versions = verify_session.exec(
+                select(CaptionVersion).where(CaptionVersion.image_id == image.id)
+            ).all()
+            assert len(versions) == 2
+            assert sum(1 for row in versions if row.is_active) == 1
+    finally:
+        if os.path.exists(media_path):
+            os.remove(media_path)
+        sidecar_path = os.path.splitext(media_path)[0] + ".json"
+        if os.path.exists(sidecar_path):
+            os.remove(sidecar_path)
+
+
+def test_update_metadata_by_path_without_image_record(client):
+    fd, video_path = tempfile.mkstemp(suffix=".mp4")
+    os.close(fd)
+    try:
+        with open(video_path, "wb") as f:
+            f.write(b"fake-video")
+
+        patch_resp = client.patch(
+            "/api/v1/gallery/image/path/metadata",
+            params={"path": video_path},
+            json={"caption": "video caption", "source": "manual"},
+        )
+        assert patch_resp.status_code == 200
+        patch_payload = patch_resp.json()
+        assert patch_payload["image_id"] is None
+        assert patch_payload["caption"] == "video caption"
+        assert patch_payload["caption_storage"] == "sidecar"
+
+        sidecar_path = os.path.splitext(video_path)[0] + ".json"
+        assert os.path.exists(sidecar_path)
+        with open(sidecar_path, "r", encoding="utf-8") as sf:
+            sidecar = json.load(sf)
+        assert sidecar.get("caption") == "video caption"
+
+        metadata_resp = client.get(
+            "/api/v1/gallery/image/path/metadata",
+            params={"path": video_path},
+        )
+        assert metadata_resp.status_code == 200
+        metadata_payload = metadata_resp.json()
+        assert metadata_payload.get("caption") == "video caption"
+
+        history_resp = client.get(
+            "/api/v1/gallery/image/path/captions",
+            params={"path": video_path},
+        )
+        assert history_resp.status_code == 200
+        history_payload = history_resp.json()
+        assert len(history_payload) == 1
+        assert history_payload[0]["caption"] == "video caption"
+        assert history_payload[0]["is_active"] is True
+    finally:
+        if os.path.exists(video_path):
+            os.remove(video_path)
+        sidecar_path = os.path.splitext(video_path)[0] + ".json"
+        if os.path.exists(sidecar_path):
+            os.remove(sidecar_path)

@@ -108,7 +108,7 @@ export const FieldRenderer = React.memo(function FieldRenderer({
     </button>
   ) : null;
 
-  const wrapWithTooltip = (content: JSX.Element) => {
+  const wrapWithTooltip = (content: React.ReactElement) => {
     if (!tooltip) return content;
     return (
       <TooltipProvider delayDuration={200}>
@@ -122,7 +122,7 @@ export const FieldRenderer = React.memo(function FieldRenderer({
     );
   };
 
-  const wrapWithEndAction = (content: JSX.Element) => {
+  const wrapWithEndAction = (content: React.ReactElement) => {
     if (!endAction) return content;
     const placeAtTop = isMediaUpload || field.widget === "textarea";
     return (

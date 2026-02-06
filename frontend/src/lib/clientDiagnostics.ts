@@ -25,7 +25,6 @@ const DEFAULT_PERF_MIN_MS = 4;
 
 let initialized = false;
 let queue: ClientLogEntry[] = [];
-let flushTimer: number | null = null;
 const throttles = new Map<string, number>();
 
 function isEnabled(): boolean {
@@ -194,7 +193,7 @@ export function initClientDiagnostics() {
     });
   };
 
-  flushTimer = window.setInterval(() => {
+  window.setInterval(() => {
     heartbeat();
     if (typeof window !== "undefined" && typeof window.requestIdleCallback === "function") {
       window.requestIdleCallback(() => {

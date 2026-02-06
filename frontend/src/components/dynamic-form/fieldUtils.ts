@@ -7,7 +7,6 @@ export const resolveMediaKind = (fieldKey: string, field: Record<string, unknown
   }
 
   const key = fieldKey.toLowerCase();
-  const title = String(field.title || "").toLowerCase();
   const classType = String(field.x_class_type || "").toLowerCase();
   if (key.endsWith(".video") && classType.includes("loadvideo")) {
     return "video";

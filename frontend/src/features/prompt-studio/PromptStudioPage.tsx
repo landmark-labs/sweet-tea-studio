@@ -3,7 +3,7 @@ import { useSetAtom, useStore } from "jotai";
 import { addProgressEntry, calculateProgressStats, mapStatusToGenerationState, formatDuration, type GenerationState, type ProgressHistoryEntry } from "@/lib/generationState";
 import { useLocation, useNavigate, useOutletContext } from "react-router-dom";
 import { api, Engine, WorkflowTemplate, GalleryItem, EngineHealth, Project, Image as ApiImage, FolderImage, IMAGE_API_BASE, Job } from "@/lib/api";
-import { extractPrompts, findPromptFieldsInSchema, findImageFieldsInSchema, findMediaFieldsInSchema } from "@/lib/promptUtils";
+import { extractPrompts, findCaptionInputFieldInSchema, findPromptFieldsInSchema, findImageFieldsInSchema, findMediaFieldsInSchema } from "@/lib/promptUtils";
 import { DynamicForm } from "@/components/DynamicForm";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -57,7 +57,7 @@ type PromptStudioViewerStateV1 = {
 const PROMPT_STUDIO_VIEWER_STATE_KEY = "ds_promptstudio_viewer_state_v1";
 
 export default function PromptStudio() {
-  const [engines, setEngines] = useState<Engine[]>([]);
+  const [, setEngines] = useState<Engine[]>([]);
   const [workflows, setWorkflows] = useState<WorkflowTemplate[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [engineHealth, setEngineHealth] = useState<EngineHealth[]>([]);
@@ -227,11 +227,6 @@ export default function PromptStudio() {
   );
   // Pending loadParams - holds the gallery item to inject until workflows are loaded
   const [pendingLoadParams, setPendingLoadParams] = useState<(GalleryItem & { __isRegenerate?: boolean; __randomizeSeed?: boolean }) | null>(null);
-  const handlePreviewSelect = useCallback((path: string, metadata?: any) => {
-    setPreviewPath(path);
-    setPreviewMetadata(metadata ?? null);
-  }, []);
-
   // Persist viewer selection (restores ImageViewer after app restart)
   useEffect(() => {
     if (!previewPath) return;
@@ -272,7 +267,7 @@ export default function PromptStudio() {
   const shouldRefetchPrompts = usePromptLibraryStore(useCallback(state => state.shouldRefetch, []));
   const [, setPromptLoading] = useState(false);
   const [, setPromptError] = useState<string | null>(null);
-  const [promptSearch, setPromptSearch] = useState("");
+  const [promptSearch] = useState("");
 
   // Add a refresh key for gallery
   const [galleryRefresh, setGalleryRefresh] = useState(0);
@@ -919,7 +914,7 @@ export default function PromptStudio() {
 
   // Install State
   const [installOpen, setInstallOpen] = useState(false);
-  const [installStatus, setInstallStatus] = useState<InstallStatus | null>(null);
+  const [installStatus] = useState<InstallStatus | null>(null);
   const [allowManualClone, setAllowManualClone] = useState(false);
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const healthIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -1823,6 +1818,7 @@ export default function PromptStudio() {
       console.log("[LoadParams] Processing with workflow:", targetWorkflow.name);
 
       const schema = targetWorkflow.input_schema;
+      const schemaNodeOrder = Array.isArray(schema.__node_order) ? schema.__node_order.map(String) : [];
 
       // STEP 1: Build defaults from target workflow schema
       const targetDefaults = buildSchemaDefaults(schema);
@@ -1884,16 +1880,21 @@ export default function PromptStudio() {
         (jobParams as any)?.negative_prompt ||
         (jobParams as any)?.negative ||
         null;
+      let mediaCaption =
+        loadParams.caption ||
+        (jobParams as any)?.caption ||
+        null;
 
       const extracted = extractPrompts(jobParams);
       if (!positivePrompt && extracted.positive) positivePrompt = extracted.positive;
       if (!negativePrompt && extracted.negative) negativePrompt = extracted.negative;
 
-      if (!positivePrompt || !negativePrompt) {
+      if (!positivePrompt || !negativePrompt || !mediaCaption) {
         try {
           const meta = await api.getImageMetadata(loadParams.image.path);
           positivePrompt = positivePrompt || (meta as any)?.prompt || null;
           negativePrompt = negativePrompt || (meta as any)?.negative_prompt || null;
+          mediaCaption = mediaCaption || (meta as any)?.caption || null;
         } catch (err) {
           console.warn("Failed to fetch metadata for prompt fallback", err);
         }
@@ -1940,6 +1941,21 @@ export default function PromptStudio() {
         if (nextNegative) baseParams[negativeTarget] = nextNegative;
       }
 
+      const captionTarget = findCaptionInputFieldInSchema(schema, schemaNodeOrder);
+      if (captionTarget) {
+        const directCaption = jobParams[captionTarget];
+        const nextCaption = choosePromptValue(mediaCaption, directCaption);
+        if (nextCaption) {
+          baseParams[captionTarget] = nextCaption;
+        } else {
+          const existing = baseParams[captionTarget];
+          const hasExisting = typeof existing === "string" && existing.trim().length > 0;
+          if (!hasExisting && !cancelled) {
+            setError("selected pipe expects a media caption, but the selected media has no caption.");
+          }
+        }
+      }
+
       // STEP 4.5: Show error only if we couldn't find ANY prompt from any source
       // Check both the positivePrompt variable AND the actual injected value
       const hasPromptInForm = positiveTarget && baseParams[positiveTarget];
@@ -1956,7 +1972,6 @@ export default function PromptStudio() {
         return lower.endsWith('.mp4') || lower.endsWith('.webm') || lower.endsWith('.mov') || lower.endsWith('.mkv') || lower.endsWith('.avi');
       };
 
-      const schemaNodeOrder = Array.isArray(schema.__node_order) ? schema.__node_order.map(String) : [];
       const hasVideoField = findMediaFieldsInSchema(schema, "video", schemaNodeOrder).length > 0;
       const isVideo = loadParams.image?.path ? isVideoPath(loadParams.image.path) : false;
 
@@ -2193,16 +2208,6 @@ export default function PromptStudio() {
       clearPrompts();
     }
   }, [selectedWorkflowId]);
-
-  const submitPromptSearch = () => loadPromptLibrary(promptSearch);
-
-
-
-  const handlePromptSearchChange = (value: string) => {
-    setPromptSearch(value);
-  };
-
-
 
 
 
@@ -3141,17 +3146,6 @@ export default function PromptStudio() {
     }
   };
 
-  const handleGallerySelect = useCallback((item: GalleryItem) => {
-    // Viewer is now showing an image from the recent gallery list
-    setViewerContext({ source: "recent", projectId: null, folder: null });
-    const rawPath = extractRawViewerPath(item.image.path);
-    handlePreviewSelect(buildViewerApiPath(rawPath), {
-      prompt: item.prompt,
-      created_at: item.created_at,
-      job_params: item.job_params
-    });
-  }, [handlePreviewSelect, extractRawViewerPath, buildViewerApiPath, setViewerContext]);
-
   const handleWorkflowSelect = useCallback(async (workflowId: string, fromImagePath?: string) => {
     if (fromImagePath) {
       setIsTransferringImage(true);
@@ -3624,3 +3618,6 @@ export default function PromptStudio() {
     </div >
   );
 }
+
+
+

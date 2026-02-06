@@ -294,8 +294,13 @@ export function GenerationProvider({ children }: GenerationProviderProps) {
         if (!shouldRefetch(selectedWorkflowId, promptSearch)) return;
 
         try {
-            const data = await api.getPrompts(promptSearch, parseInt(selectedWorkflowId));
-            setPrompts(data, selectedWorkflowId, promptSearch);
+            const data = await api.searchPromptMedia({
+                query: promptSearch,
+                workflowId: parseInt(selectedWorkflowId),
+                offset: 0,
+                limit: 200,
+            });
+            setPrompts(data.items, selectedWorkflowId, promptSearch);
         } catch (err) {
             console.error("Failed to load prompts", err);
         }

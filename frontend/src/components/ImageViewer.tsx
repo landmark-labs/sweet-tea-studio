@@ -7,6 +7,7 @@ import { getBasename } from "@/lib/pathUtils";
 import { workflowSupportsImageInput } from "@/lib/workflowGraph";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 import { InpaintEditor } from "@/components/InpaintEditor";
+import { MediaMetadataDialog } from "@/components/MediaMetadataDialog";
 import { useMediaTrayStore } from "@/lib/stores/mediaTrayStore";
 
 
@@ -40,6 +41,7 @@ export const ImageViewer = React.memo(function ImageViewer({
     onViewImagePath,
     workflows = [],
     onUseInPipe,
+    onImageUpdate,
     onRegenerate,
     onDelete,
     selectedImagePath,
@@ -51,6 +53,7 @@ export const ImageViewer = React.memo(function ImageViewer({
     const [selectedIndex, setSelectedIndex] = React.useState<number>(0);
     const [contextMenu, setContextMenu] = React.useState<{ x: number, y: number } | null>(null);
     const [contextSubmenu, setContextSubmenu] = React.useState<"regenerate" | "useInPipe" | null>(null);
+    const [metadataDialogOpen, setMetadataDialogOpen] = React.useState(false);
     const containerRef = React.useRef<HTMLDivElement>(null);
     const [maskEditorOpen, setMaskEditorOpen] = React.useState(false);
     const [maskEditorSourcePath, setMaskEditorSourcePath] = React.useState<string>("");
@@ -234,6 +237,8 @@ export const ImageViewer = React.memo(function ImageViewer({
     const [pngMetadata, setPngMetadata] = React.useState<{
         prompt?: string | null;
         negative_prompt?: string | null;
+        caption?: string | null;
+        caption_history?: Array<Record<string, unknown>>;
         parameters: Record<string, unknown>;
         source: string;
     } | null>(null);
@@ -243,6 +248,8 @@ export const ImageViewer = React.memo(function ImageViewer({
     const metadataCacheRef = React.useRef(new Map<string, {
         prompt?: string | null;
         negative_prompt?: string | null;
+        caption?: string | null;
+        caption_history?: Array<Record<string, unknown>>;
         parameters: Record<string, unknown>;
         source: string;
     }>());
@@ -298,6 +305,8 @@ export const ImageViewer = React.memo(function ImageViewer({
                 const nextMetadata = {
                     prompt: data.prompt,
                     negative_prompt: data.negative_prompt,
+                    caption: data.caption,
+                    caption_history: data.caption_history as Array<Record<string, unknown>> | undefined,
                     parameters: data.parameters,
                     source: data.source
                 };
@@ -329,6 +338,8 @@ export const ImageViewer = React.memo(function ImageViewer({
     const cacheMetadata = React.useCallback((cacheKey: string, nextMetadata: {
         prompt?: string | null;
         negative_prompt?: string | null;
+        caption?: string | null;
+        caption_history?: Array<Record<string, unknown>>;
         parameters: Record<string, unknown>;
         source: string;
     }) => {
@@ -363,6 +374,8 @@ export const ImageViewer = React.memo(function ImageViewer({
                 const nextMetadata = {
                     prompt: data.prompt,
                     negative_prompt: data.negative_prompt,
+                    caption: data.caption,
+                    caption_history: data.caption_history as Array<Record<string, unknown>> | undefined,
                     parameters: data.parameters,
                     source: data.source,
                 };
@@ -416,6 +429,8 @@ export const ImageViewer = React.memo(function ImageViewer({
     const currentMetadata = pngMetadata ? {
         prompt: pngMetadata.prompt,
         negative_prompt: pngMetadata.negative_prompt,
+        caption: pngMetadata.caption,
+        caption_history: pngMetadata.caption_history,
         job_params: pngMetadata.parameters,
         source: pngMetadata.source
     } : metadata;
@@ -901,6 +916,15 @@ export const ImageViewer = React.memo(function ImageViewer({
                         >
                             <Plus size={14} /> add to media tray
                         </div>
+                        <div
+                            className="px-3 py-2 hover:bg-muted/50 cursor-pointer flex items-center gap-2"
+                            onClick={() => {
+                                setMetadataDialogOpen(true);
+                                setContextMenu(null);
+                            }}
+                        >
+                            metadata
+                        </div>
                         {canDrawMask && (
                             <div
                                 className="px-3 py-2 hover:bg-muted/50 cursor-pointer flex items-center gap-2"
@@ -1186,6 +1210,17 @@ export const ImageViewer = React.memo(function ImageViewer({
                                     <PenTool className="w-3 h-3" /> draw mask
                                 </Button>
                             )}
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-7 text-xs"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setMetadataDialogOpen(true);
+                                }}
+                            >
+                                metadata
+                            </Button>
 
                         </div>
                         {/* Right: Keep/Download */}
@@ -1392,6 +1427,30 @@ export const ImageViewer = React.memo(function ImageViewer({
                     onOpenChange={setMaskEditorOpen}
                     imageUrl={imageUrl}
                     onSave={handleMaskSave}
+                />
+
+                <MediaMetadataDialog
+                    open={metadataDialogOpen}
+                    onOpenChange={setMetadataDialogOpen}
+                    mediaPath={imagePath ? extractRawPath(imagePath) : null}
+                    imageId={
+                        (matchingGalleryItem?.image?.id && matchingGalleryItem.image.id > 0)
+                            ? matchingGalleryItem.image.id
+                            : (currentImage?.id && currentImage.id > 0 ? currentImage.id : null)
+                    }
+                    onUpdated={({ caption }) => {
+                        const rawPath = imagePath ? extractRawPath(imagePath) : "";
+                        if (rawPath) {
+                            const cached = metadataCacheRef.current.get(rawPath);
+                            if (cached) {
+                                metadataCacheRef.current.set(rawPath, { ...cached, caption: caption ?? null });
+                            }
+                        }
+                        setPngMetadata((prev) => (prev ? { ...prev, caption: caption ?? null } : prev));
+                        if (onImageUpdate && currentImage && currentImage.id > 0) {
+                            onImageUpdate({ ...currentImage, caption: caption || undefined });
+                        }
+                    }}
                 />
             </div>
         </>

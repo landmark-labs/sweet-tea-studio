@@ -11,7 +11,7 @@ type ConnectionState = "connected" | "starting" | "stopped" | "stopping";
 export function ComfyUIControl() {
     const [state, setState] = useState<ConnectionState>("stopped");
     const [canLaunch, setCanLaunch] = useState(false);
-    const [lastError, setLastError] = useState<string | null>(null);
+    const [, setLastError] = useState<string | null>(null);
 
     // Logs state
     const [logsOpen, setLogsOpen] = useState(false);

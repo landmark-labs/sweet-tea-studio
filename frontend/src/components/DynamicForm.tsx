@@ -3,7 +3,6 @@ import { createPortal } from "react-dom";
 import { useSetAtom, useStore } from "jotai";
 import { Button } from "@/components/ui/button";
 import { DraggablePanel } from "@/components/ui/draggable-panel";
-import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
 import type { PromptItem, PromptRehydrationSnapshotV1, PromptRehydrationItemV1 } from "@/lib/types";
 import { formDataAtom, setFormDataAtom } from "@/lib/atoms/formAtoms";
@@ -11,7 +10,7 @@ import { ChevronDown, ChevronUp, Palette, X } from "lucide-react";
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger, ContextMenuSeparator, ContextMenuLabel } from "@/components/ui/context-menu";
 import { FieldRenderer } from "@/components/dynamic-form/FieldRenderer";
 import { NodeMediaGroup, NodePromptGroup, NodeStackRow } from "@/components/dynamic-form/NodeGroups";
-import { BYPASS_PLACEHOLDER_KEY, NODE_HOVER_CLOSE_DELAY, NODE_HOVER_OPEN_DELAY } from "@/components/dynamic-form/constants";
+import { NODE_HOVER_CLOSE_DELAY, NODE_HOVER_OPEN_DELAY } from "@/components/dynamic-form/constants";
 import type { FormSection, GroupMap, PlacementMeta } from "@/components/dynamic-form/types";
 import { isMediaUploadField, resolveNodeTitle, resolveParamTitle } from "@/components/dynamic-form/fieldUtils";
 
@@ -147,17 +146,6 @@ export const DynamicForm = React.memo(function DynamicForm({
 
         loadDynamicOptions();
     }, [engineId, schema]);
-
-    const defaults = useMemo(() => {
-        if (!schema) return {} as Record<string, unknown>;
-        const initial: Record<string, unknown> = {};
-        Object.keys(schema).forEach((key) => {
-            if (schema[key].default !== undefined) {
-                initial[key] = schema[key].default;
-            }
-        });
-        return initial;
-    }, [schema, nodeOrder]);
 
     const applyData = useCallback((next: Record<string, any>) => {
         if (externalOnChange) {

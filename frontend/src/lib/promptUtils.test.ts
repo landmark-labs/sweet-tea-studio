@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { resolvePromptsForGalleryItem } from "./promptUtils";
+import { findCaptionInputFieldInSchema, resolvePromptsForGalleryItem } from "./promptUtils";
 
 describe("resolvePromptsForGalleryItem", () => {
     it("prefers GalleryItem prompt fields over job_params", () => {
@@ -24,3 +24,25 @@ describe("resolvePromptsForGalleryItem", () => {
     });
 });
 
+describe("findCaptionInputFieldInSchema", () => {
+    it("prefers explicit x_use_media_caption field", () => {
+        const key = findCaptionInputFieldInSchema({
+            "10.prompt_text": { type: "string", title: "Prompt" },
+            "11.caption_text": { type: "string", title: "Caption", x_use_media_caption: true },
+        });
+
+        expect(key).toBe("11.caption_text");
+    });
+
+    it("falls back to caption-like text fields when explicit flag is missing", () => {
+        const key = findCaptionInputFieldInSchema(
+            {
+                "30.free_text": { type: "string", title: "Description" },
+                "20.notes": { type: "string", title: "Notes" },
+            },
+            ["20", "30"]
+        );
+
+        expect(key).toBe("30.free_text");
+    });
+});

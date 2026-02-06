@@ -154,6 +154,18 @@ export function resolvePromptsForGalleryItem(item: {
     };
 }
 
+const isTextSchemaField = (field: Record<string, unknown> | undefined): boolean => {
+    if (!field) return false;
+    const widget = String((field as any).widget || "").toLowerCase();
+    const type = String((field as any).type || "").toLowerCase();
+    return (
+        widget === "textarea" ||
+        widget === "text" ||
+        type === "string" ||
+        type === "string_literal"
+    );
+};
+
 /**
  * Find schema fields that match CLIPTextEncode text inputs.
  * Used to map extracted prompts to the correct form fields in a workflow.
@@ -255,6 +267,52 @@ export function findPromptFieldsInSchema(
     }
 
     return { positiveField, negativeField };
+}
+
+export function findCaptionInputFieldInSchema(
+    schema: Record<string, { title?: string; widget?: string; type?: string; x_node_id?: string | number; [k: string]: unknown }>,
+    nodeOrder?: string[]
+): string | null {
+    const explicit = Object.entries(schema).find(([key, field]) => {
+        if (key.startsWith("__")) return false;
+        if (!isTextSchemaField(field)) return false;
+        return (field as any).x_use_media_caption === true;
+    });
+    if (explicit) return explicit[0];
+
+    const textCandidates = Object.entries(schema).filter(([key, field]) => {
+        if (key.startsWith("__")) return false;
+        return isTextSchemaField(field);
+    });
+
+    if (!textCandidates.length) return null;
+
+    const sortByNodeOrder = <T extends { key: string; nodeId: string }>(items: T[]) => {
+        if (!nodeOrder || nodeOrder.length === 0) return items;
+        return [...items].sort((a, b) => {
+            const aIndex = nodeOrder.indexOf(a.nodeId);
+            const bIndex = nodeOrder.indexOf(b.nodeId);
+            if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
+            if (aIndex !== -1) return -1;
+            if (bIndex !== -1) return 1;
+            return 0;
+        });
+    };
+
+    const normalizedCandidates = sortByNodeOrder(
+        textCandidates.map(([key, field]) => ({
+            key,
+            nodeId: String((field as any).x_node_id ?? key.split(".")[0] ?? ""),
+            label: `${String((field as any).title || "")} ${key}`.toLowerCase(),
+        }))
+    );
+
+    const captionNamed = normalizedCandidates.find((candidate) =>
+        /\b(caption|description|image text)\b/.test(candidate.label)
+    );
+    if (captionNamed) return captionNamed.key;
+
+    return null;
 }
 
 /**

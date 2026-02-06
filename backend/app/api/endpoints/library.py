@@ -17,13 +17,14 @@ This module handles:
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Literal, Optional
 import json
+import math
 import time
 from threading import Thread
 
 from difflib import SequenceMatcher
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel, Field
-from sqlmodel import Session, col, select
+from sqlmodel import Session, col, func, or_, select
 
 from app.models.prompt import Prompt, PromptCreate, PromptRead
 from app.models.tag import Tag
@@ -31,6 +32,7 @@ from app.db.engine import engine as db_engine, tags_engine
 from app.models.image import Image
 from app.models.job import Job
 from app.models.project import Project
+from app.services.gallery.metadata import _extract_prompts_from_param_dict
 
 # Import new tag module
 from app.api.endpoints import library_tags
@@ -77,6 +79,13 @@ class PromptStage(BaseModel):
     source: Optional[str] = None
     timestamp: Optional[str] = None
 
+
+class LibrarySearchResponse(BaseModel):
+    items: List[LibraryPrompt]
+    offset: int
+    limit: int
+    has_more: bool
+
 # --- Helpers ---
 
 def _build_search_block(
@@ -105,22 +114,255 @@ def _build_search_block(
     ).lower()
 
 
-def _score_search_match(search: str, text_block: str) -> float:
-    """Return a fuzzy score between the search term and the text block."""
+def _tokenize_query(query: str) -> List[str]:
+    return [tok for tok in query.lower().replace(",", " ").split() if tok]
 
-    search_lower = (search or "").strip().lower()
-    if not search_lower:
+
+def _field_relevance(query: str, tokens: List[str], text: str) -> float:
+    if not text:
         return 0.0
+    lower = text.lower()
+    token_hits = sum(1 for token in tokens if token in lower)
+    coverage = token_hits / len(tokens) if tokens else 0.0
+    phrase = 1.0 if query and query in lower else 0.0
+    fuzzy = SequenceMatcher(None, query, lower).ratio() if query else 0.0
+    return (0.58 * coverage) + (0.28 * phrase) + (0.14 * fuzzy)
 
-    text_lower = text_block.lower()
-    tokens = [t for t in search_lower.replace(",", " ").split() if t]
-    token_hits = sum(1 for t in tokens if t in text_lower)
-    coverage = token_hits / len(tokens) if tokens else 0
-    similarity = SequenceMatcher(None, search_lower, text_lower).ratio()
 
-    # Reward direct substring matches while keeping fuzzy similarity relevant.
-    substring_bonus = 0.25 if search_lower in text_lower else 0
-    return (0.6 * coverage) + (0.4 * similarity) + substring_bonus
+def _recency_score(created_at: datetime) -> float:
+    age_days = max((datetime.utcnow() - created_at).total_seconds() / 86400.0, 0.0)
+    # Smooth half-life (~45 days) so very old but highly relevant items can still rank.
+    return math.exp(-age_days / 45.0)
+
+
+def _score_search_match(
+    query: str,
+    *,
+    active_positive: Optional[str],
+    active_negative: Optional[str],
+    caption: Optional[str],
+    tags: List[str],
+    prompt_history: List[PromptStage],
+    prompt_name: Optional[str],
+    project_name: Optional[str],
+    filename: Optional[str],
+    created_at: datetime,
+) -> float:
+    query_lower = (query or "").strip().lower()
+    if not query_lower:
+        # No query: pure recency ranking.
+        return _recency_score(created_at)
+
+    tokens = _tokenize_query(query_lower)
+    if not tokens:
+        return _recency_score(created_at)
+
+    history_text = " ".join(
+        f"{stage.positive_text or ''} {stage.negative_text or ''}" for stage in prompt_history
+    )
+    tag_text = " ".join(tags or [])
+
+    relevance = (
+        0.40 * _field_relevance(query_lower, tokens, active_positive or "")
+        + 0.08 * _field_relevance(query_lower, tokens, active_negative or "")
+        + 0.28 * _field_relevance(query_lower, tokens, caption or "")
+        + 0.12 * _field_relevance(query_lower, tokens, tag_text)
+        + 0.06 * _field_relevance(query_lower, tokens, history_text)
+        + 0.03 * _field_relevance(query_lower, tokens, prompt_name or "")
+        + 0.02 * _field_relevance(query_lower, tokens, project_name or "")
+        + 0.01 * _field_relevance(query_lower, tokens, filename or "")
+    )
+    recency = _recency_score(created_at)
+    return (0.86 * relevance) + (0.14 * recency)
+
+
+def _search_library_prompts(
+    session: Session,
+    *,
+    search: Optional[str],
+    workflow_id: Optional[int],
+    offset: int,
+    limit: int,
+) -> tuple[List[LibraryPrompt], bool]:
+    base_query = (
+        select(Image, Job, Prompt, Project)
+        .join(Job, Image.job_id == Job.id, isouter=True)
+        .join(Prompt, Job.prompt_id == Prompt.id, isouter=True)
+        .join(Project, Job.project_id == Project.id, isouter=True)
+        .where(Image.is_deleted == False)  # noqa: E712
+        .order_by(Image.created_at.desc())
+    )
+    if workflow_id:
+        base_query = base_query.where(Job.workflow_template_id == workflow_id)
+
+    clean_search = (search or "").strip()
+    if not clean_search:
+        rows = session.exec(base_query.offset(offset).limit(limit + 1)).all()
+        has_more = len(rows) > limit
+        rows = rows[:limit]
+    else:
+        tokens = _tokenize_query(clean_search)
+        try:
+            prompt_field = func.lower(func.coalesce(func.json_extract(Job.input_params, "$.prompt"), ""))
+            negative_field = func.lower(func.coalesce(func.json_extract(Job.input_params, "$.negative_prompt"), ""))
+        except AttributeError:
+            prompt_field = func.lower(func.coalesce(Job.input_params, ""))
+            negative_field = func.lower(func.coalesce(Job.input_params, ""))
+
+        token_filters = []
+        for token in tokens[:4]:
+            like = f"%{token}%"
+            token_filters.append(
+                or_(
+                    func.lower(func.coalesce(Image.caption, "")).like(like),
+                    prompt_field.like(like),
+                    negative_field.like(like),
+                    func.lower(func.coalesce(Prompt.positive_text, "")).like(like),
+                    func.lower(func.coalesce(Prompt.negative_text, "")).like(like),
+                    func.lower(func.coalesce(Prompt.name, "")).like(like),
+                    func.lower(func.coalesce(Image.filename, "")).like(like),
+                    func.lower(func.coalesce(Project.name, "")).like(like),
+                )
+            )
+        filtered = base_query.where(or_(*token_filters)) if token_filters else base_query
+        candidate_limit = min(max((offset + limit) * 8, 320), 5000)
+        rows = session.exec(filtered.limit(candidate_limit)).all()
+        has_more = False
+
+    scored_results: List[tuple[float, LibraryPrompt]] = []
+    query_tokens = _tokenize_query(clean_search) if clean_search else []
+    for image, job, prompt, project in rows:
+        raw_params = job.input_params if job and job.input_params else {}
+        if isinstance(raw_params, str):
+            try:
+                raw_params = json.loads(raw_params)
+            except Exception:
+                raw_params = {}
+        if not isinstance(raw_params, dict):
+            raw_params = {}
+
+        metadata = image.extra_metadata if isinstance(image.extra_metadata, dict) else {}
+        if isinstance(image.extra_metadata, str):
+            try:
+                metadata = json.loads(image.extra_metadata)
+            except Exception:
+                metadata = {}
+        if not isinstance(metadata, dict):
+            metadata = {}
+
+        raw_history = metadata.get("prompt_history", [])
+        prompt_history: List[PromptStage] = []
+        if isinstance(raw_history, list):
+            for idx, entry in enumerate(raw_history):
+                if not isinstance(entry, dict):
+                    continue
+                prompt_history.append(
+                    PromptStage(
+                        stage=entry.get("stage", idx),
+                        positive_text=entry.get("positive_text"),
+                        negative_text=entry.get("negative_text"),
+                        source=entry.get("source"),
+                        timestamp=entry.get("timestamp"),
+                    )
+                )
+
+        active_prompt = metadata.get("active_prompt") if isinstance(metadata.get("active_prompt"), dict) else {}
+        active_positive = active_prompt.get("positive_text")
+        active_negative = active_prompt.get("negative_text")
+
+        if not active_positive or not active_negative:
+            inferred_pos, inferred_neg = _extract_prompts_from_param_dict(raw_params)
+            if not active_positive and inferred_pos:
+                active_positive = inferred_pos
+            if not active_negative and inferred_neg:
+                active_negative = inferred_neg
+
+        if not active_positive:
+            active_positive = (
+                raw_params.get("prompt")
+                or raw_params.get("positive_prompt")
+                or raw_params.get("positive")
+                or raw_params.get("text_positive")
+            )
+        if not active_negative:
+            active_negative = (
+                raw_params.get("negative_prompt")
+                or raw_params.get("negative")
+                or raw_params.get("text_negative")
+            )
+
+        tags: List[str] = []
+        raw_tags = prompt.tags if prompt else []
+        if isinstance(raw_tags, str):
+            try:
+                parsed_tags = json.loads(raw_tags)
+                if isinstance(parsed_tags, list):
+                    tags = [tag for tag in parsed_tags if isinstance(tag, str)]
+            except Exception:
+                tags = []
+        elif isinstance(raw_tags, list):
+            tags = [tag for tag in raw_tags if isinstance(tag, str)]
+
+        caption = image.caption
+        preview_path = image.thumbnail_path or image.path
+
+        item = LibraryPrompt(
+            image_id=image.id,
+            job_id=job.id if job else None,
+            workflow_template_id=job.workflow_template_id if job else None,
+            project_id=project.id if project else None,
+            project_name=project.name if project else None,
+            created_at=image.created_at,
+            preview_path=preview_path,
+            active_positive=active_positive,
+            active_negative=active_negative,
+            job_params=raw_params,
+            prompt_history=prompt_history,
+            tags=tags,
+            caption=caption,
+            prompt_id=prompt.id if prompt else None,
+            prompt_name=prompt.name if prompt else None,
+        )
+
+        if clean_search:
+            haystack = " ".join(
+                filter(
+                    None,
+                    [
+                        active_positive or "",
+                        active_negative or "",
+                        caption or "",
+                        " ".join(tags),
+                        image.filename or "",
+                        item.prompt_name or "",
+                        item.project_name or "",
+                    ],
+                )
+            ).lower()
+            if not any(token in haystack for token in query_tokens):
+                continue
+
+        score = _score_search_match(
+            clean_search,
+            active_positive=active_positive,
+            active_negative=active_negative,
+            caption=caption,
+            tags=tags,
+            prompt_history=prompt_history,
+            prompt_name=item.prompt_name,
+            project_name=item.project_name,
+            filename=image.filename,
+            created_at=image.created_at,
+        )
+
+        scored_results.append((score, item))
+
+    scored_results.sort(key=lambda row: (row[0], row[1].created_at), reverse=True)
+    if clean_search:
+        has_more = len(scored_results) > (offset + limit)
+
+    paged = scored_results[offset: offset + limit]
+    return [item for _, item in paged], has_more
 
 
 # --- Endpoints ---
@@ -133,244 +375,37 @@ def read_prompts(
     workflow_id: Optional[int] = None
 ):
     with Session(db_engine) as session:
-        query = (
-            select(Image, Job, Prompt, Project)
-            .join(Job, Image.job_id == Job.id, isouter=True)
-            .join(Prompt, Job.prompt_id == Prompt.id, isouter=True)
-            .join(Project, Job.project_id == Project.id, isouter=True)
-            .where(Image.is_deleted == False)  # Exclude soft-deleted
-            .order_by(Image.created_at.desc())
+        results, _has_more = _search_library_prompts(
+            session,
+            search=search,
+            workflow_id=workflow_id,
+            offset=skip,
+            limit=limit,
         )
+        return results
 
-        if workflow_id:
-            query = query.where(Job.workflow_template_id == workflow_id)
 
-        rows = session.exec(query.offset(skip).limit(limit * 5)).all()
-
-        scored_results: List[tuple[float, LibraryPrompt]] = []
-        for image, job, prompt, project in rows:
-            raw_params = job.input_params if job and job.input_params else {}
-            if isinstance(raw_params, str):
-                try:
-                    raw_params = json.loads(raw_params)
-                except Exception:
-                    raw_params = {}
-
-            metadata = image.metadata if isinstance(image.metadata, dict) else {}
-            if isinstance(image.metadata, str):
-                try:
-                    metadata = json.loads(image.metadata)
-                except Exception:
-                    metadata = {}
-
-            raw_history = metadata.get("prompt_history", []) if isinstance(metadata, dict) else []
-            prompt_history: List[PromptStage] = []
-            for entry in raw_history:
-                if isinstance(entry, dict):
-                    prompt_history.append(PromptStage(**{**entry, "stage": entry.get("stage", len(prompt_history))}))
-
-            active_prompt = metadata.get("active_prompt") if isinstance(metadata, dict) else None
-            active_positive = None
-            active_negative = None
-            if isinstance(active_prompt, dict):
-                active_positive = active_prompt.get("positive_text")
-                active_negative = active_prompt.get("negative_text")
-
-            # Helper to find text from node-prefixed keys (e.g., CLIPTextEncode.text)
-            def find_text_value(params: dict, patterns: list, exclude_patterns: list = None) -> Optional[str]:
-                """Search for the first matching key pattern that contains text."""
-                exclude_patterns = exclude_patterns or []
-                for key, value in params.items():
-                    key_lower = key.lower()
-                    # Skip if any exclude pattern is in the key
-                    if any(ex in key_lower for ex in exclude_patterns):
-                        continue
-                    # Check if any pattern matches
-                    if any(p in key_lower for p in patterns):
-                        if isinstance(value, str) and len(value) > 5:
-                            return value
-                return None
-
-            # Helper to classify prompt fields by checking key names for positive/negative hints
-            def classify_prompt_fields(params: dict) -> tuple:
-                """
-                Scan params for STRING_LITERAL or CLIPTextEncode text fields.
-                Classify as positive/negative based on key name patterns.
-                Returns (positive, negative) tuple.
-                """
-                import re
-                positive_hints = ["positive", "_pos", ".pos", "pos_"]
-                negative_hints = ["negative", "_neg", ".neg", "neg_"]
-                
-                candidates = []
-                for key, value in params.items():
-                    if not isinstance(value, str) or len(value.strip()) < 3:
-                        continue
-                    key_lower = key.lower()
-                    # Skip lora-related fields
-                    if "lora" in key_lower:
-                        continue
-                    # Check for prompt-like patterns
-                    is_prompt_field = (
-                        ("cliptextencode" in key_lower and ".text" in key_lower) or
-                        "string_literal" in key_lower or
-                        "stringliteral" in key_lower or
-                        (".string" in key_lower and "lora" not in key_lower)
-                    )
-                    if not is_prompt_field:
-                        continue
-                    
-                    # Classify by key name hints
-                    is_positive = any(h in key_lower for h in positive_hints)
-                    is_negative = any(h in key_lower for h in negative_hints)
-                    
-                    # Extract node ID for ordering fallback
-                    node_id = None
-                    node_match = re.match(r'^(\d+)\.', key)
-                    if node_match:
-                        node_id = int(node_match.group(1))
-                    else:
-                        # Try to extract from patterns like "STRING_LITERAL_2.string"
-                        id_match = re.search(r'_(\d+)[._]', key)
-                        if id_match:
-                            node_id = int(id_match.group(1))
-                    
-                    candidates.append({
-                        "key": key,
-                        "value": value,
-                        "is_positive": is_positive,
-                        "is_negative": is_negative,
-                        "node_id": node_id
-                    })
-                
-                # First pass: use explicit positive/negative hints in key names
-                pos_result = None
-                neg_result = None
-                for c in candidates:
-                    if c["is_positive"] and not c["is_negative"] and not pos_result:
-                        pos_result = c["value"]
-                    if c["is_negative"] and not c["is_positive"] and not neg_result:
-                        neg_result = c["value"]
-                
-                # Second pass: if not found by hints, use node ID ordering (lower ID = positive)
-                if not pos_result or not neg_result:
-                    # Sort by node_id (None values last)
-                    sorted_candidates = sorted(
-                        [c for c in candidates if not c["is_positive"] and not c["is_negative"]],
-                        key=lambda x: (x["node_id"] is None, x["node_id"] or 9999)
-                    )
-                    for c in sorted_candidates:
-                        if not pos_result:
-                            pos_result = c["value"]
-                        elif not neg_result:
-                            neg_result = c["value"]
-                            break
-                
-                return pos_result, neg_result
-
-            # Fallbacks for older records - check multiple common field names
-            if not active_positive:
-                # First try: direct keys
-                active_positive = (
-                    (prompt_history[0].positive_text if prompt_history else None) or 
-                    raw_params.get("prompt") or
-                    raw_params.get("positive_prompt") or
-                    raw_params.get("positive") or
-                    raw_params.get("text_positive") or
-                    raw_params.get("clip_l") or
-                    raw_params.get("text")
-                )
-                # Second try: node-prefixed keys (e.g., CLIPTextEncode.text)
-                if not active_positive:
-                    # Look for first CLIPTextEncode (usually positive)
-                    active_positive = find_text_value(
-                        raw_params, 
-                        ["cliptextencode.text", "clip_text.text", "positive.text"],
-                        exclude_patterns=["_2.", "_neg", "negative"]
-                    )
-                # Third try: use smart classification for STRING_LITERAL/CLIPTextEncode
-                if not active_positive:
-                    classified_pos, classified_neg = classify_prompt_fields(raw_params)
-                    if classified_pos:
-                        active_positive = classified_pos
-                    # Also set negative if found and not already set
-                    if classified_neg and not active_negative:
-                        active_negative = classified_neg
-            
-            if not active_negative:
-                active_negative = (
-                    (prompt_history[0].negative_text if prompt_history else None) or 
-                    raw_params.get("negative_prompt") or
-                    raw_params.get("negative") or
-                    raw_params.get("text_negative") or
-                    raw_params.get("clip_l_negative")
-                )
-                # Second try: node-prefixed keys (e.g., CLIPTextEncode_2.text)
-                if not active_negative:
-                    active_negative = find_text_value(
-                        raw_params,
-                        ["cliptextencode_2.text", "cliptextencode_neg", "negative.text", "_2.text"],
-                        exclude_patterns=[]
-                    )
-                # Third try: use smart classification (may already be set above)
-                if not active_negative:
-                    _, classified_neg = classify_prompt_fields(raw_params)
-                    if classified_neg:
-                        active_negative = classified_neg
-
-            tags = []
-            if prompt and prompt.tags:
-                if isinstance(prompt.tags, str):
-                    try:
-                        tags = json.loads(prompt.tags)
-                    except Exception:
-                        tags = []
-                else:
-                    tags = prompt.tags or []
-
-            caption = image.caption
-            preview_path = image.thumbnail_path or image.path
-
-            text_block = _build_search_block(
-                active_positive=active_positive,
-                active_negative=active_negative,
-                caption=caption,
-                tags=tags,
-                prompt_history=prompt_history,
-            )
-
-            if search:
-                score = _score_search_match(search, text_block)
-                if score < 0.35:
-                    continue
-            else:
-                score = 1.0
-
-            scored_results.append(
-                (
-                    score,
-                    LibraryPrompt(
-                        image_id=image.id,
-                        job_id=job.id if job else None,
-                        workflow_template_id=job.workflow_template_id if job else None,
-                        project_id=project.id if project else None,
-                        project_name=project.name if project else None,
-                        created_at=image.created_at,
-                        preview_path=preview_path,
-                        active_positive=active_positive,
-                        active_negative=active_negative,
-                        job_params=raw_params,
-                        prompt_history=prompt_history,
-                        tags=tags,
-                        caption=caption,
-                        prompt_id=prompt.id if prompt else None,
-                        prompt_name=prompt.name if prompt else None,
-                    ),
-                )
-            )
-
-        scored_results.sort(key=lambda r: (r[0], r[1].created_at), reverse=True)
-        return [result for _, result in scored_results[:limit]]
+@router.get("/media-search", response_model=LibrarySearchResponse)
+def media_search(
+    q: Optional[str] = None,
+    workflow_id: Optional[int] = None,
+    offset: int = 0,
+    limit: int = 20,
+):
+    with Session(db_engine) as session:
+        items, has_more = _search_library_prompts(
+            session,
+            search=q,
+            workflow_id=workflow_id,
+            offset=max(0, offset),
+            limit=max(1, min(limit, 100)),
+        )
+        return LibrarySearchResponse(
+            items=items,
+            offset=max(0, offset),
+            limit=max(1, min(limit, 100)),
+            has_more=has_more,
+        )
 
 
 @router.post("/", response_model=PromptRead)

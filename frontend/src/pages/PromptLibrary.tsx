@@ -1,318 +1,243 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { api, PromptSuggestion, WorkflowTemplate, IMAGE_API_BASE } from "@/lib/api";
-import { isVideoFile } from "@/lib/media";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Trash2, Search, LayoutTemplate, Sparkles, Copy, Loader2, Wand2 } from "lucide-react";
+import React from "react";
+import { Copy, Loader2, Search } from "lucide-react";
+
+import { api, IMAGE_API_BASE, PromptLibraryItem } from "@/lib/api";
+import { savePipeParams } from "@/lib/persistedState";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { usePromptLibraryStore } from "@/lib/stores/promptDataStore";
-import { savePipeParams } from "@/lib/persistedState";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { MediaMetadataDialog } from "@/components/MediaMetadataDialog";
+
+const PAGE_SIZE = 60;
 
 export default function PromptLibrary() {
-    const { prompts, searchQuery, setSearchQuery, setPrompts, shouldRefetch, lastWorkflowId, lastQuery } = usePromptLibraryStore();
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-    const [tagInput, setTagInput] = useState("");
-    const [expandedPrompt, setExpandedPrompt] = useState<string>("");
-    const [expanding, setExpanding] = useState(false);
-    const [suggestions, setSuggestions] = useState<PromptSuggestion[]>([]);
-    const [vlmEnabled, setVlmEnabled] = useState(false);
-    const [vlmError, setVlmError] = useState<string | null>(null);
-    const [workflows, setWorkflows] = useState<WorkflowTemplate[]>([]);
+  const [searchInput, setSearchInput] = React.useState("");
+  const [query, setQuery] = React.useState("");
+  const [items, setItems] = React.useState<PromptLibraryItem[]>([]);
+  const [offset, setOffset] = React.useState(0);
+  const [hasMore, setHasMore] = React.useState(true);
+  const [loading, setLoading] = React.useState(false);
+  const [loadingMore, setLoadingMore] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [previewItem, setPreviewItem] = React.useState<PromptLibraryItem | null>(null);
+  const [metadataItem, setMetadataItem] = React.useState<PromptLibraryItem | null>(null);
+  const sentinelRef = React.useRef<HTMLDivElement | null>(null);
 
-    useEffect(() => {
-        loadPrompts();
-        api.vlmHealth().then(status => {
-            setVlmEnabled(status.loaded || false);
-            if (status.error) setVlmError(String(status.error));
-        }).catch(() => {
-            setVlmEnabled(false);
-            setVlmError("Service unreachable");
+  const copyText = React.useCallback((value?: string | null) => {
+    if (!value) return;
+    void navigator.clipboard.writeText(value);
+  }, []);
+
+  const load = React.useCallback(
+    async (opts?: { reset?: boolean }) => {
+      const reset = opts?.reset ?? false;
+      const nextOffset = reset ? 0 : offset;
+      if (reset) {
+        setLoading(true);
+      } else {
+        setLoadingMore(true);
+      }
+      setError(null);
+      try {
+        const res = await api.searchPromptMedia({
+          query,
+          offset: nextOffset,
+          limit: PAGE_SIZE,
         });
-        // Load workflows for pipe name lookup
-        api.getWorkflows(true).then(setWorkflows).catch(console.error);
-    }, []);
+        setItems((prev) => (reset ? res.items : [...prev, ...res.items]));
+        setOffset(nextOffset + res.items.length);
+        setHasMore(res.has_more);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to load prompt media");
+      } finally {
+        setLoading(false);
+        setLoadingMore(false);
+      }
+    },
+    [offset, query]
+  );
 
-    const loadPrompts = async (query?: string) => {
-        try {
-            setIsLoading(true);
-            const search = query ?? searchQuery;
-            if (!shouldRefetch(undefined, search)) {
-                setIsLoading(false);
-                return;
-            }
-            const data = await api.getPrompts(search);
-            setPrompts(data, null, search);
-        } catch (err) {
-            setError("Failed to load prompts");
-        } finally {
-            setIsLoading(false);
+  React.useEffect(() => {
+    void load({ reset: true });
+  }, [query, load]);
+
+  React.useEffect(() => {
+    if (!sentinelRef.current) return;
+    if (!hasMore) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const first = entries[0];
+        if (first?.isIntersecting && !loading && !loadingMore && hasMore) {
+          void load({ reset: false });
         }
-    };
-
-    const fetchSuggestions = async (query: string) => {
-        if (!query || query.length < 2) {
-            setSuggestions([]);
-            return;
-        }
-
-        try {
-            const hints = await api.getPromptSuggestions(query);
-            setSuggestions(hints);
-        } catch (err) {
-            console.error(err);
-        }
-    };
-
-    const handleSearch = (e: React.FormEvent) => {
-        e.preventDefault();
-        loadPrompts(searchQuery);
-    };
-
-    const handleExpandTags = async () => {
-        const tags = tagInput.split(",").map(t => t.trim()).filter(Boolean);
-        if (tags.length === 0) return;
-        setExpanding(true);
-        setError(null);
-        setExpandedPrompt("");
-        try {
-            const res = await api.tagsToPrompt(tags);
-            setExpandedPrompt(res.prompt);
-        } catch (err) {
-            setError(err instanceof Error ? err.message : "Failed to expand tags");
-        } finally {
-            setExpanding(false);
-        }
-    };
-
-    const handleSearchChange = (value: string) => {
-        setSearchQuery(value);
-        fetchSuggestions(value);
-    };
-
-    const handleDelete = async (id: number) => {
-        if (!confirm("Are you sure you want to delete this prompt?")) return;
-        try {
-            await api.deletePrompt(id);
-            setPrompts(prompts.filter(p => p.prompt_id !== id), lastWorkflowId, lastQuery);
-        } catch (e) {
-            alert("Failed to delete prompt");
-        }
-    };
-
-    const filteredPrompts = useMemo(() => {
-        if (!searchQuery) return prompts;
-        const needle = searchQuery.toLowerCase();
-        return prompts.filter((p) => {
-            const haystack = [
-                p.active_positive || "",
-                p.active_negative || "",
-                p.caption || "",
-                p.prompt_history.map((stage) => `${stage.positive_text || ""} ${stage.negative_text || ""}`).join(" "),
-                p.tags.join(" "),
-                p.prompt_name || "",
-            ]
-                .join(" ")
-                .toLowerCase();
-
-            return haystack.includes(needle);
-        });
-    }, [prompts, searchQuery]);
-
-    if (isLoading) return <div className="p-8">Loading library...</div>;
-
-    return (
-        <div className="h-full overflow-auto p-8 max-w-7xl mx-auto">
-            <div className="flex items-center justify-between mb-8">
-                <h1 className="text-3xl font-bold tracking-tight">prompt library</h1>
-                <form onSubmit={handleSearch} className="flex gap-2 w-full max-w-sm">
-                    <div className="relative flex-1">
-                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                        <Input
-                            type="search"
-                            placeholder="Search prompts..."
-                            className="pl-9"
-                            value={searchQuery}
-                            onChange={(e) => handleSearchChange(e.target.value)}
-                            list="prompt-suggestions"
-                        />
-                        <datalist id="prompt-suggestions">
-                            {suggestions.map((s) => (
-                                <option key={`${s.type}-${s.value}`} value={s.value} label={`${s.type} (${s.frequency})`} />
-                            ))}
-                        </datalist>
-                    </div>
-                </form>
-            </div>
-
-            {error && (
-                <Alert variant="destructive" className="mb-6">
-                    <AlertTitle>Error</AlertTitle>
-                    <AlertDescription>{error}</AlertDescription>
-                </Alert>
-            )}
-
-            <div className="mb-6 p-4 border border-border rounded-lg bg-card shadow-sm">
-                <div className="flex items-center gap-2 mb-2">
-                    <Sparkles className="w-4 h-4 text-indigo-600" />
-                    <h3 className="font-semibold text-foreground">Tag → Prompt</h3>
-                </div>
-                <p className="text-xs text-muted-foreground mb-3">Paste comma-separated tags and let the VLM expand them into a prompt.</p>
-                <div className="flex gap-2">
-                    <Input
-                        value={tagInput}
-                        onChange={(e) => setTagInput(e.target.value)}
-                        placeholder="e.g. cyberpunk, rainy night, neon lights"
-                        disabled={!vlmEnabled}
-                    />
-                    <Button
-                        onClick={handleExpandTags}
-                        disabled={expanding || !vlmEnabled}
-                        variant={vlmEnabled ? "default" : "secondary"}
-                        title={!vlmEnabled ? "VLM Model not loaded. Run backend/download_models.py" : "Generate Prompt"}
-                    >
-                        {expanding ? (
-                            <>
-                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                Dreaming...
-                            </>
-                        ) : !vlmEnabled ? (
-                            "VLM Offline"
-                        ) : (
-                            <>
-                                <Wand2 className="w-4 h-4 mr-2" />
-                                Expand
-                            </>
-                        )}
-                    </Button>
-                </div>
-                {vlmError && !vlmEnabled && (
-                    <div className="mt-4 p-3 bg-destructive/10 border border-destructive/20 rounded text-xs text-destructive">
-                        <p className="font-semibold mb-1">VLM Backend Offline</p>
-                        <p>The vision/language models are not loaded. Please run the download script in the backend folder to enable this feature.</p>
-                    </div>
-                )}
-                {expandedPrompt && (
-                    <div className="mt-3 p-3 bg-indigo-500/10 border border-indigo-500/20 rounded flex items-start justify-between gap-2">
-                        <p className="text-sm text-indigo-700 dark:text-indigo-200 flex-1">{expandedPrompt}</p>
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => navigator.clipboard.writeText(expandedPrompt)}
-                            title="Copy prompt"
-                        >
-                            <Copy className="w-4 h-4" />
-                        </Button>
-                    </div>
-                )}
-            </div>
-
-            <div className="space-y-4">
-                {filteredPrompts.map((prompt) => {
-                    const key =
-                        prompt.prompt_id !== undefined && prompt.prompt_id !== null
-                            ? `prompt-${prompt.prompt_id}`
-                            : `img-${prompt.image_id}-${prompt.prompt_name || prompt.created_at || Math.random().toString(36).slice(2)}`;
-                    const pipeName = prompt.workflow_template_id
-                        ? (workflows.find(w => w.id === prompt.workflow_template_id)?.name || `Pipe ${prompt.workflow_template_id}`)
-                        : null;
-
-                    const handleCopyToConfigurator = () => {
-                        // Store the prompt params for the configurator to pick up
-                        if (prompt.job_params && prompt.workflow_template_id) {
-                            void savePipeParams(String(prompt.workflow_template_id), prompt.job_params as Record<string, unknown>);
-                            localStorage.setItem("ds_selected_workflow", String(prompt.workflow_template_id));
-                            alert("Prompt copied to configurator! Navigate to Generation page to use it.");
-                        }
-                    };
-
-                    return (
-                        <div
-                            key={key}
-                            className="flex items-start gap-3 p-3 bg-card rounded-lg border border-border shadow-sm hover:shadow-md transition-all group"
-                        >
-                            {/* Thumbnail */}
-                            <div className="w-16 h-16 flex-none bg-muted/40 rounded overflow-hidden relative">
-                                {prompt.preview_path ? (
-                                    isVideoFile(prompt.preview_path) ? (
-                                        <video
-                                            src={`${IMAGE_API_BASE}/gallery/image/path?path=${encodeURIComponent(prompt.preview_path)}`}
-                                            className="w-full h-full object-cover"
-                                            preload="metadata"
-                                            muted
-                                            playsInline
-                                        />
-                                    ) : (
-                                        <img
-                                            src={`${IMAGE_API_BASE}/gallery/image/path?path=${encodeURIComponent(prompt.preview_path)}`}
-                                            className="w-full h-full object-cover"
-                                            alt="Prompt preview"
-                                        />
-                                    )
-                                ) : (
-                                    <div className="flex items-center justify-center h-full text-muted-foreground/40">
-                                        <LayoutTemplate className="w-5 h-5" />
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Project + Pipe Name */}
-                            <div className="flex-none w-24 min-w-0 space-y-0.5">
-                                <div className="text-[11px] font-semibold text-foreground/80 truncate" title={prompt.project_name || "No project"}>
-                                    {prompt.project_name || <span className="text-muted-foreground">No project</span>}
-                                </div>
-                                {pipeName && (
-                                    <div className="text-[10px] text-blue-600 truncate font-medium" title={pipeName}>
-                                        {pipeName}
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Prompts Side-by-Side - 75% positive, 25% negative */}
-                            <div className="flex-1 flex gap-2 min-w-0">
-                                <div className="min-w-0 bg-emerald-500/10 rounded p-1.5 border border-emerald-500/20" style={{ flex: '3 1 0%' }}>
-                                    <p className="text-[10px] text-emerald-700 dark:text-emerald-300 leading-relaxed line-clamp-4">
-                                        {prompt.active_positive || <span className="text-muted-foreground italic">No positive prompt</span>}
-                                    </p>
-                                </div>
-                                <div className="min-w-0 bg-rose-500/10 rounded p-1.5 border border-rose-500/20" style={{ flex: '1 1 0%' }}>
-                                    <p className="text-[10px] text-rose-700 dark:text-rose-300 leading-relaxed line-clamp-4">
-                                        {prompt.active_negative || <span className="text-muted-foreground italic">No negative prompt</span>}
-                                    </p>
-                                </div>
-                            </div>
-
-                            {/* Actions - always visible */}
-                            <div className="flex-none flex flex-col gap-1">
-                                <Button
-                                    variant="outline"
-                                    size="icon"
-                                    onClick={handleCopyToConfigurator}
-                                    className="h-7 w-7 text-blue-600 hover:text-blue-700 hover:bg-blue-50 border-blue-200"
-                                    title="Copy to Configurator"
-                                >
-                                    <Copy className="w-3.5 h-3.5" />
-                                </Button>
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={() => prompt.prompt_id && handleDelete(prompt.prompt_id)}
-                                    className="h-7 w-7 text-destructive/70 hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-opacity"
-                                    disabled={!prompt.prompt_id}
-                                >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                </Button>
-                            </div>
-                        </div>
-                    );
-                })}
-
-                {filteredPrompts.length === 0 && (
-                    <div className="text-center py-12 text-muted-foreground">
-                        No prompts found matching your search.
-                    </div>
-                )}
-            </div>
-        </div>
+      },
+      { threshold: 0.1 }
     );
+    observer.observe(sentinelRef.current);
+    return () => observer.disconnect();
+  }, [hasMore, load, loading, loadingMore]);
+
+  const handleSearchSubmit = React.useCallback(
+    (event: React.FormEvent) => {
+      event.preventDefault();
+      setItems([]);
+      setOffset(0);
+      setHasMore(true);
+      setQuery(searchInput.trim());
+    },
+    [searchInput]
+  );
+
+  const handleApplyToConfigurator = React.useCallback((item: PromptLibraryItem) => {
+    if (!item.workflow_template_id || !item.job_params) return;
+    void savePipeParams(String(item.workflow_template_id), item.job_params as Record<string, unknown>);
+    localStorage.setItem("ds_selected_workflow", String(item.workflow_template_id));
+  }, []);
+
+  return (
+    <div className="h-full overflow-auto p-8 max-w-[1600px] mx-auto space-y-6">
+      <div className="flex items-center justify-between gap-4">
+        <h1 className="text-3xl font-bold tracking-tight">prompt library</h1>
+        <form onSubmit={handleSearchSubmit} className="w-full max-w-xl flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-2.5 w-4 h-4 text-muted-foreground" />
+            <Input
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              className="pl-9"
+              placeholder="Search prompts, negatives, captions, tags..."
+            />
+          </div>
+          <Button type="submit">search</Button>
+        </form>
+      </div>
+
+      {error && <div className="text-sm text-destructive">{error}</div>}
+
+      {loading ? (
+        <div className="h-40 flex items-center justify-center text-muted-foreground">
+          <Loader2 className="w-5 h-5 animate-spin mr-2" />
+          loading...
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+            {items.map((item) => (
+              <ContextMenu key={`prompt-item-${item.image_id}-${item.created_at}`}>
+                <ContextMenuTrigger>
+                  <div
+                    className="rounded-lg border border-border/60 bg-card overflow-hidden cursor-pointer hover:shadow-md hover:border-primary/40 transition-all"
+                    onClick={() => setPreviewItem(item)}
+                  >
+                    <div className="aspect-square bg-muted/20">
+                      <img
+                        src={`${IMAGE_API_BASE}/gallery/image/path?path=${encodeURIComponent(item.preview_path)}`}
+                        alt={item.prompt_name || `image #${item.image_id}`}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    <div className="p-2 space-y-1">
+                      <p className="text-xs font-medium line-clamp-1">{item.prompt_name || `image #${item.image_id}`}</p>
+                      <p className="text-[10px] text-muted-foreground line-clamp-1">{new Date(item.created_at).toLocaleString()}</p>
+                    </div>
+                  </div>
+                </ContextMenuTrigger>
+                <ContextMenuContent>
+                  <ContextMenuItem onSelect={() => setPreviewItem(item)}>open preview</ContextMenuItem>
+                  <ContextMenuItem onSelect={() => handleApplyToConfigurator(item)}>load to configurator</ContextMenuItem>
+                  <ContextMenuItem onSelect={() => setMetadataItem(item)}>metadata</ContextMenuItem>
+                  <ContextMenuItem onSelect={() => copyText(item.active_positive || "")}>copy positive prompt</ContextMenuItem>
+                  <ContextMenuItem onSelect={() => copyText(item.active_negative || "")}>copy negative prompt</ContextMenuItem>
+                  <ContextMenuItem onSelect={() => copyText(item.caption || "")}>copy caption</ContextMenuItem>
+                </ContextMenuContent>
+              </ContextMenu>
+            ))}
+          </div>
+
+          <div ref={sentinelRef} className="h-10 flex items-center justify-center text-xs text-muted-foreground">
+            {loadingMore ? (
+              <span className="inline-flex items-center gap-2">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                loading more...
+              </span>
+            ) : hasMore ? (
+              "scroll for more"
+            ) : (
+              "end of results"
+            )}
+          </div>
+        </>
+      )}
+
+      <Dialog open={previewItem !== null} onOpenChange={(nextOpen) => { if (!nextOpen) setPreviewItem(null); }}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>{previewItem?.prompt_name || `image #${previewItem?.image_id}`}</DialogTitle>
+          </DialogHeader>
+          {previewItem && (
+            <div className="space-y-3">
+              <img
+                src={`${IMAGE_API_BASE}/gallery/image/path?path=${encodeURIComponent(previewItem.preview_path)}`}
+                alt={previewItem.prompt_name || `image #${previewItem.image_id}`}
+                className="w-full max-h-[65vh] object-contain rounded border border-border/60 bg-muted/20"
+              />
+              <div className="space-y-2 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-emerald-600">positive</span>
+                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copyText(previewItem.active_positive || "")}>
+                    <Copy className="w-3 h-3" />
+                  </Button>
+                </div>
+                <p className="rounded border border-border/60 bg-muted/20 p-2 whitespace-pre-wrap">{previewItem.active_positive || "none"}</p>
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-rose-600">negative</span>
+                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copyText(previewItem.active_negative || "")}>
+                    <Copy className="w-3 h-3" />
+                  </Button>
+                </div>
+                <p className="rounded border border-border/60 bg-muted/20 p-2 whitespace-pre-wrap">{previewItem.active_negative || "none"}</p>
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-sky-600">caption</span>
+                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copyText(previewItem.caption || "")}>
+                    <Copy className="w-3 h-3" />
+                  </Button>
+                </div>
+                <p className="rounded border border-border/60 bg-muted/20 p-2 whitespace-pre-wrap">{previewItem.caption || "none"}</p>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <MediaMetadataDialog
+        open={metadataItem !== null}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) setMetadataItem(null);
+        }}
+        mediaPath={metadataItem?.preview_path || null}
+        imageId={metadataItem?.image_id ?? null}
+        onUpdated={({ caption }) => {
+          if (!metadataItem) return;
+          setItems((prev) =>
+            prev.map((entry) =>
+              entry.image_id === metadataItem.image_id
+                ? { ...entry, caption: caption || undefined }
+                : entry
+            )
+          );
+        }}
+      />
+    </div>
+  );
 }

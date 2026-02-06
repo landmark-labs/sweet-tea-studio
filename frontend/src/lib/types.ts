@@ -147,6 +147,7 @@ export interface Job {
     id: number;
     engine_id: number;
     workflow_template_id: number;
+    project_id?: number | null;
     status: string;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     input_params: any;
@@ -202,15 +203,34 @@ export interface GalleryItem {
     project_id?: number | null;
 }
 
+export interface CaptionVersion {
+    id: number;
+    caption: string;
+    source: string;
+    is_active: boolean;
+    created_at: string;
+    deactivated_at?: string | null;
+}
+
+export interface ImageMetadataUpdate {
+    image_id?: number | null;
+    path: string;
+    caption?: string | null;
+    caption_storage: "embedded" | "sidecar" | "none";
+    caption_versions: CaptionVersion[];
+}
+
 export interface ImageMetadata {
     path: string;
     image_id?: number;
     job_id?: number;
     prompt?: string | null;
     negative_prompt?: string | null;
+    caption?: string | null;
+    caption_history?: CaptionVersion[];
     workflow?: unknown;
     parameters: Record<string, unknown>;
-    source: "sweet_tea" | "comfyui" | "comfyui_workflow" | "database" | "none";
+    source: "sweet_tea" | "comfyui" | "comfyui_workflow" | "database" | "sidecar_json" | "comment" | "none";
 }
 
 export interface FileItem {
@@ -284,6 +304,13 @@ export interface PromptLibraryItem {
     caption?: string;
     prompt_id?: number;
     prompt_name?: string;
+}
+
+export interface PromptLibrarySearchResponse {
+    items: PromptLibraryItem[];
+    offset: number;
+    limit: number;
+    has_more: boolean;
 }
 
 export interface TagSuggestion {

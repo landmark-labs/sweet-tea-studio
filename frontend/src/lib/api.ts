@@ -8,21 +8,18 @@
  */
 
 import type {
-    ApiKeyInfo,
     ApiKeysSettings,
     ApiKeysUpdate,
     AppSettingInfo,
-    AppSettingsUpdate,
     BackupCreateResponse,
     BackupInfo,
     Canvas,
     CanvasCreate,
     CanvasUpdate,
     CaptionResponse,
+    CaptionVersion,
     Collection,
-    CollectionCreate,
     ComfyLaunchConfig,
-    DatabaseFileInfo,
     DatabaseStatusResponse,
     Engine,
     EngineHealth,
@@ -31,20 +28,19 @@ import type {
     FolderImage,
     GalleryItem,
     GalleryQuery,
-    Image,
     ImageMetadata,
+    ImageMetadataUpdate,
     InstallStatus,
     Job,
     Project,
     ProjectCreate,
     Prompt,
     PromptLibraryItem,
-    PromptStage,
+    PromptLibrarySearchResponse,
     PromptSuggestion,
     Snippet,
     SnippetCreate,
     StatusSummary,
-    SystemGpuMetrics,
     SystemMetrics,
     TagPromptResponse,
     TagSuggestion,
@@ -545,13 +541,44 @@ export const api = {
         return res.json();
     },
 
-    updateImage: async (imageId: number, data: { caption?: string; tags?: string[] }): Promise<void> => {
+    updateImage: async (
+        imageId: number,
+        data: { caption?: string | null; source?: string }
+    ): Promise<ImageMetadataUpdate> => {
         const res = await fetch(`${API_BASE}/gallery/${imageId}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(data),
         });
         if (!res.ok) throw new Error("Failed to update image");
+        return res.json();
+    },
+
+    updateImageMetadataByPath: async (
+        path: string,
+        data: { caption?: string | null; source?: string }
+    ): Promise<ImageMetadataUpdate> => {
+        const params = new URLSearchParams({ path });
+        const res = await fetch(`${API_BASE}/gallery/image/path/metadata?${params.toString()}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(data),
+        });
+        if (!res.ok) throw new Error("Failed to update image metadata");
+        return res.json();
+    },
+
+    getCaptionHistoryByImageId: async (imageId: number, limit: number = 50): Promise<CaptionVersion[]> => {
+        const res = await fetch(`${API_BASE}/gallery/${imageId}/captions?limit=${limit}`);
+        if (!res.ok) throw new Error("Failed to fetch caption history");
+        return res.json();
+    },
+
+    getCaptionHistoryByPath: async (path: string, limit: number = 50): Promise<CaptionVersion[]> => {
+        const params = new URLSearchParams({ path, limit: String(limit) });
+        const res = await fetch(`${API_BASE}/gallery/image/path/captions?${params.toString()}`);
+        if (!res.ok) throw new Error("Failed to fetch caption history");
+        return res.json();
     },
 
     getImageMetadata: async (path: string, init?: RequestInit): Promise<ImageMetadata> => {
@@ -601,7 +628,7 @@ export const api = {
     // --- Captioning ---
     captionImage: async (file: File, imageId?: number): Promise<CaptionResponse> => {
         const formData = new FormData();
-        formData.append("file", file);
+        formData.append("image", file);
         if (imageId) formData.append("image_id", String(imageId));
 
         const res = await fetch(`${API_BASE}/vlm/caption`, {
@@ -623,6 +650,23 @@ export const api = {
         return res.json();
     },
 
+    searchPromptMedia: async (options: {
+        query?: string;
+        workflowId?: number;
+        offset?: number;
+        limit?: number;
+    }): Promise<PromptLibrarySearchResponse> => {
+        const params = new URLSearchParams();
+        if (options.query) params.append("q", options.query);
+        if (options.workflowId !== undefined) params.append("workflow_id", String(options.workflowId));
+        if (options.offset !== undefined) params.append("offset", String(options.offset));
+        if (options.limit !== undefined) params.append("limit", String(options.limit));
+
+        const res = await fetch(`${API_BASE}/library/media-search?${params.toString()}`);
+        if (!res.ok) throw new Error("Failed to fetch prompt media results");
+        return res.json();
+    },
+
     savePrompt: async (data: {
         workflow_id: number;
         name: string;
@@ -633,12 +677,32 @@ export const api = {
         negative_text?: string;
         tags?: string[];
     }): Promise<Prompt> => {
-        const res = await fetch(`${API_BASE}/library/prompts`, {
+        const res = await fetch(`${API_BASE}/library/`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(data),
         });
         if (!res.ok) throw new Error("Failed to save prompt");
+        return res.json();
+    },
+
+    deletePrompt: async (promptId: number): Promise<void> => {
+        const res = await fetch(`${API_BASE}/library/${promptId}`, {
+            method: "DELETE",
+        });
+        if (!res.ok) throw new Error("Failed to delete prompt");
+    },
+
+    tagsToPrompt: async (tags: string[], promptId?: number): Promise<TagPromptResponse> => {
+        const res = await fetch(`${API_BASE}/vlm/tags`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                tags,
+                prompt_id: promptId ?? null,
+            }),
+        });
+        if (!res.ok) throw new Error("Failed to expand tags");
         return res.json();
     },
 
@@ -839,10 +903,17 @@ export const api = {
     },
 
     // --- VLM/Captioning ---
-    vlmHealth: async (): Promise<{ available: boolean; backend?: string; model?: string }> => {
+    vlmHealth: async (): Promise<{ available: boolean; loaded?: boolean; backend?: string; model?: string; error?: string }> => {
         const res = await fetch(`${API_BASE}/vlm/health`);
-        if (!res.ok) return { available: false };
-        return res.json();
+        if (!res.ok) return { available: false, loaded: false };
+        const data = await res.json();
+        return {
+            available: Boolean(data.loaded ?? data.available),
+            loaded: Boolean(data.loaded ?? data.available),
+            backend: data.backend,
+            model: data.model_id ?? data.model,
+            error: data.error,
+        };
     },
 
     generateCaption: async (imageId: number): Promise<CaptionResponse> => {
@@ -851,17 +922,11 @@ export const api = {
         return res.json();
     },
 
-    generateTagPrompt: async (imageId: number): Promise<TagPromptResponse> => {
-        const res = await fetch(`${API_BASE}/vlm/tag-prompt/${imageId}`, { method: "POST" });
-        if (!res.ok) throw new Error("Failed to generate tag prompt");
-        return res.json();
-    },
-
 
     // Note: getTagSuggestions is defined earlier in this file (around line 197)
 
     getPromptSuggestions: async (prefix: string): Promise<PromptSuggestion[]> => {
-        const res = await fetch(`${API_BASE}/prompts/suggest?prefix=${encodeURIComponent(prefix)}`);
+        const res = await fetch(`${API_BASE}/library/suggest?query=${encodeURIComponent(prefix)}`);
         if (!res.ok) throw new Error("Failed to fetch prompt suggestions");
         return res.json();
     },

@@ -5,7 +5,8 @@ import { ImageViewer } from "./ImageViewer";
 import { api, Image as ApiImage } from "@/lib/api";
 
 describe("ImageViewer prompt copy", () => {
-    let metadataSpy: ReturnType<typeof vi.spyOn<typeof api, "getImageMetadata">>;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let metadataSpy: any;
     const sampleImage: ApiImage = {
         id: 1,
         job_id: 1,
@@ -86,7 +87,7 @@ describe("ImageViewer prompt copy", () => {
         const img1 = sampleImage;
         const img2 = { ...sampleImage, id: 2, path: "/tmp/img2.png", filename: "img2.png" };
 
-        metadataSpy.mockImplementation(async (path) => ({
+        metadataSpy.mockImplementation(async (path: string) => ({
             path,
             prompt: "prompt",
             negative_prompt: "negative",

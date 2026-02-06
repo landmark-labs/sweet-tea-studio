@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { VirtualGrid } from "@/components/VirtualGrid";
 import { getScrollPosition, saveScrollPosition } from "@/lib/galleryState";
 import { InpaintEditor } from "@/components/InpaintEditor";
+import { MediaMetadataDialog } from "@/components/MediaMetadataDialog";
 import { useMediaTrayStore } from "@/lib/stores/mediaTrayStore";
 import { workflowSupportsImageInput } from "@/lib/workflowGraph";
 
@@ -182,6 +183,7 @@ export const ProjectGallery = React.memo(function ProjectGallery({
     const [contextSubmenu, setContextSubmenu] = useState<"regenerate" | "useInPipe" | null>(null);
     const [maskEditorOpen, setMaskEditorOpen] = useState(false);
     const [maskEditorSourcePath, setMaskEditorSourcePath] = useState<string>("");
+    const [metadataTargetPath, setMetadataTargetPath] = useState<string | null>(null);
     const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set());
     const lastSelectedPath = useRef<string | null>(null);
     const imagesRef = useRef<FolderImage[]>([]);
@@ -842,6 +844,15 @@ export const ProjectGallery = React.memo(function ProjectGallery({
                         <Plus className="h-3 w-3" />
                         add to tray
                     </button>
+                    <button
+                        className="w-full px-3 py-1.5 text-left text-xs hover:bg-muted/50 flex items-center gap-2 cursor-pointer"
+                        onClick={() => {
+                            setMetadataTargetPath(contextMenu.image.path);
+                            setContextMenu(null);
+                        }}
+                    >
+                        metadata
+                    </button>
 
                     {!isVideoFile(contextMenu.image.path, contextMenu.image.filename) && (
                         <button
@@ -1040,6 +1051,15 @@ export const ProjectGallery = React.memo(function ProjectGallery({
                 onOpenChange={setMaskEditorOpen}
                 imageUrl={maskEditorSourcePath ? buildMediaUrl(maskEditorSourcePath) : ""}
                 onSave={handleMaskSave}
+            />
+
+            <MediaMetadataDialog
+                open={metadataTargetPath !== null}
+                onOpenChange={(nextOpen) => {
+                    if (!nextOpen) setMetadataTargetPath(null);
+                }}
+                mediaPath={metadataTargetPath}
+                imageId={null}
             />
         </div>
     );

@@ -15,7 +15,7 @@ interface NodePromptGroupProps {
   nonPromptKeys: string[];
   isExpanded: boolean;
   onToggleExpanded: () => void;
-  renderField: (key: string) => JSX.Element;
+  renderField: (key: string) => React.ReactElement;
   onToggleChange: (key: string, value: boolean) => void;
 }
 
@@ -104,8 +104,8 @@ interface NodeMediaGroupProps {
   nonMediaKeys: string[];
   isExpanded: boolean;
   onToggleExpanded: () => void;
-  renderField: (key: string) => JSX.Element;
-  renderMediaField: (key: string, variant: "default" | "compact", hideLabel: boolean) => JSX.Element;
+  renderField: (key: string) => React.ReactElement;
+  renderMediaField: (key: string, variant: "default" | "compact", hideLabel: boolean) => React.ReactElement;
   onToggleChange: (key: string, value: boolean) => void;
 }
 
@@ -198,7 +198,7 @@ interface NodeStackRowProps {
   onHoldOpen: () => void;
   onCloseImmediate: () => void;
   onTogglePaletteAll: () => void;
-  renderField: (key: string) => JSX.Element;
+  renderField: (key: string) => React.ReactElement;
   onToggleChange: (key: string, value: boolean) => void;
 }
 

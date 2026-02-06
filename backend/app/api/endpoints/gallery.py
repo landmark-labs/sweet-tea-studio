@@ -76,6 +76,12 @@ from app.services.gallery.thumbnails import (
 from app.services.media_paths import build_project_path_index
 from app.services.media_sync import maybe_resync_media_index
 from app.api.endpoints.projects import refresh_project_stats
+from app.services.captioning import (
+    apply_caption_update,
+    list_caption_versions,
+    normalize_caption,
+    persist_caption_to_media,
+)
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -97,6 +103,28 @@ class GalleryItem(BaseModel):
     engine_id: Optional[int] = None
     collection_id: Optional[int] = None
     project_id: Optional[int] = None
+
+
+class CaptionVersionItem(BaseModel):
+    id: int
+    caption: str
+    source: str
+    is_active: bool
+    created_at: datetime
+    deactivated_at: Optional[datetime] = None
+
+
+class ImageMetadataUpdateRequest(BaseModel):
+    caption: Optional[str] = None
+    source: str = "manual"
+
+
+class ImageMetadataUpdateResponse(BaseModel):
+    image_id: Optional[int] = None
+    path: str
+    caption: Optional[str] = None
+    caption_storage: str = "none"
+    caption_versions: List[CaptionVersionItem] = Field(default_factory=list)
 
 
 def _log_context(request: Optional[Request], **extra: Any) -> Dict[str, Any]:
@@ -157,6 +185,17 @@ def _attach_job_prompt_rehydration(
             rehydration = job_params.get("__st_prompt_rehydration")
             if rehydration:
                 params["__st_prompt_rehydration"] = rehydration
+
+
+def _find_image_by_path(session: Session, path: str, actual_path: Optional[str]) -> Optional[Image]:
+    image = session.exec(
+        select(Image).where(Image.path == path).order_by(Image.created_at.desc())
+    ).first()
+    if not image and actual_path and actual_path != path:
+        image = session.exec(
+            select(Image).where(Image.path == actual_path).order_by(Image.created_at.desc())
+        ).first()
+    return image
 
 @router.get("/", response_model=List[GalleryItem])
 def read_gallery(
@@ -507,6 +546,148 @@ def read_gallery(
     if limit is not None:
         return [item for _, item in scored_items[:limit]]
     return [item for _, item in scored_items]
+
+
+def _to_caption_payload(versions: List[Any]) -> List[CaptionVersionItem]:
+    return [
+        CaptionVersionItem(
+            id=version.id,
+            caption=version.caption,
+            source=version.source,
+            is_active=bool(version.is_active),
+            created_at=version.created_at,
+            deactivated_at=version.deactivated_at,
+        )
+        for version in versions
+        if getattr(version, "id", None) is not None
+        and isinstance(getattr(version, "caption", None), str)
+    ]
+
+
+@router.get("/image/path/captions", response_model=List[CaptionVersionItem])
+def get_captions_by_path(
+    path: str,
+    limit: int = Query(50, ge=1, le=200),
+    session: Session = Depends(get_session),
+):
+    actual_path = _resolve_media_path(path, session)
+    image = _find_image_by_path(session, path, actual_path)
+    media_path = image.path if image else (actual_path or path)
+    versions = list_caption_versions(
+        session,
+        image_id=image.id if image else None,
+        media_path=media_path,
+        limit=limit,
+    )
+    return _to_caption_payload(versions)
+
+
+@router.patch("/image/path/metadata", response_model=ImageMetadataUpdateResponse)
+def update_image_metadata_by_path(
+    path: str,
+    payload: ImageMetadataUpdateRequest,
+    session: Session = Depends(get_session),
+):
+    actual_path = _resolve_media_path(path, session)
+    media_path = actual_path or path
+    if not media_path or not os.path.exists(media_path):
+        raise HTTPException(status_code=404, detail=f"File not found: {path}")
+
+    image = _find_image_by_path(session, path, actual_path)
+    normalized_caption = normalize_caption(payload.caption)
+    storage = persist_caption_to_media(media_path, normalized_caption)
+
+    apply_caption_update(
+        session,
+        media_path=media_path,
+        caption=normalized_caption,
+        image=image,
+        source=payload.source,
+        meta={"updated_from": "path"},
+    )
+
+    if image and image.id:
+        search_text = build_search_text_from_image(image)
+        update_gallery_fts(session, image.id, search_text)
+
+    session.commit()
+
+    versions = list_caption_versions(
+        session,
+        image_id=image.id if image else None,
+        media_path=media_path,
+        limit=50,
+    )
+    return ImageMetadataUpdateResponse(
+        image_id=image.id if image else None,
+        path=media_path,
+        caption=normalized_caption,
+        caption_storage=storage,
+        caption_versions=_to_caption_payload(versions),
+    )
+
+
+@router.get("/{image_id}/captions", response_model=List[CaptionVersionItem])
+def get_captions_by_image_id(
+    image_id: int,
+    limit: int = Query(50, ge=1, le=200),
+    session: Session = Depends(get_session),
+):
+    image = session.get(Image, image_id)
+    if not image:
+        raise HTTPException(status_code=404, detail="Image not found")
+    versions = list_caption_versions(
+        session,
+        image_id=image.id,
+        media_path=image.path,
+        limit=limit,
+    )
+    return _to_caption_payload(versions)
+
+
+@router.patch("/{image_id}", response_model=ImageMetadataUpdateResponse)
+def update_image_metadata(
+    image_id: int,
+    payload: ImageMetadataUpdateRequest,
+    session: Session = Depends(get_session),
+):
+    image = session.get(Image, image_id)
+    if not image:
+        raise HTTPException(status_code=404, detail="Image not found")
+
+    media_path = image.path
+    if not media_path or not os.path.exists(media_path):
+        raise HTTPException(status_code=404, detail="Image file not found")
+
+    normalized_caption = normalize_caption(payload.caption)
+    storage = persist_caption_to_media(media_path, normalized_caption)
+
+    apply_caption_update(
+        session,
+        media_path=media_path,
+        caption=normalized_caption,
+        image=image,
+        source=payload.source,
+        meta={"updated_from": "image_id"},
+    )
+
+    search_text = build_search_text_from_image(image)
+    update_gallery_fts(session, image.id, search_text)
+    session.commit()
+
+    versions = list_caption_versions(
+        session,
+        image_id=image.id,
+        media_path=media_path,
+        limit=50,
+    )
+    return ImageMetadataUpdateResponse(
+        image_id=image.id,
+        path=media_path,
+        caption=normalized_caption,
+        caption_storage=storage,
+        caption_versions=_to_caption_payload(versions),
+    )
 
 
 @router.delete("/{image_id}")
@@ -1732,11 +1913,16 @@ def get_image_metadata_by_path(path: str, session: Session = Depends(get_session
     actual_path = _resolve_media_path(path, session)
     if not actual_path or not os.path.exists(actual_path):
         raise HTTPException(status_code=404, detail=f"File not found: {path}")
-    
+
+    image = _find_image_by_path(session, path, actual_path)
     result = {
         "path": path,
+        "image_id": image.id if image else None,
+        "job_id": image.job_id if image else None,
         "prompt": None,
         "negative_prompt": None,
+        "caption": image.caption if image else None,
+        "caption_history": [],
         "workflow": None,
         "parameters": {},
         "source": "none"
@@ -1806,7 +1992,6 @@ def get_image_metadata_by_path(path: str, session: Session = Depends(get_session
                         result["parameters"].update(provenance["params"])
                     result["source"] = "sweet_tea"
                     _attach_job_prompt_rehydration(result, session, path=path, actual_path=actual_path)
-                    return result
                 except json.JSONDecodeError:
                     pass
             
@@ -1848,7 +2033,6 @@ def get_image_metadata_by_path(path: str, session: Session = Depends(get_session
                                 if "height" not in result["parameters"]:
                                     result["parameters"]["height"] = inputs["height"]
                     result["source"] = "comfyui"
-                    return result
                 except json.JSONDecodeError:
                     pass
             
@@ -1874,29 +2058,21 @@ def get_image_metadata_by_path(path: str, session: Session = Depends(get_session
                     if isinstance(sidecar_data, dict):
                         result["prompt"] = result["prompt"] or sidecar_data.get("positive_prompt")
                         result["negative_prompt"] = result["negative_prompt"] or sidecar_data.get("negative_prompt")
+                        result["caption"] = result["caption"] or sidecar_data.get("caption")
                         # Include flattened params
                         if "params" in sidecar_data and isinstance(sidecar_data["params"], dict):
                             result["parameters"].update(sidecar_data["params"])
                         else:
                             # Include non-prompt fields as parameters
                             for k, v in sidecar_data.items():
-                                if k not in ["positive_prompt", "negative_prompt", "params"] and v is not None and not isinstance(v, (dict, list)):
+                                if k not in ["positive_prompt", "negative_prompt", "caption", "caption_updated_at", "params"] and v is not None and not isinstance(v, (dict, list)):
                                     result["parameters"][k] = v
                         if result["prompt"] or result["negative_prompt"]:
                             result["source"] = "sidecar_json"
             except Exception as sidecar_err:
                 logger.debug("Failed to read sidecar JSON", extra={"path": sidecar_path, "error": str(sidecar_err)})
     
-    # Fallback: try to find in database by path (most recent first)
-    # Try both the original path and the resolved actual_path for better matching
-    image = session.exec(
-        select(Image).where(Image.path == path).order_by(Image.created_at.desc())
-    ).first()
-    if not image and actual_path and actual_path != path:
-        # Try with the resolved actual_path (may differ in slash style or resolution)
-        image = session.exec(
-            select(Image).where(Image.path == actual_path).order_by(Image.created_at.desc())
-        ).first()
+    # Fallback: use database metadata if available.
     if image and image.extra_metadata:
         metadata = image.extra_metadata if isinstance(image.extra_metadata, dict) else {}
         if isinstance(image.extra_metadata, str):
@@ -1936,6 +2112,9 @@ def get_image_metadata_by_path(path: str, session: Session = Depends(get_session
                     result["negative_prompt"] = params.get("negative_prompt") or params.get("negative") or params.get("text_negative")
                 if result["prompt"] or result["negative_prompt"]:
                     result["source"] = "database"
+
+        if not result["caption"]:
+            result["caption"] = image.caption
         
         # Include workflow_template_id from the job (critical for regenerate to switch to correct pipe)
         if image.job_id:
@@ -1949,7 +2128,16 @@ def get_image_metadata_by_path(path: str, session: Session = Depends(get_session
                 rehydration = params.get("__st_prompt_rehydration")
                 if rehydration:
                     result["parameters"]["__st_prompt_rehydration"] = rehydration
-    
+
+    if image:
+        versions = list_caption_versions(
+            session,
+            image_id=image.id,
+            media_path=image.path,
+            limit=20,
+        )
+        result["caption_history"] = _to_caption_payload(versions)
+
     return result
 
 

@@ -1,9 +1,25 @@
-import { PromptLibraryItem } from "@/lib/api";
+import React from "react";
+import { ChevronLeft, ChevronRight, Copy, Search, X } from "lucide-react";
+
+import { PromptLibraryItem, IMAGE_API_BASE } from "@/lib/api";
+import { isVideoFile } from "@/lib/media";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
-import { Search, X } from "lucide-react";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { MediaMetadataDialog } from "@/components/MediaMetadataDialog";
 
 interface PromptLibraryQuickPanelProps {
   open: boolean;
@@ -17,6 +33,8 @@ interface PromptLibraryQuickPanelProps {
   onApply: (prompt: PromptLibraryItem) => void;
 }
 
+const PAGE_SIZE = 20;
+
 export function PromptLibraryQuickPanel({
   open,
   prompts,
@@ -28,113 +46,211 @@ export function PromptLibraryQuickPanel({
   onClose,
   onApply,
 }: PromptLibraryQuickPanelProps) {
+  const [page, setPage] = React.useState(0);
+  const [previewItem, setPreviewItem] = React.useState<PromptLibraryItem | null>(null);
+  const [metadataItem, setMetadataItem] = React.useState<PromptLibraryItem | null>(null);
+
+  React.useEffect(() => {
+    setPage(0);
+  }, [searchValue, prompts.length]);
+
   if (!open) return null;
 
+  const pageCount = Math.max(1, Math.ceil(prompts.length / PAGE_SIZE));
+  const pageStart = page * PAGE_SIZE;
+  const pageItems = prompts.slice(pageStart, pageStart + PAGE_SIZE);
+
+  const copyText = (value?: string | null) => {
+    if (!value) return;
+    void navigator.clipboard.writeText(value);
+  };
+
   return (
+    <>
       <div className="w-80 pointer-events-auto">
         <Card className="shadow-xl border border-blue-100 bg-blue-50/95 dark:border-border dark:bg-surface/95 ring-1 ring-black/5 dark:ring-white/5 backdrop-blur">
-        <div className="flex items-center justify-between px-2 py-1.5 border-b border-blue-100/80 bg-blue-50/60 dark:border-border/70 dark:bg-surface-raised/70 cursor-move">
-          <div className="font-semibold text-foreground text-xs">prompt library</div>
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onClose}>
-            <X className="w-3.5 h-3.5" />
-          </Button>
-        </div>
-
-        <div className="p-2 space-y-2">
-          <div className="flex gap-2">
-            <div className="relative flex-1">
-              <Search className="absolute left-2 top-2 h-4 w-4 text-muted-foreground" />
-              <Input
-                value={searchValue}
-                onChange={(e) => onSearchChange(e.target.value)}
-                placeholder="Search or filter prompts"
-                className="pl-8 h-8 text-xs"
-              />
-            </div>
-            <Button size="sm" variant="outline" className="h-8 text-xs px-2" onClick={onSearchSubmit}>
-              Go
+          <div className="flex items-center justify-between px-2 py-1.5 border-b border-blue-100/80 bg-blue-50/60 dark:border-border/70 dark:bg-surface-raised/70 cursor-move">
+            <div className="font-semibold text-foreground text-xs">prompt library</div>
+            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onClose}>
+              <X className="w-3.5 h-3.5" />
             </Button>
           </div>
 
-          {error && <div className="text-xs text-destructive">{error}</div>}
-          {loading && <div className="text-xs text-muted-foreground">Loading prompt library...</div>}
-
-          <ScrollArea className="h-56 pr-2">
-            <div className="space-y-2">
-              {prompts.length === 0 && !loading && (
-                <div className="text-xs text-muted-foreground">No prompts found. Save one from the form to start.</div>
-              )}
-              {prompts.map((prompt) => {
-                const key =
-                  prompt.prompt_id !== undefined && prompt.prompt_id !== null
-                    ? `prompt-${prompt.prompt_id}`
-                    : `img-${prompt.image_id}-${prompt.prompt_name || prompt.created_at || "local"}`;
-
-                return (
-                  <div
-                    key={key}
-                    className="p-1.5 border border-border/60 rounded-md bg-surface-raised/70 hover:bg-surface-overlay/60 transition-colors cursor-pointer"
-                    onClick={() => onApply(prompt)}
-                  >
-                    <div className="flex items-center justify-between mb-1">
-                      <div className="flex flex-wrap items-center gap-1 text-[10px] text-muted-foreground">
-                        <span className="font-semibold text-foreground truncate max-w-[12rem]">
-                          {prompt.job_params?.project_name || prompt.prompt_name || `Image #${prompt.image_id}`}
-                        </span>
-                        {prompt.image_id && <span className="text-muted-foreground/80">Img {prompt.image_id}</span>}
-                        {prompt.workflow_template_id && (
-                          <span className="px-1.5 py-0.5 bg-muted/30 text-muted-foreground rounded-full text-[9px] font-medium">
-                            Pipe {prompt.workflow_template_id}
-                          </span>
-                        )}
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-5 text-blue-600 hover:text-blue-700 dark:text-primary dark:hover:text-primary/80 text-[10px] px-1.5"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onApply(prompt);
-                        }}
-                      >
-                        Load
-                      </Button>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-1.5">
-                      {prompt.active_positive && (
-                        <div className="min-w-0">
-                          <div className="text-[8px] text-green-600 dark:text-emerald-300 font-semibold uppercase mb-0.5">Positive</div>
-                          <p className="text-[10px] text-foreground/80 line-clamp-2 leading-tight">{prompt.active_positive}</p>
-                        </div>
-                      )}
-                      {prompt.active_negative && (
-                        <div className="min-w-0">
-                          <div className="text-[8px] text-red-600 dark:text-rose-300 font-semibold uppercase mb-0.5">Negative</div>
-                          <p className="text-[10px] text-foreground/70 line-clamp-2 leading-tight">{prompt.active_negative}</p>
-                        </div>
-                      )}
-                      {!prompt.active_positive && !prompt.active_negative && (
-                        <div className="col-span-2 text-[10px] text-muted-foreground italic">No prompt text saved</div>
-                      )}
-                    </div>
-
-                    {prompt.tags && prompt.tags.length > 0 && (
-                      <div className="flex flex-wrap gap-0.5">
-                        {prompt.tags.slice(0, 3).map((tag) => (
-                          <span key={tag} className="px-1 py-0.5 bg-indigo-50 text-indigo-600 border border-indigo-100 dark:bg-primary/10 dark:text-primary dark:border-primary/20 rounded text-[8px]">
-                            #{tag}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+          <div className="p-2 space-y-2">
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-2 top-2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  value={searchValue}
+                  onChange={(e) => onSearchChange(e.target.value)}
+                  placeholder="Search prompt media"
+                  className="pl-8 h-8 text-xs"
+                />
+              </div>
+              <Button size="sm" variant="outline" className="h-8 text-xs px-2" onClick={onSearchSubmit}>
+                Go
+              </Button>
             </div>
-          </ScrollArea>
-        </div>
-      </Card>
-    </div>
+
+            {error && <div className="text-xs text-destructive">{error}</div>}
+            {loading && <div className="text-xs text-muted-foreground">Loading prompt library...</div>}
+
+            <ScrollArea className="h-64 pr-2">
+              <div className="grid grid-cols-2 gap-2">
+                {pageItems.length === 0 && !loading && (
+                  <div className="col-span-2 text-xs text-muted-foreground">No matching media.</div>
+                )}
+                {pageItems.map((prompt) => {
+                  const src = `${IMAGE_API_BASE}/gallery/image/path?path=${encodeURIComponent(prompt.preview_path)}`;
+                  const isVideo = isVideoFile(prompt.preview_path);
+                  return (
+                    <ContextMenu key={`prompt-media-${prompt.image_id}-${prompt.created_at}`}>
+                      <ContextMenuTrigger>
+                        <div
+                          className="border border-border/60 rounded-md overflow-hidden bg-background/80 cursor-pointer hover:border-primary/40 transition-colors"
+                          onClick={() => setPreviewItem(prompt)}
+                        >
+                          <div className="aspect-square bg-muted/30">
+                            {isVideo ? (
+                              <video src={src} className="w-full h-full object-cover" preload="metadata" muted playsInline />
+                            ) : (
+                              <img src={src} className="w-full h-full object-cover" alt={prompt.prompt_name || `Image ${prompt.image_id}`} />
+                            )}
+                          </div>
+                          <div className="p-1.5 space-y-1">
+                            <p className="text-[10px] line-clamp-1 text-foreground/80">{prompt.prompt_name || `image #${prompt.image_id}`}</p>
+                            <div className="flex items-center justify-between">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-5 w-5"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  copyText(prompt.active_positive || "");
+                                }}
+                                title="Copy positive prompt"
+                              >
+                                <Copy className="w-3 h-3" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-5 w-5"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  copyText(prompt.active_negative || "");
+                                }}
+                                title="Copy negative prompt"
+                              >
+                                <Copy className="w-3 h-3" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-5 w-5"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  copyText(prompt.caption || "");
+                                }}
+                                title="Copy caption"
+                              >
+                                <Copy className="w-3 h-3" />
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      </ContextMenuTrigger>
+                      <ContextMenuContent>
+                        <ContextMenuItem onSelect={() => onApply(prompt)}>load to configurator</ContextMenuItem>
+                        <ContextMenuItem onSelect={() => setPreviewItem(prompt)}>open preview</ContextMenuItem>
+                        <ContextMenuItem onSelect={() => setMetadataItem(prompt)}>metadata</ContextMenuItem>
+                        <ContextMenuItem onSelect={() => copyText(prompt.active_positive || "")}>copy positive prompt</ContextMenuItem>
+                        <ContextMenuItem onSelect={() => copyText(prompt.active_negative || "")}>copy negative prompt</ContextMenuItem>
+                        <ContextMenuItem onSelect={() => copyText(prompt.caption || "")}>copy caption</ContextMenuItem>
+                      </ContextMenuContent>
+                    </ContextMenu>
+                  );
+                })}
+              </div>
+            </ScrollArea>
+
+            <div className="flex items-center justify-between">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs"
+                disabled={page <= 0}
+                onClick={() => setPage((prev) => Math.max(0, prev - 1))}
+              >
+                <ChevronLeft className="w-3 h-3 mr-1" />
+                prev
+              </Button>
+              <span className="text-[10px] text-muted-foreground">
+                page {page + 1} / {pageCount}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs"
+                disabled={page >= pageCount - 1}
+                onClick={() => setPage((prev) => Math.min(pageCount - 1, prev + 1))}
+              >
+                next
+                <ChevronRight className="w-3 h-3 ml-1" />
+              </Button>
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      <Dialog open={previewItem !== null} onOpenChange={(nextOpen) => { if (!nextOpen) setPreviewItem(null); }}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>{previewItem?.prompt_name || `image #${previewItem?.image_id}`}</DialogTitle>
+          </DialogHeader>
+          {previewItem && (
+            <div className="space-y-3">
+              <img
+                src={`${IMAGE_API_BASE}/gallery/image/path?path=${encodeURIComponent(previewItem.preview_path)}`}
+                alt={previewItem.prompt_name || `image #${previewItem.image_id}`}
+                className="w-full max-h-[65vh] object-contain rounded border border-border/60 bg-muted/20"
+              />
+              <div className="grid grid-cols-1 gap-2 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-emerald-600">positive</span>
+                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copyText(previewItem.active_positive || "")}>
+                    <Copy className="w-3 h-3" />
+                  </Button>
+                </div>
+                <p className="rounded border border-border/60 bg-muted/20 p-2 whitespace-pre-wrap">{previewItem.active_positive || "none"}</p>
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-rose-600">negative</span>
+                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copyText(previewItem.active_negative || "")}>
+                    <Copy className="w-3 h-3" />
+                  </Button>
+                </div>
+                <p className="rounded border border-border/60 bg-muted/20 p-2 whitespace-pre-wrap">{previewItem.active_negative || "none"}</p>
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-sky-600">caption</span>
+                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copyText(previewItem.caption || "")}>
+                    <Copy className="w-3 h-3" />
+                  </Button>
+                </div>
+                <p className="rounded border border-border/60 bg-muted/20 p-2 whitespace-pre-wrap">{previewItem.caption || "none"}</p>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <MediaMetadataDialog
+        open={metadataItem !== null}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) setMetadataItem(null);
+        }}
+        mediaPath={metadataItem?.preview_path || null}
+        imageId={metadataItem?.image_id ?? null}
+      />
+    </>
   );
 }
