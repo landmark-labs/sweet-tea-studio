@@ -22,6 +22,7 @@ import json
 import re
 import threading
 import time
+import sqlite3
 from collections import Counter
 from pathlib import Path
 from datetime import datetime
@@ -83,6 +84,43 @@ def _get_cancel_event(job_id: int) -> threading.Event:
 def _clear_cancel_event(job_id: int) -> None:
     with _cancel_events_lock:
         _cancel_events.pop(job_id, None)
+
+
+def _is_transient_sqlite_lock_error(exc: Exception) -> bool:
+    text = str(exc).lower()
+    return (
+        "database is locked" in text
+        or "database is busy" in text
+        or "database table is locked" in text
+        or "sqlite busy" in text
+    )
+
+
+def _commit_with_retry(
+    session: Session,
+    *,
+    attempts: int = 3,
+    initial_backoff_s: float = 0.05,
+    label: str = "commit",
+) -> None:
+    backoff_s = max(0.01, initial_backoff_s)
+    for attempt in range(1, attempts + 1):
+        try:
+            session.commit()
+            return
+        except Exception as exc:
+            is_transient = isinstance(exc, sqlite3.OperationalError) or _is_transient_sqlite_lock_error(exc)
+            try:
+                session.rollback()
+            except Exception:
+                pass
+            if not is_transient or attempt >= attempts:
+                raise
+            print(
+                f"[JobProcessor] Transient DB lock during {label}; retry {attempt}/{attempts} in {backoff_s:.2f}s: {exc}"
+            )
+            time.sleep(backoff_s)
+            backoff_s = min(0.5, backoff_s * 2)
 
 
 def apply_params_to_graph(graph: dict, mapping: dict, params: dict):
@@ -2116,18 +2154,34 @@ def process_job(job_id: int):
         # Workflow - fetch from DB
         workflow = session.get(WorkflowTemplate, job.workflow_template_id)
 
-        if not engine or not workflow:
-            job.status = "failed"
-            job.error = "Engine or Workflow not found during execution"
-            session.commit()
-            manager.broadcast_sync({"type": "error", "message": job.error}, str(job_id))
-            manager.close_job_sync(str(job_id))
-            _clear_cancel_event(job_id)
-            return
-
         final_graph: dict | None = None
         bypass_nodes: list[str] = []
         working_params: dict = {}
+        completion_committed = False
+
+        def mark_job_failed(error_message: str) -> None:
+            try:
+                session.rollback()
+            except Exception:
+                pass
+            job.status = "failed"
+            job.error = error_message
+            session.add(job)
+            try:
+                _commit_with_retry(session, label=f"mark failed job {job_id}")
+            except Exception as commit_err:
+                print(f"[JobProcessor] Failed to persist failure state for job {job_id}: {commit_err}")
+                try:
+                    session.rollback()
+                except Exception:
+                    pass
+            manager.broadcast_sync({"type": "error", "message": error_message}, str(job_id))
+            manager.close_job_sync(str(job_id))
+
+        if not engine or not workflow:
+            mark_job_failed("Engine or Workflow not found during execution")
+            _clear_cancel_event(job_id)
+            return
 
         try:
             schema = workflow.input_schema or {}
@@ -2409,11 +2463,7 @@ def process_job(job_id: int):
                     # Determine filename with sequence
                     seq_num = _get_next_sequence_start(session, filename_prefix, 1)
                     original_name = os.path.basename(img_data.get("filename") or "")
-                    
-                    # Store original filename to avoid post-processing duplicates
-                    # ComfyClient sends the 'filename' it captured
-                    processed_filenames.add(original_name)
-                    
+
                     original_ext = original_name.rsplit('.', 1)[-1].lower() if '.' in original_name else "png"
                     final_filename = f"{filename_prefix}-{seq_num:04d}.{original_ext}"
                     
@@ -2440,8 +2490,12 @@ def process_job(job_id: int):
                             thumbnail_data=thumb_data, extra_metadata=image_metadata, is_kept=False
                         )
                         session.add(new_image)
-                        session.commit()
+                        _commit_with_retry(session, label=f"streamed-image persist job {job_id}")
                         session.refresh(new_image)
+
+                        # Track this source filename only after durable persistence succeeds.
+                        if original_name:
+                            processed_filenames.add(original_name)
                         
                         saved_media.append(new_image)
                         
@@ -2449,8 +2503,15 @@ def process_job(job_id: int):
                         fts_updated = False
                         search_text = build_search_text(pos_embed, neg_embed, None, None, stacked_history)
                         if search_text and new_image.id:
-                            update_gallery_fts(session, new_image.id, search_text)
-                            session.commit()
+                            try:
+                                update_gallery_fts(session, new_image.id, search_text)
+                                _commit_with_retry(
+                                    session,
+                                    label=f"streamed-image fts job {job_id}",
+                                )
+                            except Exception as fts_err:
+                                print(f"[JobProcessor] Failed to update streamed image FTS for job {job_id}: {fts_err}")
+                                session.rollback()
                             
                         # Stream the result!
                         manager.broadcast_sync({
@@ -2464,6 +2525,10 @@ def process_job(job_id: int):
                         
                 except Exception as e:
                     print(f"Failed to process streamed image: {e}")
+                    try:
+                        session.rollback()
+                    except Exception:
+                        pass
 
             if cancel_check(force=True):
                 print(f"[JobProcessor] Job {job_id} cancelled before queueing prompt")
@@ -2562,8 +2627,9 @@ def process_job(job_id: int):
                 # Note: previews might not trigger on_image_captured (type 1), only type 2 (SaveImageWebsocket)
                 # But get_images returns type 2 images too.
                 # History images (not websocket captured) wouldn't be in processed_filenames.
-                if fname not in processed_filenames:
-                    pending_outputs.append(item)
+                if fname and fname in processed_filenames:
+                    continue
+                pending_outputs.append(item)
             
             # Reuse seq start logic for the remainder
             next_seq = _get_next_sequence_start(session, filename_prefix, len(pending_outputs))
@@ -2725,7 +2791,8 @@ def process_job(job_id: int):
             job.completed_at = datetime.utcnow()
             job.error = None
             session.add(job)
-            session.commit()
+            _commit_with_retry(session, label=f"completion job {job_id}")
+            completion_committed = True
             
             for img in saved_media:
                 session.refresh(img)
@@ -2768,7 +2835,7 @@ def process_job(job_id: int):
                         if update_gallery_fts(session, img.id, search_text):
                             fts_updated = True
                 if fts_updated:
-                    session.commit()
+                    _commit_with_retry(session, label=f"completion fts job {job_id}")
             except Exception as fts_err:
                 print(f"[JobProcessor] Failed to update gallery FTS for job {job_id}: {fts_err}")
                 session.rollback()
@@ -2837,28 +2904,20 @@ def process_job(job_id: int):
         except ComfyConnectionError as e:
             if isinstance(final_graph, dict):
                 _dump_failed_prompt_graph(job_id, final_graph, bypass_nodes, working_params, str(e))
-            if job.status == "completed":
+            if completion_committed:
                 print(f"[JobProcessor] Post-completion ComfyConnectionError for job {job_id}: {e}")
-            else:
-                job.status = "failed"
-                job.error = str(e)
-                session.add(job)
-                session.commit()
-                manager.broadcast_sync({"type": "error", "message": str(e)}, str(job_id))
                 manager.close_job_sync(str(job_id))
+            else:
+                mark_job_failed(str(e))
 
         except Exception as e:
             if isinstance(final_graph, dict):
                 _dump_failed_prompt_graph(job_id, final_graph, bypass_nodes, working_params, str(e))
-            if job.status == "completed":
+            if completion_committed:
                 print(f"[JobProcessor] Post-completion error for job {job_id}: {e}")
-            else:
-                job.status = "failed"
-                job.error = str(e)
-                session.add(job)
-                session.commit()
-                manager.broadcast_sync({"type": "error", "message": str(e)}, str(job_id))
                 manager.close_job_sync(str(job_id))
+            else:
+                mark_job_failed(str(e))
 
         finally:
             _clear_cancel_event(job_id)

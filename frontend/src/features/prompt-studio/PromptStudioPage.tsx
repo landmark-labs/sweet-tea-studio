@@ -92,6 +92,15 @@ export default function PromptStudio() {
   const [progress, setProgress] = useState<number>(0);
   const [jobStartTime, setJobStartTime] = useState<number | null>(null);
   const progressHistoryRef = useRef<ProgressHistoryEntry[]>([]);
+  const generationStateRef = useRef<GenerationState>(generationState);
+  useEffect(() => {
+    generationStateRef.current = generationState;
+  }, [generationState]);
+  const isTerminalGenerationState = useCallback(
+    (state: GenerationState) =>
+      state === "completed" || state === "failed" || state === "cancelled",
+    []
+  );
   const isQueuing = generationState === "queued";
   const isRunning = generationState === "running";
   // Keep hidden-tab guard behavior without blocking after render completion.
@@ -2316,6 +2325,14 @@ export default function PromptStudio() {
           return;
         }
         const nextState = mapStatusToGenerationState(data.status);
+        const shouldIgnoreNonTerminalStatus =
+          isTerminalGenerationState(generationStateRef.current) &&
+          (nextState === "queued" || nextState === "running");
+
+        if (shouldIgnoreNonTerminalStatus) {
+          logWs(`[WS] Ignoring stale non-terminal status after local terminal state: ${data.status}`);
+          return;
+        }
         // Only update if we got a recognized status (not defaulting to idle)
         // This prevents unknown statuses from resetting the UI
         if (nextState !== "idle") {
@@ -2334,6 +2351,9 @@ export default function PromptStudio() {
       } else if (data.type === "progress") {
         // Skip progress updates entirely when tab is hidden - prevents "catch up" rendering
         if (isTabHidden) {
+          return;
+        }
+        if (isTerminalGenerationState(generationStateRef.current)) {
           return;
         }
         // Time-based throttle: MUST be first to skip ALL work when messages arrive too frequently
@@ -2423,6 +2443,9 @@ export default function PromptStudio() {
           updateFeed(lastJobId, { status: "completed", progress: 100 });
         } else {
           // Still processing a node - show running state (not queued)
+          if (isTerminalGenerationState(generationStateRef.current)) {
+            return;
+          }
           setGenerationState("running");
           setStatusLabel("processing");
           updateFeed(lastJobId, { status: "processing" });
@@ -2642,6 +2665,9 @@ export default function PromptStudio() {
             setLastJobId(null);
           } else {
             // Job might still be running, poll again
+            if (isTerminalGenerationState(generationStateRef.current)) {
+              return;
+            }
             setError("Connection lost - checking status...");
           }
         } catch (e) {
@@ -2665,7 +2691,7 @@ export default function PromptStudio() {
         wsRef.current = null;
       }
     };
-  }, [lastJobId]);
+  }, [lastJobId, isTerminalGenerationState]);
 
   // Sync job status when returning to tab after being hidden
   // This fetches the current job state to update UI that was skipped while hidden
@@ -2700,6 +2726,9 @@ export default function PromptStudio() {
             setBatchProgress(null);
             setLastJobId(null);
           } else if (job.status === "processing" || job.status === "running") {
+            if (isTerminalGenerationState(generationStateRef.current)) {
+              return;
+            }
             setGenerationState("running");
             setStatusLabel("processing");
           }
@@ -2711,7 +2740,7 @@ export default function PromptStudio() {
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-  }, [lastJobId]);
+  }, [lastJobId, isTerminalGenerationState]);
 
 
 
