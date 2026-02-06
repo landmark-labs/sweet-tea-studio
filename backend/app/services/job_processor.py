@@ -2721,22 +2721,15 @@ def process_job(job_id: int):
                 session.add(new_image)
                 saved_media.append(new_image)
             
+            job.status = "completed"
+            job.completed_at = datetime.utcnow()
+            job.error = None
+            session.add(job)
             session.commit()
             
             for img in saved_media:
                 session.refresh(img)
 
-            fts_updated = False
-            search_text = build_search_text(pos_embed, neg_embed, None, None, stacked_history)
-            if search_text:
-                for img in saved_media:
-                    if img.id is None:
-                        continue
-                    if update_gallery_fts(session, img.id, search_text):
-                        fts_updated = True
-            if fts_updated:
-                session.commit()
-                
             images_payload = [
                 {
                     "id": img.id,
@@ -2749,21 +2742,43 @@ def process_job(job_id: int):
                 for img in saved_media
             ]
             
-            # Store execution statistics
-            _store_execution_stats(
-                session,
-                job_id,
-                execution_metrics,
-            )
-            
-            manager.broadcast_sync({
+            completed_broadcast = manager.broadcast_sync({
                 "type": "completed", 
                 "images": images_payload,
                 "job_params": working_params,
                 "prompt": pos_embed,
                 "negative_prompt": neg_embed
             }, str(job_id))
+            try:
+                if completed_broadcast:
+                    completed_broadcast.result(timeout=2.0)
+            except Exception as ws_err:
+                print(f"[JobProcessor] Completed broadcast wait failed for job {job_id}: {ws_err}")
             manager.close_job_sync(str(job_id))
+
+            # Non-critical indexing/stat writes run after frontend notification.
+            # This keeps UI completion responsive even when DB writes are slow.
+            try:
+                fts_updated = False
+                search_text = build_search_text(pos_embed, neg_embed, None, None, stacked_history)
+                if search_text:
+                    for img in saved_media:
+                        if img.id is None:
+                            continue
+                        if update_gallery_fts(session, img.id, search_text):
+                            fts_updated = True
+                if fts_updated:
+                    session.commit()
+            except Exception as fts_err:
+                print(f"[JobProcessor] Failed to update gallery FTS for job {job_id}: {fts_err}")
+                session.rollback()
+
+            # Store execution statistics (best-effort)
+            _store_execution_stats(
+                session,
+                job_id,
+                execution_metrics,
+            )
             
             # Auto-Save Prompt
             if saved_media:
@@ -2822,22 +2837,28 @@ def process_job(job_id: int):
         except ComfyConnectionError as e:
             if isinstance(final_graph, dict):
                 _dump_failed_prompt_graph(job_id, final_graph, bypass_nodes, working_params, str(e))
-            job.status = "failed"
-            job.error = str(e)
-            session.add(job)
-            session.commit()
-            manager.broadcast_sync({"type": "error", "message": str(e)}, str(job_id))
-            manager.close_job_sync(str(job_id))
+            if job.status == "completed":
+                print(f"[JobProcessor] Post-completion ComfyConnectionError for job {job_id}: {e}")
+            else:
+                job.status = "failed"
+                job.error = str(e)
+                session.add(job)
+                session.commit()
+                manager.broadcast_sync({"type": "error", "message": str(e)}, str(job_id))
+                manager.close_job_sync(str(job_id))
 
         except Exception as e:
             if isinstance(final_graph, dict):
                 _dump_failed_prompt_graph(job_id, final_graph, bypass_nodes, working_params, str(e))
-            job.status = "failed"
-            job.error = str(e)
-            session.add(job)
-            session.commit()
-            manager.broadcast_sync({"type": "error", "message": str(e)}, str(job_id))
-            manager.close_job_sync(str(job_id))
+            if job.status == "completed":
+                print(f"[JobProcessor] Post-completion error for job {job_id}: {e}")
+            else:
+                job.status = "failed"
+                job.error = str(e)
+                session.add(job)
+                session.commit()
+                manager.broadcast_sync({"type": "error", "message": str(e)}, str(job_id))
+                manager.close_job_sync(str(job_id))
 
         finally:
             _clear_cancel_event(job_id)

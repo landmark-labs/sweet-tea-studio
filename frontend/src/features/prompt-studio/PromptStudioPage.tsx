@@ -94,8 +94,15 @@ export default function PromptStudio() {
   const progressHistoryRef = useRef<ProgressHistoryEntry[]>([]);
   const isQueuing = generationState === "queued";
   const isRunning = generationState === "running";
-  // Include lastJobId in busy check - if we have an active job, we're busy even if state updates lagged
-  const isBusy = isQueuing || isRunning || lastJobId !== null;
+  // Keep hidden-tab guard behavior without blocking after render completion.
+  // `lastJobId` may remain set while backend finishes metadata/index work.
+  const isBusy =
+    isQueuing ||
+    isRunning ||
+    (lastJobId !== null &&
+      generationState !== "completed" &&
+      generationState !== "failed" &&
+      generationState !== "cancelled");
   const { showUndoToast } = useUndoToast();
   const { registerStateChange, recordChange } = useUndoRedo();
 
@@ -178,6 +185,16 @@ export default function PromptStudio() {
     if (!rawPath) return "";
     return normalizePath(rawPath).toLowerCase();
   }, [extractRawViewerPath]);
+
+  const prependGalleryItem = useCallback((item: GalleryItem) => {
+    const normalizedPath = normalizePathForCompare(item.image.path);
+    setGalleryImages((prev) => {
+      const deduped = prev.filter(
+        (existing) => normalizePathForCompare(existing.image.path) !== normalizedPath
+      );
+      return [item, ...deduped];
+    });
+  }, [normalizePathForCompare]);
 
   const persistViewerState = useCallback(
     (rawPath: string, context?: Partial<Pick<PromptStudioViewerStateV1, "source" | "projectId" | "folder">>) => {
@@ -2517,7 +2534,7 @@ export default function PromptStudio() {
             workflow_template_id: selectedWorkflow?.id,
             created_at: new Date().toISOString(),
           };
-          setGalleryImages(prev => [newGalleryItem, ...prev]);
+          prependGalleryItem(newGalleryItem);
         } else {
           updateFeed(lastJobId, { status: "completed", progress: 100, previewBlob: null });
         }
@@ -2549,6 +2566,25 @@ export default function PromptStudio() {
         if (targetJobId && data.data?.blob) {
           // Use RAF-optimized method to avoid main thread blocking
           updatePreviewBlob(targetJobId, data.data.blob);
+        }
+      } else if (data.type === "image_completed") {
+        const streamedImage = data.image;
+        if (streamedImage?.path) {
+          setPreviewPath(buildViewerApiPath(streamedImage.path));
+          prependGalleryItem({
+            image: streamedImage,
+            job_params: lastSubmittedParamsRef.current || {},
+            prompt:
+              lastSubmittedParamsRef.current?.prompt ||
+              lastSubmittedParamsRef.current?.positive,
+            negative_prompt:
+              lastSubmittedParamsRef.current?.negative_prompt ||
+              lastSubmittedParamsRef.current?.negative,
+            prompt_history: [],
+            workflow_template_id: selectedWorkflow?.id,
+            created_at: streamedImage.created_at || new Date().toISOString(),
+          });
+          setGalleryRefresh(prev => prev + 1);
         }
       } else if (data.type === "save_failed") {
         // CRITICAL: Alert user that images failed to save

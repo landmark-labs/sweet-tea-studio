@@ -50,10 +50,11 @@ class ConnectionManager:
     def broadcast_sync(self, message: dict, job_id: str):
         """Thread-safe broadcast for background tasks running in threads."""
         if self.loop and self.loop.is_running():
-            asyncio.run_coroutine_threadsafe(self.broadcast(message, job_id), self.loop)
+            return asyncio.run_coroutine_threadsafe(self.broadcast(message, job_id), self.loop)
         else:
             # Fallback or error if loop isn't captured
             print(f"Warning: ConnectionManager loop not set. Cannot broadcast to {job_id}")
+            return None
 
     async def close_job(self, job_id: str, code: int = 1000):
         connections = self.active_connections.get(job_id, [])
@@ -66,9 +67,10 @@ class ConnectionManager:
 
     def close_job_sync(self, job_id: str, code: int = 1000):
         if self.loop and self.loop.is_running():
-            asyncio.run_coroutine_threadsafe(self.close_job(job_id, code=code), self.loop)
+            return asyncio.run_coroutine_threadsafe(self.close_job(job_id, code=code), self.loop)
         else:
             print(f"Warning: ConnectionManager loop not set. Cannot close websockets for {job_id}")
+            return None
 
     def get_stats(self) -> dict:
         now = time.time()
