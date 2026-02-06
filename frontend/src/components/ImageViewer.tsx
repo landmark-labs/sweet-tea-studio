@@ -1210,18 +1210,6 @@ export const ImageViewer = React.memo(function ImageViewer({
                                     <PenTool className="w-3 h-3" /> draw mask
                                 </Button>
                             )}
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-7 text-xs"
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    setMetadataDialogOpen(true);
-                                }}
-                            >
-                                metadata
-                            </Button>
-
                         </div>
                         {/* Right: Keep/Download */}
                         <div className="flex items-center gap-2">
