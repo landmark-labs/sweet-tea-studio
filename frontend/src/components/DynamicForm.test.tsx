@@ -1,5 +1,5 @@
 import type { PropsWithChildren, ReactElement } from "react";
-import { render } from "@testing-library/react";
+import { fireEvent, render, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { Provider as JotaiProvider } from "jotai";
 import { DynamicForm } from "./DynamicForm";
@@ -153,5 +153,47 @@ describe("DynamicForm grouping", () => {
         // The bypass toggle should render and show "Bypassed" state
         // Look for the bypassed indicator in the UI
         expect(getAllByText("Bypassed").length).toBeGreaterThan(0);
+    });
+
+    it("persists palette selections using the active workflow key", () => {
+        const schema = {
+            story_prompt: {
+                widget: "textarea",
+                title: "Story Prompt",
+                x_form: { section: "prompts" }
+            }
+        };
+
+        const { getByTitle } = renderForm(
+            <DynamicForm schema={schema} onSubmit={noop} workflowId="42" />
+        );
+
+        fireEvent.click(getByTitle("Add to palette"));
+
+        expect(localStorage.getItem("ds_pipe_palette_42")).toBe(JSON.stringify(["story_prompt"]));
+    });
+
+    it("removes palette selections from storage when toggled off", async () => {
+        localStorage.setItem("ds_pipe_palette_9", JSON.stringify(["story_prompt"]));
+
+        const schema = {
+            story_prompt: {
+                widget: "textarea",
+                title: "Story Prompt",
+                x_form: { section: "prompts" }
+            }
+        };
+
+        const { getByTitle } = renderForm(
+            <DynamicForm schema={schema} onSubmit={noop} workflowId="9" />
+        );
+
+        await waitFor(() => {
+            expect(getByTitle("Remove from palette")).toBeTruthy();
+        });
+
+        fireEvent.click(getByTitle("Remove from palette"));
+
+        expect(localStorage.getItem("ds_pipe_palette_9")).toBe(JSON.stringify([]));
     });
 });

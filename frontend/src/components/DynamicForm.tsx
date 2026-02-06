@@ -516,10 +516,21 @@ export const DynamicForm = React.memo(function DynamicForm({
     const [paletteKeys, setPaletteKeys] = useState<string[]>([]);
     const [paletteHydrated, setPaletteHydrated] = useState(false);
     const paletteKeySet = useMemo(() => new Set(paletteKeys), [paletteKeys]);
+    const paletteKeysRef = useRef<string[]>([]);
+
+    const applyPaletteKeys = useCallback((nextKeys: string[]) => {
+        const deduped = Array.from(new Set(nextKeys));
+        paletteKeysRef.current = deduped;
+        setPaletteKeys(deduped);
+        if (paletteStorageKey && paletteHydrated) {
+            localStorage.setItem(paletteStorageKey, JSON.stringify(deduped));
+        }
+    }, [paletteHydrated, paletteStorageKey]);
 
     useEffect(() => {
         setPaletteHydrated(false);
         if (!paletteStorageKey) {
+            paletteKeysRef.current = [];
             setPaletteKeys([]);
             setPaletteHydrated(true);
             return;
@@ -527,20 +538,25 @@ export const DynamicForm = React.memo(function DynamicForm({
         try {
             const raw = localStorage.getItem(paletteStorageKey);
             if (!raw) {
+                paletteKeysRef.current = [];
                 setPaletteKeys([]);
                 setPaletteHydrated(true);
                 return;
             }
             const parsed = JSON.parse(raw);
             if (!Array.isArray(parsed)) {
+                paletteKeysRef.current = [];
                 setPaletteKeys([]);
                 setPaletteHydrated(true);
                 return;
             }
             const next = parsed.filter((entry) => typeof entry === "string") as string[];
-            setPaletteKeys(Array.from(new Set(next)));
+            const deduped = Array.from(new Set(next));
+            paletteKeysRef.current = deduped;
+            setPaletteKeys(deduped);
         } catch (err) {
             console.warn("[palette] Failed to load palette contents", err);
+            paletteKeysRef.current = [];
             setPaletteKeys([]);
         } finally {
             setPaletteHydrated(true);
@@ -550,63 +566,57 @@ export const DynamicForm = React.memo(function DynamicForm({
     useEffect(() => {
         if (!schema || !paletteHydrated) return;
         if (Object.keys(schema).length === 0) return;
-        setPaletteKeys((current) => current.filter((key) => key in schema));
-    }, [paletteHydrated, schema]);
+        const current = paletteKeysRef.current;
+        const next = current.filter((key) => key in schema);
+        if (next.length === current.length) return;
+        paletteKeysRef.current = next;
+        setPaletteKeys(next);
+        if (paletteStorageKey) {
+            localStorage.setItem(paletteStorageKey, JSON.stringify(next));
+        }
+    }, [paletteHydrated, paletteStorageKey, schema]);
 
     useEffect(() => {
         if (!paletteStorageKey || !paletteHydrated) return;
+        paletteKeysRef.current = paletteKeys;
         localStorage.setItem(paletteStorageKey, JSON.stringify(paletteKeys));
     }, [paletteHydrated, paletteKeys, paletteStorageKey]);
 
     const togglePaletteKey = useCallback((key: string) => {
-        setPaletteKeys((current) => {
-            const next = current.includes(key)
-                ? current.filter((entry) => entry !== key)
-                : [...current, key];
-            if (paletteStorageKey && paletteHydrated) {
-                localStorage.setItem(paletteStorageKey, JSON.stringify(next));
-            }
-            return next;
-        });
-    }, [paletteHydrated, paletteStorageKey]);
+        const current = paletteKeysRef.current;
+        const next = current.includes(key)
+            ? current.filter((entry) => entry !== key)
+            : [...current, key];
+        applyPaletteKeys(next);
+    }, [applyPaletteKeys]);
 
     const togglePaletteKeys = useCallback((keys: string[]) => {
         if (keys.length === 0) return;
-        setPaletteKeys((current) => {
-            const currentSet = new Set(current);
-            const allSelected = keys.every((key) => currentSet.has(key));
-            if (allSelected) {
-                const removeSet = new Set(keys);
-                const next = current.filter((key) => !removeSet.has(key));
-                if (paletteStorageKey && paletteHydrated) {
-                    localStorage.setItem(paletteStorageKey, JSON.stringify(next));
-                }
-                return next;
-            }
-            const next = [...current];
-            keys.forEach((key) => {
-                if (currentSet.has(key)) return;
-                currentSet.add(key);
-                next.push(key);
-            });
-            if (paletteStorageKey && paletteHydrated) {
-                localStorage.setItem(paletteStorageKey, JSON.stringify(next));
-            }
-            return next;
+        const current = paletteKeysRef.current;
+        const currentSet = new Set(current);
+        const allSelected = keys.every((key) => currentSet.has(key));
+        if (allSelected) {
+            const removeSet = new Set(keys);
+            const next = current.filter((key) => !removeSet.has(key));
+            applyPaletteKeys(next);
+            return;
+        }
+        const next = [...current];
+        keys.forEach((key) => {
+            if (currentSet.has(key)) return;
+            currentSet.add(key);
+            next.push(key);
         });
-    }, [paletteHydrated, paletteStorageKey]);
+        applyPaletteKeys(next);
+    }, [applyPaletteKeys]);
 
     const removePaletteKeys = useCallback((keys: string[]) => {
         if (keys.length === 0) return;
         const removeSet = new Set(keys);
-        setPaletteKeys((current) => {
-            const next = current.filter((key) => !removeSet.has(key));
-            if (paletteStorageKey && paletteHydrated) {
-                localStorage.setItem(paletteStorageKey, JSON.stringify(next));
-            }
-            return next;
-        });
-    }, [paletteHydrated, paletteStorageKey]);
+        const current = paletteKeysRef.current;
+        const next = current.filter((key) => !removeSet.has(key));
+        applyPaletteKeys(next);
+    }, [applyPaletteKeys]);
 
     const [activeStackId, setActiveStackId] = useState<string | null>(null);
     const hoverOpenTimerRef = useRef<NodeJS.Timeout | null>(null);

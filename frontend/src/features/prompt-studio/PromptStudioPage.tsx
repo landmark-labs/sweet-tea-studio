@@ -1055,39 +1055,43 @@ export default function PromptStudio() {
     const galleryFolder = localStorage.getItem("ds_project_gallery_folder") || "";
     const galleryCollapsed = localStorage.getItem("ds_project_gallery_collapsed") === "true";
 
-    const pipePalettes: Record<string, string[]> = {};
-    workflows.forEach((workflow) => {
-      const workflowKey = String(workflow.id);
+    const readPaletteForWorkflow = (workflowKey: string): string[] => {
       try {
         const raw = localStorage.getItem(`ds_pipe_palette_${workflowKey}`);
-        if (!raw) {
-          pipePalettes[workflowKey] = [];
-          return;
-        }
+        if (!raw) return [];
         const parsed = JSON.parse(raw);
-        if (!Array.isArray(parsed)) {
-          pipePalettes[workflowKey] = [];
-          return;
-        }
+        if (!Array.isArray(parsed)) return [];
         const sanitized = parsed.filter((entry) => typeof entry === "string") as string[];
-        pipePalettes[workflowKey] = Array.from(new Set(sanitized));
+        return Array.from(new Set(sanitized));
       } catch {
-        pipePalettes[workflowKey] = [];
+        return [];
       }
+    };
+
+    const pipePalettes: Record<string, string[]> = {};
+    const palettePrefix = "ds_pipe_palette_";
+
+    // Capture every persisted palette key, including workflows not currently loaded in memory.
+    try {
+      for (let index = 0; index < localStorage.length; index += 1) {
+        const storageKey = localStorage.key(index);
+        if (!storageKey || !storageKey.startsWith(palettePrefix)) continue;
+        const workflowKey = storageKey.slice(palettePrefix.length);
+        if (!workflowKey) continue;
+        pipePalettes[workflowKey] = readPaletteForWorkflow(workflowKey);
+      }
+    } catch (e) {
+      console.warn("Failed to enumerate palette keys for canvas snapshot", e);
+    }
+
+    workflows.forEach((workflow) => {
+      const workflowKey = String(workflow.id);
+      if (workflowKey in pipePalettes) return;
+      pipePalettes[workflowKey] = readPaletteForWorkflow(workflowKey);
     });
+
     if (selectedWorkflowId && !(selectedWorkflowId in pipePalettes)) {
-      try {
-        const raw = localStorage.getItem(`ds_pipe_palette_${selectedWorkflowId}`);
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (Array.isArray(parsed)) {
-            const sanitized = parsed.filter((entry) => typeof entry === "string") as string[];
-            pipePalettes[selectedWorkflowId] = Array.from(new Set(sanitized));
-          }
-        }
-      } catch {
-        pipePalettes[selectedWorkflowId] = [];
-      }
+      pipePalettes[selectedWorkflowId] = readPaletteForWorkflow(selectedWorkflowId);
     }
 
     return {
