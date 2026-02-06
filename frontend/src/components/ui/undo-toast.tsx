@@ -6,6 +6,7 @@ interface UndoToastItem {
     message: string;
     imageIds: number[];
     expiresAt: number;
+    durationMs: number;
 }
 
 interface UndoToastContextValue {
@@ -38,7 +39,7 @@ export function UndoToastProvider({ children, duration = 5000 }: UndoToastProvid
 
             undoHandlersRef.current.set(id, onUndo);
 
-            setToasts((prev) => [...prev, { id, message, imageIds, expiresAt }]);
+            setToasts((prev) => [...prev, { id, message, imageIds, expiresAt, durationMs: duration }]);
 
             // Auto-dismiss after duration
             setTimeout(() => {
@@ -73,7 +74,7 @@ export function UndoToastProvider({ children, duration = 5000 }: UndoToastProvid
             {children}
             {/* Toast Container */}
             {toasts.length > 0 && (
-                <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[200] flex flex-col gap-2 pointer-events-auto">
+                <div className="fixed top-20 right-4 z-[200] flex flex-col items-end gap-2 pointer-events-none">
                     {toasts.map((toast) => (
                         <UndoToastItem
                             key={toast.id}
@@ -95,10 +96,6 @@ interface UndoToastItemProps {
 }
 
 function UndoToastItem({ toast, onUndo, onDismiss }: UndoToastItemProps) {
-    // Use CSS animation instead of setInterval for progress bar
-    // This eliminates 20 state updates per second, fixing the performance regression
-    const durationMs = React.useMemo(() => Math.max(0, toast.expiresAt - Date.now()), [toast.expiresAt]);
-
     return (
         <div className="pointer-events-auto bg-slate-900 text-white px-4 py-3 rounded-lg shadow-xl flex items-center gap-3 min-w-[280px] max-w-[400px] relative overflow-hidden">
             {/* Progress bar - uses CSS animation instead of JS interval */}
@@ -106,7 +103,7 @@ function UndoToastItem({ toast, onUndo, onDismiss }: UndoToastItemProps) {
                 className="absolute bottom-0 left-0 h-1 bg-amber-500"
                 style={{
                     width: '100%',
-                    animation: `undo-toast-shrink ${durationMs}ms linear forwards`,
+                    animation: `undo-toast-shrink ${toast.durationMs}ms linear forwards`,
                 }}
             />
             {/* CSS keyframes for the animation */}
