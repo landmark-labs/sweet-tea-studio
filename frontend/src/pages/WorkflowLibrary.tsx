@@ -13,7 +13,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { FileJson, AlertTriangle, GitBranch, Edit2, Trash2, ArrowUpRight, Save, RotateCw, CheckCircle2, XCircle, GripVertical, ChevronDown, ChevronUp, Archive } from "lucide-react";
-import { api, WorkflowTemplate, getApiBase } from "@/lib/api";
+import { api, TeaWorkflowStatus, WorkflowTemplate, getApiBase } from "@/lib/api";
 import { WorkflowGraphViewer } from "@/components/WorkflowGraphViewer";
 import { cn } from "@/lib/utils";
 import { labels } from "@/ui/labels";
@@ -444,7 +444,9 @@ const getNodeDisplayOrder = (graph: any, schema: any) => {
 interface SortableWorkflowCardProps {
     workflow: WorkflowTemplate;
     missing: string[];
+    teaStatus?: TeaWorkflowStatus;
     installDecision: FeatureGateDecision;
+    fixDecision: FeatureGateDecision;
     onViewGraph: (w: WorkflowTemplate) => void;
     onExport: (w: WorkflowTemplate) => void;
     onEdit: (w: WorkflowTemplate) => void;
@@ -452,21 +454,34 @@ interface SortableWorkflowCardProps {
     onArchive: (id: number) => void;
     onUnarchive: (id: number) => void;
     onStartInstall: (nodes: string[]) => void;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    onFixDependency: (workflow: WorkflowTemplate, kind: "model" | "custom_node", dep: any) => void;
 }
 
 const SortableWorkflowCard = ({
     workflow: w,
     missing,
+    teaStatus,
     installDecision,
+    fixDecision,
     onViewGraph,
     onExport,
     onEdit,
     onDelete,
     onArchive,
     onUnarchive,
-    onStartInstall
+    onStartInstall,
+    onFixDependency
 }: SortableWorkflowCardProps) => {
     const isArchived = Boolean(w.archived_at);
+    const teaReadiness = teaStatus?.readiness;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const missingTeaModels = (teaReadiness?.missing_models || []) as any[];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const missingTeaNodes = (teaReadiness?.missing_custom_nodes || []) as any[];
+    const teaPipeMeta = teaStatus?.manifest?.pipe as
+        | { id?: string; version?: string; name?: string }
+        | undefined;
     const {
         attributes,
         listeners,
@@ -516,6 +531,25 @@ const SortableWorkflowCard = ({
                 </CardDescription>
             </CardHeader>
             <CardContent>
+                {teaStatus?.is_tea && teaStatus?.manifest && (
+                    <div className="mb-3 rounded-md border border-border bg-muted/30 p-2 text-[11px] text-muted-foreground">
+                        <div className="flex items-center justify-between">
+                            <span className="font-semibold">
+                                .tea package {teaPipeMeta?.version ? `v${teaPipeMeta.version}` : ""}
+                            </span>
+                            <span className={cn("font-semibold", teaReadiness?.ready === false ? "text-destructive" : "text-foreground")}>
+                                {teaReadiness?.ready === false ? "not ready" : "ready"}
+                            </span>
+                        </div>
+                        {teaPipeMeta?.id && <div className="mt-1 truncate font-mono">{teaPipeMeta.id}</div>}
+                        {teaStatus.unverified && (
+                            <div className="mt-1 text-destructive">
+                                integrity warning ({(teaStatus.integrity_mismatches || []).join(", ") || "hash mismatch"})
+                            </div>
+                        )}
+                    </div>
+                )}
+
                 {missing.length > 0 && (
                     <div className="bg-muted rounded-md p-3 border border-border text-xs">
                         <div className="flex items-center justify-between text-muted-foreground font-semibold mb-1">
@@ -541,6 +575,64 @@ const SortableWorkflowCard = ({
                         </ul>
                     </div>
                 )}
+
+                {teaStatus?.is_tea && teaStatus?.manifest && (missingTeaModels.length > 0 || missingTeaNodes.length > 0) && (
+                    <div className="mt-3 bg-muted rounded-md p-3 border border-border text-xs">
+                        <div className="flex items-center justify-between text-muted-foreground font-semibold mb-1">
+                            <div className="flex items-center">
+                                <AlertTriangle className="w-3 h-3 mr-1" /> missing dependencies
+                            </div>
+                        </div>
+                        {!fixDecision.allowed && (
+                            <div className="mb-2 text-[11px] text-muted-foreground">{fixDecision.reason}</div>
+                        )}
+                        {missingTeaModels.length > 0 && (
+                            <div className="mb-2">
+                                <div className="text-[11px] font-semibold mb-1">models</div>
+                                <div className="space-y-1">
+                                    {missingTeaModels.map((dep, index) => (
+                                        <div key={`${dep.name || "model"}-${index}`} className="flex items-center justify-between gap-2">
+                                            <span className="break-all">{dep.name || dep.preferred_filename || "unknown model"}</span>
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-6 px-1.5 text-[10px]"
+                                                onClick={() => onFixDependency(w, "model", dep)}
+                                                disabled={!fixDecision.allowed}
+                                                title={!fixDecision.allowed ? fixDecision.reason : undefined}
+                                            >
+                                                fix
+                                            </Button>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                        {missingTeaNodes.length > 0 && (
+                            <div>
+                                <div className="text-[11px] font-semibold mb-1">custom nodes</div>
+                                <div className="space-y-1">
+                                    {missingTeaNodes.map((dep, index) => (
+                                        <div key={`${dep.repo || "node"}-${index}`} className="flex items-center justify-between gap-2">
+                                            <span className="break-all">{dep.repo || "unknown repo"}</span>
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-6 px-1.5 text-[10px]"
+                                                onClick={() => onFixDependency(w, "custom_node", dep)}
+                                                disabled={!fixDecision.allowed}
+                                                title={!fixDecision.allowed ? fixDecision.reason : undefined}
+                                            >
+                                                fix
+                                            </Button>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
+
                 <div className="mt-4 flex flex-wrap gap-2 text-xs text-muted-foreground">
                     <span className="bg-muted/40 px-2 py-1 rounded">{Object.keys(w.graph_json).length} nodes</span>
                     <span className="bg-muted/40 px-2 py-1 rounded">{Object.keys(stripSchemaMeta(w.input_schema)).length} params</span>
@@ -651,6 +743,7 @@ export default function WorkflowLibrary() {
         }
         return [];
     });
+    const [teaStatusByWorkflowId, setTeaStatusByWorkflowId] = useState<Record<number, TeaWorkflowStatus>>({});
     const [error, setError] = useState<string | null>(null);
     const [importFile, setImportFile] = useState<File | null>(null);
     const [importName, setImportName] = useState("");
@@ -754,6 +847,11 @@ export default function WorkflowLibrary() {
         })
     );
     const [composeDescription, setComposeDescription] = useState("");
+    const [exportDialogOpen, setExportDialogOpen] = useState(false);
+    const [exportWorkflow, setExportWorkflow] = useState<WorkflowTemplate | null>(null);
+    const [exportMode, setExportMode] = useState<"shareable" | "exact_clone">("shareable");
+    const [exportNewId, setExportNewId] = useState(false);
+    const [isExportingTea, setIsExportingTea] = useState(false);
     const autoInstallDecision = canUseFeature("auto_install_nodes");
     const dependencyFixDecision = canUseFeature("dependency_fix");
 
@@ -820,8 +918,16 @@ export default function WorkflowLibrary() {
 
     const loadWorkflows = async () => {
         try {
-            const data = await api.getWorkflows(showArchived);
+            const [data, teaStatus] = await Promise.all([
+                api.getWorkflows(showArchived),
+                api.getTeaWorkflowStatuses(showArchived).catch(() => [] as TeaWorkflowStatus[]),
+            ]);
             setWorkflows(data);
+            const statusMap: Record<number, TeaWorkflowStatus> = {};
+            teaStatus.forEach((status) => {
+                statusMap[status.workflow_id] = status;
+            });
+            setTeaStatusByWorkflowId(statusMap);
         } catch (err) {
             setError("Failed to load workflows");
         }
@@ -856,6 +962,13 @@ export default function WorkflowLibrary() {
         return [];
     };
 
+    // Fix actions are intentionally hooks for entitlement-gated flows.
+    // Gating behavior lives elsewhere; this page only surfaces the action intents.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const handleFixDependency = (workflow: WorkflowTemplate, kind: "model" | "custom_node", dep: any) => {
+        console.info("dependency fix hook", { workflowId: workflow.id, kind, dep });
+    };
+
     useEffect(() => {
         if (!editingWorkflow || !schemaEdits) return;
         const desiredOrder = getNodeDisplayOrder(editingWorkflow.graph_json, schemaEdits);
@@ -880,20 +993,22 @@ export default function WorkflowLibrary() {
         if (e.target.files && e.target.files[0]) {
             const file = e.target.files[0];
             setImportFile(file);
-            setImportName(file.name.replace(".json", ""));
+            setImportName(file.name.replace(/\.(json|tea)$/i, ""));
 
-            file.text().then(text => {
-                try {
-                    const parsed = JSON.parse(text);
-                    if (parsed?._sweet_tea?.name) {
-                        setImportName(parsed._sweet_tea.name);
+            if (file.name.toLowerCase().endsWith(".json")) {
+                file.text().then(text => {
+                    try {
+                        const parsed = JSON.parse(text);
+                        if (parsed?._sweet_tea?.name) {
+                            setImportName(parsed._sweet_tea.name);
+                        }
+                    } catch (err) {
+                        console.debug("Ignoring filename inference error", err);
                     }
-                } catch (err) {
-                    console.debug("Ignoring filename inference error", err);
-                }
-            }).catch(() => {
-                // ignore background parse errors; manual name entry still works
-            });
+                }).catch(() => {
+                    // ignore background parse errors; manual name entry still works
+                });
+            }
         }
     };
 
@@ -901,24 +1016,33 @@ export default function WorkflowLibrary() {
         if (!importFile) return;
         setIsImporting(true);
         try {
-            const text = await importFile.text();
-            const graph = JSON.parse(text);
-
             const cleanedDescription = importDescription.trim().slice(0, 500);
+            const lowerName = importFile.name.toLowerCase();
 
-            if (graph.nodes && Array.isArray(graph.nodes)) {
-                alert("It looks like you uploaded a 'Saved' workflow. Please use 'Save (API Format)' in ComfyUI.");
-                setIsImporting(false);
-                return;
+            if (lowerName.endsWith(".tea")) {
+                await api.importTeaPipe({
+                    file: importFile,
+                    name: importName.trim() || undefined,
+                    description: cleanedDescription || undefined,
+                });
+            } else {
+                const text = await importFile.text();
+                const graph = JSON.parse(text);
+
+                if (graph.nodes && Array.isArray(graph.nodes)) {
+                    alert("It looks like you uploaded a 'Saved' workflow. Please use 'Save (API Format)' in ComfyUI.");
+                    setIsImporting(false);
+                    return;
+                }
+
+                const bundleName = importName || graph?._sweet_tea?.name || importFile.name.replace(".json", "");
+
+                await api.importWorkflow({
+                    data: graph,
+                    name: bundleName,
+                    description: cleanedDescription || graph?._sweet_tea?.description,
+                });
             }
-
-            const bundleName = importName || graph?._sweet_tea?.name || importFile.name.replace(".json", "");
-
-            await api.importWorkflow({
-                data: graph,
-                name: bundleName,
-                description: cleanedDescription || graph?._sweet_tea?.description,
-            });
 
             setImportFile(null);
             setImportName("");
@@ -932,21 +1056,38 @@ export default function WorkflowLibrary() {
         }
     };
 
-    const handleExport = async (workflow: WorkflowTemplate) => {
+    const handleExport = (workflow: WorkflowTemplate) => {
+        setExportWorkflow(workflow);
+        setExportMode("shareable");
+        setExportNewId(false);
+        setExportDialogOpen(true);
+    };
+
+    const runTeaExport = async () => {
+        if (!exportWorkflow) return;
+        setIsExportingTea(true);
         try {
-            const bundle = await api.exportWorkflow(workflow.id);
-            const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: "application/json" });
+            const result = await api.exportTeaPipe(exportWorkflow.id, {
+                mode: exportMode,
+                newId: exportNewId,
+            });
+            const blob = result.blob;
             const url = URL.createObjectURL(blob);
             const link = document.createElement("a");
             link.href = url;
-            const safeName = (workflow.name || `workflow_${workflow.id}`).replace(/[^a-z0-9-_]+/gi, "_").toLowerCase();
-            link.download = `${safeName}_pipe.json`;
+            link.download = result.filename;
             document.body.appendChild(link);
             link.click();
             link.remove();
             URL.revokeObjectURL(url);
+            setExportDialogOpen(false);
+            if (result.warnings) {
+                console.info("tea export warnings:", result.warnings);
+            }
         } catch (err) {
-            setError(err instanceof Error ? err.message : "Failed to export workflow");
+            setError(err instanceof Error ? err.message : "Failed to export .tea package");
+        } finally {
+            setIsExportingTea(false);
         }
     };
 
@@ -1640,9 +1781,9 @@ export default function WorkflowLibrary() {
                         </DialogTrigger>
                         <DialogContent>
                             <DialogHeader>
-                                <DialogTitle>import pipe from comfyui</DialogTitle>
+                                <DialogTitle>import pipe (.tea or comfy json)</DialogTitle>
                                 <DialogDescription>
-                                    Upload a Sweet Tea export bundle (includes integrity metadata) or a ComfyUI <b>Save (API Format)</b> JSON.
+                                    Upload a portable <b>.tea</b> pipe package or a ComfyUI <b>Save (API Format)</b> JSON.
                                 </DialogDescription>
                             </DialogHeader>
                             <div className="grid gap-4 py-4">
@@ -1665,12 +1806,64 @@ export default function WorkflowLibrary() {
                                 </div>
                                 <div className="grid grid-cols-4 items-center gap-4">
                                     <Label htmlFor="file" className="text-right">file</Label>
-                                    <Input id="file" type="file" accept=".json" onChange={handleFileChange} className="col-span-3" />
+                                    <Input id="file" type="file" accept=".json,.tea" onChange={handleFileChange} className="col-span-3" />
                                 </div>
                             </div>
                             <DialogFooter>
                                 <Button disabled={!importFile || isImporting} onClick={handleImport}>
                                     {isImporting ? "importing..." : "import"}
+                                </Button>
+                            </DialogFooter>
+                        </DialogContent>
+                    </Dialog>
+
+                    <Dialog open={exportDialogOpen} onOpenChange={setExportDialogOpen}>
+                        <DialogContent>
+                            <DialogHeader>
+                                <DialogTitle>export .tea package</DialogTitle>
+                                <DialogDescription>
+                                    choose export mode for {exportWorkflow?.name || "selected pipe"}.
+                                </DialogDescription>
+                            </DialogHeader>
+                            <div className="space-y-3 py-2">
+                                <div className="space-y-2">
+                                    <Label className="text-xs">mode</Label>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <Button
+                                            type="button"
+                                            variant={exportMode === "shareable" ? "default" : "outline"}
+                                            onClick={() => setExportMode("shareable")}
+                                        >
+                                            shareable
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            variant={exportMode === "exact_clone" ? "default" : "outline"}
+                                            onClick={() => setExportMode("exact_clone")}
+                                        >
+                                            exact clone
+                                        </Button>
+                                    </div>
+                                    <p className="text-[11px] text-muted-foreground">
+                                        {exportMode === "shareable"
+                                            ? "strips machine-specific paths and keeps package portable."
+                                            : "preserves local metadata and includes lock.json when detectable."}
+                                    </p>
+                                </div>
+                                <div className="flex items-center justify-between rounded border border-border px-3 py-2">
+                                    <div>
+                                        <div className="text-xs font-medium">new pipe id</div>
+                                        <div className="text-[11px] text-muted-foreground">generate a fresh pipe id on export</div>
+                                    </div>
+                                    <Switch checked={exportNewId} onCheckedChange={setExportNewId} />
+                                </div>
+                            </div>
+                            <DialogFooter>
+                                <Button variant="outline" onClick={() => setExportDialogOpen(false)} disabled={isExportingTea}>
+                                    cancel
+                                </Button>
+                                <Button onClick={runTeaExport} disabled={!exportWorkflow || isExportingTea}>
+                                    {isExportingTea ? "exporting..." : "export .tea"}
                                 </Button>
                             </DialogFooter>
                         </DialogContent>
@@ -1695,7 +1888,9 @@ export default function WorkflowLibrary() {
                                     key={w.id}
                                     workflow={w}
                                     missing={missing}
+                                    teaStatus={teaStatusByWorkflowId[w.id]}
                                     installDecision={autoInstallDecision}
+                                    fixDecision={dependencyFixDecision}
                                     onViewGraph={handleViewGraph}
                                     onExport={handleExport}
                                     onEdit={handleEdit}
@@ -1703,6 +1898,7 @@ export default function WorkflowLibrary() {
                                     onArchive={handleArchive}
                                     onUnarchive={handleUnarchive}
                                     onStartInstall={startInstall}
+                                    onFixDependency={handleFixDependency}
                                 />
                             );
                         })}

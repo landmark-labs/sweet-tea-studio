@@ -139,6 +139,36 @@ export interface WorkflowExportBundle {
     };
 }
 
+export interface TeaDependencyStatus {
+    ready: boolean;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    models: any[];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    custom_nodes: any[];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    missing_models: any[];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    missing_custom_nodes: any[];
+}
+
+export interface TeaWorkflowStatus {
+    workflow_id: number;
+    is_tea: boolean;
+    pipe_id?: string | null;
+    unverified?: boolean;
+    integrity_mismatches?: string[];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    manifest?: Record<string, any> | null;
+    readiness?: TeaDependencyStatus | null;
+    storage_path?: string | null;
+}
+
+export interface TeaImportResponse {
+    workflow: WorkflowTemplate;
+    status: TeaWorkflowStatus;
+    warnings: string[];
+}
+
 // ====================
 // JOBS
 // ====================

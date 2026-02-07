@@ -121,6 +121,15 @@ APP_SETTINGS: List[AppSettingDefinition] = [
         description="LRU size for cached image dimensions.",
         category="performance",
     ),
+    AppSettingDefinition(
+        key="pipes_store_original_blob",
+        env_var="STS_PIPES_STORE_ORIGINAL_BLOB",
+        default="true",
+        type="bool",
+        label="Store original .tea archives",
+        description="Persist the original imported .tea blob for exact round-trip exports.",
+        category="storage",
+    ),
 ]
 
 APP_SETTINGS_INDEX = {setting.key: setting for setting in APP_SETTINGS}

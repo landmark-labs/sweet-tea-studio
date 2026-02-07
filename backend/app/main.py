@@ -3,7 +3,24 @@ import asyncio
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.endpoints import canvases, collections, engines, extensions, files, gallery, jobs, library, models, monitoring, projects, workflows, portfolio, snippets, auth_client
+from app.api.endpoints import (
+    auth_client,
+    canvases,
+    collections,
+    engines,
+    extensions,
+    files,
+    gallery,
+    jobs,
+    library,
+    models,
+    monitoring,
+    portfolio,
+    projects,
+    snippets,
+    tea_pipes,
+    workflows,
+)
 from app.api.endpoints.library_tags import start_tag_cache_refresh_background
 from app.core.config import settings
 from app.core.error_handlers import register_gallery_error_handlers
@@ -116,6 +133,7 @@ app.include_router(monitoring.router, prefix="/api/v1/monitoring", tags=["monito
 app.include_router(models.router, prefix="/api/v1/models", tags=["models"])
 app.include_router(portfolio.router, prefix="/api/v1/portfolio", tags=["portfolio"])
 app.include_router(snippets.router, prefix="/api/v1/snippets", tags=["snippets"])
+app.include_router(tea_pipes.router, prefix="/api/v1", tags=["tea-pipes"])
 app.include_router(auth_client.router, prefix="/api/v1", tags=["auth-client"])
 from app.api.endpoints import settings as settings_endpoints
 app.include_router(settings_endpoints.router, prefix="/api/v1", tags=["settings"])

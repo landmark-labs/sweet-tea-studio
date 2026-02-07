@@ -15,6 +15,7 @@ from app.models.workflow import WorkflowTemplate, WorkflowTemplateCreate, Workfl
 from app.models.engine import Engine
 from app.core.comfy_client import ComfyClient
 from app.core.workflow_merger import WorkflowMerger
+from app.services.tea_package import runtime_target_from_pointer
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -487,7 +488,35 @@ def _build_node_mapping_from_schema(schema: Dict[str, Any]) -> Dict[str, Any]:
         if str(key).startswith("__"):
             continue
         if not isinstance(field_def, dict) or "x_node_id" not in field_def:
+            # .tea interface fields can still be valid even when x_node_id is omitted.
+            targets = field_def.get("x_tea_targets")
+            if isinstance(targets, list):
+                runtime_targets: List[Dict[str, Any]] = []
+                for pointer in targets:
+                    if not isinstance(pointer, str):
+                        continue
+                    runtime_targets.append(runtime_target_from_pointer(pointer))
+                if runtime_targets:
+                    if len(runtime_targets) == 1 and "node_id" in runtime_targets[0]:
+                        mapping[str(key)] = runtime_targets[0]
+                    else:
+                        mapping[str(key)] = {"targets": runtime_targets}
             continue
+
+        targets = field_def.get("x_tea_targets")
+        if isinstance(targets, list) and targets:
+            runtime_targets: List[Dict[str, Any]] = []
+            for pointer in targets:
+                if not isinstance(pointer, str):
+                    continue
+                runtime_targets.append(runtime_target_from_pointer(pointer))
+            if runtime_targets:
+                if len(runtime_targets) == 1 and "node_id" in runtime_targets[0]:
+                    mapping[str(key)] = runtime_targets[0]
+                else:
+                    mapping[str(key)] = {"targets": runtime_targets}
+                continue
+
         mapping[str(key)] = {
             "node_id": str(field_def["x_node_id"]),
             "field": f"inputs.{field_def.get('mock_field', str(key).split('.')[-1])}",
@@ -639,18 +668,8 @@ def create_workflow(workflow_in: WorkflowTemplateCreate):
             # Ensure __node_order exists if a pre-existing schema was provided (e.g. from import)
             ensure_node_order(workflow_in)
             
-        # Generate default helper mapping as well
-        workflow_in.node_mapping = {}
-        for key, field_def in workflow_in.input_schema.items():
-            if key.startswith("__"):
-                continue
-            if not isinstance(field_def, dict) or "x_node_id" not in field_def:
-                continue
-            # We preserve x_ metadata in the schema for UI grouping!
-            workflow_in.node_mapping[key] = {
-                "node_id": field_def["x_node_id"],
-                "field": f"inputs.{field_def.get('mock_field', key.split('.')[-1])}" # fallback logic
-            }
+        # Generate default helper mapping as well.
+        workflow_in.node_mapping = _build_node_mapping_from_schema(workflow_in.input_schema)
 
         workflow_in.description = _clean_description(workflow_in.description)
 

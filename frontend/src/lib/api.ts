@@ -42,6 +42,8 @@ import type {
     SnippetCreate,
     StatusSummary,
     SystemMetrics,
+    TeaImportResponse,
+    TeaWorkflowStatus,
     TagPromptResponse,
     TagSuggestion,
     WorkflowExportBundle,
@@ -299,6 +301,71 @@ export const api = {
         });
         if (!res.ok) throw new Error("Failed to reorder workflows");
         return res.json();
+    },
+
+    getTeaWorkflowStatuses: async (includeArchived = true): Promise<TeaWorkflowStatus[]> => {
+        const params = new URLSearchParams();
+        if (!includeArchived) {
+            params.set("include_archived", "false");
+        }
+        const suffix = params.toString() ? `?${params.toString()}` : "";
+        const res = await fetch(`${API_BASE}/tea-pipes/status${suffix}`);
+        if (!res.ok) throw new Error("Failed to fetch tea status");
+        return res.json();
+    },
+
+    getTeaWorkflowStatus: async (workflowId: number): Promise<TeaWorkflowStatus> => {
+        const res = await fetch(`${API_BASE}/tea-pipes/${workflowId}`);
+        if (!res.ok) throw new Error("Failed to fetch tea status");
+        return res.json();
+    },
+
+    importTeaPipe: async (payload: {
+        file: File;
+        name?: string;
+        description?: string;
+        storeOriginal?: boolean;
+    }): Promise<TeaImportResponse> => {
+        const formData = new FormData();
+        formData.append("file", payload.file);
+        if (payload.name !== undefined) {
+            formData.append("name", payload.name);
+        }
+        if (payload.description !== undefined) {
+            formData.append("description", payload.description);
+        }
+        if (payload.storeOriginal !== undefined) {
+            formData.append("store_original", payload.storeOriginal ? "true" : "false");
+        }
+
+        const res = await fetch(`${API_BASE}/tea-pipes/import`, {
+            method: "POST",
+            body: formData,
+        });
+        if (!res.ok) {
+            const body = await res.json().catch(() => ({}));
+            throw new Error(body.detail || "Failed to import .tea package");
+        }
+        return res.json();
+    },
+
+    exportTeaPipe: async (
+        workflowId: number,
+        options?: { mode?: "shareable" | "exact_clone"; newId?: boolean }
+    ): Promise<{ blob: Blob; filename: string; warnings?: string }> => {
+        const mode = options?.mode || "shareable";
+        const newId = options?.newId ? "true" : "false";
+        const res = await fetch(`${API_BASE}/tea-pipes/${workflowId}/export?mode=${mode}&new_id=${newId}`);
+        if (!res.ok) {
+            const body = await res.json().catch(() => ({}));
+            throw new Error(body.detail || "Failed to export .tea package");
+        }
+        const blob = await res.blob();
+        const cd = res.headers.get("Content-Disposition") || "";
+        const match = /filename="?([^"]+)"?/i.exec(cd);
+        const filename = match?.[1] || `pipe_${workflowId}.tea`;
+        const warnings = res.headers.get("X-Sweet-Tea-Warnings") || undefined;
+        return { blob, filename, warnings };
     },
 
     // --- Jobs ---

@@ -41,6 +41,7 @@ from app.db.engine import engine as db_engine
 from app.core.websockets import manager
 from app.services.comfy_watchdog import watchdog
 from app.services.gallery.search import build_search_text, update_gallery_fts
+from app.services.tea_package import runtime_target_from_pointer
 from app.services.job_processor_sequence import (
     _derive_output_filename,
     _get_next_sequence_start,
@@ -127,14 +128,64 @@ def apply_params_to_graph(graph: dict, mapping: dict, params: dict):
     for param_name, value in params.items():
         if param_name in mapping:
             target = mapping[param_name]
-            node_id = target["node_id"]
-            field_path = target["field"].split(".")
-            
-            if node_id in graph:
-                current = graph[node_id]
-                for part in field_path[:-1]:
-                    current = current.get(part, {})
-                current[field_path[-1]] = value
+            if isinstance(target, dict) and isinstance(target.get("targets"), list):
+                for nested in target.get("targets", []):
+                    _apply_mapping_target(graph, nested, value)
+                continue
+            _apply_mapping_target(graph, target, value)
+
+
+def _set_nested_path(root: dict, dotted_path: str, value: object) -> None:
+    parts = [part for part in dotted_path.split(".") if part]
+    if not parts:
+        return
+    current = root
+    for part in parts[:-1]:
+        next_val = current.get(part)
+        if not isinstance(next_val, dict):
+            next_val = {}
+            current[part] = next_val
+        current = next_val
+    current[parts[-1]] = value
+
+
+def _set_json_pointer(graph: dict, pointer: str, value: object) -> None:
+    if not isinstance(pointer, str) or not pointer.startswith("/"):
+        return
+    tokens = pointer[1:].split("/")
+    tokens = [token.replace("~1", "/").replace("~0", "~") for token in tokens]
+    if not tokens:
+        return
+    current: object = graph
+    for token in tokens[:-1]:
+        if not isinstance(current, dict):
+            return
+        if token not in current:
+            return
+        current = current[token]
+    if not isinstance(current, dict):
+        return
+    current[tokens[-1]] = value
+
+
+def _apply_mapping_target(graph: dict, target: object, value: object) -> None:
+    if not isinstance(target, dict):
+        return
+    json_pointer = target.get("json_pointer")
+    if isinstance(json_pointer, str):
+        _set_json_pointer(graph, json_pointer, value)
+        return
+
+    node_id = target.get("node_id")
+    field = target.get("field")
+    if not isinstance(node_id, str) or not isinstance(field, str):
+        return
+    if node_id not in graph:
+        return
+    node = graph.get(node_id)
+    if not isinstance(node, dict):
+        return
+    _set_nested_path(node, field, value)
 
 
 def _stable_json_sha256(data: object) -> str:
@@ -1649,12 +1700,25 @@ def _dump_comfy_history_and_resolved(
 
 
 def _build_node_mapping_from_schema(schema: dict) -> dict:
-    mapping: dict[str, dict[str, str]] = {}
+    mapping: dict[str, dict[str, Any]] = {}
     for key, field_def in schema.items():
         if not isinstance(key, str) or key.startswith("__"):
             continue
         if not isinstance(field_def, dict):
             continue
+        tea_targets = field_def.get("x_tea_targets")
+        if isinstance(tea_targets, list) and tea_targets:
+            runtime_targets: list[dict[str, str]] = []
+            for pointer in tea_targets:
+                if not isinstance(pointer, str):
+                    continue
+                runtime_targets.append(runtime_target_from_pointer(pointer))
+            if runtime_targets:
+                if len(runtime_targets) == 1 and "node_id" in runtime_targets[0]:
+                    mapping[key] = runtime_targets[0]
+                else:
+                    mapping[key] = {"targets": runtime_targets}
+                continue
         node_id = field_def.get("x_node_id")
         if node_id is None:
             continue
