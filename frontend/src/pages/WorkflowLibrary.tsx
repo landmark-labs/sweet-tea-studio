@@ -99,10 +99,11 @@ interface NodeCardProps {
     node: RenderNode;
     schemaEdits: any;
     setSchemaEdits: (edits: any) => void;
+    isExpanded: boolean;
+    onToggleExpand: () => void;
 }
 
-const NodeCard = ({ node, schemaEdits, setSchemaEdits }: NodeCardProps) => {
-    const [isExpanded, setIsExpanded] = useState(false);
+const NodeCard = ({ node, schemaEdits, setSchemaEdits, isExpanded, onToggleExpand }: NodeCardProps) => {
     const {
         attributes,
         listeners,
@@ -171,7 +172,7 @@ const NodeCard = ({ node, schemaEdits, setSchemaEdits }: NodeCardProps) => {
         >
             <div
                 className="px-4 py-2 bg-muted/40 border-b border-border flex justify-between items-center cursor-pointer hover:bg-muted/60 transition-colors"
-                onClick={() => setIsExpanded(!isExpanded)}
+                onClick={onToggleExpand}
             >
                 <div className="flex items-center gap-2">
                     <button
@@ -577,6 +578,13 @@ export default function WorkflowLibrary() {
     const setShowArchived = usePipesPageStore((state) => state.setShowArchived);
     const editingWorkflowId = usePipesPageStore((state) => state.editingWorkflowId);
     const setEditingWorkflowId = usePipesPageStore((state) => state.setEditingWorkflowId);
+    const editName = usePipesPageStore((state) => state.editName);
+    const setEditName = usePipesPageStore((state) => state.setEditName);
+    const schemaEdits = usePipesPageStore((state) => state.schemaEdits);
+    const setSchemaEdits = usePipesPageStore((state) => state.setSchemaEdits);
+    const expandedNodes = usePipesPageStore((state) => state.expandedNodes);
+    const setExpandedNodes = usePipesPageStore((state) => state.setExpandedNodes);
+    const clearEditingState = usePipesPageStore((state) => state.clearEditingState);
     const [error, setError] = useState<string | null>(null);
     const [importFile, setImportFile] = useState<File | null>(null);
     const [importName, setImportName] = useState("");
@@ -584,10 +592,8 @@ export default function WorkflowLibrary() {
     const [isImporting, setIsImporting] = useState(false);
     const [isDialogOpen, setIsDialogOpen] = useState(false);
 
-    // Edit State
+    // Edit State (local object reference only, actual data is in store)
     const [editingWorkflow, setEditingWorkflowLocal] = useState<WorkflowTemplate | null>(null);
-    const [schemaEdits, setSchemaEdits] = useState<any>(null);
-    const [editName, setEditName] = useState("");
     const [nameError, setNameError] = useState("");
     const [isSaving, setIsSaving] = useState(false);
     const [isSyncingSchema, setIsSyncingSchema] = useState(false);
@@ -596,7 +602,18 @@ export default function WorkflowLibrary() {
     // Wrapper to keep store and local state in sync
     const setEditingWorkflow = (wf: WorkflowTemplate | null) => {
         setEditingWorkflowLocal(wf);
-        setEditingWorkflowId(wf?.id ?? null);
+        if (wf) {
+            setEditingWorkflowId(wf.id);
+            // Only initialize if we don't have existing edits for this workflow
+            if (!schemaEdits) {
+                setSchemaEdits(wf.input_schema ? JSON.parse(JSON.stringify(wf.input_schema)) : null);
+            }
+            if (!editName) {
+                setEditName(wf.name);
+            }
+        } else {
+            clearEditingState();
+        }
     };
 
     // Restore editing state when workflows load and we have a persisted ID
@@ -605,14 +622,20 @@ export default function WorkflowLibrary() {
             const found = workflows.find((w) => w.id === editingWorkflowId);
             if (found) {
                 setEditingWorkflowLocal(found);
-                setEditName(found.name);
-                setSchemaEdits(found.input_schema ? JSON.parse(JSON.stringify(found.input_schema)) : null);
+                // Use persisted edits if available, otherwise init from workflow
+                if (!schemaEdits) {
+                    setSchemaEdits(found.input_schema ? JSON.parse(JSON.stringify(found.input_schema)) : null);
+                }
+                if (!editName) {
+                    setEditName(found.name);
+                }
             } else {
-                // Workflow no longer exists, clear persisted ID
-                setEditingWorkflowId(null);
+                // Workflow no longer exists, clear persisted state
+                clearEditingState();
             }
         }
     }, [workflows, editingWorkflowId, editingWorkflow]);
+
 
     const generation = useGeneration();
 
@@ -1324,7 +1347,20 @@ export default function WorkflowLibrary() {
                         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                             <SortableContext items={nodesRenderData.map(node => node.id)} strategy={verticalListSortingStrategy}>
                                 {nodesRenderData.map(node => (
-                                    <NodeCard key={node.id} node={node} schemaEdits={schemaEdits} setSchemaEdits={setSchemaEdits} />
+                                    <NodeCard
+                                        key={node.id}
+                                        node={node}
+                                        schemaEdits={schemaEdits}
+                                        setSchemaEdits={setSchemaEdits}
+                                        isExpanded={expandedNodes.includes(node.id)}
+                                        onToggleExpand={() => {
+                                            if (expandedNodes.includes(node.id)) {
+                                                setExpandedNodes(expandedNodes.filter(id => id !== node.id));
+                                            } else {
+                                                setExpandedNodes([...expandedNodes, node.id]);
+                                            }
+                                        }}
+                                    />
                                 ))}
                             </SortableContext>
                         </DndContext>

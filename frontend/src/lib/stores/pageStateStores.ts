@@ -24,8 +24,15 @@ export const useProjectsPageStore = create<ProjectsPageState>()(
 interface PipesPageState {
     showArchived: boolean;
     editingWorkflowId: number | null;
+    editName: string;
+    schemaEdits: any | null;
+    expandedNodes: string[];
     setShowArchived: (show: boolean) => void;
     setEditingWorkflowId: (id: number | null) => void;
+    setEditName: (name: string) => void;
+    setSchemaEdits: (schema: any | null) => void;
+    setExpandedNodes: (nodes: string[]) => void;
+    clearEditingState: () => void;
 }
 
 export const usePipesPageStore = create<PipesPageState>()(
@@ -33,8 +40,20 @@ export const usePipesPageStore = create<PipesPageState>()(
         (set) => ({
             showArchived: false,
             editingWorkflowId: null,
+            editName: "",
+            schemaEdits: null,
+            expandedNodes: [],
             setShowArchived: (show) => set({ showArchived: show }),
             setEditingWorkflowId: (id) => set({ editingWorkflowId: id }),
+            setEditName: (name) => set({ editName: name }),
+            setSchemaEdits: (schema) => set({ schemaEdits: schema }),
+            setExpandedNodes: (nodes) => set({ expandedNodes: nodes }),
+            clearEditingState: () => set({
+                editingWorkflowId: null,
+                editName: "",
+                schemaEdits: null,
+                expandedNodes: []
+            }),
         }),
         {
             name: "ds_page_pipes",
