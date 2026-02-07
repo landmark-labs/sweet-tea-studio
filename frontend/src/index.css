@@ -1,101 +1,118 @@
 @import "tailwindcss";
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600&display=swap');
 
 /* Tailwind v4 dark mode uses CSS custom variants; map `dark:` to the `.dark` class */
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* Light theme (default) */
+/* Light theme (ChatGPT-inspired neutral system) */
 :root {
-  --color-background: hsl(220 23% 97%);
-  --color-foreground: hsl(229 24% 18%);
+  --color-background: #f7f7f8;
+  --color-foreground: #202123;
 
-  --color-surface: hsl(0 0% 100%);
-  --color-surface-raised: hsl(0 0% 100%);
-  --color-surface-overlay: hsl(0 0% 100%);
+  --color-surface: #ffffff;
+  --color-surface-raised: #f2f3f5;
+  --color-surface-overlay: #ffffff;
 
-  --color-card: hsl(0 0% 100%);
-  --color-card-foreground: hsl(229 24% 18%);
+  --color-card: #ffffff;
+  --color-card-foreground: #202123;
 
-  --color-popover: hsl(0 0% 100%);
-  --color-popover-foreground: hsl(229 24% 18%);
+  --color-popover: #ffffff;
+  --color-popover-foreground: #202123;
 
-  --color-primary: hsl(256 84% 56%);
-  --color-primary-foreground: hsl(210 40% 98%);
-
-  --color-secondary: hsl(198 86% 51%);
-  --color-secondary-foreground: hsl(210 40% 98%);
-
-  --color-muted: hsl(225 18% 92%);
-  --color-muted-foreground: hsl(225 16% 46%);
-
-  --color-accent: hsl(43 96% 64%);
-  --color-accent-foreground: hsl(229 24% 18%);
-
-  --color-destructive: hsl(0 79% 63%);
-  --color-destructive-foreground: hsl(210 40% 98%);
-
-  --color-border: hsl(223 15% 86%);
-  --color-input: hsl(223 15% 86%);
-  --color-ring: hsl(256 84% 56%);
-
-  /* Interactive state colors */
-  --color-hover: hsl(225 18% 96%);
-  --color-active: hsl(225 18% 90%);
-
-  /* Scrollbars */
-  --scrollbar-track: transparent;
-  --scrollbar-thumb: hsl(223 15% 86%);
-  --scrollbar-thumb-hover: hsl(225 16% 46%);
-
-  --radius: 0.75rem;
-}
-
-/* Dark theme - improved based on reference design */
-:root.dark {
-  /* Near-black base with subtle blue tint (see docs/mock for expectations) */
-  --color-background: #050508;
-  --color-foreground: #e2e8f0;
-
-  /* Surfaces/panels */
-  --color-surface: #0b0c15;
-  --color-surface-raised: #0f111a;
-  --color-surface-overlay: #121428;
-
-  --color-card: #0b0c15;
-  --color-card-foreground: #e2e8f0;
-
-  --color-popover: #0f111a;
-  --color-popover-foreground: #e2e8f0;
-
-  /* Brand */
-  --color-primary: #3b82f6;
+  --color-primary: #3f7cff;
   --color-primary-foreground: #ffffff;
 
-  --color-secondary: #60a5fa;
-  --color-secondary-foreground: #050508;
+  --color-secondary: #eceef2;
+  --color-secondary-foreground: #202123;
 
-  --color-muted: #111327;
-  --color-muted-foreground: #94a3b8;
+  --color-muted: #eef0f3;
+  --color-muted-foreground: #6b7280;
 
-  --color-accent: #1e3a8a;
-  --color-accent-foreground: #e2e8f0;
+  --color-accent: #e6edff;
+  --color-accent-foreground: #1f2937;
+
+  --color-destructive: #dc2626;
+  --color-destructive-foreground: #ffffff;
+
+  --color-success: #059669;
+  --color-success-foreground: #ffffff;
+
+  --color-border: #dfe3e8;
+  --color-input: #d5dae1;
+  --color-ring: #3f7cff;
+
+  --color-hover: #eef1f4;
+  --color-active: #e4e8ee;
+
+  --focus-ring: 0 0 0 3px rgb(63 124 255 / 0.28);
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+
+  --shadow-xs: 0 1px 2px rgb(15 23 42 / 0.05);
+  --shadow-sm: 0 1px 3px rgb(15 23 42 / 0.08), 0 1px 2px rgb(15 23 42 / 0.04);
+  --shadow-md: 0 8px 24px rgb(15 23 42 / 0.12);
+
+  --scrollbar-track: transparent;
+  --scrollbar-thumb: #d1d5dc;
+  --scrollbar-thumb-hover: #b5bcc6;
+
+  --radius: 0.9rem;
+}
+
+/* Dark theme (ChatGPT-inspired neutral system) */
+:root.dark {
+  --color-background: #212121;
+  --color-foreground: #ececf1;
+
+  --color-surface: #171717;
+  --color-surface-raised: #262626;
+  --color-surface-overlay: #2d2d2d;
+
+  --color-card: #262626;
+  --color-card-foreground: #ececf1;
+
+  --color-popover: #2a2a2a;
+  --color-popover-foreground: #ececf1;
+
+  --color-primary: #5a8dff;
+  --color-primary-foreground: #ffffff;
+
+  --color-secondary: #32363d;
+  --color-secondary-foreground: #ececf1;
+
+  --color-muted: #2d2d2f;
+  --color-muted-foreground: #a1a1aa;
+
+  --color-accent: #353b46;
+  --color-accent-foreground: #e5e7eb;
 
   --color-destructive: #ef4444;
   --color-destructive-foreground: #ffffff;
 
-  /* Borders/inputs */
-  --color-border: #1e2235;
-  --color-input: #1e2235;
-  --color-ring: #3b82f6;
+  --color-success: #10b981;
+  --color-success-foreground: #062e24;
 
-  /* Interactive state colors */
-  --color-hover: #0f111a;
-  --color-active: #121428;
+  --color-border: #3f3f46;
+  --color-input: #404046;
+  --color-ring: #5a8dff;
 
-  /* Scrollbars */
-  --scrollbar-track: #050508;
-  --scrollbar-thumb: #1e293b;
-  --scrollbar-thumb-hover: #334155;
+  --color-hover: #3a3a44;
+  --color-active: #383841;
+
+  --focus-ring: 0 0 0 3px rgb(90 141 255 / 0.35);
+
+  --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.35);
+  --shadow-sm: 0 1px 3px rgb(0 0 0 / 0.4), 0 1px 2px rgb(0 0 0 / 0.25);
+  --shadow-md: 0 12px 28px rgb(0 0 0 / 0.45);
+
+  --scrollbar-track: #171717;
+  --scrollbar-thumb: #47474f;
+  --scrollbar-thumb-hover: #5c5c66;
 }
 
 /* Tailwind theme integration */
@@ -124,6 +141,8 @@
   --color-ring: var(--color-ring);
   --color-hover: var(--color-hover);
   --color-active: var(--color-active);
+  --color-success: var(--color-success);
+  --color-success-foreground: var(--color-success-foreground);
   --radius: var(--radius);
 }
 
@@ -145,7 +164,7 @@
 
   ::-webkit-scrollbar-thumb {
     background: var(--scrollbar-thumb);
-    border-radius: 8px;
+    border-radius: 999px;
     border: 2px solid var(--scrollbar-track);
   }
 
@@ -153,9 +172,24 @@
     background: var(--scrollbar-thumb-hover);
   }
 
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
   body {
     @apply bg-background text-foreground antialiased;
-    font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-family: "Segoe UI", "Segoe UI Variable", "Helvetica Neue", Arial, system-ui, sans-serif;
+    line-height: 1.45;
+    font-size: 14px;
+  }
+
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
   }
 
   h1,
@@ -164,22 +198,31 @@
   h4,
   h5,
   h6 {
-    font-family: "Space Grotesk", "Inter", system-ui, sans-serif;
-    @apply tracking-tight text-foreground;
+    @apply text-foreground;
+    font-family: "Segoe UI", "Segoe UI Variable", "Helvetica Neue", Arial, system-ui, sans-serif;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  :focus-visible {
+    outline: none;
+    box-shadow: var(--focus-ring);
   }
 }
 
 @layer components {
   .glass-card {
-    @apply bg-surface/80 backdrop-blur border border-border/80 shadow-sm rounded-2xl;
+    @apply bg-surface border border-border;
+    box-shadow: var(--shadow-sm);
+    border-radius: var(--radius);
   }
 
   .section-title {
-    @apply text-lg font-semibold text-foreground;
+    @apply text-base font-semibold text-foreground;
   }
 
   .muted-label {
-    @apply text-sm text-muted-foreground;
+    @apply text-xs text-muted-foreground;
   }
 
   .virtual-grid {
@@ -195,7 +238,6 @@ input[type="number"]::-webkit-outer-spin-button {
   cursor: pointer;
 }
 
-/* Dark mode: invert spinner arrows for visibility */
 :root.dark input[type="number"]::-webkit-inner-spin-button,
 :root.dark input[type="number"]::-webkit-outer-spin-button {
   filter: invert(1) hue-rotate(180deg);

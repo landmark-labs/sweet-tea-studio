@@ -60,7 +60,7 @@ function highlightMatch(label: string, term: string): React.ReactNode {
     return (
         <>
             {label.slice(0, idx)}
-            <span className="bg-amber-100 text-amber-900 rounded px-0.5">{label.slice(idx, idx + term.length)}</span>
+            <span className="bg-accent text-foreground rounded px-0.5">{label.slice(idx, idx + term.length)}</span>
             {label.slice(idx + term.length)}
         </>
     );
@@ -68,9 +68,9 @@ function highlightMatch(label: string, term: string): React.ReactNode {
 
 function sourceBadgeClass(source: string): string {
     if (source === "danbooru") return "bg-pink-50 text-pink-700 border-pink-200";
-    if (source === "e621") return "bg-amber-50 text-amber-700 border-amber-200";
-    if (source === "rule34") return "bg-green-50 text-green-700 border-green-200";
-    return "bg-indigo-50 text-indigo-700 border-indigo-200";
+    if (source === "e621") return "bg-muted text-foreground border-border";
+    if (source === "rule34") return "bg-muted text-foreground border-border";
+    return "bg-muted text-muted-foreground border-border";
 }
 
 /**
@@ -566,7 +566,7 @@ export function PromptAutocompleteTextarea({
 
         // We intentionally ignore any `dark:*` snippet classes here so snippet colors
         // stay consistent across themes (matches light mode appearance).
-        const fallback = "bg-slate-200";
+        const fallback = "bg-muted";
         const tokens = (rawColor || "").split(/\s+/g).filter(Boolean);
         const bgTokens = tokens.filter((c) => c.startsWith("bg-"));
         const result = bgTokens.join(" ") || fallback;
@@ -642,7 +642,7 @@ export function PromptAutocompleteTextarea({
 
                 selectedMatches.forEach((m, idx) => {
                     if (m.start > cursor) {
-                        // Non-highlighted text: inherits `text-transparent dark:text-slate-300` from the backdrop container.
+                        // Non-highlighted text: inherits `text-transparent dark:text-muted-foreground` from the backdrop container.
                         nodes.push(valueToHighlight.slice(cursor, m.start));
                     }
                     const bgClasses = buildHighlightBgClasses(m.snippet.color);
@@ -652,13 +652,9 @@ export function PromptAutocompleteTextarea({
                             key={`${m.start}-${idx}`}
                             className={cn(
                                 bgClasses,
-                                "rounded-sm opacity-80",
-                                isRehydrationMatch && "ring-2 ring-black/40 dark:ring-red-500 ring-inset underline decoration-dashed decoration-black/60 dark:decoration-red-500 underline-offset-2",
-                                // Dark mode: keep highlights bright and vibrant, render text in black
-                                // for maximum readability contrast. The textarea text above will be
-                                // made transparent so this black text shows through.
-                                "dark:opacity-100 dark:text-black dark:font-medium",
-                                // Light mode: keep text transparent so textarea text shows
+                                "rounded-sm opacity-95 dark:opacity-100",
+                                isRehydrationMatch && "ring-2 ring-black/40 dark:ring-destructive ring-inset underline decoration-dashed decoration-black/60 dark:decoration-destructive underline-offset-2",
+                                // Keep highlight text transparent so the live textarea text remains authoritative.
                                 "text-transparent"
                             )}
                         >
@@ -669,7 +665,7 @@ export function PromptAutocompleteTextarea({
                 });
 
                 if (cursor < valueToHighlight.length) {
-                    // Trailing non-highlighted text: inherits `text-transparent dark:text-slate-300` from the backdrop container.
+                    // Trailing non-highlighted text: inherits `text-transparent dark:text-muted-foreground` from the backdrop container.
                     nodes.push(valueToHighlight.slice(cursor));
                 }
 
@@ -828,8 +824,8 @@ export function PromptAutocompleteTextarea({
                         className={cn(
                             "rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors",
                             autocompleteEnabled
-                                ? "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
-                                : "bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200",
+                                ? "bg-surface text-foreground border-border hover:bg-hover"
+                                : "bg-muted text-muted-foreground border-border hover:bg-hover",
                         )}
                         title={autocompleteEnabled ? "Disable autocomplete" : "Enable autocomplete"}
                         onMouseDown={(e) => {
@@ -851,7 +847,7 @@ export function PromptAutocompleteTextarea({
                         aria-hidden="true"
                         className={cn(
                             // Match Textarea base styles EXACTLY. Keep it behind the textarea so text stays responsive.
-                            "absolute inset-0 z-0 p-3 text-xs font-mono whitespace-pre-wrap break-words overflow-auto bg-transparent border border-transparent pointer-events-none text-transparent dark:text-slate-300",
+                            "absolute inset-0 z-0 p-3 text-xs font-mono whitespace-pre-wrap break-words overflow-auto bg-transparent border border-transparent pointer-events-none text-transparent",
                             // Must match textarea sizing/resize
                             className?.includes("h-") ? "" : "h-auto" // If height is fixed in class, it inherits naturally via inset. If auto, we might drift.
                             // Actually, Scroll Sync handles offset.
@@ -1011,12 +1007,12 @@ export function PromptAutocompleteTextarea({
                     }}
                     className={cn(
                         "text-xs font-mono transition-all min-h-[150px] relative z-10",
-                        isActive && "ring-2 ring-blue-400 border-blue-400",
+                        isActive && "border-ring",
                         highlightSnippets ? "bg-transparent focus:bg-transparent" : "",
-                        highlightSnippets && isActive && "bg-blue-50/10", // slight tint if active but transparent
+                        highlightSnippets && isActive && "bg-accent/10", // slight tint if active but transparent
                         // Dark mode caret visibility: black when cursor is on light snippet highlights, white otherwise
                         showHighlightOverlay
-                            ? (isCursorInHighlight ? "dark:text-transparent dark:caret-black" : "dark:text-transparent dark:caret-white")
+                            ? (isCursorInHighlight ? "dark:caret-black" : "dark:caret-white")
                             : "dark:caret-white",
                         className,
                         // Ensure padding matches overlay
@@ -1028,7 +1024,7 @@ export function PromptAutocompleteTextarea({
 
             {autocompleteEnabled && showDropdown && textareaRef.current && dropdownRect && createPortal(
                 <div
-                    className="fixed z-[9999] rounded-lg border border-slate-300 bg-white shadow-2xl max-h-60 overflow-y-auto text-sm ring-1 ring-black/5"
+                    className="fixed z-[9999] rounded-lg border border-border bg-surface shadow-md max-h-60 overflow-y-auto text-sm ring-1 ring-black/5"
                     style={{
                         top: dropdownRect.top,
                         left: dropdownRect.left,
@@ -1040,8 +1036,8 @@ export function PromptAutocompleteTextarea({
                             key={`${s.source} -${s.name} `}
                             type="button"
                             className={cn(
-                                "w-full px-3 py-2 text-left flex items-start gap-2 hover:bg-slate-50",
-                                idx === highlightIndex && "bg-blue-50 text-blue-900",
+                                "w-full px-3 py-2 text-left flex items-start gap-2 hover:bg-hover",
+                                idx === highlightIndex && "bg-accent text-foreground",
                             )}
                             onMouseDown={(e) => {
                                 e.preventDefault();
@@ -1053,7 +1049,7 @@ export function PromptAutocompleteTextarea({
                                     {highlightMatch(s.name.replace(/_/g, " "), deferredToken.replace(/_/g, " "))}
                                 </div>
                                 {s.description && (
-                                    <div className="text-[11px] text-slate-500 truncate">{s.description}</div>
+                                    <div className="text-[11px] text-muted-foreground truncate">{s.description}</div>
                                 )}
                             </div>
                             <div
@@ -1065,7 +1061,7 @@ export function PromptAutocompleteTextarea({
                                 {s.source}
                             </div>
                             {s.frequency > 0 && (
-                                <span className="text-[11px] text-slate-500 tabular-nums">{s.frequency}</span>
+                                <span className="text-[11px] text-muted-foreground tabular-nums">{s.frequency}</span>
                             )}
                         </button>
                     ))}
@@ -1085,7 +1081,7 @@ export function PromptAutocompleteTextarea({
                     <div className="h-px bg-border/50 my-1" />
                     <button
                         type="button"
-                        className="w-full px-3 py-2 text-left hover:bg-muted/50 cursor-pointer text-xs"
+                        className="w-full px-3 py-2 text-left hover:bg-hover cursor-pointer text-xs"
                         onMouseDown={(event) => {
                             event.preventDefault();
                             event.stopPropagation();
@@ -1118,3 +1114,6 @@ export function PromptAutocompleteTextarea({
         </div>
     );
 }
+
+
+

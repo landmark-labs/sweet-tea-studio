@@ -34,7 +34,7 @@ export const NodePromptGroup = React.memo(function NodePromptGroup({
   return (
     <div
       className={cn(
-        "rounded-lg border bg-card p-3 space-y-3 shadow-sm transition-opacity",
+        "rounded-lg border border-border/80 bg-card dark:bg-surface-overlay p-3 space-y-3 shadow-sm transition-opacity",
         isBypassed && "opacity-60"
       )}
       data-node-inline
@@ -48,7 +48,7 @@ export const NodePromptGroup = React.memo(function NodePromptGroup({
             {group.title}
           </span>
           {isBypassed && (
-            <span className="text-[9px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5">
+            <span className="text-[9px] font-medium text-muted-foreground bg-muted border border-border rounded px-2 py-0.5">
               Bypassed
             </span>
           )}
@@ -60,7 +60,7 @@ export const NodePromptGroup = React.memo(function NodePromptGroup({
                 checked={Boolean(bypassValue)}
                 onCheckedChange={(c) => onToggleChange(group.bypassKey!, Boolean(c))}
                 className={cn(
-                  "h-3.5 w-6 data-[state=checked]:bg-amber-500 data-[state=unchecked]:bg-muted"
+                  "h-4 w-8 border-border"
                 )}
               />
             </div>
@@ -125,7 +125,7 @@ export const NodeMediaGroup = React.memo(function NodeMediaGroup({
   return (
     <div
       className={cn(
-        "rounded-lg border bg-card p-3 space-y-3 shadow-sm transition-opacity",
+        "rounded-lg border border-border/80 bg-card dark:bg-surface-overlay p-3 space-y-3 shadow-sm transition-opacity",
         isBypassed && "opacity-60"
       )}
       data-node-inline
@@ -139,7 +139,7 @@ export const NodeMediaGroup = React.memo(function NodeMediaGroup({
             {group.title}
           </span>
           {isBypassed && (
-            <span className="text-[9px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5">
+            <span className="text-[9px] font-medium text-muted-foreground bg-muted border border-border rounded px-2 py-0.5">
               Bypassed
             </span>
           )}
@@ -151,7 +151,7 @@ export const NodeMediaGroup = React.memo(function NodeMediaGroup({
                 checked={Boolean(bypassValue)}
                 onCheckedChange={(c) => onToggleChange(group.bypassKey!, Boolean(c))}
                 className={cn(
-                  "h-3.5 w-6 data-[state=checked]:bg-amber-500 data-[state=unchecked]:bg-muted"
+                  "h-4 w-8 border-border"
                 )}
               />
             </div>
@@ -242,9 +242,9 @@ export const NodeStackRow = React.memo(function NodeStackRow({
         <div
           ref={rowRef}
           className={cn(
-            "flex items-center justify-between rounded-lg border bg-card px-3 py-2 shadow-sm transition-colors",
+            "flex items-center justify-between rounded-lg border border-border/80 bg-card dark:bg-surface-overlay px-3 py-2 shadow-sm transition-colors",
             isBypassed && "opacity-60",
-            isOpen && "border-blue-200 ring-1 ring-blue-100 dark:border-primary/40 dark:ring-primary/20"
+            isOpen && "border-border ring-1 ring-border"
           )}
           data-node-stack-item
           data-node-stack-id={stackId}
@@ -281,7 +281,7 @@ export const NodeStackRow = React.memo(function NodeStackRow({
             {group.hasBypass && group.bypassKey && (
               <div className="flex items-center gap-2">
                 {isBypassed && (
-                  <span className="text-[9px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5">
+                  <span className="text-[9px] font-medium text-muted-foreground bg-muted border border-border rounded px-2 py-0.5">
                     Bypassed
                   </span>
                 )}
@@ -289,7 +289,7 @@ export const NodeStackRow = React.memo(function NodeStackRow({
                   checked={Boolean(bypassValue)}
                   onCheckedChange={(c) => onToggleChange(group.bypassKey!, Boolean(c))}
                   className={cn(
-                    "h-3.5 w-6 data-[state=checked]:bg-amber-500 data-[state=unchecked]:bg-muted"
+                    "h-4 w-8 border-border"
                   )}
                 />
               </div>
@@ -300,7 +300,7 @@ export const NodeStackRow = React.memo(function NodeStackRow({
               size="icon"
               className={cn(
                 "h-7 w-7 text-muted-foreground hover:text-foreground",
-                allOnPalette && "text-blue-600"
+                allOnPalette && "text-foreground"
               )}
               title={allOnPalette ? "Remove all from palette" : "Add all to palette"}
               onClick={(e) => {
@@ -340,7 +340,7 @@ export const NodeStackRow = React.memo(function NodeStackRow({
                   checked={Boolean(bypassValue)}
                   onCheckedChange={(c) => onToggleChange(group.bypassKey!, Boolean(c))}
                   className={cn(
-                    "h-3.5 w-6 data-[state=checked]:bg-amber-500 data-[state=unchecked]:bg-muted"
+                    "h-4 w-8 border-border"
                   )}
                 />
               </div>
@@ -351,7 +351,7 @@ export const NodeStackRow = React.memo(function NodeStackRow({
               size="icon"
               className={cn(
                 "h-7 w-7 text-muted-foreground hover:text-foreground",
-                allOnPalette && "text-blue-600"
+                allOnPalette && "text-foreground"
               )}
               title={allOnPalette ? "Remove all from palette" : "Add all to palette"}
               onClick={(e) => {
@@ -382,3 +382,4 @@ export const NodeStackRow = React.memo(function NodeStackRow({
     </Popover>
   );
 });
+

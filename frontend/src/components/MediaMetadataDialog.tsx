@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
+import { groupGenerationParamsByNode } from "@/lib/metadataParams";
 
 interface MediaMetadataDialogProps {
   open: boolean;
@@ -125,6 +126,10 @@ export function MediaMetadataDialog({
 
   const positive = typeof metadata?.prompt === "string" ? metadata.prompt : "";
   const negative = typeof metadata?.negative_prompt === "string" ? metadata.negative_prompt : "";
+  const groupedGenerationParams = React.useMemo(
+    () => groupGenerationParamsByNode((metadata?.parameters as Record<string, unknown> | undefined) ?? null),
+    [metadata?.parameters]
+  );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -145,43 +150,53 @@ export function MediaMetadataDialog({
               {error && <div className="text-xs text-destructive">{error}</div>}
 
               <section className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold uppercase text-muted-foreground">positive prompt</span>
-                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleCopy(positive, "positive")}>
-                    {copied === "positive" ? <Check className="w-3 h-3 text-green-600" /> : <Copy className="w-3 h-3" />}
-                  </Button>
-                </div>
-                <p className="text-xs bg-muted/30 rounded border border-border p-2 whitespace-pre-wrap">{positive || "none"}</p>
-              </section>
-
-              <section className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold uppercase text-muted-foreground">negative prompt</span>
-                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleCopy(negative, "negative")}>
-                    {copied === "negative" ? <Check className="w-3 h-3 text-green-600" /> : <Copy className="w-3 h-3" />}
-                  </Button>
-                </div>
-                <p className="text-xs bg-muted/30 rounded border border-border p-2 whitespace-pre-wrap">{negative || "none"}</p>
-              </section>
-
-              <section className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold uppercase text-muted-foreground">caption</span>
+                <span className="text-xs font-semibold uppercase text-muted-foreground">positive prompt</span>
+                <div className="relative">
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-6 w-6"
+                    className="h-6 w-6 absolute top-1 right-1 z-10"
+                    onClick={() => handleCopy(positive, "positive")}
+                  >
+                    {copied === "positive" ? <Check className="w-3 h-3 text-success" /> : <Copy className="w-3 h-3" />}
+                  </Button>
+                  <p className="text-xs bg-muted/30 rounded border border-border p-2 pr-9 whitespace-pre-wrap">{positive || "none"}</p>
+                </div>
+              </section>
+
+              <section className="space-y-2">
+                <span className="text-xs font-semibold uppercase text-muted-foreground">negative prompt</span>
+                <div className="relative">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 absolute top-1 right-1 z-10"
+                    onClick={() => handleCopy(negative, "negative")}
+                  >
+                    {copied === "negative" ? <Check className="w-3 h-3 text-success" /> : <Copy className="w-3 h-3" />}
+                  </Button>
+                  <p className="text-xs bg-muted/30 rounded border border-border p-2 pr-9 whitespace-pre-wrap">{negative || "none"}</p>
+                </div>
+              </section>
+
+              <section className="space-y-2">
+                <span className="text-xs font-semibold uppercase text-muted-foreground">caption</span>
+                <div className="relative">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 absolute top-1 right-1 z-10"
                     onClick={() => handleCopy(captionInput, "caption")}
                   >
-                    {copied === "caption" ? <Check className="w-3 h-3 text-green-600" /> : <Copy className="w-3 h-3" />}
+                    {copied === "caption" ? <Check className="w-3 h-3 text-success" /> : <Copy className="w-3 h-3" />}
                   </Button>
+                  <Textarea
+                    value={captionInput}
+                    onChange={(e) => setCaptionInput(e.target.value)}
+                    placeholder="Enter or paste caption..."
+                    className="min-h-28 text-xs pr-9"
+                  />
                 </div>
-                <Textarea
-                  value={captionInput}
-                  onChange={(e) => setCaptionInput(e.target.value)}
-                  placeholder="Enter or paste caption..."
-                  className="min-h-28 text-xs"
-                />
                 <div className="flex justify-end">
                   <Button size="sm" onClick={handleSave} disabled={saving || !rawPath}>
                     {saving && <Loader2 className="w-3 h-3 mr-1 animate-spin" />}
@@ -197,7 +212,7 @@ export function MediaMetadataDialog({
                     <div key={row.id} className="text-xs border border-border rounded p-2 bg-muted/20">
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-muted-foreground">{new Date(row.created_at).toLocaleString()}</span>
-                        <span className={row.is_active ? "text-green-600 font-medium" : "text-muted-foreground"}>
+                        <span className={row.is_active ? "text-success font-medium" : "text-muted-foreground"}>
                           {row.is_active ? "active" : "inactive"}
                         </span>
                       </div>
@@ -209,6 +224,29 @@ export function MediaMetadataDialog({
                   )}
                 </div>
               </section>
+
+              <section className="space-y-2">
+                <span className="text-xs font-semibold uppercase text-muted-foreground">generation parameters</span>
+                {groupedGenerationParams.length === 0 ? (
+                  <div className="text-xs text-muted-foreground">no generation parameters detected</div>
+                ) : (
+                  <div className="space-y-2">
+                    {groupedGenerationParams.map((group) => (
+                      <div key={group.node} className="rounded border border-border/70 bg-muted/20 p-2">
+                        <div className="text-xs font-semibold text-foreground mb-2">{group.node}</div>
+                        <div className="grid grid-cols-[minmax(150px,220px)_1fr] gap-x-3 gap-y-1">
+                          {group.items.map((entry) => (
+                            <React.Fragment key={entry.key}>
+                              <div className="text-xs text-muted-foreground truncate">{entry.label}</div>
+                              <div className="text-xs font-mono text-foreground break-all">{entry.value}</div>
+                            </React.Fragment>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
             </div>
           </ScrollArea>
         )}
@@ -216,3 +254,4 @@ export function MediaMetadataDialog({
     </Dialog>
   );
 }
+

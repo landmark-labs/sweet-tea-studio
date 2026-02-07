@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ArrowDownCircle, FolderOpen, Info, Link2, Rocket, Sparkles, Trash2, XCircle } from "lucide-react";
+import { ArrowDownCircle, FolderOpen, Info, Link2, Rocket, Trash2, XCircle } from "lucide-react";
 import { getApiBase } from "@/lib/api";
 import { splitPathSegments } from "@/lib/pathUtils";
 
@@ -295,16 +295,13 @@ export default function Models() {
   };
 
   return (
-    <div className="h-full flex flex-col p-4 gap-4 overflow-hidden">
+    <div className="h-full flex flex-col p-8 gap-4 overflow-hidden">
       <div className="flex-none flex flex-col gap-1">
-        <div className="flex items-center gap-2">
-          <Sparkles className="text-blue-600" size={20} />
-          <div>
-            <h1 className="text-xl font-semibold">models</h1>
-            <p className="text-xs text-muted-foreground">
-              manage everything sweet tea feeds to comfyui: checkpoints, loras, controlnets, upscalers, and vlm assets.
-            </p>
-          </div>
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">models</h1>
+          <p className="text-sm text-muted-foreground">
+            manage everything sweet tea feeds to comfyui: checkpoints, loras, controlnets, upscalers, and vlm assets.
+          </p>
         </div>
       </div>
 
@@ -315,7 +312,7 @@ export default function Models() {
             <CardTitle className="text-sm">comfyui folders</CardTitle>
             <span title="click to set a custom models directory">
               <FolderOpen
-                className="text-blue-500 cursor-pointer hover:text-blue-600 active:scale-95 transition-all"
+                className="text-muted-foreground cursor-pointer hover:text-foreground active:scale-95 transition-all"
                 size={14}
                 onClick={async () => {
                   const newPath = prompt(
@@ -355,7 +352,7 @@ export default function Models() {
                 {modelFolders.map((folder) => (
                   <button
                     key={folder.name}
-                    className={`w-full text-left px-2 py-1.5 rounded-sm text-xs transition-colors ${activeFolder === folder.name ? "bg-blue-50 text-blue-700 border border-blue-200" : "hover:bg-muted/40"}`}
+                    className={`w-full text-left px-2 py-1.5 rounded-sm text-xs transition-colors ${activeFolder === folder.name ? "bg-muted text-foreground border border-border" : "hover:bg-muted/40"}`}
                     onClick={() => setActiveFolder(folder.name)}
                   >
                     <div className="font-medium truncate">{folder.name}</div>
@@ -411,8 +408,8 @@ export default function Models() {
                     value={row.target}
                     onValueChange={(v) => handleRowChange(row.id, 'target', v)}
                   >
-                    <SelectTrigger className="w-[100px] flex-none h-7 text-xs">
-                      <span className="truncate block max-w-[70px]"><SelectValue /></span>
+                    <SelectTrigger className="w-[170px] flex-none h-7 text-xs">
+                      <span className="truncate block max-w-[136px]"><SelectValue /></span>
                     </SelectTrigger>
                     <SelectContent>
                       {modelFolders.map((folder) => (
@@ -434,7 +431,7 @@ export default function Models() {
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="flex-none h-7 w-7 text-muted-foreground hover:text-red-500"
+                    className="flex-none h-7 w-7 text-muted-foreground hover:text-destructive"
                     onClick={() => handleRemoveRow(row.id)}
                     disabled={downloadRows.length === 1 && !row.url}
                   >
@@ -478,7 +475,7 @@ export default function Models() {
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-6 text-[10px] text-muted-foreground hover:text-red-500"
+                className="h-6 text-[10px] text-muted-foreground hover:text-destructive"
                 onClick={clearQueue}
               >
                 <Trash2 size={12} className="mr-1" />
@@ -490,15 +487,15 @@ export default function Models() {
             {downloadQueue.map((job) => (
               <div key={job.id} className={`rounded-md border p-2 bg-card space-y-1 ${job.status === "failed" ? "border-destructive/40 bg-destructive/10" :
                 job.status === "cancelled" ? "border-border/60 bg-muted/20" :
-                  job.status === "completed" ? "border-emerald-500/30 bg-emerald-500/10" :
+                  job.status === "completed" ? "border-success/30 bg-success/10" :
                     "border-border/60"
                 }`}>
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5 w-full overflow-hidden">
                     <div className="flex items-center gap-1.5 text-xs font-medium text-foreground">
-                      <ArrowDownCircle size={14} className={`flex-none ${job.status === "downloading" ? "text-blue-500 animate-pulse" :
-                        job.status === "completed" ? "text-green-500" :
-                          job.status === "failed" ? "text-red-500" :
+                      <ArrowDownCircle size={14} className={`flex-none ${job.status === "downloading" ? "text-primary animate-pulse" :
+                        job.status === "completed" ? "text-success" :
+                          job.status === "failed" ? "text-destructive" :
                             job.status === "cancelled" ? "text-muted-foreground/70" :
                               "text-muted-foreground"
                         }`} />
@@ -511,7 +508,7 @@ export default function Models() {
                       <Button
                         size="icon"
                         variant="ghost"
-                        className="h-6 w-6 text-muted-foreground hover:text-red-500"
+                        className="h-6 w-6 text-muted-foreground hover:text-destructive"
                         onClick={() => cancelJob(job.id)}
                         title="cancel download"
                       >
@@ -519,7 +516,7 @@ export default function Models() {
                       </Button>
                     )}
                     {(job.status === "completed" || job.status === "failed" || job.status === "cancelled") && (
-                      <Button size="icon" variant="ghost" className="h-6 w-6 text-muted-foreground hover:text-red-500" onClick={() => cancelJob(job.id)} title="Remove from queue">
+                      <Button size="icon" variant="ghost" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={() => cancelJob(job.id)} title="Remove from queue">
                         <Trash2 size={12} />
                       </Button>
                     )}
@@ -527,9 +524,9 @@ export default function Models() {
                 </div>
                 <div className="space-y-1">
                   <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-                    <span className={`capitalize font-medium ${job.status === "downloading" ? "text-blue-600" :
-                      job.status === "completed" ? "text-green-600" :
-                        job.status === "failed" ? "text-red-600" :
+                    <span className={`capitalize font-medium ${job.status === "downloading" ? "text-foreground" :
+                      job.status === "completed" ? "text-success" :
+                        job.status === "failed" ? "text-destructive" :
                           job.status === "cancelled" ? "text-muted-foreground" :
                             "text-muted-foreground"
                       }`}>{job.status}</span>
@@ -540,7 +537,7 @@ export default function Models() {
                   </div>
                   <Progress value={job.progress} className="h-1.5" />
                   {job.error && (
-                    <p className="text-[10px] text-red-600 truncate" title={job.error}>{job.error}</p>
+                    <p className="text-[10px] text-destructive truncate" title={job.error}>{job.error}</p>
                   )}
                 </div>
               </div>
@@ -625,3 +622,5 @@ export default function Models() {
     </div>
   );
 }
+
+

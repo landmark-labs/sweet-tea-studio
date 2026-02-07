@@ -3263,7 +3263,7 @@ export default function PromptStudio() {
 
       {/* 1. Left Column - Prompt Constructor (Collapsible) */}
       <div
-        className={`flex-none bg-amber-50/80 dark:bg-surface/80 border-r hidden xl:flex flex-col overflow-hidden transition-all duration-200 ${promptConstructorCollapsed ? 'w-8 cursor-pointer hover:bg-amber-100/50 dark:hover:bg-muted/60' : 'w-[380px]'
+        className={`flex-none bg-surface border-r border-border hidden xl:flex flex-col overflow-hidden transition-all duration-200 ${promptConstructorCollapsed ? 'w-8 cursor-pointer hover:bg-hover' : 'w-[380px]'
           }`}
         onClick={promptConstructorCollapsed ? () => setPromptConstructorCollapsed(false) : undefined}
       >
@@ -3279,11 +3279,11 @@ export default function PromptStudio() {
           // Expanded state - full prompt constructor
           <>
             {/* Collapse toggle header */}
-            <div className="flex-none flex items-center justify-between px-3 py-2 border-b bg-amber-100/50 dark:bg-surface-raised/70">
-              <span className="text-xs font-bold text-foreground tracking-wider font-['Space_Grotesk']">PROMPT CONSTRUCTOR</span>
+            <div className="flex-none flex items-center justify-between px-3 py-2 border-b border-border bg-surface-raised/80">
+              <span className="text-xs font-semibold text-foreground tracking-normal">prompt constructor</span>
               <button
                 onClick={() => setPromptConstructorCollapsed(true)}
-                className="p-1 rounded hover:bg-muted/60 text-muted-foreground hover:text-foreground transition-colors"
+                className="p-1 rounded hover:bg-hover text-muted-foreground hover:text-foreground transition-colors"
                 title="Collapse prompt constructor"
               >
                 <ChevronLeft className="w-4 h-4" />
@@ -3315,11 +3315,11 @@ export default function PromptStudio() {
       </div>
 
       {/* 2. Configuration (Left) - NEW LAYOUT */}
-      <div className="w-[420px] flex-none bg-blue-50 dark:bg-surface border-r border-blue-100 dark:border-border/70 flex flex-col h-full overflow-hidden">
+      <div className="w-[420px] flex-none bg-surface border-r border-border flex flex-col h-full overflow-hidden">
 
         {/* Sticky Header Section */}
-        <div className="flex-none p-3 space-y-2 border-b bg-muted/10 dark:bg-surface-raised/80 backdrop-blur z-10">
-          <div className="text-xs font-bold text-foreground tracking-wider font-['Space_Grotesk']">CONFIGURATOR</div>
+        <div className="flex-none p-3 space-y-2 border-b bg-muted/10 dark:bg-black backdrop-blur z-10">
+          <div className="text-xs font-semibold text-foreground tracking-normal">configurator</div>
 
           {/* Project + Destination Row */}
           <div className="flex gap-2 items-end">
@@ -3458,7 +3458,7 @@ export default function PromptStudio() {
                   }
                 }}
                 disabled={isBusy}
-                className="w-14 h-10 text-center text-sm font-semibold border border-border rounded-md bg-surface-raised dark:bg-surface-raised dark:border-border disabled:bg-muted/40 disabled:text-muted-foreground"
+                className="w-14 h-10 text-center text-sm font-semibold border border-input rounded-md bg-surface disabled:bg-muted/40 disabled:text-muted-foreground"
                 title="Number of times to run (1-100)"
               />
             </div>
@@ -3555,7 +3555,7 @@ export default function PromptStudio() {
         {lastJobId && isBusy && (
           <div className="flex-none p-4 border-t bg-muted/10 dark:bg-surface-raised/80">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-medium text-blue-600 dark:text-primary capitalize">{statusLabel || (generationState === "queued" ? "queued" : "processing")}</span>
+              <span className="text-xs font-medium text-foreground capitalize">{statusLabel || (generationState === "queued" ? "queued" : "processing")}</span>
               <span className="text-xs text-muted-foreground">{Math.round(progress)}%</span>
             </div>
             <Progress value={progress} className="h-1 mb-2" />
@@ -3568,7 +3568,7 @@ export default function PromptStudio() {
       </div>
 
       {/* 3. Center Preview with Navigation and Auto-Discard */}
-      <div className="flex-1 overflow-hidden relative bg-slate-900/90 dark:bg-background flex flex-col">
+      <div className="flex-1 overflow-hidden relative bg-surface-raised flex flex-col">
         <ErrorBoundary>
           <ImageViewer
             images={viewerImages}

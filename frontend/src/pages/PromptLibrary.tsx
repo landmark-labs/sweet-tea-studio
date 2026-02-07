@@ -193,27 +193,42 @@ export default function PromptLibrary() {
                 className="w-full max-h-[65vh] object-contain rounded border border-border/60 bg-muted/20"
               />
               <div className="space-y-2 text-xs">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-emerald-600">positive</span>
-                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copyText(previewItem.active_positive || "")}>
+                <span className="font-semibold text-foreground">positive</span>
+                <div className="relative">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 absolute top-1 right-1 z-10"
+                    onClick={() => copyText(previewItem.active_positive || "")}
+                  >
                     <Copy className="w-3 h-3" />
                   </Button>
+                  <p className="rounded border border-border/60 bg-muted/20 p-2 pr-9 whitespace-pre-wrap">{previewItem.active_positive || "none"}</p>
                 </div>
-                <p className="rounded border border-border/60 bg-muted/20 p-2 whitespace-pre-wrap">{previewItem.active_positive || "none"}</p>
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-rose-600">negative</span>
-                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copyText(previewItem.active_negative || "")}>
+                <span className="font-semibold text-foreground">negative</span>
+                <div className="relative">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 absolute top-1 right-1 z-10"
+                    onClick={() => copyText(previewItem.active_negative || "")}
+                  >
                     <Copy className="w-3 h-3" />
                   </Button>
+                  <p className="rounded border border-border/60 bg-muted/20 p-2 pr-9 whitespace-pre-wrap">{previewItem.active_negative || "none"}</p>
                 </div>
-                <p className="rounded border border-border/60 bg-muted/20 p-2 whitespace-pre-wrap">{previewItem.active_negative || "none"}</p>
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-sky-600">caption</span>
-                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copyText(previewItem.caption || "")}>
+                <span className="font-semibold text-foreground">caption</span>
+                <div className="relative">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 absolute top-1 right-1 z-10"
+                    onClick={() => copyText(previewItem.caption || "")}
+                  >
                     <Copy className="w-3 h-3" />
                   </Button>
+                  <p className="rounded border border-border/60 bg-muted/20 p-2 pr-9 whitespace-pre-wrap">{previewItem.caption || "none"}</p>
                 </div>
-                <p className="rounded border border-border/60 bg-muted/20 p-2 whitespace-pre-wrap">{previewItem.caption || "none"}</p>
               </div>
             </div>
           )}
@@ -241,3 +256,4 @@ export default function PromptLibrary() {
     </div>
   );
 }
+

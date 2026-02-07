@@ -1,14 +1,16 @@
 import React from "react";
-import { Download, ExternalLink, X, Check, ArrowLeft, ArrowRight, RotateCcw, Copy, Trash2, PenTool, Plus } from "lucide-react";
+import { Download, ExternalLink, X, Check, ArrowLeft, ArrowRight, RotateCcw, Copy, Trash2, PenTool, Plus, Info } from "lucide-react";
 import { Button } from "./ui/button";
 import { api, Image as ApiImage, GalleryItem, IMAGE_API_BASE } from "@/lib/api";
 import { isVideoFile } from "@/lib/media";
 import { getBasename } from "@/lib/pathUtils";
 import { workflowSupportsImageInput } from "@/lib/workflowGraph";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "./ui/hover-card";
 import { InpaintEditor } from "@/components/InpaintEditor";
 import { MediaMetadataDialog } from "@/components/MediaMetadataDialog";
 import { useMediaTrayStore } from "@/lib/stores/mediaTrayStore";
+import { groupGenerationParamsByNode } from "@/lib/metadataParams";
 
 
 
@@ -435,6 +437,12 @@ export const ImageViewer = React.memo(function ImageViewer({
         source: pngMetadata.source
     } : metadata;
 
+    const groupedGenerationParams = React.useMemo(() => {
+        if (!currentMetadata || typeof currentMetadata !== "object") return [];
+        const params = (currentMetadata as { job_params?: Record<string, unknown> }).job_params;
+        return groupGenerationParamsByNode(params ?? null);
+    }, [currentMetadata]);
+
     const galleryItemByPath = React.useMemo(() => {
         if (!galleryItems?.length) return null;
         const map = new Map<string, GalleryItem>();
@@ -817,7 +825,7 @@ export const ImageViewer = React.memo(function ImageViewer({
 
     return (
         <>
-            <div ref={containerRef} className="h-full flex flex-col bg-slate-900 dark:bg-background relative">
+            <div ref={containerRef} className="h-full flex flex-col bg-surface-raised dark:bg-background relative">
 
                 {/* Image Area */}
                 <div
@@ -893,19 +901,19 @@ export const ImageViewer = React.memo(function ImageViewer({
                         style={{ top: contextMenu.y, left: contextMenu.x }}
                     >
                         <div
-                            className="px-3 py-2 hover:bg-muted/50 cursor-pointer flex items-center gap-2"
+                            className="px-3 py-2 hover:bg-hover cursor-pointer flex items-center gap-2"
                             onClick={toggleFullScreen}
                         >
                             {lightboxOpen ? <React.Fragment><ExternalLink size={14} className="rotate-180" /> exit full screen</React.Fragment> : <React.Fragment><ExternalLink size={14} /> full screen</React.Fragment>}
                         </div>
                         <div
-                            className="px-3 py-2 hover:bg-muted/50 cursor-pointer flex items-center gap-2"
+                            className="px-3 py-2 hover:bg-hover cursor-pointer flex items-center gap-2"
                             onClick={handleDownload}
                         >
                             <Download size={14} /> download
                         </div>
                         <div
-                            className="px-3 py-2 hover:bg-muted/50 cursor-pointer flex items-center gap-2"
+                            className="px-3 py-2 hover:bg-hover cursor-pointer flex items-center gap-2"
                             onClick={() => {
                                 const rawPath = resolveRawPath(imagePath);
                                 if (rawPath) {
@@ -917,17 +925,17 @@ export const ImageViewer = React.memo(function ImageViewer({
                             <Plus size={14} /> add to media tray
                         </div>
                         <div
-                            className="px-3 py-2 hover:bg-muted/50 cursor-pointer flex items-center gap-2"
+                            className="px-3 py-2 hover:bg-hover cursor-pointer flex items-center gap-2"
                             onClick={() => {
                                 setMetadataDialogOpen(true);
                                 setContextMenu(null);
                             }}
                         >
-                            metadata
+                            <Info size={14} /> metadata
                         </div>
                         {canDrawMask && (
                             <div
-                                className="px-3 py-2 hover:bg-muted/50 cursor-pointer flex items-center gap-2"
+                                className="px-3 py-2 hover:bg-hover cursor-pointer flex items-center gap-2"
                                 onClick={openMaskEditor}
                             >
                                 <PenTool size={14} /> draw mask
@@ -941,7 +949,7 @@ export const ImageViewer = React.memo(function ImageViewer({
                                 onMouseEnter={() => handleSubmenuEnter("regenerate")}
                                 onMouseLeave={handleSubmenuLeave}
                             >
-                                <div className="px-3 py-2 hover:bg-muted/50 cursor-pointer flex items-center justify-between">
+                                <div className="px-3 py-2 hover:bg-hover cursor-pointer flex items-center justify-between">
                                     <span className="flex items-center gap-2"><RotateCcw size={14} /> regenerate</span>
                                     <span className="text-xs">▶</span>
                                 </div>
@@ -952,7 +960,7 @@ export const ImageViewer = React.memo(function ImageViewer({
                                 >
                                     <div className="bg-popover border border-border/60 rounded-md shadow-lg py-1 w-40">
                                         <div
-                                            className="px-3 py-2 hover:bg-muted/50 cursor-pointer text-xs"
+                                            className="px-3 py-2 hover:bg-hover cursor-pointer text-xs"
                                             onClick={() => {
                                                 onRegenerate(currentItemForRegenerate || currentMetadata || {}, 'same');
                                                 setContextMenu(null);
@@ -961,7 +969,7 @@ export const ImageViewer = React.memo(function ImageViewer({
                                             same seed
                                         </div>
                                         <div
-                                            className="px-3 py-2 hover:bg-muted/50 cursor-pointer text-xs"
+                                            className="px-3 py-2 hover:bg-hover cursor-pointer text-xs"
                                             onClick={() => {
                                                 onRegenerate(currentItemForRegenerate || currentMetadata || {}, 'random');
                                                 setContextMenu(null);
@@ -980,7 +988,7 @@ export const ImageViewer = React.memo(function ImageViewer({
                                 onMouseEnter={() => handleSubmenuEnter("useInPipe")}
                                 onMouseLeave={handleSubmenuLeave}
                             >
-                                <div className="px-3 py-2 hover:bg-muted/50 cursor-pointer flex items-center justify-between">
+                                <div className="px-3 py-2 hover:bg-hover cursor-pointer flex items-center justify-between">
                                     <span className="flex items-center gap-2">use in pipe</span>
                                     <span className="text-xs">▶</span>
                                 </div>
@@ -994,7 +1002,7 @@ export const ImageViewer = React.memo(function ImageViewer({
                                         {imageWorkflows.map(w => (
                                             <div
                                                 key={w.id}
-                                                className="px-3 py-2 hover:bg-muted/50 cursor-pointer truncate"
+                                                className="px-3 py-2 hover:bg-hover cursor-pointer truncate text-xs"
                                                 onClick={() => {
                                                     const rawPath = resolveRawPath(imagePath);
                                                     const item = matchingGalleryItem;
@@ -1090,7 +1098,7 @@ export const ImageViewer = React.memo(function ImageViewer({
                 {/* Bottom Panel: Toolbar + Metadata - Takes ~35% of container height */}
                 <div className="border-t border-border/60 bg-card flex flex-col" style={{ height: '35%', minHeight: '200px' }}>
                     {/* Toolbar Row */}
-                    <div className="px-4 py-2 border-b border-border/60 bg-muted/20 flex flex-wrap items-center justify-between gap-2 flex-shrink-0">
+                    <div className="px-4 py-2 border-b border-border/60 bg-muted/20 dark:bg-black flex flex-wrap items-center justify-between gap-2 flex-shrink-0">
                         {/* Left: Actions */}
                         <div className="flex items-center gap-2">
                             {imageWorkflows.length > 0 && (
@@ -1102,7 +1110,7 @@ export const ImageViewer = React.memo(function ImageViewer({
                                     <Button
                                         variant="outline"
                                         size="sm"
-                                        className="h-7 text-xs gap-1 border-blue-200 hover:bg-blue-50 text-blue-700 dark:border-border/60 dark:hover:bg-muted/60 dark:text-primary"
+                                        className="h-7 text-xs gap-1 border-border hover:bg-hover text-foreground"
                                         onClick={(e) => {
                                             e.stopPropagation();
                                             setUseInPipeMenuOpen((open) => !open);
@@ -1114,7 +1122,7 @@ export const ImageViewer = React.memo(function ImageViewer({
                                     <div className={`absolute left-0 top-full pt-2 -mt-1 z-50 ${useInPipeMenuOpen ? "block" : "hidden"}`}>
                                         <div className="bg-popover border border-border/60 rounded-md shadow-lg py-1 w-48 max-h-64 overflow-y-auto">
                                             {imageWorkflows.map(w => (
-                                                <div key={w.id} className="px-3 py-2 hover:bg-muted/50 cursor-pointer truncate text-xs" onClick={() => {
+                                                <div key={w.id} className="px-3 py-2 hover:bg-hover cursor-pointer truncate text-xs" onClick={() => {
                                                     const rawPath = resolveRawPath(imagePath);
                                                     const item = matchingGalleryItem;
                                                     onUseInPipe?.({
@@ -1164,7 +1172,7 @@ export const ImageViewer = React.memo(function ImageViewer({
                                     <Button
                                         variant="outline"
                                         size="sm"
-                                        className="h-7 text-xs gap-1 border-green-200 hover:bg-green-50 text-green-700 dark:border-border/60 dark:hover:bg-muted/60 dark:text-green-400"
+                                        className="h-7 text-xs gap-1 border-border hover:bg-hover text-foreground"
                                         onClick={(e) => {
                                             e.stopPropagation();
                                             setRegenerateMenuOpen((open) => !open);
@@ -1175,7 +1183,7 @@ export const ImageViewer = React.memo(function ImageViewer({
                                     <div className={`absolute left-0 top-full pt-2 -mt-1 z-50 ${regenerateMenuOpen ? "block" : "hidden"}`}>
                                         <div className="bg-popover border border-border/60 rounded-md shadow-lg py-1 w-40">
                                             <div
-                                                className="px-3 py-2 hover:bg-muted/50 cursor-pointer text-xs"
+                                                className="px-3 py-2 hover:bg-hover cursor-pointer text-xs"
                                                 onClick={() => {
                                                     onRegenerate(currentItemForRegenerate || currentMetadata || {}, 'same');
                                                     setRegenerateMenuOpen(false);
@@ -1184,7 +1192,7 @@ export const ImageViewer = React.memo(function ImageViewer({
                                                 same seed
                                             </div>
                                             <div
-                                                className="px-3 py-2 hover:bg-muted/50 cursor-pointer text-xs"
+                                                className="px-3 py-2 hover:bg-hover cursor-pointer text-xs"
                                                 onClick={() => {
                                                     onRegenerate(currentItemForRegenerate || currentMetadata || {}, 'random');
                                                     setRegenerateMenuOpen(false);
@@ -1201,7 +1209,7 @@ export const ImageViewer = React.memo(function ImageViewer({
                                 <Button
                                     variant="outline"
                                     size="sm"
-                                    className="h-7 text-xs gap-1 border-orange-200 hover:bg-orange-50 text-orange-700 hover:text-orange-800 dark:border-border/60 dark:hover:bg-muted/60 dark:text-orange-300 dark:hover:text-orange-200"
+                                    className="h-7 text-xs gap-1 border-border hover:bg-hover text-foreground"
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         openMaskEditor();
@@ -1289,7 +1297,7 @@ export const ImageViewer = React.memo(function ImageViewer({
                                                         className="h-7 w-7 absolute top-0 right-0 text-muted-foreground hover:text-foreground"
                                                         onClick={() => handleCopy(String(currentMetadata.prompt), "positive")}
                                                     >
-                                                        {copyState.positive ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
+                                                        {copyState.positive ? <Check className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4" />}
                                                     </Button>
                                                 </TooltipTrigger>
                                                 <TooltipContent>{copyState.positive ? "Copied!" : "Copy positive prompt"}</TooltipContent>
@@ -1313,7 +1321,7 @@ export const ImageViewer = React.memo(function ImageViewer({
                                                         className="h-7 w-7 absolute top-0 right-0 text-muted-foreground hover:text-foreground"
                                                         onClick={() => handleCopy(String(currentMetadata.negative_prompt), "negative")}
                                                     >
-                                                        {copyState.negative ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
+                                                        {copyState.negative ? <Check className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4" />}
                                                     </Button>
                                                 </TooltipTrigger>
                                                 <TooltipContent>{copyState.negative ? "Copied!" : "Copy negative prompt"}</TooltipContent>
@@ -1324,39 +1332,48 @@ export const ImageViewer = React.memo(function ImageViewer({
                                         </div>
                                     )}
 
-                                    {/* Parameters Grid */}
-                                    {!!currentMetadata.job_params && typeof currentMetadata.job_params === 'object' && Object.keys(currentMetadata.job_params).length > 0 && (
-                                        <div className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-x-4 gap-y-2 pt-2 border-t border-border/50">
-                                            {Object.entries(currentMetadata.job_params as Record<string, unknown>)
-                                                .filter(([k, v]) => {
-                                                    // Exclude null/empty values
-                                                    if (v === null || v === undefined || v === "" || typeof v === 'object') return false;
-                                                    // Exclude CLIPTextEncode prompt params - these show in dedicated boxes
-                                                    const keyLower = k.toLowerCase();
-                                                    if (keyLower.includes('cliptextencode') || keyLower.includes('cliptext')) return false;
-                                                    if (keyLower.includes('positive_prompt') || keyLower.includes('negative_prompt')) return false;
-                                                    if (k === 'prompt' || k === 'text') return false;
-                                                    return true;
-                                                })
-                                                .map(([k, v]) => (
-                                                    <Tooltip key={k}>
-                                                        <TooltipTrigger asChild>
-                                                            <div className="min-w-0 cursor-default">
-                                                                <span className="font-medium text-muted-foreground capitalize text-[9px] uppercase tracking-wide block truncate">{k.replace(/_/g, ' ')}</span>
-                                                                <span className="text-foreground font-mono text-xs block truncate">{String(v)}</span>
+                                    {groupedGenerationParams.length > 0 && (
+                                        <HoverCard openDelay={120} closeDelay={120}>
+                                            <HoverCardTrigger asChild>
+                                                <div className="pt-2 border-t border-border/50 cursor-help">
+                                                    <div className="flex items-center justify-between mb-2">
+                                                        <span className="font-medium text-muted-foreground text-[10px] uppercase">Generation Parameters</span>
+                                                        <span className="text-[10px] text-muted-foreground/80">hover for grouped details</span>
+                                                    </div>
+                                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-2">
+                                                        {groupedGenerationParams
+                                                            .flatMap((group) => group.items.map((entry) => ({ node: group.node, ...entry })))
+                                                            .slice(0, 12)
+                                                            .map((entry) => (
+                                                                <div key={entry.key} className="min-w-0">
+                                                                    <span className="font-medium text-muted-foreground text-[9px] block truncate">
+                                                                        {entry.label}
+                                                                    </span>
+                                                                    <span className="text-foreground font-mono text-xs block truncate">{entry.value}</span>
+                                                                </div>
+                                                            ))}
+                                                    </div>
+                                                </div>
+                                            </HoverCardTrigger>
+                                            <HoverCardContent className="w-[760px] max-w-[95vw] max-h-[68vh] overflow-y-auto p-3" align="end">
+                                                <div className="space-y-3">
+                                                    <div className="text-xs font-semibold text-foreground">generation parameters by node</div>
+                                                    {groupedGenerationParams.map((group) => (
+                                                        <section key={group.node} className="rounded-md border border-border/60 bg-muted/20 p-2.5">
+                                                            <div className="text-[11px] font-semibold text-foreground mb-2">{group.node}</div>
+                                                            <div className="grid grid-cols-[minmax(170px,240px)_1fr] gap-x-3 gap-y-1.5">
+                                                                {group.items.map((entry) => (
+                                                                    <React.Fragment key={entry.key}>
+                                                                        <div className="text-[11px] text-muted-foreground truncate">{entry.label}</div>
+                                                                        <div className="text-[11px] font-mono text-foreground break-all">{entry.value}</div>
+                                                                    </React.Fragment>
+                                                                ))}
                                                             </div>
-                                                        </TooltipTrigger>
-                                                        <TooltipContent side="top" className="max-w-xs">
-                                                            <div className="text-xs">
-                                                                <span className="font-semibold text-foreground/80">{k.replace(/_/g, ' ')}</span>
-                                                                <span className="mx-1 text-muted-foreground">:</span>
-                                                                <span className="font-mono break-all">{String(v)}</span>
-                                                            </div>
-                                                        </TooltipContent>
-                                                    </Tooltip>
-                                                ))
-                                            }
-                                        </div>
+                                                        </section>
+                                                    ))}
+                                                </div>
+                                            </HoverCardContent>
+                                        </HoverCard>
                                     )}
 
                                     {/* Loading indicator */}
@@ -1374,7 +1391,7 @@ export const ImageViewer = React.memo(function ImageViewer({
                     <div className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center" onWheel={handleWheel} onContextMenu={handleContextMenu}>
                         <div className="absolute top-4 right-4 z-[101] flex gap-2">
                             <div className="bg-white/10 text-white px-3 py-1 rounded backdrop-blur-md text-xs font-mono">{Math.round(scale * 100)}%</div>
-                            <button onClick={() => setLightboxOpen(false)} className="text-white hover:text-red-400"><X className="w-8 h-8" /></button>
+                            <button onClick={() => setLightboxOpen(false)} className="text-white hover:text-destructive"><X className="w-8 h-8" /></button>
                         </div>
                         <div
                             className="w-full h-full flex items-center justify-center"
@@ -1444,3 +1461,5 @@ export const ImageViewer = React.memo(function ImageViewer({
         </>
     );
 });
+
+

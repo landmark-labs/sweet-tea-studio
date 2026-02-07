@@ -68,8 +68,8 @@ export function PromptLibraryQuickPanel({
   return (
     <>
       <div className="w-80 pointer-events-auto">
-        <Card className="shadow-xl border border-blue-100 bg-blue-50/95 dark:border-border dark:bg-surface/95 ring-1 ring-black/5 dark:ring-white/5 backdrop-blur">
-          <div className="flex items-center justify-between px-2 py-1.5 border-b border-blue-100/80 bg-blue-50/60 dark:border-border/70 dark:bg-surface-raised/70 cursor-move">
+        <Card className="shadow-md border border-border bg-surface/95 ring-1 ring-black/5 dark:ring-white/5 backdrop-blur">
+          <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-border bg-surface-raised/80 cursor-move">
             <div className="font-semibold text-foreground text-xs">prompt library</div>
             <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onClose}>
               <X className="w-3.5 h-3.5" />
@@ -96,7 +96,7 @@ export function PromptLibraryQuickPanel({
             {loading && <div className="text-xs text-muted-foreground">Loading prompt library...</div>}
 
             <ScrollArea className="h-64 pr-2">
-              <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-2">
                 {pageItems.length === 0 && !loading && (
                   <div className="col-span-2 text-xs text-muted-foreground">No matching media.</div>
                 )}
@@ -107,7 +107,7 @@ export function PromptLibraryQuickPanel({
                     <ContextMenu key={`prompt-media-${prompt.image_id}-${prompt.created_at}`}>
                       <ContextMenuTrigger>
                         <div
-                          className="border border-border/60 rounded-md overflow-hidden bg-background/80 cursor-pointer hover:border-primary/40 transition-colors"
+                          className="border border-border rounded-lg overflow-hidden bg-background/80 cursor-pointer hover:bg-hover/30 transition-colors"
                           onClick={() => setPreviewItem(prompt)}
                         >
                           <div className="aspect-square bg-muted/30">
@@ -216,27 +216,42 @@ export function PromptLibraryQuickPanel({
                 className="w-full max-h-[65vh] object-contain rounded border border-border/60 bg-muted/20"
               />
               <div className="grid grid-cols-1 gap-2 text-xs">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-emerald-600">positive</span>
-                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copyText(previewItem.active_positive || "")}>
+                <span className="font-semibold text-foreground">positive</span>
+                <div className="relative">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 absolute top-1 right-1 z-10"
+                    onClick={() => copyText(previewItem.active_positive || "")}
+                  >
                     <Copy className="w-3 h-3" />
                   </Button>
+                  <p className="rounded border border-border/60 bg-muted/20 p-2 pr-9 whitespace-pre-wrap">{previewItem.active_positive || "none"}</p>
                 </div>
-                <p className="rounded border border-border/60 bg-muted/20 p-2 whitespace-pre-wrap">{previewItem.active_positive || "none"}</p>
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-rose-600">negative</span>
-                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copyText(previewItem.active_negative || "")}>
+                <span className="font-semibold text-foreground">negative</span>
+                <div className="relative">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 absolute top-1 right-1 z-10"
+                    onClick={() => copyText(previewItem.active_negative || "")}
+                  >
                     <Copy className="w-3 h-3" />
                   </Button>
+                  <p className="rounded border border-border/60 bg-muted/20 p-2 pr-9 whitespace-pre-wrap">{previewItem.active_negative || "none"}</p>
                 </div>
-                <p className="rounded border border-border/60 bg-muted/20 p-2 whitespace-pre-wrap">{previewItem.active_negative || "none"}</p>
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-sky-600">caption</span>
-                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copyText(previewItem.caption || "")}>
+                <span className="font-semibold text-foreground">caption</span>
+                <div className="relative">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 absolute top-1 right-1 z-10"
+                    onClick={() => copyText(previewItem.caption || "")}
+                  >
                     <Copy className="w-3 h-3" />
                   </Button>
+                  <p className="rounded border border-border/60 bg-muted/20 p-2 pr-9 whitespace-pre-wrap">{previewItem.caption || "none"}</p>
                 </div>
-                <p className="rounded border border-border/60 bg-muted/20 p-2 whitespace-pre-wrap">{previewItem.caption || "none"}</p>
               </div>
             </div>
           )}

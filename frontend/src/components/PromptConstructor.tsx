@@ -39,70 +39,39 @@ interface PromptConstructorProps {
 
 // --- Constants ---
 
-// Expanded color palette with 56 unique colors to avoid repetition.
-// Contains original Tailwind colors, extended shades, and HSL-based custom colors.
+// Expanded snippet palette with high diversity to avoid frequent recycling.
+// We keep >=24 distinct tones so repeated colors are uncommon in normal usage.
 export const COLORS = [
-    // Original palette (22 colors) - 100-level backgrounds
-    "bg-red-100 border-red-300 text-red-900",
-    "bg-orange-100 border-orange-300 text-orange-900",
-    "bg-amber-200 border-amber-400 text-amber-900",
-    "bg-yellow-200 border-yellow-400 text-yellow-900",
-    "bg-lime-100 border-lime-300 text-lime-900",
-    "bg-green-100 border-green-300 text-green-900",
-    "bg-emerald-100 border-emerald-300 text-emerald-900",
-    "bg-teal-100 border-teal-300 text-teal-900",
-    "bg-cyan-100 border-cyan-300 text-cyan-900",
-    "bg-sky-100 border-sky-300 text-sky-900",
-    "bg-blue-100 border-blue-300 text-blue-900",
-    "bg-indigo-100 border-indigo-300 text-indigo-900",
-    "bg-violet-100 border-violet-300 text-violet-900",
-    "bg-purple-100 border-purple-300 text-purple-900",
-    "bg-fuchsia-100 border-fuchsia-300 text-fuchsia-900",
-    "bg-pink-100 border-pink-300 text-pink-900",
-    "bg-rose-100 border-rose-300 text-rose-900",
-    "bg-stone-100 border-stone-300 text-stone-900",
-    "bg-slate-100 border-slate-300 text-slate-900",
-    "bg-zinc-100 border-zinc-300 text-zinc-900",
-    "bg-gray-100 border-gray-300 text-gray-900",
-    "bg-neutral-100 border-neutral-300 text-neutral-900",
-
-    // Extended palette (22 colors) - 200-level backgrounds for visual distinction
-    "bg-red-200 border-red-400 text-red-900",
-    "bg-orange-200 border-orange-400 text-orange-900",
-    "bg-lime-200 border-lime-400 text-lime-900",
-    "bg-green-200 border-green-400 text-green-900",
-    "bg-emerald-200 border-emerald-400 text-emerald-900",
-    "bg-teal-200 border-teal-400 text-teal-900",
-    "bg-cyan-200 border-cyan-400 text-cyan-900",
-    "bg-sky-200 border-sky-400 text-sky-900",
-    "bg-blue-200 border-blue-400 text-blue-900",
-    "bg-indigo-200 border-indigo-400 text-indigo-900",
-    "bg-violet-200 border-violet-400 text-violet-900",
-    "bg-purple-200 border-purple-400 text-purple-900",
-    "bg-fuchsia-200 border-fuchsia-400 text-fuchsia-900",
-    "bg-pink-200 border-pink-400 text-pink-900",
-    "bg-rose-200 border-rose-400 text-rose-900",
-    "bg-stone-200 border-stone-400 text-stone-900",
-    "bg-slate-200 border-slate-400 text-slate-900",
-    "bg-zinc-200 border-zinc-400 text-zinc-900",
-    "bg-gray-200 border-gray-400 text-gray-900",
-    "bg-neutral-200 border-neutral-400 text-neutral-900",
-    "bg-amber-100 border-amber-300 text-amber-900",
-    "bg-yellow-100 border-yellow-300 text-yellow-900",
-
-    // HSL-based custom colors (12 colors) - unique hues for additional variety
-    "bg-[hsl(15,85%,92%)] border-[hsl(15,70%,65%)] text-[hsl(15,50%,25%)]",   // coral
-    "bg-[hsl(45,90%,88%)] border-[hsl(45,80%,55%)] text-[hsl(45,60%,25%)]",   // gold
-    "bg-[hsl(75,70%,88%)] border-[hsl(75,55%,55%)] text-[hsl(75,45%,25%)]",   // chartreuse
-    "bg-[hsl(165,65%,88%)] border-[hsl(165,50%,50%)] text-[hsl(165,45%,25%)]", // mint
-    "bg-[hsl(195,80%,90%)] border-[hsl(195,65%,55%)] text-[hsl(195,50%,25%)]", // azure
-    "bg-[hsl(225,75%,92%)] border-[hsl(225,60%,60%)] text-[hsl(225,50%,25%)]", // periwinkle
-    "bg-[hsl(285,65%,92%)] border-[hsl(285,50%,60%)] text-[hsl(285,45%,25%)]", // lavender
-    "bg-[hsl(315,70%,92%)] border-[hsl(315,55%,60%)] text-[hsl(315,45%,25%)]", // orchid
-    "bg-[hsl(345,75%,92%)] border-[hsl(345,60%,60%)] text-[hsl(345,50%,25%)]", // salmon
-    "bg-[hsl(30,80%,90%)] border-[hsl(30,65%,55%)] text-[hsl(30,50%,25%)]",    // peach
-    "bg-[hsl(135,60%,88%)] border-[hsl(135,45%,50%)] text-[hsl(135,40%,25%)]", // sage
-    "bg-[hsl(255,70%,92%)] border-[hsl(255,55%,60%)] text-[hsl(255,45%,25%)]", // iris
+    "bg-rose-100/85 border-rose-300/80 text-rose-900",
+    "bg-pink-100/85 border-pink-300/80 text-pink-900",
+    "bg-fuchsia-100/85 border-fuchsia-300/80 text-fuchsia-900",
+    "bg-purple-100/85 border-purple-300/80 text-purple-900",
+    "bg-violet-100/85 border-violet-300/80 text-violet-900",
+    "bg-indigo-100/85 border-indigo-300/80 text-indigo-900",
+    "bg-blue-100/85 border-blue-300/80 text-blue-900",
+    "bg-sky-100/85 border-sky-300/80 text-sky-900",
+    "bg-cyan-100/85 border-cyan-300/80 text-cyan-900",
+    "bg-teal-100/85 border-teal-300/80 text-teal-900",
+    "bg-emerald-100/85 border-emerald-300/80 text-emerald-900",
+    "bg-green-100/85 border-green-300/80 text-green-900",
+    "bg-lime-100/85 border-lime-300/80 text-lime-900",
+    "bg-yellow-100/85 border-yellow-300/80 text-yellow-900",
+    "bg-amber-100/85 border-amber-300/80 text-amber-900",
+    "bg-orange-100/85 border-orange-300/80 text-orange-900",
+    "bg-red-100/85 border-red-300/80 text-red-900",
+    "bg-rose-200/70 border-rose-400/70 text-rose-950",
+    "bg-pink-200/70 border-pink-400/70 text-pink-950",
+    "bg-fuchsia-200/70 border-fuchsia-400/70 text-fuchsia-950",
+    "bg-purple-200/70 border-purple-400/70 text-purple-950",
+    "bg-indigo-200/70 border-indigo-400/70 text-indigo-950",
+    "bg-blue-200/70 border-blue-400/70 text-blue-950",
+    "bg-cyan-200/70 border-cyan-400/70 text-cyan-950",
+    "bg-teal-200/70 border-teal-400/70 text-teal-950",
+    "bg-emerald-200/70 border-emerald-400/70 text-emerald-950",
+    "bg-green-200/70 border-green-400/70 text-green-950",
+    "bg-lime-200/70 border-lime-400/70 text-lime-950",
+    "bg-amber-200/70 border-amber-400/70 text-amber-950",
+    "bg-orange-200/70 border-orange-400/70 text-orange-950",
 ];
 
 /**
@@ -168,7 +137,7 @@ const SortableItem = React.memo(function SortableItem({ item, textIndex, onRemov
                         onFocus={() => onTextFocusChange(true)}
                         onBlur={handleBlur}
                         onKeyDown={handleKeyDown}
-                        className="min-h-[32px] h-auto w-full text-[11px] font-mono border-dashed bg-surface-raised shadow-lg ring-2 ring-blue-500 transition-colors resize-y py-1 px-2 rounded-md"
+                        className="min-h-[32px] h-auto w-full text-[11px] font-mono border-dashed bg-surface-raised shadow-lg ring-2 ring-ring transition-colors resize-y py-1 px-2 rounded-md"
                         placeholder="text..."
                     />
                 </div>
@@ -183,8 +152,8 @@ const SortableItem = React.memo(function SortableItem({ item, textIndex, onRemov
                         style={style}
                         className={cn(
                             "flex items-center gap-1 px-2 py-1 rounded-md border shadow-sm cursor-grab active:cursor-grabbing select-none group relative text-[11px] font-medium w-full min-w-0 min-h-[32px] transition-all hover:-translate-y-0.5 hover:shadow-md",
-                            "bg-slate-50 border-slate-300 text-slate-700 hover:border-slate-400 dark:bg-muted/20 dark:border-border/60 dark:text-foreground/80 dark:hover:border-border",
-                            isDragging && "ring-2 ring-blue-200 shadow-lg"
+                            "bg-surface-raised border-border text-foreground/90 hover:border-ring",
+                            isDragging && "ring-2 ring-ring shadow-lg"
                         )}
                         {...attributes}
                         {...listeners}
@@ -196,7 +165,7 @@ const SortableItem = React.memo(function SortableItem({ item, textIndex, onRemov
                             <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-4 w-4 rounded-full text-black/20 hover:text-amber-600 hover:bg-amber-50 dark:text-foreground/30 dark:hover:text-amber-300 dark:hover:bg-amber-500/10"
+                                className="h-4 w-4 rounded-full text-muted-foreground hover:text-foreground hover:bg-hover"
                                 onPointerDown={(e) => e.stopPropagation()}
                                 onClick={(e) => {
                                     e.stopPropagation();
@@ -255,7 +224,7 @@ const SortableItem = React.memo(function SortableItem({ item, textIndex, onRemov
                     className={cn(
                         "flex items-center gap-1 px-2 py-1 rounded-md border shadow-sm cursor-grab active:cursor-grabbing select-none group relative text-[11px] font-medium w-full min-w-0 min-h-[32px] transition-all hover:-translate-y-0.5 hover:shadow-md",
                         stripDarkVariantClasses(item.color) || "bg-muted/20 border-border/60",
-                        isDragging && "ring-2 ring-blue-200 shadow-lg"
+                        isDragging && "ring-2 ring-ring shadow-lg"
                     )}
                     {...attributes}
                     {...listeners}
@@ -524,8 +493,8 @@ const SortableLibrarySnippet = React.memo(function SortableLibrarySnippet({ snip
                             className={cn(
                                 "flex items-center gap-1 px-1.5 py-1 rounded-md border shadow-sm cursor-grab active:cursor-grabbing select-none group relative text-[10px] font-medium w-full h-full min-w-0 min-h-[28px] transition-all hover:-translate-y-0.5 hover:shadow-md overflow-hidden",
                                 stripDarkVariantClasses(snippet.color),
-                                isEditing ? "ring-2 ring-amber-400 ring-offset-1" : "",
-                                isDragging && "ring-2 ring-blue-200 shadow-lg"
+                                isEditing ? "ring-2 ring-ring ring-offset-1" : "",
+                                isDragging && "ring-2 ring-ring shadow-lg"
                             )}
                             onMouseEnter={handleMouseEnter}
                             onMouseMove={handleMouseMove}
@@ -544,7 +513,7 @@ const SortableLibrarySnippet = React.memo(function SortableLibrarySnippet({ snip
                                 <Button
                                     variant="ghost"
                                     size="icon"
-                                    className="h-4 w-4 rounded-full bg-surface/60 hover:bg-amber-100/80 dark:hover:bg-muted/60"
+                                    className="h-4 w-4 rounded-full bg-surface/60 hover:bg-hover"
                                     onPointerDown={(e) => e.stopPropagation()}
                                     onClick={onEdit}
                                     title="Edit Snippet"
@@ -556,7 +525,7 @@ const SortableLibrarySnippet = React.memo(function SortableLibrarySnippet({ snip
                                 <Button
                                     variant="ghost"
                                     size="icon"
-                                    className="h-4 w-4 ml-0.5 rounded-full bg-surface/60 hover:bg-red-100/80 dark:hover:bg-destructive/20"
+                                    className="h-4 w-4 ml-0.5 rounded-full bg-surface/60 hover:bg-destructive/10"
                                     onPointerDown={(e) => e.stopPropagation()}
                                     onClick={onDelete}
                                     title="Delete Snippet"
@@ -1690,26 +1659,26 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
 
 
     return (
-        <div className="prompt-constructor h-full flex flex-col border-t border-amber-200 dark:border-border/60">
+        <div className="prompt-constructor h-full flex flex-col border-t border-border">
 
             {/* 2. Snippet Creator (Standing) */}
-            <div data-snippet-editor="true" className={cn("p-3 border-b border-dashed border-amber-200 dark:border-border/60 shrink-0 transition-colors bg-amber-50/60 dark:bg-surface-raised/60", isEditing && "bg-amber-100/60 dark:bg-surface-overlay/60")}>
+            <div data-snippet-editor="true" className={cn("p-3 border-b border-dashed border-border shrink-0 transition-colors bg-surface-raised/60", isEditing && "bg-surface-overlay/60")}>
                 <div className="flex gap-2">
                     <div className="flex-1 space-y-2">
                         <div className="flex justify-between items-center">
                             <Input
                                 placeholder="snippet name"
-                                className="h-7 text-xs font-semibold bg-surface-raised w-full disabled:opacity-80"
+                                className="h-7 text-xs font-semibold bg-surface w-full disabled:opacity-80"
                                 value={snippetTitle}
                                 onChange={e => setSnippetTitle(e.target.value)}
                                 onKeyDown={handleTitleKeyDown}
                                 disabled={!!editingTextId}
                             />
-                            {isEditing && <span className="text-[10px] font-bold text-amber-600 dark:text-amber-300 ml-2 whitespace-nowrap">EDITING</span>}
+                            {isEditing && <span className="text-[10px] font-bold text-primary ml-2 whitespace-nowrap">EDITING</span>}
                         </div>
                         <PromptAutocompleteTextarea
                             placeholder="Prompt text... (Ctrl+Enter to save)"
-                            className="h-[100px] text-xs font-mono bg-surface-raised resize-none"
+                            className="h-[100px] text-xs font-mono bg-surface resize-none"
                             value={snippetContent}
                             onValueChange={setSnippetContent}
                             onKeyDown={handleKeyDown}
@@ -1719,12 +1688,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
                     <div className="flex flex-col gap-2">
                         <Button
                             variant="default"
-                            className={cn(
-                                "h-auto flex-1 w-10 p-0 flex flex-col gap-1 items-center justify-center",
-                                isEditing
-                                    ? "bg-amber-600 hover:bg-amber-700 dark:bg-amber-500/80 dark:hover:bg-amber-500"
-                                    : "bg-slate-800 hover:bg-slate-700 dark:bg-primary dark:hover:bg-primary/90"
-                            )}
+                            className="h-auto flex-1 w-10 p-0 flex flex-col gap-1 items-center justify-center"
                             onClick={saveSnippet}
                             title={isEditing ? "Update Snippet" : "Create Snippet"}
                         >
@@ -1748,7 +1712,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
 
             {/* 3. Library (Horizontal Scroll)
                 Grid layout keeps snippet chips aligned for tessellation and consistent sizing. */}
-            <div className="px-3 py-2 border-b border-amber-200 dark:border-border/60 shadow-sm shrink-0 bg-surface/60 dark:bg-surface-raised/60">
+            <div className="px-3 py-2 border-b border-border shadow-sm shrink-0 bg-surface/80">
                 <div className="mb-2">
                     <span className="text-[10px] font-bold text-muted-foreground uppercase block">Snippets (Double-click to Add, Drag to Reorder, Long-press to Edit)</span>
                 </div>
@@ -1789,7 +1753,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
             </div>
 
             {/* 4. Canvas (Vertical / Flex Wrap) */}
-            <div className="flex-1 overflow-y-auto p-4 relative bg-amber-50/60 dark:bg-surface">
+            <div className="flex-1 overflow-y-auto p-4 relative bg-background">
                 {!isTargetValid ? (
                     <div className="h-full flex flex-col items-center justify-center text-muted-foreground text-sm select-none gap-2 opacity-60">
                         <CornerDownLeft size={32} />
@@ -1808,7 +1772,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
                                 <Button
                                     variant="ghost"
                                     size="icon"
-                                    className="h-7 w-7 text-green-600 bg-green-50 hover:bg-green-100 hover:text-green-700 border border-green-200 shadow-sm dark:text-emerald-300 dark:bg-emerald-500/10 dark:hover:bg-emerald-500/15 dark:hover:text-emerald-200 dark:border-emerald-500/20"
+                                    className="h-7 w-7 text-foreground bg-muted hover:bg-hover border border-border shadow-xs"
                                     onClick={() => onFinish?.()}
                                     title="Finish Editing (Deselect)"
                                 >
@@ -1831,7 +1795,7 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
                             strategy={rectSortingStrategy}
                         >
                             {/* Canvas grid uses 2-column layout to match snippet bank. */}
-                            <div className="grid grid-cols-2 auto-rows-[minmax(32px,auto)] items-start gap-2 min-h-[100px] p-2 rounded-xl border-2 border-dashed border-amber-300 dark:border-border/60 bg-amber-100/40 dark:bg-surface-raised/60 transition-colors hover:bg-amber-100/60 dark:hover:bg-surface-overlay/60 relative group/canvas">
+                            <div className="grid grid-cols-2 auto-rows-[minmax(32px,auto)] items-start gap-2 min-h-[100px] p-2 rounded-xl border-2 border-dashed border-border bg-surface-raised/40 transition-colors hover:bg-hover/40 relative group/canvas">
 
                                 {items.length === 0 && (
                                     <div className="w-full text-center py-10 text-muted-foreground text-sm select-none italic flex flex-col items-center gap-2">
@@ -1872,3 +1836,5 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
         </div>
     );
 });
+
+

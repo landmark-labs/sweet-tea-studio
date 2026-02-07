@@ -3,7 +3,7 @@ import { api, Project, FolderImage, GalleryItem, IMAGE_API_BASE } from "@/lib/ap
 import { isVideoFile } from "@/lib/media";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight, FolderOpen, ImageIcon, Loader2, Download, Trash2, Check, RotateCcw, PenTool, Plus } from "lucide-react";
+import { ChevronLeft, ChevronRight, FolderOpen, ImageIcon, Loader2, Download, Trash2, Check, RotateCcw, PenTool, Plus, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { VirtualGrid } from "@/components/VirtualGrid";
 import { getScrollPosition, saveScrollPosition } from "@/lib/galleryState";
@@ -90,8 +90,8 @@ const GalleryItemCell = React.memo(function GalleryItemCell({
             className={cn(
                 "h-full w-full relative group cursor-pointer rounded overflow-hidden border transition-all",
                 isSelected
-                    ? "border-blue-500 ring-2 ring-blue-500 scale-[0.97]"
-                    : "border-border/60 hover:border-blue-400 hover:shadow-md dark:hover:border-primary/60"
+                    ? "border-ring ring-2 ring-ring scale-[0.97]"
+                    : "border-border/60 hover:border-ring hover:shadow-sm"
             )}
             draggable
             onDragStart={(e) => onDragStart(e, image)}
@@ -103,7 +103,7 @@ const GalleryItemCell = React.memo(function GalleryItemCell({
         >
             {/* Selection indicator */}
             {isSelected && (
-                <div className="absolute top-1 left-1 z-20 bg-blue-500 text-white rounded-full p-0.5">
+                <div className="absolute top-1 left-1 z-20 bg-primary text-primary-foreground rounded-full p-0.5">
                     <Check className="w-3 h-3" />
                 </div>
             )}
@@ -689,7 +689,7 @@ export const ProjectGallery = React.memo(function ProjectGallery({
                     <ChevronLeft className="h-4 w-4" />
                 </Button>
                 <div className="mt-4 [writing-mode:vertical-rl] [text-orientation:mixed] text-xs text-muted-foreground font-medium tracking-wider whitespace-nowrap">
-                    PROJECT GALLERY
+                    project gallery
                 </div>
             </div>
         );
@@ -700,7 +700,7 @@ export const ProjectGallery = React.memo(function ProjectGallery({
             {/* Header */}
             <div className="flex-none p-3 border-b border-border/60 bg-muted/20">
                 <div className="flex items-center justify-between mb-3">
-                    <div className="text-xs font-bold text-foreground tracking-wider">PROJECT GALLERY</div>
+                    <div className="text-xs font-bold text-foreground tracking-wider">project gallery</div>
                     <Button
                         variant="ghost"
                         size="icon"
@@ -827,7 +827,7 @@ export const ProjectGallery = React.memo(function ProjectGallery({
                     onClick={(e) => e.stopPropagation()}
                 >
                     <button
-                        className="w-full px-3 py-1.5 text-left text-xs hover:bg-muted/50 flex items-center gap-2 cursor-pointer"
+                        className="w-full px-3 py-1.5 text-left text-xs hover:bg-hover flex items-center gap-2 cursor-pointer"
                         onClick={handleDownload}
                     >
                         <Download className="h-3 w-3" />
@@ -835,7 +835,7 @@ export const ProjectGallery = React.memo(function ProjectGallery({
                     </button>
 
                     <button
-                        className="w-full px-3 py-1.5 text-left text-xs hover:bg-muted/50 flex items-center gap-2 cursor-pointer"
+                        className="w-full px-3 py-1.5 text-left text-xs hover:bg-hover flex items-center gap-2 cursor-pointer"
                         onClick={() => {
                             addToMediaTray({ path: contextMenu.image.path, filename: contextMenu.image.filename });
                             setContextMenu(null);
@@ -845,18 +845,19 @@ export const ProjectGallery = React.memo(function ProjectGallery({
                         add to tray
                     </button>
                     <button
-                        className="w-full px-3 py-1.5 text-left text-xs hover:bg-muted/50 flex items-center gap-2 cursor-pointer"
+                        className="w-full px-3 py-1.5 text-left text-xs hover:bg-hover flex items-center gap-2 cursor-pointer"
                         onClick={() => {
                             setMetadataTargetPath(contextMenu.image.path);
                             setContextMenu(null);
                         }}
                     >
+                        <Info className="h-3 w-3" />
                         metadata
                     </button>
 
                     {!isVideoFile(contextMenu.image.path, contextMenu.image.filename) && (
                         <button
-                            className="w-full px-3 py-1.5 text-left text-xs hover:bg-muted/50 flex items-center gap-2 cursor-pointer"
+                            className="w-full px-3 py-1.5 text-left text-xs hover:bg-hover flex items-center gap-2 cursor-pointer"
                             onClick={() => openMaskEditorForImage(contextMenu.image)}
                         >
                             <PenTool className="h-3 w-3" />
@@ -871,7 +872,7 @@ export const ProjectGallery = React.memo(function ProjectGallery({
                             onMouseEnter={() => handleSubmenuEnter("regenerate")}
                             onMouseLeave={handleSubmenuLeave}
                         >
-                            <div className="w-full px-3 py-1.5 text-left text-xs hover:bg-muted/50 flex items-center justify-between cursor-pointer">
+                            <div className="w-full px-3 py-1.5 text-left text-xs hover:bg-hover flex items-center justify-between cursor-pointer">
                                 <span className="flex items-center gap-2"><RotateCcw className="h-3 w-3" /> regenerate</span>
                                 <span className="text-[10px]">▶</span>
                             </div>
@@ -882,7 +883,7 @@ export const ProjectGallery = React.memo(function ProjectGallery({
                             >
                                 <div className="bg-popover border border-border/60 rounded-md shadow-lg py-1 w-36">
                                     <button
-                                        className="w-full px-3 py-1.5 text-left text-xs hover:bg-muted/50 cursor-pointer"
+                                        className="w-full px-3 py-1.5 text-left text-xs hover:bg-hover cursor-pointer"
                                         onClick={async () => {
                                             // Fetch metadata from image to get workflow_template_id and job_params
                                             try {
@@ -921,7 +922,7 @@ export const ProjectGallery = React.memo(function ProjectGallery({
                                         same seed
                                     </button>
                                     <button
-                                        className="w-full px-3 py-1.5 text-left text-xs hover:bg-muted/50 cursor-pointer"
+                                        className="w-full px-3 py-1.5 text-left text-xs hover:bg-hover cursor-pointer"
                                         onClick={async () => {
                                             // Fetch metadata from image to get workflow_template_id and job_params
                                             try {
@@ -971,7 +972,7 @@ export const ProjectGallery = React.memo(function ProjectGallery({
                             onMouseEnter={() => handleSubmenuEnter("useInPipe")}
                             onMouseLeave={handleSubmenuLeave}
                         >
-                            <div className="w-full px-3 py-1.5 text-left text-xs hover:bg-muted/50 flex items-center justify-between cursor-pointer">
+                            <div className="w-full px-3 py-1.5 text-left text-xs hover:bg-hover flex items-center justify-between cursor-pointer">
                                 <span className="flex items-center gap-2">use in pipe</span>
                                 <span className="text-[10px]">▶</span>
                             </div>
@@ -984,7 +985,7 @@ export const ProjectGallery = React.memo(function ProjectGallery({
                                     {useInPipeWorkflows.map((w: any) => (
                                         <button
                                             key={w.id}
-                                            className="w-full px-3 py-1.5 text-left text-xs hover:bg-muted/50 truncate cursor-pointer"
+                                            className="w-full px-3 py-1.5 text-left text-xs hover:bg-hover truncate cursor-pointer"
                                             onClick={async () => {
                                                 try {
                                                     const metadata = await api.getImageMetadata(contextMenu.image.path);
@@ -1064,3 +1065,4 @@ export const ProjectGallery = React.memo(function ProjectGallery({
         </div>
     );
 });
+

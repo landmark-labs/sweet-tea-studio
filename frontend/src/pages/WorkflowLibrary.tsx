@@ -12,7 +12,7 @@ import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { FileJson, AlertTriangle, GitBranch, Edit2, Trash2, Save, RotateCw, CheckCircle2, XCircle, GripVertical, ChevronDown, ChevronUp, Archive } from "lucide-react";
+import { FileJson, AlertTriangle, GitBranch, Edit2, Trash2, ArrowUpRight, Save, RotateCw, CheckCircle2, XCircle, GripVertical, ChevronDown, ChevronUp, Archive } from "lucide-react";
 import { api, WorkflowTemplate, getApiBase } from "@/lib/api";
 import { WorkflowGraphViewer } from "@/components/WorkflowGraphViewer";
 import { cn } from "@/lib/utils";
@@ -165,7 +165,7 @@ const NodeCard = ({ node, schemaEdits, setSchemaEdits }: NodeCardProps) => {
             style={style}
             className={cn(
                 "bg-card border border-border rounded-lg overflow-hidden shadow-sm",
-                isDragging && "ring-2 ring-blue-200 shadow-lg"
+                isDragging && "ring-2 ring-ring shadow-lg"
             )}
         >
             <div
@@ -187,7 +187,7 @@ const NodeCard = ({ node, schemaEdits, setSchemaEdits }: NodeCardProps) => {
                     {/* Alias or Title display */}
                     {currentAlias ? (
                         <div className="flex items-center gap-1.5">
-                            <span className="font-medium text-sm text-blue-700 dark:text-blue-300">{currentAlias}</span>
+                            <span className="font-medium text-sm text-foreground">{currentAlias}</span>
                             <span className="text-[10px] text-muted-foreground">({node.title})</span>
                         </div>
                     ) : (
@@ -197,7 +197,7 @@ const NodeCard = ({ node, schemaEdits, setSchemaEdits }: NodeCardProps) => {
                         <span className="text-[10px] text-muted-foreground ml-1">({paramCount} params)</span>
                     )}
                     {node.hiddenInControls && (
-                        <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium uppercase text-amber-700">
+                        <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase text-muted-foreground">
                             Hidden
                         </span>
                     )}
@@ -212,7 +212,7 @@ const NodeCard = ({ node, schemaEdits, setSchemaEdits }: NodeCardProps) => {
                             onCheckedChange={toggleCore}
                             className={cn(
                                 "h-4 w-7",
-                                isCore ? "bg-blue-500" : "bg-muted"
+                                isCore ? "bg-primary" : "bg-muted"
                             )}
                         />
                     </div>
@@ -336,7 +336,7 @@ const NodeCard = ({ node, schemaEdits, setSchemaEdits }: NodeCardProps) => {
                                             )}
                                         </TableCell>
                                         <TableCell className="text-right py-2">
-                                            <Button variant="ghost" size="sm" className="h-6 text-xs text-red-500 hover:text-red-700" onClick={() => {
+                                            <Button variant="ghost" size="sm" className="h-6 text-xs text-destructive hover:text-destructive" onClick={() => {
                                                 const s = { ...schemaEdits };
                                                 s[key].__hidden = true;
                                                 setSchemaEdits(s);
@@ -369,7 +369,7 @@ const NodeCard = ({ node, schemaEdits, setSchemaEdits }: NodeCardProps) => {
                                             <TableCell className="text-xs py-2 text-muted-foreground w-[15%]">{field.type}</TableCell>
                                             <TableCell className="py-2 text-xs text-muted-foreground w-[25%]">{String(field.default ?? "-")}</TableCell>
                                             <TableCell className="text-right py-2 w-[10%]">
-                                                <Button variant="ghost" size="sm" className="h-6 text-xs text-blue-500 hover:text-blue-700" onClick={() => {
+                                                <Button variant="ghost" size="sm" className="h-6 text-xs text-foreground hover:text-foreground" onClick={() => {
                                                     const s = { ...schemaEdits };
                                                     delete s[key].__hidden;
                                                     setSchemaEdits(s);
@@ -445,9 +445,9 @@ const SortableWorkflowCard = ({
             ref={setNodeRef}
             style={style}
             className={cn(
-                "relative group hover:shadow-lg transition-shadow",
+                "relative group min-w-0 overflow-hidden hover:shadow-lg transition-shadow",
                 isArchived && "opacity-65 border-dashed",
-                isDragging && "ring-2 ring-blue-300 shadow-xl"
+                isDragging && "ring-2 ring-ring shadow-xl"
             )}
             title={w.description || undefined}
         >
@@ -463,58 +463,107 @@ const SortableWorkflowCard = ({
                 </div>
             )}
 
-            <CardHeader className="pl-10">
-                <div className="flex justify-between items-start">
-                    <CardTitle className="truncate pr-4" title={w.name}>{w.name}</CardTitle>
-                    <FileJson className="w-5 h-5 text-muted-foreground" />
+            <CardHeader className="pl-10 min-w-0">
+                <div className="flex min-w-0 justify-between items-start gap-3">
+                    <CardTitle className="min-w-0 truncate pr-1" title={w.name}>{w.name}</CardTitle>
+                    <FileJson className="w-5 h-5 text-muted-foreground shrink-0" />
                 </div>
-                <CardDescription className="line-clamp-2 h-10" title={w.description || undefined}>
+                <CardDescription className="line-clamp-2 h-10 break-words" title={w.description || undefined}>
                     {w.description?.split("[Missing")[0] || "No description"}
                 </CardDescription>
             </CardHeader>
             <CardContent>
                 {missing.length > 0 && (
-                    <div className="bg-amber-50 rounded-md p-3 border border-amber-200 text-xs">
-                        <div className="flex items-center justify-between text-amber-600 font-semibold mb-1">
+                    <div className="bg-muted rounded-md p-3 border border-border text-xs">
+                        <div className="flex items-center justify-between text-muted-foreground font-semibold mb-1">
                             <div className="flex items-center">
                                 <AlertTriangle className="w-3 h-3 mr-1" /> missing nodes
                             </div>
-                            <Button variant="ghost" size="sm" className="text-amber-700 hover:bg-amber-100" onClick={() => onStartInstall(missing)}>
+                            <Button variant="ghost" size="sm" className="text-muted-foreground hover:bg-muted" onClick={() => onStartInstall(missing)}>
                                 install all
                             </Button>
                         </div>
-                        <ul className="list-disc list-inside text-amber-800 space-y-0.5">
-                            {missing.map((node, i) => <li key={i}>{node}</li>)}
+                        <ul className="list-disc list-inside text-muted-foreground space-y-0.5">
+                            {missing.map((node, i) => <li key={i} className="break-all">{node}</li>)}
                         </ul>
                     </div>
                 )}
-                <div className="mt-4 flex gap-2 text-xs text-muted-foreground">
+                <div className="mt-4 flex flex-wrap gap-2 text-xs text-muted-foreground">
                     <span className="bg-muted/40 px-2 py-1 rounded">{Object.keys(w.graph_json).length} nodes</span>
                     <span className="bg-muted/40 px-2 py-1 rounded">{Object.keys(stripSchemaMeta(w.input_schema)).length} params</span>
                 </div>
             </CardContent>
-            <CardFooter className="flex justify-end gap-2 text-muted-foreground">
-                <Button variant="ghost" size="sm" onClick={() => onViewGraph(w)}>
-                    <GitBranch className="w-4 h-4 mr-1" /> view graph
-                </Button>
-                <Button variant="ghost" size="sm" onClick={() => onExport(w)}>
-                    <Save className="w-4 h-4 mr-1" /> export
-                </Button>
-                <Button variant="ghost" size="sm" onClick={() => onEdit(w)}>
-                    <Edit2 className="w-4 h-4 mr-1" /> edit
-                </Button>
-                {isArchived ? (
-                    <Button variant="ghost" size="sm" onClick={() => onUnarchive(w.id)} title="unarchive pipe">
-                        <Archive className="w-4 h-4 mr-1 rotate-180" /> unarchive
+            <CardFooter className="flex min-w-0 items-center gap-1.5 text-muted-foreground">
+                <div className="flex min-w-0 items-center gap-1">
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-1.5 text-[11px]"
+                        onClick={() => onViewGraph(w)}
+                        title="view graph"
+                        aria-label="view graph"
+                    >
+                        <GitBranch className="w-3.5 h-3.5 mr-1" />
+                        graph
                     </Button>
-                ) : (
-                    <Button variant="ghost" size="sm" onClick={() => onArchive(w.id)} title="archive pipe">
-                        <Archive className="w-4 h-4 mr-1" /> archive
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-1.5 text-[11px]"
+                        onClick={() => onEdit(w)}
+                        title="edit pipe"
+                        aria-label="edit pipe"
+                    >
+                        <Edit2 className="w-3.5 h-3.5 mr-1" />
+                        edit
                     </Button>
-                )}
-                <Button variant="ghost" size="sm" className="hover:text-red-500" onClick={() => onDelete(w.id)}>
-                    <Trash2 className="w-4 h-4" />
-                </Button>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-1.5 text-[11px]"
+                        onClick={() => onExport(w)}
+                        title="export pipe"
+                        aria-label="export pipe"
+                    >
+                        <ArrowUpRight className="w-3.5 h-3.5 mr-1" />
+                        export
+                    </Button>
+                </div>
+                <div className="ml-auto flex shrink-0 items-center gap-1">
+                    {isArchived ? (
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => onUnarchive(w.id)}
+                            title="unarchive pipe"
+                            aria-label="unarchive pipe"
+                        >
+                            <Archive className="w-3.5 h-3.5 rotate-180" />
+                        </Button>
+                    ) : (
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => onArchive(w.id)}
+                            title="archive pipe"
+                            aria-label="archive pipe"
+                        >
+                            <Archive className="w-3.5 h-3.5" />
+                        </Button>
+                    )}
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 hover:text-destructive"
+                        onClick={() => onDelete(w.id)}
+                        title="delete pipe"
+                        aria-label="delete pipe"
+                    >
+                        <Trash2 className="w-3.5 h-3.5" />
+                    </Button>
+                </div>
             </CardFooter>
         </Card>
     );
@@ -999,7 +1048,7 @@ export default function WorkflowLibrary() {
                             placeholder="enter a unique name"
                             className="text-sm"
                         />
-                        {nameError && <span className="text-xs text-red-600">{nameError}</span>}
+                        {nameError && <span className="text-xs text-destructive">{nameError}</span>}
                     </div>
 
                     {/* Description */}
@@ -1109,7 +1158,7 @@ export default function WorkflowLibrary() {
                                                 key={id}
                                                 className={cn(
                                                     "flex items-center justify-between rounded-lg border border-border bg-card px-3 py-2.5 shadow-sm",
-                                                    (hidden || hasBypass) && "border-blue-500/30 bg-blue-500/5"
+                                                    (hidden || hasBypass) && "border-border bg-muted/30"
                                                 )}
                                             >
                                                 <div className="flex flex-col gap-0.5 min-w-0 flex-1 mr-3">
@@ -1117,7 +1166,7 @@ export default function WorkflowLibrary() {
                                                         <span className="text-xs font-mono text-muted-foreground">#{id}</span>
                                                         {alias ? (
                                                             <div className="flex items-center gap-1">
-                                                                <span className="text-sm font-semibold text-blue-700 dark:text-blue-300">{alias}</span>
+                                                                <span className="text-sm font-semibold text-foreground">{alias}</span>
                                                                 <span className="text-xs text-muted-foreground">({nodeTitle})</span>
                                                             </div>
                                                         ) : (
@@ -1126,7 +1175,7 @@ export default function WorkflowLibrary() {
                                                     </div>
                                                     <span className="text-[11px] text-muted-foreground">{node.class_type}</span>
                                                     {hasBypass && isBypassedByDefault && (
-                                                        <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">
+                                                        <span className="text-[10px] text-muted-foreground font-medium">
                                                             bypassed by default
                                                         </span>
                                                     )}
@@ -1155,7 +1204,7 @@ export default function WorkflowLibrary() {
                                                             className={cn(
                                                                 "w-9 h-9 rounded-lg flex items-center justify-center text-xs font-medium transition-all border",
                                                                 hasBypass
-                                                                    ? "bg-blue-500 text-white border-blue-600 hover:bg-blue-600"
+                                                                    ? "bg-primary text-white border-primary hover:bg-primary/90"
                                                                     : "bg-muted text-muted-foreground border-border hover:bg-muted/80"
                                                             )}
                                                             title={hasBypass ? "Bypass enabled - click to disable" : "Click to enable bypass toggle"}
@@ -1174,7 +1223,7 @@ export default function WorkflowLibrary() {
                                                             className={cn(
                                                                 "w-9 h-9 rounded-lg flex items-center justify-center text-xs font-medium transition-all border",
                                                                 !hidden
-                                                                    ? "bg-blue-500 text-white border-blue-600 hover:bg-blue-600"
+                                                                    ? "bg-primary text-white border-primary hover:bg-primary/90"
                                                                     : "bg-muted text-muted-foreground border-border hover:bg-muted/80"
                                                             )}
                                                             title={hidden ? "Hidden in controls - click to show" : "Visible in controls - click to hide"}
@@ -1305,9 +1354,9 @@ export default function WorkflowLibrary() {
 
 
     return (
-        <div className="container mx-auto p-4 overflow-y-auto">
+        <div className="container mx-auto p-8 overflow-y-auto">
             <div className="flex justify-between items-center mb-6">
-                <h1 className="text-3xl font-bold">{labels.pageTitle.pipes}</h1>
+                <h1 className="text-3xl font-bold tracking-tight">{labels.pageTitle.pipes}</h1>
                 <div className="flex gap-2">
                     <Button variant={showArchived ? "secondary" : "ghost"} onClick={() => setShowArchived(!showArchived)}>
                         {showArchived ? "hide archived" : "view archived"}
@@ -1518,9 +1567,9 @@ export default function WorkflowLibrary() {
                             <div className="space-y-4">
                                 <div className="flex items-center justify-between">
                                     <span className="font-semibold capitalize text-sm">Status: {installStatus.status}</span>
-                                    {installStatus.status === "running" && <RotateCw className="w-4 h-4 animate-spin text-blue-500" />}
-                                    {installStatus.status === "completed" && <CheckCircle2 className="w-5 h-5 text-green-500" />}
-                                    {installStatus.status === "failed" && <XCircle className="w-5 h-5 text-red-500" />}
+                                    {installStatus.status === "running" && <RotateCw className="w-4 h-4 animate-spin text-primary" />}
+                                    {installStatus.status === "completed" && <CheckCircle2 className="w-5 h-5 text-success" />}
+                                    {installStatus.status === "failed" && <XCircle className="w-5 h-5 text-destructive" />}
                                 </div>
 
                                 <div className="text-sm text-muted-foreground bg-muted/20 p-2 rounded">
@@ -1529,10 +1578,10 @@ export default function WorkflowLibrary() {
 
                                 {installStatus.installed && installStatus.installed.length > 0 && (
                                     <div>
-                                        <div className="text-xs font-semibold mb-1 text-green-700">successfully installed:</div>
+                                        <div className="text-xs font-semibold mb-1 text-success">successfully installed:</div>
                                         <div className="text-xs space-y-1">
                                             {installStatus.installed.map((item: string, i: number) => (
-                                                <div key={i} className="flex items-center"><CheckCircle2 className="w-3 h-3 mr-1 text-green-500" /> {item}</div>
+                                                <div key={i} className="flex items-center"><CheckCircle2 className="w-3 h-3 mr-1 text-success" /> {item}</div>
                                             ))}
                                         </div>
                                     </div>
@@ -1540,8 +1589,8 @@ export default function WorkflowLibrary() {
 
                                 {installStatus.failed && installStatus.failed.length > 0 && (
                                     <div>
-                                        <div className="text-xs font-semibold mb-1 text-red-700">failed to install:</div>
-                                        <div className="text-xs space-y-1 text-red-600">
+                                        <div className="text-xs font-semibold mb-1 text-destructive">failed to install:</div>
+                                        <div className="text-xs space-y-1 text-destructive">
                                             {installStatus.failed.map((item: string, i: number) => (
                                                 <div key={i} className="flex items-center"><XCircle className="w-3 h-3 mr-1" /> {item}</div>
                                             ))}
@@ -1551,8 +1600,8 @@ export default function WorkflowLibrary() {
 
                                 {installStatus.unknown && installStatus.unknown.length > 0 && (
                                     <div>
-                                        <div className="text-xs font-semibold mb-1 text-amber-700">unknown nodes (no repo found):</div>
-                                        <div className="text-xs space-y-1 text-amber-600">
+                                        <div className="text-xs font-semibold mb-1 text-muted-foreground">unknown nodes (no repo found):</div>
+                                        <div className="text-xs space-y-1 text-muted-foreground">
                                             {installStatus.unknown.map((item: string, i: number) => (
                                                 <div key={i}>• {item}</div>
                                             ))}
@@ -1589,3 +1638,5 @@ export default function WorkflowLibrary() {
         </div>
     );
 }
+
+

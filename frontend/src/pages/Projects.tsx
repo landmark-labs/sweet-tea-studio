@@ -233,11 +233,11 @@ export default function Projects() {
     };
 
     return (
-        <div className="p-4 space-y-4 h-full overflow-auto">
+        <div className="p-8 space-y-4 h-full overflow-auto">
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-2xl font-semibold">{labels.pageTitle.projects}</h1>
+                    <h1 className="text-3xl font-bold tracking-tight">{labels.pageTitle.projects}</h1>
                     <p className="text-muted-foreground text-sm">
                         organize your generations into projects
                     </p>
@@ -320,7 +320,7 @@ export default function Projects() {
                                                 <Button
                                                     variant="ghost"
                                                     size="icon"
-                                                    className="h-6 w-6 text-slate-400 hover:text-orange-500"
+                                                    className="h-6 w-6 text-muted-foreground hover:text-foreground"
                                                     onClick={async () => {
                                                         if (!managingProject) return;
                                                         if (!confirm(`Permanently delete all items in the trash for "${folder}"? This cannot be undone.`)) return;
@@ -348,7 +348,7 @@ export default function Projects() {
                                                     <Button
                                                         variant="ghost"
                                                         size="icon"
-                                                        className="h-6 w-6 text-slate-400 hover:text-red-500"
+                                                        className="h-6 w-6 text-muted-foreground hover:text-destructive"
                                                         onClick={async () => {
                                                             if (!managingProject) return;
                                                             if (!confirm(`Delete folder "${folder}"? This only works if the folder is empty.`)) return;
@@ -370,7 +370,7 @@ export default function Projects() {
                                                         disabled={isDeletingFolder === folder}
                                                         title="Delete folder"
                                                     >
-                                                        <Trash2 size={12} className="text-red-400" />
+                                                        <Trash2 size={12} className="text-destructive" />
                                                     </Button>
                                                 )}
                                             </div>
@@ -619,7 +619,7 @@ function ProjectCard({
                             <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-8 w-8 text-muted-foreground hover:text-green-600"
+                                className="h-8 w-8 text-muted-foreground hover:text-success"
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     onUnarchive?.(project.id);
@@ -664,3 +664,4 @@ function ProjectCard({
         </Card>
     );
 }
+
