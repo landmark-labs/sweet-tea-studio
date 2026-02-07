@@ -687,28 +687,28 @@ export default function Gallery() {
                         </div>
 
                         {selectedIds.size > 0 && (
-                            <div className="flex items-center gap-2 bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-sm font-medium border border-blue-100 animate-in fade-in slide-in-from-left-4 whitespace-nowrap flex-shrink-0">
+                            <div className="flex items-center gap-2 bg-surface-raised text-foreground px-3 py-1 rounded-full text-sm font-medium border border-border animate-in fade-in slide-in-from-left-4 whitespace-nowrap flex-shrink-0">
                                 <Check className="w-4 h-4 flex-shrink-0" />
                                 {cleanupMode ? `${selectedIds.size} to keep` : `${selectedIds.size} selected`}
-                                <div className="h-4 w-px bg-blue-200 mx-1 flex-shrink-0" />
+                                <div className="h-4 w-px bg-border mx-1 flex-shrink-0" />
                                 {!cleanupMode && (
                                     <>
-                                        <button onClick={handleBulkDownload} className="hover:underline text-blue-600 flex items-center gap-1">
+                                        <button onClick={handleBulkDownload} className="hover:underline text-foreground flex items-center gap-1">
                                             <Download className="w-3 h-3" />
                                             download
                                         </button>
-                                        <div className="h-4 w-px bg-blue-200 flex-shrink-0" />
-                                        <button onClick={() => { setMoveTargetIds(Array.from(selectedIds)); setMoveDialogOpen(true); }} className="hover:underline text-blue-600 flex items-center gap-1">
+                                        <div className="h-4 w-px bg-border flex-shrink-0" />
+                                        <button onClick={() => { setMoveTargetIds(Array.from(selectedIds)); setMoveDialogOpen(true); }} className="hover:underline text-foreground flex items-center gap-1">
                                             <FolderInput className="w-3 h-3" />
                                             move
                                         </button>
-                                        <div className="h-4 w-px bg-blue-200 flex-shrink-0" />
-                                        <button onClick={handleAddSelectedToTray} className="hover:underline text-blue-600 flex items-center gap-1">
+                                        <div className="h-4 w-px bg-border flex-shrink-0" />
+                                        <button onClick={handleAddSelectedToTray} className="hover:underline text-foreground flex items-center gap-1">
                                             <Plus className="w-3 h-3" />
                                             add to tray
                                         </button>
-                                        <div className="h-4 w-px bg-blue-200 flex-shrink-0" />
-                                        <button onClick={handleBulkDelete} className="hover:underline text-red-600">delete</button>
+                                        <div className="h-4 w-px bg-border flex-shrink-0" />
+                                        <button onClick={handleBulkDelete} className="hover:underline text-destructive">delete</button>
                                     </>
                                 )}
                                 <button onClick={() => setSelectedIds(new Set())} className="hover:underline text-muted-foreground">clear</button>
@@ -808,7 +808,7 @@ export default function Gallery() {
                                             <Card
                                                 className={cn(
                                                     "group overflow-hidden flex flex-col relative transition-all duration-200 select-none h-full",
-                                                    selectedIds.has(item.image.id) ? "ring-2 ring-blue-500 shadow-lg scale-[0.98] bg-blue-50/50" : ""
+                                                    selectedIds.has(item.image.id) ? "ring-2 ring-ring shadow-md scale-[0.98] bg-accent/40" : ""
                                                 )}
                                                 onClick={(e) => handleCardClick(item, e)}
                                                 onDoubleClick={() => handleCardDoubleClick(item)}
@@ -819,9 +819,9 @@ export default function Gallery() {
                                                     handleImageError={handleImageError}
                                                 />
                                                 <div className="absolute inset-x-0 top-0 aspect-square pointer-events-none">
-                                                    <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                        <div className="h-full flex flex-col justify-between p-3">
-                                                            <div className="flex items-center justify-center gap-2">
+                                                    <div className="absolute inset-0 bg-black/65 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                        <div className="h-full w-full flex items-center justify-center">
+                                                            <div className="flex items-center gap-2">
                                                                 <Button
                                                                     className="pointer-events-auto"
                                                                     variant="secondary"
@@ -850,11 +850,6 @@ export default function Gallery() {
                                                                     <Trash2 className="w-4 h-4" />
                                                                 </Button>
                                                             </div>
-                                                            <div className="space-y-1 text-[10px] text-white">
-                                                                <p className="line-clamp-2"><span className="font-semibold text-emerald-300">positive:</span> {positive || "none"}</p>
-                                                                <p className="line-clamp-2"><span className="font-semibold text-rose-300">negative:</span> {negative || "none"}</p>
-                                                                <p className="line-clamp-2"><span className="font-semibold text-sky-300">caption:</span> {caption || "none"}</p>
-                                                            </div>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -866,7 +861,7 @@ export default function Gallery() {
                                                 >
                                                     <div className="flex items-center gap-2 flex-wrap">
                                                         {item.workflow_name && (
-                                                            <span className="px-1.5 py-0.5 bg-purple-50 text-purple-600 border border-purple-100 rounded text-[10px] font-medium">
+                                                            <span className="px-1.5 py-0.5 bg-muted text-muted-foreground border border-border rounded text-[10px] font-medium">
                                                                 {item.workflow_name}
                                                             </span>
                                                         )}
@@ -888,46 +883,108 @@ export default function Gallery() {
                                                     {item.prompt_tags && item.prompt_tags.length > 0 && (
                                                         <div className="flex flex-wrap gap-1 mt-1">
                                                             {item.prompt_tags.slice(0, 6).map((tag) => (
-                                                                <span key={tag} className="px-1.5 py-0.5 bg-indigo-50 text-indigo-600 border border-indigo-100 rounded">#{tag}</span>
+                                                                <span key={tag} className="px-1.5 py-0.5 bg-muted text-muted-foreground border border-border rounded">#{tag}</span>
                                                             ))}
                                                         </div>
                                                     )}
 
                                                     <div className="mt-2 space-y-2">
-                                                        {positive && (
-                                                            <div className="group/prompt">
-                                                                <div className="flex items-center justify-between mb-1">
-                                                                    <span className="font-semibold text-green-600 block text-[10px] uppercase">Positive</span>
-                                                                    <Button variant="ghost" size="icon" className="h-4 w-4 opacity-0 group-hover/prompt:opacity-100" onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(positive); }}>
-                                                                        <Copy className="h-3 w-3 text-muted-foreground" />
-                                                                    </Button>
-                                                                </div>
-                                                                <HoverCard openDelay={200}>
-                                                                    <HoverCardTrigger asChild>
-                                                                        <p className="line-clamp-6 text-foreground/80 leading-relaxed cursor-help select-text">{positive}</p>
-                                                                    </HoverCardTrigger>
-                                                                    <HoverCardContent className="w-[500px] max-h-[60vh] overflow-y-auto p-4 z-[100]" align="start">
-                                                                        <div className="space-y-4">
-                                                                            <div>
-                                                                                <div className="flex items-center gap-2 mb-1">
-                                                                                    <span className="font-semibold text-green-600 text-xs uppercase">Positive Prompt</span>
-                                                                                </div>
-                                                                                <p className="text-sm text-foreground/80 whitespace-pre-wrap font-mono text-[11px] leading-relaxed select-text">{positive}</p>
+                                                        {(positive || negative || caption) ? (
+                                                            <HoverCard openDelay={180}>
+                                                                <HoverCardTrigger asChild>
+                                                                    <div className="cursor-help rounded-md border border-border/70 bg-muted/20 p-2 space-y-1.5">
+                                                                        {positive && (
+                                                                            <p className="line-clamp-2 text-foreground/80 leading-relaxed text-[11px]">
+                                                                                <span className="font-semibold text-foreground">positive:</span> {positive}
+                                                                            </p>
+                                                                        )}
+                                                                        {negative && (
+                                                                            <p className="line-clamp-2 text-foreground/70 leading-relaxed text-[11px]">
+                                                                                <span className="font-semibold text-foreground">negative:</span> {negative}
+                                                                            </p>
+                                                                        )}
+                                                                        {caption && (
+                                                                            <p className="line-clamp-2 text-foreground/70 leading-relaxed text-[11px]">
+                                                                                <span className="font-semibold text-foreground">caption:</span> {caption}
+                                                                            </p>
+                                                                        )}
+                                                                    </div>
+                                                                </HoverCardTrigger>
+                                                                <HoverCardContent className="w-[560px] max-h-[62vh] overflow-y-auto p-4 z-[100]" align="start">
+                                                                    <div className="space-y-4">
+                                                                        <div className="flex items-center justify-between">
+                                                                            <span className="font-semibold text-foreground text-xs tracking-normal">prompt details</span>
+                                                                            <div className="flex items-center gap-1">
+                                                                                {positive && (
+                                                                                    <Button
+                                                                                        variant="outline"
+                                                                                        size="icon"
+                                                                                        className="h-6 w-6"
+                                                                                        onClick={() => { void navigator.clipboard.writeText(positive); }}
+                                                                                        title="Copy positive"
+                                                                                    >
+                                                                                        <Copy className="h-3 w-3" />
+                                                                                    </Button>
+                                                                                )}
+                                                                                {negative && (
+                                                                                    <Button
+                                                                                        variant="outline"
+                                                                                        size="icon"
+                                                                                        className="h-6 w-6"
+                                                                                        onClick={() => { void navigator.clipboard.writeText(negative); }}
+                                                                                        title="Copy negative"
+                                                                                    >
+                                                                                        <Copy className="h-3 w-3" />
+                                                                                    </Button>
+                                                                                )}
+                                                                                {caption && (
+                                                                                    <Button
+                                                                                        variant="outline"
+                                                                                        size="icon"
+                                                                                        className="h-6 w-6"
+                                                                                        onClick={() => { void navigator.clipboard.writeText(caption); }}
+                                                                                        title="Copy caption"
+                                                                                    >
+                                                                                        <Copy className="h-3 w-3" />
+                                                                                    </Button>
+                                                                                )}
                                                                             </div>
-                                                                            {negative && (
-                                                                                <div className="border-t pt-3">
-                                                                                    <div className="flex items-center gap-2 mb-1">
-                                                                                        <span className="font-semibold text-red-500 text-xs uppercase">Negative Prompt</span>
-                                                                                    </div>
-                                                                                    <p className="text-sm text-muted-foreground whitespace-pre-wrap font-mono text-[11px] leading-relaxed select-text">{negative}</p>
-                                                                                </div>
-                                                                            )}
                                                                         </div>
-                                                                    </HoverCardContent>
-                                                                </HoverCard>
-                                                            </div>
-                                                        )}
-                                                        {!positive && !negative && (
+
+                                                                        {positive && (
+                                                                            <div>
+                                                                                <div className="mb-1">
+                                                                                    <span className="font-semibold text-foreground text-xs">positive</span>
+                                                                                </div>
+                                                                                <p className="text-foreground/80 whitespace-pre-wrap font-mono text-[11px] leading-relaxed select-text rounded border border-border/60 bg-muted/20 p-2">
+                                                                                    {positive}
+                                                                                </p>
+                                                                            </div>
+                                                                        )}
+                                                                        {negative && (
+                                                                            <div className="border-t border-border/50 pt-3">
+                                                                                <div className="mb-1">
+                                                                                    <span className="font-semibold text-foreground text-xs">negative</span>
+                                                                                </div>
+                                                                                <p className="text-foreground/75 whitespace-pre-wrap font-mono text-[11px] leading-relaxed select-text rounded border border-border/60 bg-muted/20 p-2">
+                                                                                    {negative}
+                                                                                </p>
+                                                                            </div>
+                                                                        )}
+                                                                        {caption && (
+                                                                            <div className="border-t border-border/50 pt-3">
+                                                                                <div className="mb-1">
+                                                                                    <span className="font-semibold text-foreground text-xs">caption</span>
+                                                                                </div>
+                                                                                <p className="text-foreground/75 whitespace-pre-wrap text-[11px] leading-relaxed select-text rounded border border-border/60 bg-muted/20 p-2">
+                                                                                    {caption}
+                                                                                </p>
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                </HoverCardContent>
+                                                            </HoverCard>
+                                                        ) : (
                                                             <div className="flex flex-wrap gap-1 mt-2">
                                                                 {Object.entries(item.job_params).slice(0, 4).map(([k, v]) => (
                                                                     <span key={k} className="px-1.5 py-0.5 bg-muted/40 rounded text-muted-foreground border border-border">{k}: {String(v)}</span>
@@ -951,7 +1008,7 @@ export default function Gallery() {
                                             <ContextMenuItem onSelect={() => addToMediaTray({ path: item.image.path, filename: item.image.filename })}>add to media tray</ContextMenuItem>
                                             <ContextMenuItem onSelect={() => { setMoveTargetIds([item.image.id]); setMoveDialogOpen(true); }}>move</ContextMenuItem>
                                             <ContextMenuSeparator />
-                                            <ContextMenuItem className="text-red-600" onSelect={() => handleDelete(item.image.id)}>delete</ContextMenuItem>
+                                            <ContextMenuItem className="text-destructive" onSelect={() => handleDelete(item.image.id)}>delete</ContextMenuItem>
                                         </ContextMenuContent>
                                     </ContextMenu>
                                 );
@@ -1015,7 +1072,7 @@ export default function Gallery() {
                                 onDoubleClick={handleZoomReset}
                             >
                                 {selectedIds.has(fullscreenItem.image.id) && (
-                                    <div className="absolute top-3 left-3 z-10 bg-blue-500 text-white rounded-full p-1 shadow-sm flex items-center gap-1 text-xs">
+                                    <div className="absolute top-3 left-3 z-10 bg-primary text-primary-foreground rounded-full p-1 shadow-sm flex items-center gap-1 text-xs">
                                         <Check className="w-3 h-3" /> Selected
                                     </div>
                                 )}
@@ -1046,9 +1103,9 @@ export default function Gallery() {
                                 )}
                             </div>
                             <div className="bg-white/5 rounded-lg px-4 py-2 text-sm w-full flex items-center justify-between">
-                                <div className="flex items-center gap-2 text-slate-100">
+                                <div className="flex items-center gap-2 text-white">
                                     <span className="font-semibold">{fullscreenItem.prompt_name || fullscreenItem.image.filename}</span>
-                                    <span className="text-xs text-slate-300">{new Date(fullscreenItem.created_at).toLocaleString()}</span>
+                                    <span className="text-xs text-white/70">{new Date(fullscreenItem.created_at).toLocaleString()}</span>
                                 </div>
                                 <div className="flex items-center gap-3">
                                     <div className="flex items-center gap-2">
@@ -1083,7 +1140,7 @@ export default function Gallery() {
                                             Delete
                                         </Button>
                                     </div>
-                                    <div className="text-xs text-slate-200">Scroll to zoom, drag to pan. ← → arrows navigate. ESC closes.</div>
+                                    <div className="text-xs text-white/80">Scroll to zoom, drag to pan. ← → arrows navigate. ESC closes.</div>
                                 </div>
                             </div>
                         </div>
@@ -1135,3 +1192,5 @@ export default function Gallery() {
         </div >
     );
 }
+
+

@@ -60,7 +60,7 @@ function App() {
       <GenerationProvider>
         <UndoToastProvider>
           <BrowserRouter>
-            <Suspense fallback={<div className="p-4 text-sm text-muted-foreground">Loading Sweet Tea Studio…</div>}>
+            <Suspense fallback={<div className="p-4 text-sm text-muted-foreground">Loading Sweet Tea Studio...</div>}>
               <Routes>
                 <Route element={
                   <ErrorBoundary>

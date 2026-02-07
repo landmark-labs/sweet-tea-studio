@@ -481,7 +481,7 @@ export function ImageUpload({
                     className={cn(
                         "flex flex-col items-center justify-center border-2 border-dashed rounded-lg transition-colors gap-3",
                         layoutCompact ? "p-2 gap-2" : "p-4",
-                        isDragging ? "border-blue-500 bg-blue-50" : "border-slate-200 hover:bg-slate-50"
+                        isDragging ? "border-ring bg-accent/40" : "border-border hover:bg-hover"
                     )}
                     onDragEnter={handleDragEnter}
                     onDragOver={handleDragOver}
@@ -489,8 +489,8 @@ export function ImageUpload({
                     onDrop={handleDrop}
                 >
                     <div className="flex flex-col items-center gap-1 text-center">
-                        {isUploading ? <Loader2 className={cn("animate-spin text-blue-500", layoutCompact ? "h-4 w-4" : "h-5 w-5")} /> : <Upload className={cn("text-slate-300", layoutCompact ? "h-4 w-4" : "h-5 w-5")} />}
-                        <div className={cn("text-slate-500", layoutCompact ? "text-[10px]" : "text-xs")}>
+                        {isUploading ? <Loader2 className={cn("animate-spin text-primary", layoutCompact ? "h-4 w-4" : "h-5 w-5")} /> : <Upload className={cn("text-muted-foreground", layoutCompact ? "h-4 w-4" : "h-5 w-5")} />}
+                        <div className={cn("text-muted-foreground", layoutCompact ? "text-[10px]" : "text-xs")}>
                             {isUploading ? "Uploading..." : "Drag & drop here"}
                         </div>
                     </div>
@@ -531,9 +531,9 @@ export function ImageUpload({
             ) : (
                 <div
                     className={cn(
-                        "relative w-full bg-slate-100 rounded-lg overflow-hidden border group transition-colors",
+                        "relative w-full bg-muted/50 rounded-lg overflow-hidden border group transition-colors",
                         layoutCompact ? "h-28" : "h-48",
-                        isDragging ? "border-blue-500 ring-2 ring-blue-500 ring-opacity-50" : ""
+                        isDragging ? "border-ring ring-2 ring-ring" : ""
                     )}
                     onDragEnter={handleDragEnter}
                     onDragOver={handleDragOver}
@@ -542,9 +542,9 @@ export function ImageUpload({
                 >
                     {/* Overlay for drop indication */}
                     {isDragging && (
-                        <div className="absolute inset-0 bg-blue-500/20 z-10 flex items-center justify-center">
+                        <div className="absolute inset-0 bg-accent/60 z-10 flex items-center justify-center">
                             <div className="bg-white/90 p-2 rounded-full shadow-lg">
-                                <Upload className="h-6 w-6 text-blue-600" />
+                                <Upload className="h-6 w-6 text-primary" />
                             </div>
                         </div>
                     )}
@@ -581,7 +581,7 @@ export function ImageUpload({
                             <button
                                 type="button"
                                 onClick={() => setIsMaskEditorOpen(true)}
-                                className="bg-white/90 text-slate-700 p-1.5 rounded-full shadow hover:bg-blue-50 hover:text-blue-600 transition-colors"
+                                className="bg-surface/90 text-foreground p-1.5 rounded-full shadow hover:bg-hover hover:text-foreground transition-colors"
                                 title="Draw Mask (In-Painting)"
                             >
                                 <PenTool className="w-4 h-4" />
@@ -591,7 +591,7 @@ export function ImageUpload({
                         <button
                             type="button"
                             onClick={clear}
-                            className="bg-white/90 text-red-500 p-1.5 rounded-full shadow hover:bg-red-50 transition-colors"
+                            className="bg-surface/90 text-destructive p-1.5 rounded-full shadow hover:bg-destructive/10 transition-colors"
                         >
                             <X className="w-4 h-4" />
                         </button>
@@ -612,7 +612,7 @@ export function ImageUpload({
 
                     {/* Project/Folder Selector */}
                     <div className="flex gap-2 items-center border-b pb-3">
-                        <div className="flex items-center gap-1 text-sm text-slate-500">
+                        <div className="flex items-center gap-1 text-sm text-muted-foreground">
                             <FolderOpen className="w-4 h-4" />
                             <span>browse:</span>
                         </div>
@@ -633,7 +633,7 @@ export function ImageUpload({
 
                         {selectedProjectId && (
                             <>
-                                <ChevronRight className="w-4 h-4 text-slate-400" />
+                                <ChevronRight className="w-4 h-4 text-muted-foreground" />
                                 <select
                                     value={selectedFolder ?? ""}
                                     onChange={(e) => setSelectedFolder(e.target.value || null)}
@@ -649,7 +649,7 @@ export function ImageUpload({
                     </div>
 
                     <div className="flex-1 min-h-[350px] flex flex-col">
-                        <ScrollArea className="flex-1 bg-slate-50 p-4 rounded-md border text-sm">
+                        <ScrollArea className="flex-1 bg-surface-raised p-4 rounded-md border border-border text-sm">
                             {/* Show project folder images when project & folder selected */}
                             {selectedProjectId && selectedFolder && projectFolderImages.length > 0 && (
                                 <div className="grid grid-cols-5 gap-3">
@@ -658,7 +658,7 @@ export function ImageUpload({
                                             key={img.path}
                                             type="button"
                                             onClick={() => selectGalleryImage(img.path)}
-                                            className="aspect-square relative group bg-white border rounded-md overflow-hidden hover:ring-2 hover:ring-blue-500 focus:outline-none"
+                                            className="aspect-square relative group bg-surface border border-border rounded-md overflow-hidden hover:ring-2 hover:ring-ring focus:outline-none"
                                         >
                                             <img
                                                 loading="lazy"
@@ -688,7 +688,7 @@ export function ImageUpload({
                                             key={path}
                                             type="button"
                                             onClick={() => selectGalleryImage(path)}
-                                            className="aspect-square relative group bg-white border rounded-md overflow-hidden hover:ring-2 hover:ring-blue-500 focus:outline-none"
+                                            className="aspect-square relative group bg-surface border border-border rounded-md overflow-hidden hover:ring-2 hover:ring-ring focus:outline-none"
                                         >
                                             <img
                                                 loading="lazy"
@@ -712,22 +712,22 @@ export function ImageUpload({
 
                             {/* Loading indicator for project images */}
                             {selectedProjectId && isLoadingProjectImages && (
-                                <div className="text-center text-slate-400 py-8 flex flex-col items-center gap-2">
-                                    <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
+                                <div className="text-center text-muted-foreground py-8 flex flex-col items-center gap-2">
+                                    <Loader2 className="w-6 h-6 animate-spin text-primary" />
                                     <span>Loading images...</span>
                                 </div>
                             )}
 
                             {/* Message when project selected but no images */}
                             {selectedProjectId && !selectedFolder && !isLoadingProjectImages && projectGalleryImages.length === 0 && (
-                                <div className="text-center text-slate-400 py-8">
+                                <div className="text-center text-muted-foreground py-8">
                                     No images in this project
                                 </div>
                             )}
 
                             {/* Message when folder selected but empty */}
                             {selectedProjectId && selectedFolder && !isLoadingProjectImages && projectFolderImages.length === 0 && (
-                                <div className="text-center text-slate-400 py-8">
+                                <div className="text-center text-muted-foreground py-8">
                                     No images in this folder
                                 </div>
                             )}
@@ -742,7 +742,7 @@ export function ImageUpload({
                                                     key={path}
                                                     type="button"
                                                     onClick={() => selectGalleryImage(path)}
-                                                    className="aspect-square relative group bg-white border rounded-md overflow-hidden hover:ring-2 hover:ring-green-500 focus:outline-none"
+                                                    className="aspect-square relative group bg-white border rounded-md overflow-hidden hover:ring-2 hover:ring-ring focus:outline-none"
                                                 >
                                                     <img
                                                         loading="lazy"
@@ -789,8 +789,8 @@ export function ImageUpload({
             <PopoverAnchor asChild>
                 <div
                     className={cn(
-                        "flex items-center justify-between gap-3 rounded-md border border-dashed px-3 py-2 bg-slate-50 transition-colors",
-                        isDragging ? "border-blue-500 bg-blue-50" : "border-slate-200 hover:bg-slate-100"
+                        "flex items-center justify-between gap-3 rounded-md border border-dashed px-3 py-2 bg-surface-raised transition-colors",
+                        isDragging ? "border-ring bg-accent/40" : "border-border hover:bg-hover"
                     )}
                     tabIndex={0}
                     onPointerEnter={() => requestHoverOpen()}
@@ -807,15 +807,15 @@ export function ImageUpload({
                 >
                     <div className="flex items-center gap-2 min-w-0">
                         {isVideoPreview ? (
-                            <VideoIcon className="h-4 w-4 text-slate-400" />
+                            <VideoIcon className="h-4 w-4 text-muted-foreground" />
                         ) : (
-                            <ImageIcon className="h-4 w-4 text-slate-400" />
+                            <ImageIcon className="h-4 w-4 text-muted-foreground" />
                         )}
-                        <span className="text-xs text-slate-600 truncate" title={displayValue}>
+                        <span className="text-xs text-foreground/80 truncate" title={displayValue}>
                             {displayValue}
                         </span>
                     </div>
-                    <span className="text-[10px] text-slate-400 uppercase tracking-wider">
+                    <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
                         {hasValue ? "hover preview" : "hover to select"}
                     </span>
                 </div>
@@ -825,7 +825,7 @@ export function ImageUpload({
                 side="right"
                 align="start"
                 sideOffset={12}
-                className="w-[360px] max-h-[75vh] overflow-y-auto p-3 shadow-xl border-slate-200"
+                className="w-[360px] max-h-[75vh] overflow-y-auto p-3 shadow-md border border-border"
                 onPointerEnter={holdHoverOpen}
                 onPointerLeave={requestHoverClose}
                 onFocusCapture={holdHoverOpen}
@@ -841,3 +841,5 @@ export function ImageUpload({
         </Popover>
     );
 }
+
+

@@ -97,10 +97,10 @@ interface UndoToastItemProps {
 
 function UndoToastItem({ toast, onUndo, onDismiss }: UndoToastItemProps) {
     return (
-        <div className="pointer-events-auto bg-slate-900 text-white px-4 py-3 rounded-lg shadow-xl flex items-center gap-3 min-w-[280px] max-w-[400px] relative overflow-hidden">
+        <div className="pointer-events-auto border border-border bg-surface text-foreground px-4 py-3 rounded-[var(--radius)] shadow-md flex items-center gap-3 min-w-[280px] max-w-[400px] relative overflow-hidden">
             {/* Progress bar - uses CSS animation instead of JS interval */}
             <div
-                className="absolute bottom-0 left-0 h-1 bg-amber-500"
+                className="absolute bottom-0 left-0 h-1 bg-primary"
                 style={{
                     width: '100%',
                     animation: `undo-toast-shrink ${toast.durationMs}ms linear forwards`,
@@ -119,7 +119,7 @@ function UndoToastItem({ toast, onUndo, onDismiss }: UndoToastItemProps) {
             <button
                 type="button"
                 onClick={onUndo}
-                className="flex items-center gap-1.5 text-amber-400 hover:text-amber-300 font-medium text-sm transition-colors"
+                className="flex items-center gap-1.5 text-primary hover:text-primary/80 font-medium text-sm transition-colors"
             >
                 <Undo2 className="w-4 h-4" />
                 Undo
@@ -128,7 +128,7 @@ function UndoToastItem({ toast, onUndo, onDismiss }: UndoToastItemProps) {
             <button
                 type="button"
                 onClick={onDismiss}
-                className="text-slate-400 hover:text-white transition-colors"
+                className="text-muted-foreground hover:text-foreground transition-colors"
                 aria-label="Dismiss"
             >
                 <X className="w-4 h-4" />

@@ -1354,7 +1354,7 @@ export default function WorkflowLibrary() {
 
 
     return (
-        <div className="container mx-auto p-8 overflow-y-auto">
+        <div className="pt-4 pr-8 pb-8 pl-[83px] overflow-y-auto">
             <div className="flex justify-between items-center mb-6">
                 <h1 className="text-3xl font-bold tracking-tight">{labels.pageTitle.pipes}</h1>
                 <div className="flex gap-2">

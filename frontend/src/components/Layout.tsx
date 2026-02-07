@@ -86,15 +86,15 @@ export default function Layout() {
   };
 
   return (
-    <div className="flex h-screen w-screen bg-gradient-to-br from-background via-surface to-muted text-foreground overflow-hidden">
+    <div className="flex h-screen w-screen bg-background text-foreground overflow-hidden">
       {/* Sidebar */}
       <aside
         className={cn(
-          "border-r border-border/70 bg-surface/80 backdrop-blur flex flex-col transition-all duration-300 shadow-sm",
-          collapsed ? "w-16" : "w-56"
+          "border-r border-border bg-surface flex flex-col transition-all duration-300",
+          collapsed ? "w-16" : "w-64"
         )}
       >
-        <div className={cn("p-4 border-b border-border/70 flex items-center relative", collapsed ? "justify-center" : "justify-between")}>
+        <div className={cn("p-3 border-b border-border flex items-center relative min-h-[72px]", collapsed ? "justify-center" : "justify-between")}>
           {!collapsed ? (
             <div className="w-full">
               <img
@@ -116,17 +116,17 @@ export default function Layout() {
             variant="ghost"
             size="icon"
             className={cn(
-              "rounded-full transition-all",
+              "rounded-full border border-transparent transition-all",
               collapsed
                 ? "absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-8 w-8 hover:bg-transparent text-foreground/80 font-bold"
-                : "h-8 w-8"
+                : "h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-hover"
             )}
             onClick={() => setCollapsed(!collapsed)}
           >
             {collapsed ? <ChevronRight size={18} strokeWidth={3} /> : <ChevronLeft size={16} />}
           </Button>
         </div>
-        <nav className="flex-1 p-3 overflow-x-hidden flex flex-col gap-3">
+        <nav className="flex-1 p-3 overflow-x-hidden flex flex-col gap-4">
           <div className="space-y-1">
             {navItems.map((item) => (
               <NavLink
@@ -134,10 +134,10 @@ export default function Layout() {
                 to={item.to}
                 className={({ isActive }) =>
                   cn(
-                    "flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all border border-transparent",
+                    "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all border",
                     isActive
-                      ? "bg-primary/10 text-primary border-primary/20 shadow-sm"
-                      : "text-muted-foreground hover:text-foreground hover:bg-muted/60",
+                      ? "bg-muted text-foreground border-border shadow-xs"
+                      : "text-muted-foreground border-transparent hover:text-foreground hover:bg-hover",
                     collapsed && "justify-center px-2"
                   )
                 }
@@ -157,11 +157,11 @@ export default function Layout() {
             to="/settings"
             className={({ isActive }) =>
               cn(
-                "flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all border border-transparent",
+                "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all border",
                 !collapsed && "flex-1",
                 isActive
-                  ? "bg-primary/10 text-primary border-primary/20 shadow-sm"
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted/60",
+                  ? "bg-muted text-foreground border-border shadow-xs"
+                  : "text-muted-foreground border-transparent hover:text-foreground hover:bg-hover",
                 collapsed && "justify-center px-2 w-full h-9"
               )
             }
@@ -172,7 +172,7 @@ export default function Layout() {
           <Button
             variant="ghost"
             size="icon"
-            className={cn("text-muted-foreground hover:text-foreground hover:bg-muted/60", collapsed ? "h-9 w-full" : "h-9 w-9")}
+            className={cn("text-muted-foreground hover:text-foreground hover:bg-hover", collapsed ? "h-9 w-full" : "h-9 w-9")}
             onClick={handleRestartBackend}
             disabled={isRestarting}
             title="restart backend"
@@ -182,9 +182,9 @@ export default function Layout() {
         </div>
       </aside>
       {/* Main Content */}
-      <main className="flex-1 overflow-auto bg-gradient-to-b from-surface/50 to-background">
+      <main className="flex-1 overflow-auto bg-background">
         <div className="w-full h-full flex flex-col">
-          <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-3 flex-none border-b border-border/50 bg-surface/80 backdrop-blur">
+          <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-2.5 flex-none border-b border-border bg-surface">
             {/* Left: Connection Indicator + ComfyUI Control */}
             <div className="flex items-center gap-3">
               <ConnectionIndicator />
@@ -194,15 +194,15 @@ export default function Layout() {
             {/* Right: Toggle Buttons & UndoRedo */}
             <div className="flex items-center gap-3">
               {/* Toggle Buttons Group */}
-              <div className="flex items-center gap-2 mr-4">
+              <div className="flex items-center gap-1.5 mr-3 rounded-lg border border-border bg-surface-raised p-1">
                 <Button
                   variant="outline"
                   size="sm"
                   className={cn(
-                    "text-xs transition-colors",
+                    "h-7 text-xs transition-colors",
                     paletteOpen
-                      ? "bg-primary text-primary-foreground hover:bg-primary/90 border-primary"
-                      : "text-muted-foreground bg-muted/40 hover:bg-muted/60 border-border"
+                      ? "bg-surface text-foreground border-border shadow-xs"
+                      : "text-muted-foreground bg-transparent hover:bg-hover border-transparent"
                   )}
                   onClick={() => setPaletteOpen(!paletteOpen)}
                 >
@@ -212,10 +212,10 @@ export default function Layout() {
                   variant="outline"
                   size="sm"
                   className={cn(
-                    "text-xs transition-colors",
+                    "h-7 text-xs transition-colors",
                     feedOpen
-                      ? "bg-primary text-primary-foreground hover:bg-primary/90 border-primary"
-                      : "text-muted-foreground bg-muted/40 hover:bg-muted/60 border-border"
+                      ? "bg-surface text-foreground border-border shadow-xs"
+                      : "text-muted-foreground bg-transparent hover:bg-hover border-transparent"
                   )}
                   onClick={() => setFeedOpen(!feedOpen)}
                 >
@@ -225,10 +225,10 @@ export default function Layout() {
                   variant="outline"
                   size="sm"
                   className={cn(
-                    "text-xs transition-colors",
+                    "h-7 text-xs transition-colors",
                     libraryOpen
-                      ? "bg-primary text-primary-foreground hover:bg-primary/90 border-primary"
-                      : "text-muted-foreground bg-muted/40 hover:bg-muted/60 border-border"
+                      ? "bg-surface text-foreground border-border shadow-xs"
+                      : "text-muted-foreground bg-transparent hover:bg-hover border-transparent"
                   )}
                   onClick={() => setLibraryOpen(!libraryOpen)}
                 >
@@ -238,10 +238,10 @@ export default function Layout() {
                   variant="outline"
                   size="sm"
                   className={cn(
-                    "text-xs transition-colors",
+                    "h-7 text-xs transition-colors",
                     perfHudOpen
-                      ? "bg-primary text-primary-foreground hover:bg-primary/90 border-primary"
-                      : "text-muted-foreground bg-muted/40 hover:bg-muted/60 border-border"
+                      ? "bg-surface text-foreground border-border shadow-xs"
+                      : "text-muted-foreground bg-transparent hover:bg-hover border-transparent"
                   )}
                   onClick={() => setPerfHudOpen(!perfHudOpen)}
                 >
@@ -283,12 +283,12 @@ function GlobalFloatingPanels({ feedOpen, libraryOpen, onFeedClose, onLibraryClo
         defaultPosition={{ x: 20, y: 100 }}
         className={`z-40 ${feedOpen ? "" : "hidden"}`}
       >
-        <div className="shadow-xl border border-blue-100 bg-blue-50/95 dark:border-border dark:bg-surface/95 ring-1 ring-black/5 dark:ring-white/5 backdrop-blur overflow-hidden rounded-lg text-[11px] text-foreground">
-          <div className="px-2 py-1.5 border-b border-blue-100/80 bg-blue-50/60 dark:border-border/70 dark:bg-surface-raised/70 text-xs font-semibold cursor-move flex items-center justify-between">
+        <div className="shadow-md border border-border bg-surface/95 ring-1 ring-black/5 dark:ring-white/5 backdrop-blur overflow-hidden rounded-xl text-[11px] text-foreground">
+          <div className="px-2.5 py-1.5 border-b border-border bg-surface-raised/80 text-xs font-semibold cursor-move flex items-center justify-between">
             <span>generation feed</span>
             <button
               onClick={onFeedClose}
-              className="p-0.5 rounded hover:bg-muted/60 text-muted-foreground hover:text-foreground"
+              className="p-0.5 rounded hover:bg-hover text-muted-foreground hover:text-foreground"
               aria-label="Close generation feed"
             >
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

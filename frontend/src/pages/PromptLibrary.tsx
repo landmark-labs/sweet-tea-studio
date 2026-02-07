@@ -106,7 +106,7 @@ export default function PromptLibrary() {
   }, []);
 
   return (
-    <div className="h-full overflow-auto p-8 max-w-[1600px] mx-auto space-y-6">
+    <div className="h-full overflow-auto pt-4 pr-8 pb-8 pl-[83px] max-w-[1600px] space-y-6">
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-3xl font-bold tracking-tight">prompt library</h1>
         <form onSubmit={handleSearchSubmit} className="w-full max-w-xl flex items-center gap-2">

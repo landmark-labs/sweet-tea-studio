@@ -885,15 +885,15 @@ export const DynamicForm = React.memo(function DynamicForm({
                     defaultPosition={{ x: 140, y: 100 }}
                     className="z-50"
                 >
-                    <div className="shadow-2xl border border-violet-200/60 bg-gradient-to-br from-white via-violet-50/30 to-fuchsia-50/40 dark:border-blue-500 dark:bg-surface/95 dark:from-surface dark:via-surface dark:to-surface ring-1 ring-violet-200/30 dark:ring-blue-500/30 backdrop-blur-md overflow-hidden rounded-xl w-80 max-w-[320px] text-[11px] text-foreground transition-shadow hover:shadow-violet-200/40">
-                        <div className="flex items-center justify-between px-3 py-2 border-b border-violet-100/50 bg-gradient-to-r from-violet-100/40 via-fuchsia-100/30 to-violet-100/40 dark:border-border/70 dark:bg-surface-raised/70 dark:from-surface-raised/70 dark:via-surface-raised/70 dark:to-surface-raised/70 cursor-move">
+                    <div className="shadow-md border border-border bg-surface/95 ring-1 ring-black/5 dark:ring-white/5 backdrop-blur-md overflow-hidden rounded-xl w-80 max-w-[320px] text-[11px] text-foreground transition-shadow">
+                        <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-surface-raised/80 cursor-move">
                             <div className="flex items-center gap-2">
-                                <div className="p-1 rounded-md bg-gradient-to-br from-violet-500 to-fuchsia-500 shadow-sm">
+                                <div className="p-1 rounded-md bg-primary shadow-sm">
                                     <Palette className="w-3 h-3 text-white" />
                                 </div>
-                                <span className="text-xs font-semibold bg-gradient-to-r from-violet-600 to-fuchsia-600 bg-clip-text text-transparent dark:text-foreground">palette</span>
+                                <span className="text-xs font-semibold text-foreground">palette</span>
                                 {paletteKeys.length > 0 && (
-                                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-600 font-semibold dark:bg-muted dark:text-muted-foreground">
+                                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground font-semibold">
                                         {paletteKeys.length}
                                     </span>
                                 )}
@@ -903,7 +903,7 @@ export const DynamicForm = React.memo(function DynamicForm({
                                     <button
                                         type="button"
                                         onClick={onPaletteClose}
-                                        className="p-1 rounded-md hover:bg-violet-100/60 text-violet-400 hover:text-violet-600 transition-colors dark:hover:bg-muted/40 dark:text-muted-foreground dark:hover:text-foreground"
+                                        className="p-1 rounded-md hover:bg-hover text-muted-foreground hover:text-foreground transition-colors"
                                         aria-label="Close palette"
                                         title="Close palette"
                                     >
@@ -915,7 +915,7 @@ export const DynamicForm = React.memo(function DynamicForm({
 
                         <div className="p-2 max-h-[85vh] overflow-y-auto">
                             {paletteGroups.length === 0 ? (
-                                <div className="text-[10px] text-violet-500/80 dark:text-muted-foreground text-center py-4 px-2">
+                                <div className="text-[10px] text-muted-foreground text-center py-4 px-2">
                                     <div className="mb-2 opacity-60">✨</div>
                                     Add parameters using the palette icon next to a parameter label.
                                 </div>
@@ -926,7 +926,7 @@ export const DynamicForm = React.memo(function DynamicForm({
                                             <ContextMenuTrigger asChild>
                                                 <div
                                                     title={group.title}
-                                                    className="break-inside-avoid mb-1.5 border border-violet-200/50 hover:border-violet-300/70 dark:border-blue-500/70 dark:hover:border-blue-400 rounded-lg bg-gradient-to-br from-white to-violet-50/50 dark:from-surface-raised/50 dark:to-surface-raised/50 shadow-sm hover:shadow-md transition-all duration-200 cursor-default"
+                                                    className="break-inside-avoid mb-1.5 border border-border rounded-lg bg-surface-raised/70 shadow-xs hover:bg-hover/40 transition-all duration-200 cursor-default"
                                                 >
                                                     <div className="p-1.5 space-y-0.5">
                                                         {group.keys.map((key) => {
@@ -1016,7 +1016,7 @@ export const DynamicForm = React.memo(function DynamicForm({
 
             <div className="space-y-4 p-4 bg-surface-raised/70 rounded-lg border border-border/60">
                 <div className="flex items-center justify-between">
-                    <h3 className="text-xs font-bold text-foreground tracking-wider font-['Space_Grotesk']">CORE PIPE CONTROLS</h3>
+                    <h3 className="text-xs font-semibold text-foreground tracking-normal">core pipe controls</h3>
                     {onReset && (
                         <Button
                             type="button"
@@ -1117,7 +1117,7 @@ export const DynamicForm = React.memo(function DynamicForm({
                         localStorage.setItem("ds_expanded_controls_collapsed", String(next));
                     }}
                 >
-                    <h3 className="text-xs font-bold text-foreground tracking-wider font-['Space_Grotesk']">EXPANDED CONTROLS</h3>
+                    <h3 className="text-xs font-semibold text-foreground tracking-normal">expanded controls</h3>
                     <div className="flex items-center gap-2">
                         <span className="text-[10px] text-muted-foreground">hover a node to edit</span>
                         {expandedControlsCollapsed ? <ChevronDown className="w-4 h-4 text-muted-foreground" /> : <ChevronUp className="w-4 h-4 text-muted-foreground" />}
@@ -1204,3 +1204,4 @@ export const DynamicForm = React.memo(function DynamicForm({
         </form>
     );
 });
+

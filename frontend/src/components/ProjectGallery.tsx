@@ -700,7 +700,10 @@ export const ProjectGallery = React.memo(function ProjectGallery({
             {/* Header */}
             <div className="flex-none p-3 border-b border-border/60 bg-muted/20">
                 <div className="flex items-center justify-between mb-3">
-                    <div className="text-xs font-bold text-foreground tracking-wider">project gallery</div>
+                    <div className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background/80 px-2.5 py-1 shadow-xs">
+                        <ImageIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                        <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-foreground/90">project gallery</span>
+                    </div>
                     <Button
                         variant="ghost"
                         size="icon"
@@ -712,41 +715,47 @@ export const ProjectGallery = React.memo(function ProjectGallery({
                 </div>
 
                 {/* Project Selector */}
-                <div className="space-y-2">
-                    <Select value={selectedProjectId} onValueChange={setSelectedProjectId}>
-                        <SelectTrigger className="h-8 text-xs">
-                            <SelectValue placeholder="Select project...">
-                                {selectedProject?.name || "Select project..."}
-                            </SelectValue>
-                        </SelectTrigger>
-                        <SelectContent>
-                            {sortedProjects.length === 0 ? (
-                                <SelectItem value="__empty" disabled>No projects</SelectItem>
-                            ) : (
-                                sortedProjects.map((p) => (
-                                    <SelectItem key={p.id} value={String(p.id)}>
-                                        {p.name}
-                                    </SelectItem>
-                                ))
-                            )}
-                        </SelectContent>
-                    </Select>
+                <div className="space-y-2 rounded-lg border border-border/70 bg-surface-raised/50 p-2 shadow-xs">
+                    <div className="space-y-1">
+                        <label className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">project</label>
+                        <Select value={selectedProjectId} onValueChange={setSelectedProjectId}>
+                            <SelectTrigger className="h-8 text-xs bg-background/80 dark:bg-surface/80">
+                                <SelectValue placeholder="Select project...">
+                                    {selectedProject?.name || "Select project..."}
+                                </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent>
+                                {sortedProjects.length === 0 ? (
+                                    <SelectItem value="__empty" disabled>No projects</SelectItem>
+                                ) : (
+                                    sortedProjects.map((p) => (
+                                        <SelectItem key={p.id} value={String(p.id)}>
+                                            {p.name}
+                                        </SelectItem>
+                                    ))
+                                )}
+                            </SelectContent>
+                        </Select>
+                    </div>
 
                     {/* Folder Selector */}
                     {selectedProjectId && folders.length > 0 && (
-                        <Select value={selectedFolder} onValueChange={setSelectedFolder}>
-                            <SelectTrigger className="h-7 text-[10px]">
-                                <FolderOpen className="h-3 w-3 mr-1 text-muted-foreground" />
-                                <SelectValue placeholder="Select folder..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {folders.map((folder) => (
-                                    <SelectItem key={folder} value={folder}>
-                                        /{folder}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">folder</label>
+                            <Select value={selectedFolder} onValueChange={setSelectedFolder}>
+                                <SelectTrigger className="h-8 text-xs bg-background/80 dark:bg-surface/80">
+                                    <FolderOpen className="h-3 w-3 mr-1 text-muted-foreground" />
+                                    <SelectValue placeholder="Select folder..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {folders.map((folder) => (
+                                        <SelectItem key={folder} value={folder}>
+                                            /{folder}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
                     )}
                 </div>
             </div>

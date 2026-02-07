@@ -54,10 +54,10 @@ export function InstallStatusDialog({
 
                 <div className="py-4 space-y-4">
                     {onAllowManualCloneChange && (
-                        <div className="flex items-center justify-between rounded-md border p-3 bg-slate-50">
+                        <div className="flex items-center justify-between rounded-md border p-3 bg-surface-raised">
                             <div>
                                 <div className="text-sm font-semibold">allow manual git clone fallback</div>
-                                <p className="text-xs text-slate-600">opt into raw git clone when comfyui manager reports success but files are missing.</p>
+                                <p className="text-xs text-muted-foreground">opt into raw git clone when comfyui manager reports success but files are missing.</p>
                             </div>
                             <Switch
                                 checked={!!allowManualClone}
@@ -67,7 +67,7 @@ export function InstallStatusDialog({
                     )}
 
                     {!status ? (
-                        <div className="text-center text-slate-500">Starting...</div>
+                        <div className="text-center text-muted-foreground">Starting...</div>
                     ) : (
                         <div className="space-y-4">
                             <div className="flex items-center justify-between">
@@ -75,29 +75,29 @@ export function InstallStatusDialog({
                                     Status: {status.status}
                                 </span>
                                 {status.status === "running" && (
-                                    <RotateCw className="w-4 h-4 animate-spin text-blue-500" />
+                                    <RotateCw className="w-4 h-4 animate-spin text-primary" />
                                 )}
                                 {status.status === "completed" && (
-                                    <CheckCircle2 className="w-5 h-5 text-green-500" />
+                                    <CheckCircle2 className="w-5 h-5 text-success" />
                                 )}
                                 {status.status === "failed" && (
-                                    <XCircle className="w-5 h-5 text-red-500" />
+                                    <XCircle className="w-5 h-5 text-destructive" />
                                 )}
                             </div>
 
-                            <div className="text-sm text-slate-600 bg-slate-50 p-2 rounded">
+                            <div className="text-sm text-muted-foreground bg-surface-raised p-2 rounded">
                                 {status.progress_text}
                             </div>
 
                             {status.installed && status.installed.length > 0 && (
                                 <div>
-                                    <div className="text-xs font-semibold mb-1 text-green-700">
+                                    <div className="text-xs font-semibold mb-1 text-success">
                                         Successfully Installed:
                                     </div>
                                     <div className="text-xs space-y-1">
                                         {status.installed.map((item, i) => (
                                             <div key={i} className="flex items-center">
-                                                <CheckCircle2 className="w-3 h-3 mr-1 text-green-500" />
+                                                <CheckCircle2 className="w-3 h-3 mr-1 text-success" />
                                                 {item}
                                             </div>
                                         ))}
@@ -107,10 +107,10 @@ export function InstallStatusDialog({
 
                             {status.failed && status.failed.length > 0 && (
                                 <div>
-                                    <div className="text-xs font-semibold mb-1 text-red-700">
+                                    <div className="text-xs font-semibold mb-1 text-destructive">
                                         Failed to Install:
                                     </div>
-                                    <div className="text-xs space-y-1 text-red-600">
+                                    <div className="text-xs space-y-1 text-destructive">
                                         {status.failed.map((item, i) => (
                                             <div key={i} className="flex items-center">
                                                 <XCircle className="w-3 h-3 mr-1" /> {item}
@@ -122,10 +122,10 @@ export function InstallStatusDialog({
 
                             {status.unknown && status.unknown.length > 0 && (
                                 <div>
-                                    <div className="text-xs font-semibold mb-1 text-amber-700">
+                                    <div className="text-xs font-semibold mb-1 text-muted-foreground">
                                         Unknown Nodes (No Repo Found):
                                     </div>
-                                    <div className="text-xs space-y-1 text-amber-600">
+                                    <div className="text-xs space-y-1 text-muted-foreground">
                                         {status.unknown.map((item, i) => (
                                             <div key={i}>• {item}</div>
                                         ))}
@@ -134,7 +134,7 @@ export function InstallStatusDialog({
                             )}
 
                             {status.error && (
-                                <div className="text-sm text-red-600 bg-red-50 p-2 rounded border border-red-200">
+                                <div className="text-sm text-destructive bg-destructive/10 p-2 rounded border border-destructive/30">
                                     Error: {status.error}
                                 </div>
                             )}
@@ -145,7 +145,7 @@ export function InstallStatusDialog({
                 <DialogFooter>
                     {status?.status === "completed" ? (
                         <div className="flex w-full justify-between items-center">
-                            <div className="text-xs text-slate-500">
+                            <div className="text-xs text-muted-foreground">
                                 Reboot required to apply changes.
                             </div>
                             <div className="flex gap-2">
@@ -174,3 +174,4 @@ export function InstallStatusDialog({
         </Dialog>
     );
 }
+

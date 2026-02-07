@@ -69,8 +69,8 @@ export function DraggablePanel({ children, className, defaultPosition = { x: 0, 
             if (!isDragging) return;
 
             // Calculate new position
-            let newX = e.clientX - dragStart.x;
-            let newY = e.clientY - dragStart.y;
+            const newX = e.clientX - dragStart.x;
+            const newY = e.clientY - dragStart.y;
 
             setPosition(clampToViewport({ x: newX, y: newY }));
         };

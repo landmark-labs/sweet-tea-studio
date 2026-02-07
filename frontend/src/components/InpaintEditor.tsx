@@ -509,7 +509,7 @@ export function InpaintEditor({ open, onOpenChange, imageUrl, onSave }: InpaintE
                                 />
                             </div>
 
-                            <Button variant="ghost" size="sm" onClick={handleClear} className="text-red-300 hover:text-red-200 hover:bg-red-500/20">
+                            <Button variant="ghost" size="sm" onClick={handleClear} className="text-destructive hover:text-destructive hover:bg-destructive/20">
                                 <Trash2 className="w-4 h-4 mr-1" /> clear
                             </Button>
                             <Button variant="ghost" size="sm" onClick={handleUndo} disabled={!canUndo}>
@@ -655,3 +655,4 @@ export function InpaintEditor({ open, onOpenChange, imageUrl, onSave }: InpaintE
         </Dialog>
     );
 }
+

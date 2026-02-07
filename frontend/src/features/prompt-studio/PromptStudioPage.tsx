@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
-import { Loader2, ChevronLeft, ChevronRight } from "lucide-react";
+import { Loader2, ChevronLeft, ChevronRight, FileText, SlidersHorizontal } from "lucide-react";
 
 import { ImageViewer } from "@/components/ImageViewer";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -3280,7 +3280,10 @@ export default function PromptStudio() {
           <>
             {/* Collapse toggle header */}
             <div className="flex-none flex items-center justify-between px-3 py-2 border-b border-border bg-surface-raised/80">
-              <span className="text-xs font-semibold text-foreground tracking-normal">prompt constructor</span>
+              <div className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background/80 px-2.5 py-1 shadow-xs">
+                <FileText className="w-3.5 h-3.5 text-muted-foreground" />
+                <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-foreground/90">prompt constructor</span>
+              </div>
               <button
                 onClick={() => setPromptConstructorCollapsed(true)}
                 className="p-1 rounded hover:bg-hover text-muted-foreground hover:text-foreground transition-colors"
@@ -3318,13 +3321,18 @@ export default function PromptStudio() {
       <div className="w-[420px] flex-none bg-surface border-r border-border flex flex-col h-full overflow-hidden">
 
         {/* Sticky Header Section */}
-        <div className="flex-none p-3 space-y-2 border-b bg-muted/10 dark:bg-black backdrop-blur z-10">
-          <div className="text-xs font-semibold text-foreground tracking-normal">configurator</div>
+        <div className="flex-none p-3 space-y-3 border-b bg-muted/10 dark:bg-black backdrop-blur z-10">
+          <div className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background/80 px-2.5 py-1 shadow-xs">
+            <SlidersHorizontal className="w-3.5 h-3.5 text-muted-foreground" />
+            <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-foreground/90">configurator</span>
+          </div>
 
-          {/* Project + Destination Row */}
-          <div className="flex gap-2 items-end">
-            <div className="flex-1">
-              <label className="text-xs font-medium text-muted-foreground">project</label>
+          {/* Workspace Context */}
+          <div className="rounded-lg border border-border/70 bg-surface-raised/60 dark:bg-black/70 px-2.5 py-2.5 space-y-2 shadow-xs">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">workspace context</div>
+            <div className="flex gap-2 items-end">
+              <div className="flex-1 space-y-1">
+                <label className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">project</label>
               <Select
                 value={selectedProjectId || "none"}
                 onValueChange={(value) => {
@@ -3340,7 +3348,7 @@ export default function PromptStudio() {
                   setGalleryRefresh((prev) => prev + 1);
                 }}
               >
-                <SelectTrigger className="h-7 text-xs">
+                <SelectTrigger className="h-8 text-xs bg-background/80 dark:bg-surface/80">
                   <SelectValue placeholder="select project">
                     {selectedProject?.slug === "drafts" ? "drafts" : (selectedProject?.name || "drafts")}
                   </SelectValue>
@@ -3360,29 +3368,30 @@ export default function PromptStudio() {
                     ))}
                 </SelectContent>
               </Select>
-            </div>
-
-            {/* Destination Selector (Compact) - hidden for drafts project which has no subfolders */}
-            {selectedProjectId && selectedProject?.slug !== "drafts" && (
-              <div className="flex-1">
-                <label className="text-xs font-medium text-muted-foreground">destination</label>
-                <Select
-                  value={generationTarget}
-                  onValueChange={(value) => setGenerationTarget(value)}
-                >
-                  <SelectTrigger className="h-7 text-xs">
-                    <SelectValue placeholder="input" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {projectFolders.map((folder) => (
-                      <SelectItem key={folder} value={folder}>
-                        /{folder}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
               </div>
-            )}
+
+              {/* Destination Selector (Compact) - hidden for drafts project which has no subfolders */}
+              {selectedProjectId && selectedProject?.slug !== "drafts" && (
+                <div className="flex-1 space-y-1">
+                  <label className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">destination</label>
+                  <Select
+                    value={generationTarget}
+                    onValueChange={(value) => setGenerationTarget(value)}
+                  >
+                    <SelectTrigger className="h-8 text-xs bg-background/80 dark:bg-surface/80">
+                      <SelectValue placeholder="input" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {projectFolders.map((folder) => (
+                        <SelectItem key={folder} value={folder}>
+                          /{folder}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* GENERATE BUTTON + QUEUE INPUT */}
@@ -3469,13 +3478,13 @@ export default function PromptStudio() {
         <div className="flex-1 overflow-y-auto p-4 space-y-6" style={{ scrollbarGutter: 'stable' }} data-configurator-scroll>
 
           {/* Pipe Selector */}
-          <div className="space-y-2">
-            <label className="text-xs font-semibold text-muted-foreground lowercase">pipe</label>
+          <div className="space-y-2 rounded-lg border border-border/70 bg-surface-raised/40 px-2.5 py-2.5 shadow-xs">
+            <label className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">pipe</label>
             <Select
               value={selectedWorkflowId ? String(selectedWorkflowId) : undefined}
               onValueChange={setSelectedWorkflowId}
             >
-              <SelectTrigger>
+              <SelectTrigger className="h-8 bg-background/80 dark:bg-surface/80">
                 <SelectValue placeholder="select a pipe...">
                   {workflows.find(w => String(w.id) === String(selectedWorkflowId))?.name || "select a pipe..."}
                 </SelectValue>

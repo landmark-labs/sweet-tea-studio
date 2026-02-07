@@ -97,7 +97,7 @@ export function MoveImagesDialog({
 
                 <div className="space-y-4 py-4">
                     <div className="space-y-2">
-                        <label className="text-sm font-medium text-slate-700">target project</label>
+                        <label className="text-sm font-medium text-foreground">target project</label>
                         <Select value={targetProjectId} onValueChange={setTargetProjectId}>
                             <SelectTrigger>
                                 <SelectValue placeholder="select a project..." />
@@ -120,8 +120,8 @@ export function MoveImagesDialog({
 
                     {targetProjectId && (availableFolders.length > 0 || (isSameProject && currentFolder)) && (
                         <div className="space-y-2">
-                            <label className="text-sm font-medium text-slate-700">
-                                destination folder <span className="text-slate-400">(optional)</span>
+                            <label className="text-sm font-medium text-foreground">
+                                destination folder <span className="text-muted-foreground">(optional)</span>
                             </label>
                             <Select
                                 value={targetSubfolder || "__default"}
@@ -146,7 +146,7 @@ export function MoveImagesDialog({
                     )}
 
                     {error && (
-                        <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded px-3 py-2">
+                        <div className="text-sm text-destructive bg-destructive/10 border border-destructive/30 rounded px-3 py-2">
                             {error}
                         </div>
                     )}
@@ -171,3 +171,4 @@ export function MoveImagesDialog({
         </Dialog>
     );
 }
+

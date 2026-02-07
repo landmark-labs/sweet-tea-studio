@@ -194,10 +194,10 @@ export function ComfyUIControl() {
     const isStopped = state === "stopped";
 
     const statusColor = {
-        connected: "bg-green-500",
-        starting: "bg-yellow-500 animate-pulse",
-        stopping: "bg-yellow-500 animate-pulse",
-        stopped: "bg-red-500 animate-pulse",
+        connected: "bg-success",
+        starting: "bg-primary animate-pulse",
+        stopping: "bg-primary animate-pulse",
+        stopped: "bg-destructive animate-pulse",
     }[state];
 
     const statusText = {
@@ -211,8 +211,8 @@ export function ComfyUIControl() {
     const containerClass = cn(
         "flex items-center gap-1.5 px-2 py-1 rounded-lg border transition-all",
         isStopped
-            ? "bg-amber-500/20 border-amber-500/50 ring-1 ring-amber-500/30"
-            : "bg-muted/40 border-border/60"
+            ? "bg-destructive/10 border-destructive/30 ring-1 ring-destructive/20"
+            : "bg-surface-raised border-border"
     );
 
     return (
@@ -222,13 +222,13 @@ export function ComfyUIControl() {
                 <div className={cn("w-2 h-2 rounded-full", statusColor)} />
                 <span className={cn(
                     "text-[10px] font-semibold uppercase tracking-wide",
-                    isStopped ? "text-amber-600 dark:text-amber-400" : "text-foreground/80"
+                    isStopped ? "text-destructive" : "text-foreground/80"
                 )}>
                     ComfyUI
                 </span>
                 <span className={cn(
                     "text-[9px]",
-                    isStopped ? "text-amber-600/80 dark:text-amber-400/80 font-medium" : "text-muted-foreground"
+                    isStopped ? "text-destructive/80 font-medium" : "text-muted-foreground"
                 )}>
                     {statusText}
                 </span>
@@ -263,7 +263,7 @@ export function ComfyUIControl() {
                         className={cn(
                             "h-6 w-6",
                             canLaunch && !isTransitioning
-                                ? "text-green-600 dark:text-green-400 hover:text-green-700 dark:hover:text-green-300 hover:bg-green-500/10"
+                                ? "text-success hover:text-success hover:bg-success/10"
                                 : "text-muted-foreground/70 cursor-not-allowed"
                         )}
                         onClick={handleStart}
@@ -304,7 +304,7 @@ export function ComfyUIControl() {
                                 ComfyUI Logs
                             </DialogTitle>
                         </DialogHeader>
-                        <div className="flex-1 bg-black text-green-400 font-mono text-xs p-4 rounded-md overflow-auto whitespace-pre-wrap border border-border/60">
+                        <div className="flex-1 bg-background text-foreground font-mono text-xs p-4 rounded-md overflow-auto whitespace-pre-wrap border border-border">
                             {logs || "No logs available (process might not be managed by Sweet Tea)"}
                         </div>
                     </DialogContent>
@@ -313,3 +313,4 @@ export function ComfyUIControl() {
         </div>
     );
 }
+

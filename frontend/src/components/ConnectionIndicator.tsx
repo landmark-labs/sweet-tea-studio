@@ -62,13 +62,13 @@ export function ConnectionIndicator() {
                     <span
                         className={cn(
                             "w-2 h-2 rounded-full",
-                            isConnected ? "bg-green-500" : "bg-red-500",
+                            isConnected ? "bg-success" : "bg-destructive",
                             isConnected && "animate-pulse"
                         )}
                     />
                 <span className={cn(
                         "font-medium",
-                        isConnected ? "text-green-600 dark:text-green-400" : "text-red-500 dark:text-red-400"
+                        isConnected ? "text-foreground" : "text-destructive"
                     )}>
                         {isConnected ? "connected" : "not connected"}
                     </span>
@@ -78,7 +78,7 @@ export function ConnectionIndicator() {
                 <Popover open={isEditing} onOpenChange={setIsEditing}>
                     <PopoverTrigger asChild>
                         <button
-                            className="flex items-center gap-1 px-2 py-0.5 rounded bg-muted/40 hover:bg-muted/60 text-muted-foreground transition-colors cursor-pointer"
+                            className="flex items-center gap-1 px-2 py-1 rounded-md border border-border bg-surface-raised hover:bg-hover text-muted-foreground transition-colors cursor-pointer"
                         >
                             <span className="text-[10px] text-muted-foreground/70">port</span>
                             <span className="font-mono">{port}</span>
@@ -110,7 +110,7 @@ export function ConnectionIndicator() {
 
             {/* Versions Display */}
             {isConnected && versions && (
-                <div className="flex items-center gap-3 text-[10px] text-muted-foreground border-l border-border/50 pl-4">
+                <div className="flex items-center gap-3 text-[10px] text-muted-foreground border-l border-border pl-4">
                     {versions.comfyui_version && (
                         <div><span className="font-semibold text-foreground/80">ComfyUI</span> {versions.comfyui_version}</div>
                     )}
@@ -128,3 +128,4 @@ export function ConnectionIndicator() {
         </div>
     );
 }
+

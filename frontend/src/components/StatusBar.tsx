@@ -81,9 +81,9 @@ function StatusPill({ label, status, extraInfo, onClick, actionLabel, actionLoad
                         <span
                             className={cn(
                                 "flex-none w-2.5 h-2.5 rounded-full border-2",
-                                status.state === "ok" && "bg-emerald-500/20 border-emerald-500",
-                                status.state === "warn" && "bg-amber-500/20 border-amber-500",
-                                status.state === "error" && "bg-red-500/20 border-red-500 animate-pulse",
+                                status.state === "ok" && "bg-success/20 border-success",
+                                status.state === "warn" && "bg-primary/20 border-primary",
+                                status.state === "error" && "bg-destructive/20 border-destructive animate-pulse",
                                 collapsed && "w-3 h-3"
                             )}
                         />
@@ -252,3 +252,4 @@ export const StatusBar = React.memo(function StatusBar({ collapsed }: { collapse
         </div>
     );
 });
+

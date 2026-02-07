@@ -233,7 +233,7 @@ export default function Projects() {
     };
 
     return (
-        <div className="p-8 space-y-4 h-full overflow-auto">
+        <div className="pt-4 pr-8 pb-8 pl-[83px] space-y-4 h-full overflow-auto">
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div>

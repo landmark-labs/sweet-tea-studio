@@ -1,4 +1,4 @@
-﻿import { useState, type SyntheticEvent } from "react";
+import { useState, type SyntheticEvent } from "react";
 import { Check } from "lucide-react";
 
 import { isVideoFile } from "@/lib/media";
@@ -19,12 +19,12 @@ export function GalleryCardContent({ item, isSelected, handleImageError }: Galle
 
   return (
     <div
-      className="relative bg-slate-100 aspect-square overflow-hidden"
+      className="relative bg-muted/50 aspect-square overflow-hidden"
       onMouseEnter={() => setIsHovering(true)}
       onMouseLeave={() => setIsHovering(false)}
     >
       {isSelected && (
-        <div className="absolute top-2 left-2 z-20 bg-blue-500 text-white rounded-full p-0.5 shadow-sm">
+        <div className="absolute top-2 left-2 z-20 bg-primary text-primary-foreground rounded-full p-0.5 shadow-sm">
           <Check className="w-3 h-3" />
         </div>
       )}
@@ -48,3 +48,4 @@ export function GalleryCardContent({ item, isSelected, handleImageError }: Galle
     </div>
   );
 }
+

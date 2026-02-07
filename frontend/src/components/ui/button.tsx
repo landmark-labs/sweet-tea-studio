@@ -8,19 +8,20 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant = "default", size = "default", ...props }, ref) => {
-    const baseStyles = "inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50"
+    const baseStyles =
+      "inline-flex items-center justify-center whitespace-nowrap rounded-[calc(var(--radius)-4px)] text-sm font-medium transition-colors active:translate-y-[1px] disabled:pointer-events-none disabled:opacity-45"
     const variants = {
-      default: "bg-primary text-primary-foreground hover:bg-primary/90",
-      destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
-      outline: "border border-border bg-background hover:bg-muted hover:text-foreground",
-      secondary: "bg-muted text-foreground hover:bg-muted/80",
-      ghost: "hover:bg-muted hover:text-foreground",
+      default: "border border-transparent bg-primary text-primary-foreground shadow-xs hover:bg-primary/90",
+      destructive: "border border-destructive/30 bg-destructive text-destructive-foreground shadow-xs hover:bg-destructive/90",
+      outline: "border border-border bg-surface text-foreground hover:bg-hover",
+      secondary: "border border-border/70 bg-muted text-foreground hover:bg-hover",
+      ghost: "border border-transparent bg-transparent text-muted-foreground hover:bg-hover hover:text-foreground",
     }
     const sizes = {
-      default: "h-10 px-4 py-2",
-      sm: "h-9 rounded-md px-3",
-      lg: "h-11 rounded-md px-8",
-      icon: "h-10 w-10",
+      default: "h-9 px-3.5",
+      sm: "h-8 px-3 text-xs",
+      lg: "h-10 px-5",
+      icon: "h-9 w-9",
     }
     return (
       <button

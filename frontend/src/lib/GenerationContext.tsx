@@ -214,10 +214,9 @@ export function GenerationProvider({ children }: GenerationProviderProps) {
                     // If remote is done/failed but local is active, sync it
                     if (['completed', 'failed', 'cancelled'].includes(remoteJob.status)) {
                         console.log(`[GenerationContext] Syncing stuck job ${job.jobId} -> ${remoteJob.status}`);
-                        let updates: any = { status: remoteJob.status };
-                        if (remoteJob.status === 'completed') {
-                            updates.progress = 100;
-                        }
+                        const updates: any = remoteJob.status === "completed"
+                            ? { status: remoteJob.status, progress: 100 }
+                            : { status: remoteJob.status };
                         updateFeed(job.jobId, updates);
                     }
                 } catch (err) {

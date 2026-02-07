@@ -295,7 +295,7 @@ export default function Models() {
   };
 
   return (
-    <div className="h-full flex flex-col p-8 gap-4 overflow-hidden">
+    <div className="h-full flex flex-col pt-4 pr-8 pb-8 pl-[83px] gap-4 overflow-hidden">
       <div className="flex-none flex flex-col gap-1">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">models</h1>

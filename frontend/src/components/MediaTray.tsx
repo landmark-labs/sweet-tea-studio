@@ -88,8 +88,8 @@ function SortableTrayCell({
             "relative aspect-square rounded overflow-hidden border transition-all select-none group",
             reorderMode
               ? "cursor-grab border-border/60 bg-muted/20"
-              : "cursor-pointer border-border/60 hover:border-blue-400 dark:hover:border-primary/60 hover:shadow-sm bg-card",
-            isDragging ? "ring-2 ring-blue-500" : ""
+              : "cursor-pointer border-border/60 hover:border-ring hover:shadow-sm bg-card",
+            isDragging ? "ring-2 ring-ring" : ""
           )}
           draggable={!reorderMode}
           onDragStart={(e) => onExternalDragStart?.(e, item)}
@@ -321,17 +321,21 @@ export const MediaTray = React.memo(function MediaTray({ className, onShowInView
   return (
     <div ref={trayRef} className={cn("flex-none w-40 bg-card border-l border-border/70 flex flex-col h-full overflow-hidden", className)}>
       <div className="flex-none p-3 border-b border-border/60 bg-muted/20">
-        <div className="flex items-center">
-          <div className="text-xs font-bold text-foreground tracking-wider">MEDIA TRAY</div>
-          <button
-            type="button"
-            className="ml-2 flex-1 h-7 rounded hover:bg-muted/50 transition flex items-center justify-end pr-1"
+        <div className="flex items-center justify-between mb-3">
+          <div className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background/80 px-2.5 py-1 shadow-xs">
+            <Eye className="h-3.5 w-3.5 text-muted-foreground" />
+            <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-foreground/90">media tray</span>
+          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6"
             onClick={toggleCollapsed}
             title="Collapse Media Tray"
             aria-label="Collapse Media Tray"
           >
-            <ChevronRight className="h-4 w-4 text-muted-foreground" />
-          </button>
+            <ChevronRight className="h-4 w-4" />
+          </Button>
         </div>
 
         <div className="flex items-center justify-between text-[11px] text-muted-foreground">
@@ -339,7 +343,7 @@ export const MediaTray = React.memo(function MediaTray({ className, onShowInView
             {items.length} item{items.length === 1 ? "" : "s"}
           </div>
           {reorderMode ? (
-            <div className="text-blue-600 font-semibold">reorder mode</div>
+            <div className="text-primary font-semibold">reorder mode</div>
           ) : (
             <div className="text-muted-foreground">hold to reorder</div>
           )}
@@ -394,3 +398,4 @@ export const MediaTray = React.memo(function MediaTray({ className, onShowInView
     </div>
   );
 });
+

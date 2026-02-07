@@ -10,16 +10,16 @@ export function UndoRedoBar() {
   const [historyOpen, setHistoryOpen] = useState(false);
 
   return (
-    <div className="flex items-center gap-2 rounded-xl border border-border/60 bg-surface/60 px-3 py-2 shadow-sm backdrop-blur">
+    <div className="flex items-center gap-2 rounded-lg border border-border bg-surface-raised px-2.5 py-1.5 shadow-xs">
       <Popover open={historyOpen} onOpenChange={setHistoryOpen}>
         <PopoverTrigger asChild>
-          <button className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
+          <button className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors cursor-pointer px-1">
             <History className="h-4 w-4" />
             <span>history</span>
           </button>
         </PopoverTrigger>
         <PopoverContent className="w-64 p-0" align="start">
-          <div className="p-2 border-b border-border/50 bg-muted/30">
+          <div className="p-2 border-b border-border bg-surface-raised">
             <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">recent actions</span>
           </div>
           <div className="max-h-64 overflow-y-auto">
@@ -30,7 +30,7 @@ export function UndoRedoBar() {
                 {historyLabels.slice(0, 100).map((label, idx) => (
                   <li
                     key={idx}
-                    className="px-3 py-1.5 text-xs text-foreground/80 hover:bg-muted/50 border-b border-border/20 last:border-b-0"
+                    className="px-3 py-1.5 text-xs text-foreground/80 hover:bg-hover border-b border-border/30 last:border-b-0"
                   >
                     {label.toLowerCase()}
                   </li>

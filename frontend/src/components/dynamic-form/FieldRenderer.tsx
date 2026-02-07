@@ -76,15 +76,15 @@ export const FieldRenderer = React.memo(function FieldRenderer({
   const tooltip = resolveParamTooltip(field);
 
   const labelClassName = cn(
-    isPaletteVariant ? "text-[9px] font-semibold text-violet-700 dark:text-foreground/90" : "text-xs text-foreground/80",
-    isActive && (isPaletteVariant ? "text-violet-800 dark:text-foreground" : "text-blue-600 dark:text-primary font-semibold"),
+    isPaletteVariant ? "text-[9px] font-semibold text-foreground/80" : "text-xs text-foreground/80",
+    isActive && "text-foreground font-semibold",
     tooltip && "cursor-help"
   );
 
   const controlClassName = cn(
     "flex-1 min-w-0",
-    isPaletteVariant ? "h-6 text-[10px] bg-white/80 dark:bg-surface border-violet-200/60 dark:border-yellow-400" : "h-7 text-xs",
-    isActive && "ring-1 ring-violet-400 border-violet-400 dark:ring-blue-400 dark:border-blue-400"
+    isPaletteVariant ? "h-6 text-[10px] bg-surface border-border" : "h-7 text-xs",
+    isActive && "border-ring"
   );
 
   const paletteButton = showPaletteToggle && onPaletteToggle ? (
@@ -93,8 +93,8 @@ export const FieldRenderer = React.memo(function FieldRenderer({
       className={cn(
         "h-5 w-5 rounded-md border flex items-center justify-center transition-colors",
         paletteSelected
-          ? "bg-blue-50 border-blue-200 text-blue-600 hover:bg-blue-100 dark:bg-primary/15 dark:border-primary/30 dark:text-primary dark:hover:bg-primary/20"
-          : "bg-muted/30 border-border/60 text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+          ? "bg-accent border-border text-foreground hover:bg-hover"
+          : "bg-muted/40 border-border text-muted-foreground hover:bg-hover hover:text-foreground"
       )}
       title={paletteSelected ? "Remove from palette" : "Add to palette"}
       aria-label={paletteSelected ? "Remove from palette" : "Add to palette"}
@@ -158,7 +158,7 @@ export const FieldRenderer = React.memo(function FieldRenderer({
               <span
                 className={cn(
                   "text-[10px] text-muted-foreground",
-                  isPaletteVariant && "text-violet-600 dark:text-foreground/80",
+                  isPaletteVariant && "text-muted-foreground",
                   tooltip && "cursor-help"
                 )}
               >
@@ -201,21 +201,23 @@ export const FieldRenderer = React.memo(function FieldRenderer({
           </div>
         )}
         {shouldUsePromptEditor ? (
-          <PromptAutocompleteTextarea
-            id={fieldKey}
-            value={typeof value === "string" ? value : ""}
-            onValueChange={(val) => onValueChange(fieldKey, val)}
-            onFocus={() => onFieldFocus?.(fieldKey)}
-            onBlur={(e) => onFieldBlur?.(fieldKey, e.relatedTarget as Element)}
-            placeholder=""
-            isActive={isActive}
-            snippets={snippets}
-            highlightSnippets={true}
-            externalValueSyncKey={externalValueSyncKey}
-            rehydrationItems={rehydrationItems}
-            rehydrationKey={rehydrationKey}
-            showAutocompleteToggle={false}
-          />
+          <div className="rounded-[calc(var(--radius)-4px)] bg-surface">
+            <PromptAutocompleteTextarea
+              id={fieldKey}
+              value={typeof value === "string" ? value : ""}
+              onValueChange={(val) => onValueChange(fieldKey, val)}
+              onFocus={() => onFieldFocus?.(fieldKey)}
+              onBlur={(e) => onFieldBlur?.(fieldKey, e.relatedTarget as Element)}
+              placeholder=""
+              isActive={isActive}
+              snippets={snippets}
+              highlightSnippets={true}
+              externalValueSyncKey={externalValueSyncKey}
+              rehydrationItems={rehydrationItems}
+              rehydrationKey={rehydrationKey}
+              showAutocompleteToggle={false}
+            />
+          </div>
         ) : (
           <Textarea
             id={fieldKey}
@@ -227,7 +229,7 @@ export const FieldRenderer = React.memo(function FieldRenderer({
             rows={6}
             className={cn(
               isPaletteVariant ? "text-[10px] font-mono transition-all min-h-[110px]" : "text-xs font-mono transition-all min-h-[150px]",
-              isActive && "ring-2 ring-blue-400 border-blue-400 bg-blue-50/20 dark:ring-ring dark:border-ring dark:bg-primary/10"
+              isActive && "border-ring bg-accent/20"
             )}
           />
         )}
@@ -253,11 +255,11 @@ export const FieldRenderer = React.memo(function FieldRenderer({
           )}
         </div>
         <div className="flex items-center gap-2">
-          <span className={cn("text-[10px] uppercase", isPaletteVariant ? "text-violet-600/80 dark:text-foreground/70" : "text-foreground/70")}>{value ? "Bypassed" : "Active"}</span>
+          <span className={cn("text-[10px] uppercase", "text-foreground/70")}>{value ? "Bypassed" : "Active"}</span>
           <Switch
             checked={!!value}
             onCheckedChange={(c) => onToggleChange(fieldKey, Boolean(c))}
-            className={cn(value ? "bg-amber-500" : "bg-muted")}
+            className={cn(value ? "bg-primary" : "bg-muted")}
           />
         </div>
       </div>

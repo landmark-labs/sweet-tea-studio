@@ -344,14 +344,14 @@ export default function Settings() {
                 </div>
 
                 {error && (
-                    <div className="flex items-center gap-2 p-4 bg-red-50 text-red-700 rounded-lg border border-red-200">
+                    <div className="flex items-center gap-2 p-4 bg-destructive/10 text-destructive rounded-[var(--radius)] border border-destructive/30">
                         <AlertCircle className="w-5 h-5 flex-shrink-0" />
                         <span>{error}</span>
                     </div>
                 )}
 
                 {success && (
-                    <div className="flex items-center gap-2 p-4 bg-green-50 text-green-700 rounded-lg border border-green-200">
+                    <div className="flex items-center gap-2 p-4 bg-success/10 text-success rounded-[var(--radius)] border border-success/30">
                         <CheckCircle2 className="w-5 h-5 flex-shrink-0" />
                         <span>{success}</span>
                     </div>
@@ -438,9 +438,9 @@ export default function Settings() {
                         <div className="text-xs text-muted-foreground bg-muted/20 p-3 rounded">
                             <span className="font-medium">Detection: </span>
                             {launchConfig.detection_method === "not_found" ? (
-                                <span className="text-amber-600">Not found - configure path below</span>
+                                <span className="text-muted-foreground">Not found - configure path below</span>
                             ) : (
-                                <span className="text-green-600">{launchConfig.detection_method}</span>
+                                <span className="text-success">{launchConfig.detection_method}</span>
                             )}
                             {launchConfig.path && (
                                 <div className="mt-1 font-mono text-[10px] truncate" title={launchConfig.path}>
@@ -524,11 +524,11 @@ export default function Settings() {
                             </div>
                             <p className="text-xs text-muted-foreground">
                                 required for downloading models from civitai.{" "}
-                                <a href="https://civitai.com/user/account" target="_blank" rel="noreferrer" className="text-blue-600 underline">
+                                <a href="https://civitai.com/user/account" target="_blank" rel="noreferrer" className="text-primary underline">
                                     get your key
                                 </a>
                                 {apiKeys?.civitai_api_key.is_set && (
-                                    <span className="ml-2 text-green-600">
+                                    <span className="ml-2 text-success">
                                         ✓ Set via {apiKeys.civitai_api_key.source}
                                     </span>
                                 )}
@@ -558,7 +558,7 @@ export default function Settings() {
                                 </div>
                             </div>
                             {apiKeys?.rule34_api_key.is_set && (
-                                <p className="text-xs text-green-600">
+                                <p className="text-xs text-success">
                                     ✓ Set via {apiKeys.rule34_api_key.source}
                                 </p>
                             )}
@@ -576,11 +576,11 @@ export default function Settings() {
                             />
                             <p className="text-xs text-muted-foreground">
                                 optional credentials for rule34 tag autocomplete.{" "}
-                                <a href="https://rule34.xxx/index.php?page=account&s=options" target="_blank" rel="noreferrer" className="text-blue-600 underline">
+                                <a href="https://rule34.xxx/index.php?page=account&s=options" target="_blank" rel="noreferrer" className="text-primary underline">
                                     get your credentials
                                 </a>
                                 {apiKeys?.rule34_user_id.is_set && (
-                                    <span className="ml-2 text-green-600">
+                                    <span className="ml-2 text-success">
                                         ✓ Set via {apiKeys.rule34_user_id.source}
                                     </span>
                                 )}
@@ -720,7 +720,7 @@ export default function Settings() {
                                 {dbStatus.databases.map((db) => (
                                     <div key={db.name} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
                                         <div className="flex items-center gap-3">
-                                            <Shield className={`w-4 h-4 ${db.health_status === "ok" ? "text-green-500" : "text-red-500"}`} />
+                                            <Shield className={`w-4 h-4 ${db.health_status === "ok" ? "text-success" : "text-destructive"}`} />
                                             <div>
                                                 <div className="font-medium text-sm">{db.name}</div>
                                                 <div className="text-xs text-muted-foreground">
@@ -729,7 +729,7 @@ export default function Settings() {
                                                 </div>
                                             </div>
                                         </div>
-                                        <span className={`text-xs font-medium ${db.health_status === "ok" ? "text-green-600" : "text-red-600"}`}>
+                                        <span className={`text-xs font-medium ${db.health_status === "ok" ? "text-success" : "text-destructive"}`}>
                                             {db.health_status}
                                         </span>
                                     </div>
@@ -792,7 +792,7 @@ export default function Settings() {
                 {/* Appearance Settings */}
                 <ThemeSettingsSection setError={setError} setSuccess={setSuccess} />
 
-                <div className="text-xs text-muted-foreground p-4 bg-muted rounded-lg">
+                <div className="text-xs text-muted-foreground p-4 bg-muted/70 rounded-[var(--radius)]">
                     <strong>Tip:</strong> You can also set paths via environment variables before starting the backend:
                     <ul className="list-disc ml-5 mt-2 space-y-1">
                         <li><code>SWEET_TEA_COMFYUI_OUTPUT_DIR=/path/to/output</code></li>
@@ -806,3 +806,5 @@ export default function Settings() {
         </div>
     );
 }
+
+

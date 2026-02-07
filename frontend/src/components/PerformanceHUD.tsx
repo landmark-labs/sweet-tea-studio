@@ -72,8 +72,8 @@ export function PerformanceHUD({ className, refreshMs = 3000, visible = true, on
       defaultPosition={{ x: window.innerWidth - 340, y: window.innerHeight - 400 }}
       className={cn("fixed z-40 w-72", !visible && "hidden", className)}
     >
-      <Card className="shadow-xl border border-border/80 bg-card/95 ring-1 ring-black/5 dark:ring-white/5 backdrop-blur text-[11px] text-foreground">
-        <div className="flex items-center justify-between px-2 py-1.5 border-b border-border/70 bg-surface-raised/70 cursor-move">
+      <Card className="shadow-md border border-border bg-card/95 ring-1 ring-black/5 dark:ring-white/5 backdrop-blur text-[11px] text-foreground">
+        <div className="flex items-center justify-between px-2 py-1.5 border-b border-border bg-surface-raised/80 cursor-move">
           <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
             <Gauge className={cn("w-3 h-3 text-primary", loading && "animate-pulse")} />
             performance
@@ -159,7 +159,7 @@ export function PerformanceHUD({ className, refreshMs = 3000, visible = true, on
               disabled={unloading !== null}
               className={cn(
                 "flex-1 flex items-center justify-center gap-1 px-2 py-1 rounded text-[9px] font-medium transition-colors",
-                "bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/20 dark:hover:bg-amber-500/15",
+                "bg-muted text-foreground border border-border hover:bg-hover",
                 unloading === "vram" && "opacity-70 cursor-wait",
                 unloading !== null && unloading !== "vram" && "opacity-50 cursor-not-allowed"
               )}
@@ -173,7 +173,7 @@ export function PerformanceHUD({ className, refreshMs = 3000, visible = true, on
               disabled={unloading !== null}
               className={cn(
                 "flex-1 flex items-center justify-center gap-1 px-2 py-1 rounded text-[9px] font-medium transition-colors",
-                "bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 dark:bg-destructive/10 dark:text-destructive dark:border-destructive/20 dark:hover:bg-destructive/15",
+                "bg-destructive/10 text-destructive border border-destructive/30 hover:bg-destructive/15",
                 unloading === "all" && "opacity-70 cursor-wait",
                 unloading !== null && unloading !== "all" && "opacity-50 cursor-not-allowed"
               )}

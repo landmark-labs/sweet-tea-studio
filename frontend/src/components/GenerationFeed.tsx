@@ -223,11 +223,11 @@ export const GenerationFeed = React.memo(function GenerationFeed({ items, onSele
   return (
     <div className="w-full h-full pointer-events-auto">
       {activeItem ? (
-        <div className="shadow-xl border border-blue-100 bg-blue-50/95 dark:border-border dark:bg-surface/95 ring-1 ring-black/5 dark:ring-white/5 backdrop-blur overflow-hidden rounded-lg">
+        <div className="shadow-md border border-border bg-surface/95 ring-1 ring-black/5 dark:ring-white/5 backdrop-blur overflow-hidden rounded-xl">
           {/* Header */}
-          <div className="flex items-center justify-between px-3 py-2 border-b border-blue-100/80 bg-blue-50/60 dark:border-border/70 dark:bg-surface-raised/70">
+          <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-surface-raised/80">
             <div className="text-xs font-semibold text-foreground flex items-center gap-2">
-              <span className={cn("w-2 h-2 rounded-full", isRunning ? "bg-green-500 animate-pulse" : "bg-muted-foreground/40")} />
+              <span className={cn("w-2 h-2 rounded-full", isRunning ? "bg-success animate-pulse" : "bg-muted-foreground/40")} />
               generation status
             </div>
             <Badge variant="outline" className="text-[10px] text-muted-foreground h-5 px-2 font-medium">
@@ -351,3 +351,5 @@ export const GenerationFeed = React.memo(function GenerationFeed({ items, onSele
     </div>
   );
 });
+
+

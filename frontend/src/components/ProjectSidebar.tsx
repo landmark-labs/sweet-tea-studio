@@ -94,7 +94,7 @@ export function ProjectSidebar({
               onClick={() => onSelectProject(draftsProject.id)}
               title="drafts"
             >
-              <FolderOpen className={cn("h-4 w-4 mr-2", selectedProjectId === draftsProject.id ? "text-blue-600" : "text-muted-foreground")} />
+              <FolderOpen className={cn("h-4 w-4 mr-2", selectedProjectId === draftsProject.id ? "text-foreground" : "text-muted-foreground")} />
               {!collapsed && <span className="truncate">drafts</span>}
             </Button>
           )}
@@ -107,7 +107,7 @@ export function ProjectSidebar({
                 onClick={() => onSelectProject(project.id)}
                 title={project.name}
               >
-                <Folder className={cn("h-4 w-4 mr-2", selectedProjectId === project.id ? "text-blue-600" : "text-muted-foreground")} />
+                <Folder className={cn("h-4 w-4 mr-2", selectedProjectId === project.id ? "text-foreground" : "text-muted-foreground")} />
                 {!collapsed && <span className="truncate">{project.name}</span>}
               </Button>
               {/* Subfolders shown under selected project */}
@@ -118,7 +118,7 @@ export function ProjectSidebar({
                     className={cn(
                       "w-full text-left px-2 py-1 rounded text-xs transition flex items-center gap-1.5",
                       !selectedFolder
-                        ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium"
+                        ? "bg-muted text-foreground font-medium"
                         : "text-muted-foreground hover:bg-muted"
                     )}
                   >
@@ -132,7 +132,7 @@ export function ProjectSidebar({
                       className={cn(
                         "w-full text-left px-2 py-1 rounded text-xs transition flex items-center gap-1.5 truncate",
                         selectedFolder === folder
-                          ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium"
+                          ? "bg-muted text-foreground font-medium"
                           : "text-muted-foreground hover:bg-muted"
                       )}
                       title={folder}
@@ -150,3 +150,4 @@ export function ProjectSidebar({
     </div>
   );
 }
+
