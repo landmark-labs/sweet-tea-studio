@@ -456,7 +456,7 @@ export default function Models() {
 
             <div className="bg-muted/30 p-2 rounded text-[10px] text-muted-foreground space-y-1">
               <div className="flex gap-2 items-center"><Info size={12} /> <span>Auto-sorted by link type</span></div>
-              <p>Civitai: API downloader. HF file links: aria2c. HF repo IDs: huggingface_hub (sharded models).</p>
+              <p>Civitai: API downloader. Hugging Face: huggingface_hub. Other links: aria2c fallback.</p>
             </div>
           </CardContent>
         </Card>
