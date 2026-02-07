@@ -147,17 +147,8 @@ Implemented as CSS variables in `frontend/src/index.css` and mirrored in built-i
   - Result: pass
 
 ### After-state screenshots
-Generated route screenshots (light + dark) in:
-- `ui-overhaul-after/after-light-generation.png`
-- `ui-overhaul-after/after-light-projects.png`
-- `ui-overhaul-after/after-light-pipes.png`
-- `ui-overhaul-after/after-light-gallery.png`
-- `ui-overhaul-after/after-light-library.png`
-- `ui-overhaul-after/after-light-models.png`
-- `ui-overhaul-after/after-dark-generation.png`
-- `ui-overhaul-after/after-dark-gallery.png`
-- `ui-overhaul-after/after-dark-settings.png`
-- `ui-overhaul-after/after-dark-models.png`
+Generated route screenshots (light + dark) are written to `ui-overhaul-after/` when running the capture script.
+That folder is intentionally gitignored because it contains generated artifacts.
 
 ### Repro checklist
 1. Start app dev server:
