@@ -40,7 +40,7 @@ const ComfyNode = ({ data }: { data: any }) => {
                     <span className="text-[10px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
                         #{data.nodeId}
                     </span>
-                    <span className="font-bold text-xs text-foreground">{data.label}</span>
+                    <span className="font-bold text-xs text-black">{data.label}</span>
                 </div>
                 <div className="flex justify-between gap-4">
                     {/* Inputs - Left Side handles */}
@@ -472,6 +472,7 @@ export function WorkflowGraphViewer({ graph, inputSchema }: WorkflowGraphViewerP
                     fitView
                     className="bg-background"
                     minZoom={0.1}
+                    proOptions={{ hideAttribution: true }}
                     onNodeClick={(_, node) => setSelectedNodeId((prev) => (prev === node.id ? null : node.id))}
                     onPaneClick={() => setSelectedNodeId(null)}
                 >
