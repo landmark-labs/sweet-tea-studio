@@ -27,3 +27,6 @@ backend/logs/
 backend/*.log
 backend/*.txt
 backend/debug_*.json
+
+# Agent
+.agent/
