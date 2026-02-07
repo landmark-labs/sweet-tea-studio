@@ -12,54 +12,50 @@ const Providers = ({ children }: PropsWithChildren) => (
     </JotaiProvider>
 );
 
-describe("PromptConstructor snippet sync", () => {
-    it("rewrites prompt values using previous snippet content on library edit", async () => {
-        const onUpdate = vi.fn();
-        const onUpdateMany = vi.fn();
-        const onUpdateSnippets = vi.fn();
+const schema = {
+    prompt: { type: "string", widget: "textarea", title: "Prompt" },
+};
 
-        const schema = {
-            prompt: { type: "string", widget: "textarea", title: "Prompt" },
-        };
+function makeBlock(id: string, label: string, content: string, colorIndex = 0): PromptItem {
+    return {
+        id,
+        type: "block",
+        label,
+        content,
+        color: COLORS[colorIndex],
+    };
+}
 
-        const currentValues = { prompt: "foo, something" };
+async function settleSyncGuard() {
+    // PromptConstructor's internal sync guard clears on a 0ms tick.
+    await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+}
 
-        const oldSnippet: PromptItem = {
-            id: "s1",
-            type: "block",
-            label: "Foo",
-            content: "foo",
-            color: COLORS[0],
-        };
+function renderSnippetSyncHarness(currentValues: Record<string, string>, snippets: PromptItem[]) {
+    const onUpdate = vi.fn();
+    const onUpdateMany = vi.fn();
+    const onUpdateSnippets = vi.fn();
 
-        const nextSnippet: PromptItem = {
-            ...oldSnippet,
-            content: "bar",
-        };
+    const renderResult = render(
+        <PromptConstructor
+            schema={schema}
+            onUpdate={onUpdate}
+            onUpdateMany={onUpdateMany}
+            currentValues={currentValues}
+            targetField="prompt"
+            onTargetChange={() => undefined}
+            onFinish={() => undefined}
+            snippets={snippets}
+            onUpdateSnippets={onUpdateSnippets as unknown as Dispatch<SetStateAction<PromptItem[]>>}
+        />,
+        { wrapper: Providers }
+    );
 
-        const { rerender } = render(
-            <PromptConstructor
-                schema={schema}
-                onUpdate={onUpdate}
-                onUpdateMany={onUpdateMany}
-                currentValues={currentValues}
-                targetField="prompt"
-                onTargetChange={() => undefined}
-                onFinish={() => undefined}
-                snippets={[oldSnippet]}
-                onUpdateSnippets={onUpdateSnippets as unknown as Dispatch<SetStateAction<PromptItem[]>>}
-            />,
-            { wrapper: Providers }
-        );
-
-        // PromptConstructor's internal sync guard clears on a 0ms tick.
-        // Ensure it's settled before we simulate a snippet library edit.
+    const rerenderWithSnippets = async (nextSnippets: PromptItem[]) => {
         await act(async () => {
-            await new Promise((resolve) => setTimeout(resolve, 0));
-        });
-
-        await act(async () => {
-            rerender(
+            renderResult.rerender(
                 <PromptConstructor
                     schema={schema}
                     onUpdate={onUpdate}
@@ -68,11 +64,34 @@ describe("PromptConstructor snippet sync", () => {
                     targetField="prompt"
                     onTargetChange={() => undefined}
                     onFinish={() => undefined}
-                    snippets={[nextSnippet]}
+                    snippets={nextSnippets}
                     onUpdateSnippets={onUpdateSnippets as unknown as Dispatch<SetStateAction<PromptItem[]>>}
                 />
             );
         });
+    };
+
+    return {
+        onUpdate,
+        onUpdateMany,
+        rerenderWithSnippets,
+    };
+}
+
+describe("PromptConstructor snippet sync", () => {
+    it("rewrites prompt values using previous snippet content on library edit", async () => {
+        const currentValues = { prompt: "foo, something" };
+        const oldSnippet = makeBlock("s1", "Foo", "foo");
+        const nextSnippet: PromptItem = {
+            ...makeBlock("s1", "Foo", "foo"),
+            content: "bar",
+        };
+
+        const { onUpdate, onUpdateMany, rerenderWithSnippets } =
+            renderSnippetSyncHarness(currentValues, [oldSnippet]);
+
+        await settleSyncGuard();
+        await rerenderWithSnippets([nextSnippet]);
 
         await waitFor(() => expect(onUpdateMany).toHaveBeenCalled());
         expect(onUpdateMany).toHaveBeenLastCalledWith({ prompt: "bar, something" });
@@ -80,63 +99,17 @@ describe("PromptConstructor snippet sync", () => {
     });
 
     it("relinks text-only prompt segments into snippet blocks when an edited snippet now matches", async () => {
-        const onUpdate = vi.fn();
-        const onUpdateMany = vi.fn();
-        const onUpdateSnippets = vi.fn();
-
-        const schema = {
-            prompt: { type: "string", widget: "textarea", title: "Prompt" },
-        };
-
         const currentValues = { prompt: "bar, something" };
-
-        const oldSnippet: PromptItem = {
-            id: "s1",
-            type: "block",
-            label: "Foo",
-            content: "foo",
-            color: COLORS[0],
-        };
-
+        const oldSnippet = makeBlock("s1", "Foo", "foo");
         const nextSnippet: PromptItem = {
-            ...oldSnippet,
+            ...makeBlock("s1", "Foo", "foo"),
             content: "bar",
         };
 
-        const { rerender } = render(
-            <PromptConstructor
-                schema={schema}
-                onUpdate={onUpdate}
-                onUpdateMany={onUpdateMany}
-                currentValues={currentValues}
-                targetField="prompt"
-                onTargetChange={() => undefined}
-                onFinish={() => undefined}
-                snippets={[oldSnippet]}
-                onUpdateSnippets={onUpdateSnippets as unknown as Dispatch<SetStateAction<PromptItem[]>>}
-            />,
-            { wrapper: Providers }
-        );
+        const { rerenderWithSnippets } = renderSnippetSyncHarness(currentValues, [oldSnippet]);
 
-        await act(async () => {
-            await new Promise((resolve) => setTimeout(resolve, 0));
-        });
-
-        await act(async () => {
-            rerender(
-                <PromptConstructor
-                    schema={schema}
-                    onUpdate={onUpdate}
-                    onUpdateMany={onUpdateMany}
-                    currentValues={currentValues}
-                    targetField="prompt"
-                    onTargetChange={() => undefined}
-                    onFinish={() => undefined}
-                    snippets={[nextSnippet]}
-                    onUpdateSnippets={onUpdateSnippets as unknown as Dispatch<SetStateAction<PromptItem[]>>}
-                />
-            );
-        });
+        await settleSyncGuard();
+        await rerenderWithSnippets([nextSnippet]);
 
         await waitFor(() => {
             expect(screen.getAllByText("Foo").length).toBeGreaterThan(1);
@@ -144,70 +117,18 @@ describe("PromptConstructor snippet sync", () => {
     });
 
     it("relinks matching text segments even when other linked blocks already exist", async () => {
-        const onUpdate = vi.fn();
-        const onUpdateMany = vi.fn();
-        const onUpdateSnippets = vi.fn();
-
-        const schema = {
-            prompt: { type: "string", widget: "textarea", title: "Prompt" },
-        };
-
         const currentValues = { prompt: "bar, baz" };
-
-        const oldFoo: PromptItem = {
-            id: "s1",
-            type: "block",
-            label: "Foo",
-            content: "foo",
-            color: COLORS[0],
-        };
-        const baz: PromptItem = {
-            id: "s2",
-            type: "block",
-            label: "Baz",
-            content: "baz",
-            color: COLORS[1],
-        };
-
+        const oldFoo = makeBlock("s1", "Foo", "foo");
+        const baz = makeBlock("s2", "Baz", "baz", 1);
         const nextFoo: PromptItem = {
-            ...oldFoo,
+            ...makeBlock("s1", "Foo", "foo"),
             content: "bar",
         };
 
-        const { rerender } = render(
-            <PromptConstructor
-                schema={schema}
-                onUpdate={onUpdate}
-                onUpdateMany={onUpdateMany}
-                currentValues={currentValues}
-                targetField="prompt"
-                onTargetChange={() => undefined}
-                onFinish={() => undefined}
-                snippets={[oldFoo, baz]}
-                onUpdateSnippets={onUpdateSnippets as unknown as Dispatch<SetStateAction<PromptItem[]>>}
-            />,
-            { wrapper: Providers }
-        );
+        const { rerenderWithSnippets } = renderSnippetSyncHarness(currentValues, [oldFoo, baz]);
 
-        await act(async () => {
-            await new Promise((resolve) => setTimeout(resolve, 0));
-        });
-
-        await act(async () => {
-            rerender(
-                <PromptConstructor
-                    schema={schema}
-                    onUpdate={onUpdate}
-                    onUpdateMany={onUpdateMany}
-                    currentValues={currentValues}
-                    targetField="prompt"
-                    onTargetChange={() => undefined}
-                    onFinish={() => undefined}
-                    snippets={[nextFoo, baz]}
-                    onUpdateSnippets={onUpdateSnippets as unknown as Dispatch<SetStateAction<PromptItem[]>>}
-                />
-            );
-        });
+        await settleSyncGuard();
+        await rerenderWithSnippets([nextFoo, baz]);
 
         await waitFor(() => {
             expect(screen.getAllByText("Foo").length).toBeGreaterThan(1);
