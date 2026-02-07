@@ -130,7 +130,7 @@ export function PromptLibraryQuickPanel({
                                 }}
                                 title="Copy positive prompt"
                               >
-                                <Copy className="w-3 h-3" />
+                                <Copy className="w-3 h-3 text-success" />
                               </Button>
                               <Button
                                 variant="ghost"
@@ -142,7 +142,7 @@ export function PromptLibraryQuickPanel({
                                 }}
                                 title="Copy negative prompt"
                               >
-                                <Copy className="w-3 h-3" />
+                                <Copy className="w-3 h-3 text-destructive" />
                               </Button>
                               <Button
                                 variant="ghost"
@@ -154,7 +154,7 @@ export function PromptLibraryQuickPanel({
                                 }}
                                 title="Copy caption"
                               >
-                                <Copy className="w-3 h-3" />
+                                <Copy className="w-3 h-3 text-yellow-500" />
                               </Button>
                             </div>
                           </div>
