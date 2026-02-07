@@ -9,6 +9,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { ArrowDownCircle, FolderOpen, Info, Link2, Rocket, Trash2, XCircle } from "lucide-react";
 import { getApiBase } from "@/lib/api";
 import { splitPathSegments } from "@/lib/pathUtils";
+import { useModelsPageStore } from "@/lib/stores/pageStateStores";
 
 type ModelCategory = string;
 
@@ -55,16 +56,18 @@ export default function Models() {
   const [isLoading, setIsLoading] = useState(true);
   const [downloadQueue, setDownloadQueue] = useState<DownloadJob[]>([]);
   const [modelFolders, setModelFolders] = useState<ModelFolder[]>([]);
-  const [activeFolder, setActiveFolder] = useState<string>("");
   const [modelsRoot, setModelsRoot] = useState<string>("");
 
-  // New State for Dynamic Download Rows
   const [downloadRows, setDownloadRows] = useState<{ target: string; url: string; id: number }[]>([
     { target: "", url: "", id: Date.now() }
   ]);
 
-  const [selectedCategory, setSelectedCategory] = useState<ModelCategory>("all");
-  const [search, setSearch] = useState("");
+  const selectedCategory = useModelsPageStore((s) => s.selectedCategory);
+  const setSelectedCategory = useModelsPageStore((s) => s.setSelectedCategory);
+  const search = useModelsPageStore((s) => s.search);
+  const setSearch = useModelsPageStore((s) => s.setSearch);
+  const activeFolder = useModelsPageStore((s) => s.activeFolder);
+  const setActiveFolder = useModelsPageStore((s) => s.setActiveFolder);
   // Removed single targetFolder state since it's now per-row
 
   // Fetch installed models from API

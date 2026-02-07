@@ -28,6 +28,7 @@ import { Separator } from "@/components/ui/separator";
 
 import { api, Project } from "@/lib/api";
 import { useGeneration } from "@/lib/GenerationContext";
+import { useProjectsPageStore } from "@/lib/stores/pageStateStores";
 
 export default function Projects() {
     const generation = useGeneration();
@@ -37,7 +38,8 @@ export default function Projects() {
     const [newProjectName, setNewProjectName] = useState("");
     const [isCreating, setIsCreating] = useState(false);
 
-    const [showArchived, setShowArchived] = useState(false);
+    const showArchived = useProjectsPageStore((state) => state.showArchived);
+    const setShowArchived = useProjectsPageStore((state) => state.setShowArchived);
 
     // Folder Management State
     const [managingProject, setManagingProject] = useState<Project | null>(null);

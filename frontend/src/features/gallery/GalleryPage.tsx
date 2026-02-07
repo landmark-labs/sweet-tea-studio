@@ -23,6 +23,7 @@ import { MoveImagesDialog } from "@/components/MoveImagesDialog";
 import { MediaMetadataDialog } from "@/components/MediaMetadataDialog";
 import { GalleryCardContent } from "@/features/gallery/components/GalleryCardContent";
 import { useMediaTrayStore } from "@/lib/stores/mediaTrayStore";
+import { useGalleryPageStore } from "@/lib/stores/pageStateStores";
 import { useUndoToast } from "@/components/ui/undo-toast";
 import { useUndoRedo } from "@/lib/undoRedo";
 
@@ -42,10 +43,13 @@ export default function Gallery() {
     const [isLoading, setIsLoading] = useState(true);
     const [isLoadingMore, setIsLoadingMore] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [search, setSearch] = useState("");
+    const search = useGalleryPageStore((s) => s.search);
+    const setSearch = useGalleryPageStore((s) => s.setSearch);
     const [activeQuery, setActiveQuery] = useState("");
-    const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
-    const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
+    const selectedProjectId = useGalleryPageStore((s) => s.selectedProjectId);
+    const setSelectedProjectId = useGalleryPageStore((s) => s.setSelectedProjectId);
+    const selectedFolder = useGalleryPageStore((s) => s.selectedFolder);
+    const setSelectedFolder = useGalleryPageStore((s) => s.setSelectedFolder);
     const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
     const [lastSelectedId, setLastSelectedId] = useState<number | null>(null);
     const [projects, setProjects] = useState<Project[]>([]);

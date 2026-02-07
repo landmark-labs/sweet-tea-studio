@@ -20,6 +20,7 @@ import { labels } from "@/ui/labels";
 import { stripSchemaMeta } from "@/lib/schema";
 import { useGeneration } from "@/lib/GenerationContext";
 import { resolveParamTooltip } from "@/components/dynamic-form/fieldUtils";
+import { usePipesPageStore } from "@/lib/stores/pageStateStores";
 
 const arraysEqual = (a: string[], b: string[]) => {
     if (a.length !== b.length) return false;
@@ -285,63 +286,63 @@ const NodeCard = ({ node, schemaEdits, setSchemaEdits }: NodeCardProps) => {
                                             <TableCell className="font-mono text-[10px] text-muted-foreground py-2">{key}</TableCell>
                                             <TableCell className="text-xs text-muted-foreground py-2">{field.type}</TableCell>
                                             <TableCell className="py-2">
-                                            {field.widget === "toggle" || field.type === "boolean" ? (
-                                                <Switch
-                                                    checked={Boolean(field.default)}
-                                                    onCheckedChange={(checked) => {
-                                                        const s = { ...schemaEdits };
-                                                        s[key].default = checked;
-                                                        setSchemaEdits(s);
-                                                    }}
-                                                />
-                                            ) : (
-                                                <Input
-                                                    className="h-7 text-xs"
-                                                    value={field.default === undefined || field.default === null || (typeof field.default === 'number' && isNaN(field.default)) ? "" : String(field.default)}
-                                                    onChange={(e) => {
-                                                        const s = { ...schemaEdits };
-                                                        // Store raw value while typing to allow natural input of "-", ".", etc.
-                                                        s[key].default = e.target.value;
-                                                        setSchemaEdits(s);
-                                                    }}
-                                                    onBlur={(e) => {
-                                                        const s = { ...schemaEdits };
-                                                        const val = e.target.value;
-                                                        const type = key.toLowerCase() === 'cfg' ? 'float' : field.type;
+                                                {field.widget === "toggle" || field.type === "boolean" ? (
+                                                    <Switch
+                                                        checked={Boolean(field.default)}
+                                                        onCheckedChange={(checked) => {
+                                                            const s = { ...schemaEdits };
+                                                            s[key].default = checked;
+                                                            setSchemaEdits(s);
+                                                        }}
+                                                    />
+                                                ) : (
+                                                    <Input
+                                                        className="h-7 text-xs"
+                                                        value={field.default === undefined || field.default === null || (typeof field.default === 'number' && isNaN(field.default)) ? "" : String(field.default)}
+                                                        onChange={(e) => {
+                                                            const s = { ...schemaEdits };
+                                                            // Store raw value while typing to allow natural input of "-", ".", etc.
+                                                            s[key].default = e.target.value;
+                                                            setSchemaEdits(s);
+                                                        }}
+                                                        onBlur={(e) => {
+                                                            const s = { ...schemaEdits };
+                                                            const val = e.target.value;
+                                                            const type = key.toLowerCase() === 'cfg' ? 'float' : field.type;
 
-                                                        // Parse on blur for number types
-                                                        if (type === "number" || type === "float") {
-                                                            if (val === "" || val === "-" || val === "." || val === "-.") {
-                                                                s[key].default = val === "" ? undefined : val;
-                                                            } else {
-                                                                const parsed = parseFloat(val);
-                                                                if (!isNaN(parsed)) {
-                                                                    s[key].default = parsed;
-                                                                    setSchemaEdits(s);
+                                                            // Parse on blur for number types
+                                                            if (type === "number" || type === "float") {
+                                                                if (val === "" || val === "-" || val === "." || val === "-.") {
+                                                                    s[key].default = val === "" ? undefined : val;
+                                                                } else {
+                                                                    const parsed = parseFloat(val);
+                                                                    if (!isNaN(parsed)) {
+                                                                        s[key].default = parsed;
+                                                                        setSchemaEdits(s);
+                                                                    }
+                                                                }
+                                                            } else if (type === "integer") {
+                                                                if (val === "" || val === "-") {
+                                                                    s[key].default = val === "" ? undefined : val;
+                                                                } else {
+                                                                    const parsed = parseInt(val);
+                                                                    if (!isNaN(parsed)) {
+                                                                        s[key].default = parsed;
+                                                                        setSchemaEdits(s);
+                                                                    }
                                                                 }
                                                             }
-                                                        } else if (type === "integer") {
-                                                            if (val === "" || val === "-") {
-                                                                s[key].default = val === "" ? undefined : val;
-                                                            } else {
-                                                                const parsed = parseInt(val);
-                                                                if (!isNaN(parsed)) {
-                                                                    s[key].default = parsed;
-                                                                    setSchemaEdits(s);
-                                                                }
-                                                            }
-                                                        }
-                                                    }}
-                                                />
-                                            )}
-                                        </TableCell>
-                                        <TableCell className="text-right py-2">
-                                            <Button variant="ghost" size="sm" className="h-6 text-xs text-destructive hover:text-destructive" onClick={() => {
-                                                const s = { ...schemaEdits };
-                                                s[key].__hidden = true;
-                                                setSchemaEdits(s);
-                                            }}>Hide</Button>
-                                        </TableCell>
+                                                        }}
+                                                    />
+                                                )}
+                                            </TableCell>
+                                            <TableCell className="text-right py-2">
+                                                <Button variant="ghost" size="sm" className="h-6 text-xs text-destructive hover:text-destructive" onClick={() => {
+                                                    const s = { ...schemaEdits };
+                                                    s[key].__hidden = true;
+                                                    setSchemaEdits(s);
+                                                }}>Hide</Button>
+                                            </TableCell>
                                         </TableRow>
                                     );
                                 })}
@@ -365,18 +366,18 @@ const NodeCard = ({ node, schemaEdits, setSchemaEdits }: NodeCardProps) => {
                                                         tooltip
                                                     )}
                                                 </TableCell>
-                                            <TableCell className="font-mono text-[10px] text-muted-foreground py-2 w-[20%] break-all">{key}</TableCell>
-                                            <TableCell className="text-xs py-2 text-muted-foreground w-[15%]">{field.type}</TableCell>
-                                            <TableCell className="py-2 text-xs text-muted-foreground w-[25%]">{String(field.default ?? "-")}</TableCell>
-                                            <TableCell className="text-right py-2 w-[10%]">
-                                                <Button variant="ghost" size="sm" className="h-6 text-xs text-foreground hover:text-foreground" onClick={() => {
-                                                    const s = { ...schemaEdits };
-                                                    delete s[key].__hidden;
-                                                    setSchemaEdits(s);
-                                                }}>
-                                                    Restore
-                                                </Button>
-                                            </TableCell>
+                                                <TableCell className="font-mono text-[10px] text-muted-foreground py-2 w-[20%] break-all">{key}</TableCell>
+                                                <TableCell className="text-xs py-2 text-muted-foreground w-[15%]">{field.type}</TableCell>
+                                                <TableCell className="py-2 text-xs text-muted-foreground w-[25%]">{String(field.default ?? "-")}</TableCell>
+                                                <TableCell className="text-right py-2 w-[10%]">
+                                                    <Button variant="ghost" size="sm" className="h-6 text-xs text-foreground hover:text-foreground" onClick={() => {
+                                                        const s = { ...schemaEdits };
+                                                        delete s[key].__hidden;
+                                                        setSchemaEdits(s);
+                                                    }}>
+                                                        Restore
+                                                    </Button>
+                                                </TableCell>
                                             </TableRow>
                                         );
                                     })}
@@ -572,7 +573,8 @@ const SortableWorkflowCard = ({
 
 export default function WorkflowLibrary() {
     const [workflows, setWorkflows] = useState<WorkflowTemplate[]>([]);
-    const [showArchived, setShowArchived] = useState(false);
+    const showArchived = usePipesPageStore((state) => state.showArchived);
+    const setShowArchived = usePipesPageStore((state) => state.setShowArchived);
     const [error, setError] = useState<string | null>(null);
     const [importFile, setImportFile] = useState<File | null>(null);
     const [importName, setImportName] = useState("");
@@ -1119,15 +1121,15 @@ export default function WorkflowLibrary() {
                     {/* Spacer to push buttons to bottom */}
                     <div className="flex-1" />
 
-                     {/* Action Buttons */}
-                     <div className="space-y-2 pt-4 border-t">
-                         <Dialog open={visibilityDialogOpen} onOpenChange={setVisibilityDialogOpen}>
-                             <DialogTrigger asChild>
-                                 <Button variant="secondary" size="sm" className="w-full justify-start">
+                    {/* Action Buttons */}
+                    <div className="space-y-2 pt-4 border-t">
+                        <Dialog open={visibilityDialogOpen} onOpenChange={setVisibilityDialogOpen}>
+                            <DialogTrigger asChild>
+                                <Button variant="secondary" size="sm" className="w-full justify-start">
                                     <GitBranch className="w-4 h-4 mr-2" />
                                     manage nodes
                                 </Button>
-                             </DialogTrigger>
+                            </DialogTrigger>
                             <DialogContent className="max-w-xl">
                                 <DialogHeader>
                                     <DialogTitle>Manage nodes</DialogTitle>
@@ -1251,41 +1253,41 @@ export default function WorkflowLibrary() {
                                     <Button variant="outline" onClick={() => setVisibilityDialogOpen(false)}>Close</Button>
                                 </DialogFooter>
                             </DialogContent>
-                         </Dialog>
+                        </Dialog>
 
-                         <Button
-                             variant="secondary"
-                             size="sm"
-                             className="w-full justify-start"
-                             onClick={handleSyncSchema}
-                             disabled={isSaving || isSyncingSchema}
-                             title="Backfill schema from graph + current ComfyUI object_info"
-                         >
-                             <RotateCw className="w-4 h-4 mr-2" />
-                             {isSyncingSchema ? "syncing schema..." : "sync schema"}
-                         </Button>
- 
-                         <div className="flex gap-2 pt-2">
-                             <Button
-                                 variant="outline"
-                                 size="sm"
-                                 className="flex-1"
-                                 onClick={() => { setEditingWorkflow(null); setNodeOrder([]); setShowCaptionFieldPicker(false); }}
-                                 disabled={isSaving || isSyncingSchema}
-                             >
-                                 Cancel
-                             </Button>
-                             <Button
-                                 size="sm"
-                                 className="flex-1"
-                                 onClick={handleSaveSchema}
-                                 disabled={Boolean(nameError) || isSaving || isSyncingSchema}
-                             >
-                                 <Save className="w-4 h-4 mr-1" /> {isSaving ? "Saving..." : "Save"}
-                             </Button>
-                         </div>
-                     </div>
-                 </div>
+                        <Button
+                            variant="secondary"
+                            size="sm"
+                            className="w-full justify-start"
+                            onClick={handleSyncSchema}
+                            disabled={isSaving || isSyncingSchema}
+                            title="Backfill schema from graph + current ComfyUI object_info"
+                        >
+                            <RotateCw className="w-4 h-4 mr-2" />
+                            {isSyncingSchema ? "syncing schema..." : "sync schema"}
+                        </Button>
+
+                        <div className="flex gap-2 pt-2">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                className="flex-1"
+                                onClick={() => { setEditingWorkflow(null); setNodeOrder([]); setShowCaptionFieldPicker(false); }}
+                                disabled={isSaving || isSyncingSchema}
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                size="sm"
+                                className="flex-1"
+                                onClick={handleSaveSchema}
+                                disabled={Boolean(nameError) || isSaving || isSyncingSchema}
+                            >
+                                <Save className="w-4 h-4 mr-1" /> {isSaving ? "Saving..." : "Save"}
+                            </Button>
+                        </div>
+                    </div>
+                </div>
 
 
                 {/* Right Content - Pipe Parameters */}
@@ -1362,77 +1364,77 @@ export default function WorkflowLibrary() {
                         {showArchived ? "hide archived" : "view archived"}
                     </Button>
                     {SHOW_PIPE_COMPOSE && (
-                    <Dialog open={composeOpen} onOpenChange={(open) => {
-                        setComposeOpen(open);
-                        if (!open) {
-                            setComposeName("");
-                            setComposeSource("");
-                            setComposeTarget("");
-                            setComposeDescription("");
-                        }
-                    }}>
-                        <DialogTrigger asChild>
-                            <Button variant="outline">compose</Button>
-                        </DialogTrigger>
-                        <DialogContent>
-                            <DialogHeader>
-                                <DialogTitle>compose pipes</DialogTitle>
-                                <DialogDescription>merge two pipes by piping the output of one into the other.</DialogDescription>
-                            </DialogHeader>
-                            <div className="grid gap-4 py-4">
-                                <div className="grid grid-cols-4 items-center gap-4">
-                                    <Label htmlFor="source" className="text-right">source pipe (image)</Label>
-                                    <select
-                                        id="source"
-                                        className="col-span-3 flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                                        value={composeSource}
-                                        onChange={(e) => setComposeSource(e.target.value)}
-                                    >
-                                        <option value="">select source pipe...</option>
-                                        {workflows.map(w => (
-                                            <option key={w.id} value={w.id}>{w.name}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div className="grid grid-cols-4 items-center gap-4">
-                                    <Label htmlFor="target" className="text-right">target pipe (loadimage)</Label>
-                                    <select
-                                        id="target"
-                                        className="col-span-3 flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                                        value={composeTarget}
-                                        onChange={(e) => setComposeTarget(e.target.value)}
-                                    >
-                                        <option value="">select target pipe...</option>
-                                        {workflows.map(w => (
-                                            <option key={w.id} value={w.id}>{w.name}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div className="grid grid-cols-4 items-center gap-4">
-                                    <Label htmlFor="compose-name" className="text-right">new pipe name</Label>
-                                    <Input id="compose-name" value={composeName} onChange={(e) => setComposeName(e.target.value)} className="col-span-3" />
-                                </div>
-                                <div className="grid grid-cols-4 items-start gap-4">
-                                    <Label htmlFor="compose-description" className="text-right mt-2">description</Label>
-                                    <div className="col-span-3 space-y-1">
-                                        <Textarea
-                                            id="compose-description"
-                                            value={composeDescription}
-                                            onChange={(e) => setComposeDescription(e.target.value.slice(0, 500))}
-                                            placeholder="how should this composed pipe be used?"
-                                            maxLength={500}
-                                        />
-                                        <div className="text-[11px] text-muted-foreground text-right">{composeDescription.length}/500</div>
+                        <Dialog open={composeOpen} onOpenChange={(open) => {
+                            setComposeOpen(open);
+                            if (!open) {
+                                setComposeName("");
+                                setComposeSource("");
+                                setComposeTarget("");
+                                setComposeDescription("");
+                            }
+                        }}>
+                            <DialogTrigger asChild>
+                                <Button variant="outline">compose</Button>
+                            </DialogTrigger>
+                            <DialogContent>
+                                <DialogHeader>
+                                    <DialogTitle>compose pipes</DialogTitle>
+                                    <DialogDescription>merge two pipes by piping the output of one into the other.</DialogDescription>
+                                </DialogHeader>
+                                <div className="grid gap-4 py-4">
+                                    <div className="grid grid-cols-4 items-center gap-4">
+                                        <Label htmlFor="source" className="text-right">source pipe (image)</Label>
+                                        <select
+                                            id="source"
+                                            className="col-span-3 flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                            value={composeSource}
+                                            onChange={(e) => setComposeSource(e.target.value)}
+                                        >
+                                            <option value="">select source pipe...</option>
+                                            {workflows.map(w => (
+                                                <option key={w.id} value={w.id}>{w.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div className="grid grid-cols-4 items-center gap-4">
+                                        <Label htmlFor="target" className="text-right">target pipe (loadimage)</Label>
+                                        <select
+                                            id="target"
+                                            className="col-span-3 flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                            value={composeTarget}
+                                            onChange={(e) => setComposeTarget(e.target.value)}
+                                        >
+                                            <option value="">select target pipe...</option>
+                                            {workflows.map(w => (
+                                                <option key={w.id} value={w.id}>{w.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div className="grid grid-cols-4 items-center gap-4">
+                                        <Label htmlFor="compose-name" className="text-right">new pipe name</Label>
+                                        <Input id="compose-name" value={composeName} onChange={(e) => setComposeName(e.target.value)} className="col-span-3" />
+                                    </div>
+                                    <div className="grid grid-cols-4 items-start gap-4">
+                                        <Label htmlFor="compose-description" className="text-right mt-2">description</Label>
+                                        <div className="col-span-3 space-y-1">
+                                            <Textarea
+                                                id="compose-description"
+                                                value={composeDescription}
+                                                onChange={(e) => setComposeDescription(e.target.value.slice(0, 500))}
+                                                placeholder="how should this composed pipe be used?"
+                                                maxLength={500}
+                                            />
+                                            <div className="text-[11px] text-muted-foreground text-right">{composeDescription.length}/500</div>
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
-                            <DialogFooter>
-                                <Button onClick={handleCompose} disabled={!composeSource || !composeTarget || !composeName}>
-                                    create composition
-                                </Button>
-                            </DialogFooter>
-                        </DialogContent>
-                    </Dialog>
+                                <DialogFooter>
+                                    <Button onClick={handleCompose} disabled={!composeSource || !composeTarget || !composeName}>
+                                        create composition
+                                    </Button>
+                                </DialogFooter>
+                            </DialogContent>
+                        </Dialog>
                     )}
 
                     <Dialog open={isDialogOpen} onOpenChange={(open) => {

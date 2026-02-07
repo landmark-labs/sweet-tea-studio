@@ -18,11 +18,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { MediaMetadataDialog } from "@/components/MediaMetadataDialog";
+import { useLibraryPageStore } from "@/lib/stores/pageStateStores";
 
 const PAGE_SIZE = 60;
 
 export default function PromptLibrary() {
-  const [searchInput, setSearchInput] = React.useState("");
+  const searchInput = useLibraryPageStore((s) => s.searchInput);
+  const setSearchInput = useLibraryPageStore((s) => s.setSearchInput);
   const [query, setQuery] = React.useState("");
   const [items, setItems] = React.useState<PromptLibraryItem[]>([]);
   const [offset, setOffset] = React.useState(0);
