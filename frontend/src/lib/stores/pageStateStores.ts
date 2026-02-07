@@ -8,6 +8,9 @@ type DownloadRow = {
 };
 
 type DownloadRowsUpdater = DownloadRow[] | ((rows: DownloadRow[]) => DownloadRow[]);
+type SchemaEditsUpdater =
+    | any
+    | ((schemaEdits: any | null) => any | null);
 
 // --- Projects Page Store ---
 interface ProjectsPageState {
@@ -65,7 +68,7 @@ interface PipesPageState {
     setEditName: (name: string) => void;
     setEditDescription: (description: string) => void;
     setHiddenNodes: (hiddenNodes: Record<string, boolean>) => void;
-    setSchemaEdits: (schema: any | null) => void;
+    setSchemaEdits: (schema: SchemaEditsUpdater) => void;
     setExpandedNodes: (nodes: string[]) => void;
     clearEditingState: () => void;
 }
@@ -85,7 +88,9 @@ export const usePipesPageStore = create<PipesPageState>()(
             setEditName: (name) => set({ editName: name }),
             setEditDescription: (description) => set({ editDescription: description }),
             setHiddenNodes: (hiddenNodes) => set({ hiddenNodes }),
-            setSchemaEdits: (schema) => set({ schemaEdits: schema }),
+            setSchemaEdits: (schema) => set((state) => ({
+                schemaEdits: typeof schema === "function" ? schema(state.schemaEdits) : schema
+            })),
             setExpandedNodes: (nodes) => set({ expandedNodes: nodes }),
             clearEditingState: () => set({
                 editingWorkflowId: null,
