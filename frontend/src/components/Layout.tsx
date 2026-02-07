@@ -6,8 +6,10 @@ import { Button } from "@/components/ui/button";
 import { UndoRedoBar } from "@/components/UndoRedoBar";
 import { ConnectionIndicator } from "@/components/ConnectionIndicator";
 import brandingLogo from "@/../assets/sweet_tea_studio_branding.png";
+import brandingLogoDark from "@/../assets/sweet_tea_studio_branding_darkmode.png";
 import lemonBadgeLogo from "@/../assets/sweet_tea_studio_lemon_badge.png";
 import { labels } from "@/ui/labels";
+import { useTheme } from "@/lib/ThemeContext";
 import { api } from "@/lib/api";
 
 const navItems = [
@@ -34,6 +36,11 @@ import { CanvasSidebar } from "@/components/CanvasSidebar";
 export default function Layout() {
   const [collapsed, setCollapsed] = useState(false);
   const [isRestarting, setIsRestarting] = useState(false);
+  const { resolvedTheme } = useTheme();
+
+  // Determine if dark mode is active (dark theme or custom with dark appearance)
+  const isDarkMode = resolvedTheme === "dark" || (resolvedTheme === "custom" && document.documentElement.classList.contains("dark"));
+  const currentBrandingLogo = isDarkMode ? brandingLogoDark : brandingLogo;
 
   // Persisted Panel States
   const [feedOpen, setFeedOpen] = useState(() => localStorage.getItem("ds_feed_open") !== "false");
@@ -98,7 +105,7 @@ export default function Layout() {
           {!collapsed ? (
             <div className="w-full">
               <img
-                src={brandingLogo}
+                src={currentBrandingLogo}
                 alt="Sweet Tea Studio"
                 className="h-14 w-auto max-w-full object-contain"
               />
