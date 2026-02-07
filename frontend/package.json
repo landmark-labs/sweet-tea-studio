@@ -12,8 +12,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "test": "vitest run",
-    "preview": "vite preview",
-    "capture:ui-overhaul": "node scripts/capture_ui_overhaul.mjs"
+    "preview": "vite preview"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
