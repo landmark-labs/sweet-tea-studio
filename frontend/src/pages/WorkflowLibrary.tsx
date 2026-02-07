@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy, rectSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -111,6 +111,16 @@ const applyHiddenNodes = (graph: any, hiddenNodes: Record<string, boolean>): any
     });
     return updatedGraph;
 };
+
+const buildRestoredWorkflow = (
+    workflow: WorkflowTemplate,
+    descriptionDraft: string,
+    hiddenNodes: Record<string, boolean>
+): WorkflowTemplate => ({
+    ...workflow,
+    description: descriptionDraft || workflow.description || "",
+    graph_json: applyHiddenNodes(workflow.graph_json, hiddenNodes),
+});
 
 // --- Types ---
 type RenderNode = {
@@ -601,7 +611,10 @@ const SortableWorkflowCard = ({
 
 
 export default function WorkflowLibrary() {
-    const [workflows, setWorkflows] = useState<WorkflowTemplate[]>([]);
+    const generation = useGeneration();
+    // Use workflows from context if available (faster on navigation)
+    const contextWorkflows = generation?.workflows;
+
     const showArchived = usePipesPageStore((state) => state.showArchived);
     const setShowArchived = usePipesPageStore((state) => state.setShowArchived);
     const editingWorkflowId = usePipesPageStore((state) => state.editingWorkflowId);
@@ -617,6 +630,13 @@ export default function WorkflowLibrary() {
     const expandedNodes = usePipesPageStore((state) => state.expandedNodes);
     const setExpandedNodes = usePipesPageStore((state) => state.setExpandedNodes);
     const clearEditingState = usePipesPageStore((state) => state.clearEditingState);
+
+    const [workflows, setWorkflows] = useState<WorkflowTemplate[]>(() => {
+        if (!showArchived && contextWorkflows && contextWorkflows.length > 0) {
+            return contextWorkflows;
+        }
+        return [];
+    });
     const [error, setError] = useState<string | null>(null);
     const [importFile, setImportFile] = useState<File | null>(null);
     const [importName, setImportName] = useState("");
@@ -625,7 +645,12 @@ export default function WorkflowLibrary() {
     const [isDialogOpen, setIsDialogOpen] = useState(false);
 
     // Edit State (local object reference only, actual data is in store)
-    const [editingWorkflow, setEditingWorkflowLocal] = useState<WorkflowTemplate | null>(null);
+    const [editingWorkflow, setEditingWorkflowLocal] = useState<WorkflowTemplate | null>(() => {
+        if (!editingWorkflowId || !contextWorkflows || contextWorkflows.length === 0) return null;
+        const found = contextWorkflows.find((w) => w.id === editingWorkflowId);
+        if (!found) return null;
+        return buildRestoredWorkflow(found, editDescription, hiddenNodes);
+    });
     const [nameError, setNameError] = useState("");
     const [isSaving, setIsSaving] = useState(false);
     const [isSyncingSchema, setIsSyncingSchema] = useState(false);
@@ -654,17 +679,15 @@ export default function WorkflowLibrary() {
         }
     };
 
-    // Restore editing state when workflows load and we have a persisted ID
-    useEffect(() => {
-        if (editingWorkflowId && workflows.length > 0 && !editingWorkflow) {
+    // Restore editing state before paint when workflows are available.
+    useLayoutEffect(() => {
+        if (editingWorkflowId && workflows.length > 0) {
             const found = workflows.find((w) => w.id === editingWorkflowId);
             if (found) {
-                const restoredWorkflow = {
-                    ...found,
-                    description: editDescription || found.description || "",
-                    graph_json: applyHiddenNodes(found.graph_json, hiddenNodes),
-                };
-                setEditingWorkflowLocal(restoredWorkflow);
+                if (!editingWorkflow) {
+                    const restoredWorkflow = buildRestoredWorkflow(found, editDescription, hiddenNodes);
+                    setEditingWorkflowLocal(restoredWorkflow);
+                }
                 // Use persisted edits if they exist and have content, otherwise init from workflow
                 const needsSchema = !schemaEdits || Object.keys(schemaEdits).length === 0;
                 if (needsSchema) {
@@ -675,7 +698,7 @@ export default function WorkflowLibrary() {
                     setNodeOrder(orderedIds);
                 }
                 if (!editName) {
-                    setEditName(restoredWorkflow.name);
+                    setEditName(found.name);
                 }
                 if (!editDescription) {
                     setEditDescription(found.description || "");
@@ -689,9 +712,6 @@ export default function WorkflowLibrary() {
             }
         }
     }, [workflows, editingWorkflowId, editingWorkflow, schemaEdits, editName, editDescription, hiddenNodes, setSchemaEdits, setEditName, setEditDescription, setHiddenNodes, clearEditingState]);
-
-
-    const generation = useGeneration();
 
     // Install State
     const [installOpen, setInstallOpen] = useState(false);
@@ -762,9 +782,6 @@ export default function WorkflowLibrary() {
         setInstallOpen(false);
     };
 
-    // Use workflows from context if available (faster on navigation)
-    const contextWorkflows = generation?.workflows;
-
     const loadWorkflows = async () => {
         try {
             const data = await api.getWorkflows(showArchived);
@@ -796,6 +813,16 @@ export default function WorkflowLibrary() {
         }
         return [];
     };
+
+    const isRestoringEditor = Boolean(editingWorkflowId) && !editingWorkflow && workflows.length === 0;
+
+    if (isRestoringEditor) {
+        return (
+            <div className="pt-4 pr-8 pb-8 pl-[83px]">
+                <div className="text-sm text-muted-foreground">restoring pipe editor...</div>
+            </div>
+        );
+    }
 
     // --- Import Logic ---
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
