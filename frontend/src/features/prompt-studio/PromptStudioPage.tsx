@@ -14,10 +14,9 @@ import { Loader2, ChevronLeft, ChevronRight, FileText, SlidersHorizontal } from 
 import { ImageViewer } from "@/components/ImageViewer";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { InstallStatusDialog, InstallStatus } from "@/components/InstallStatusDialog";
-import { COLORS } from "@/components/PromptConstructor";
 import { CanvasPayload, PromptItem, type PromptRehydrationSnapshotV1, type PromptRehydrationItemV1 } from "@/lib/types";
 
-import { stripDarkVariantClasses } from "@/lib/utils";
+import { getSnippetColorSeed, normalizeSnippetColor } from "@/lib/snippetColors";
 import { getBasename, normalizePath } from "@/lib/pathUtils";
 import { useUndoRedo } from "@/lib/undoRedo";
 import { useUndoToast } from "@/components/ui/undo-toast";
@@ -418,7 +417,7 @@ export default function PromptStudio() {
           type: "block" as const,
           label: s.label,
           content: s.content,
-          color: stripDarkVariantClasses(s.color) || COLORS[0],
+          color: normalizeSnippetColor(s.color, `${s.id}|${s.label}|${s.content}`),
         }));
         if (!isMounted) return;
         if (retryTimeout) {
@@ -442,8 +441,32 @@ export default function PromptStudio() {
             if (saved) {
               const parsed = JSON.parse(saved);
               if (Array.isArray(parsed)) {
-                libraryRef.current = parsed;
-                setLibrary(parsed);
+                const migrated: PromptItem[] = parsed.map((item: any, idx: number) => {
+                  const id = String(item?.id ?? `legacy-${idx}`);
+                  const type: PromptItem["type"] = item?.type === "text" ? "text" : "block";
+                  const content = typeof item?.content === "string" ? item.content : "";
+                  const label = typeof item?.label === "string" ? item.label : undefined;
+                  const sourceId = typeof item?.sourceId === "string" ? item.sourceId : undefined;
+                  const rehydrationMode = item?.rehydrationMode === "live" || item?.rehydrationMode === "frozen"
+                    ? item.rehydrationMode
+                    : undefined;
+                  const frozenContent = typeof item?.frozenContent === "string" ? item.frozenContent : undefined;
+
+                  return {
+                    id,
+                    type,
+                    content,
+                    label,
+                    sourceId,
+                    rehydrationMode,
+                    frozenContent,
+                    color: type === "block"
+                      ? normalizeSnippetColor(item?.color, `${id}|${sourceId || ""}|${label || ""}|${content}`)
+                      : undefined,
+                  };
+                }).filter((item) => item.content.length > 0);
+                libraryRef.current = migrated;
+                setLibrary(migrated);
               }
             }
           } catch (e2) { console.error("Failed to parse local snippets", e2); }
@@ -562,7 +585,7 @@ export default function PromptStudio() {
         await snippetApi.bulkUpsert(library.map(item => ({
           label: item.label || "Untitled",
           content: item.content,
-          color: stripDarkVariantClasses(item.color),
+          color: normalizeSnippetColor(item.color, getSnippetColorSeed(item)),
         })));
         // Clear localStorage after successful save to backend
         localStorage.removeItem("ds_prompt_snippets");

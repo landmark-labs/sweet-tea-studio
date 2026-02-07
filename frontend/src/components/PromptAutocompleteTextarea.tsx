@@ -8,6 +8,7 @@ import { useUndoRedo } from "@/lib/undoRedo";
 import { logClientFrameLatency } from "@/lib/clientDiagnostics";
 import { cancelIdle, scheduleIdle, type IdleHandle } from "@/lib/idleScheduler";
 import { buildSnippetIndex, findSnippetMatches, selectNonOverlappingMatches, type SnippetMatch } from "@/lib/snippetMatcher";
+import { getSnippetColorSeed, getSnippetHighlightBgClasses } from "@/lib/snippetColors";
 
 const AUTOCOMPLETE_STORAGE_KEY = "sts_autocomplete_enabled";
 const AUTOCOMPLETE_EVENT_NAME = "sts-autocomplete-enabled-changed";
@@ -559,17 +560,12 @@ export function PromptAutocompleteTextarea({
     const highlightTokenRef = useRef(0);
     const highlightBgClassCacheRef = useRef<Map<string, string>>(new Map());
 
-    const buildHighlightBgClasses = useCallback((rawColor: string | null | undefined) => {
-        const key = rawColor || "";
+    const buildHighlightBgClasses = useCallback((rawColor: string | null | undefined, seed = "") => {
+        const key = `${rawColor || ""}::${seed}`;
         const cached = highlightBgClassCacheRef.current.get(key);
         if (cached) return cached;
 
-        // We intentionally ignore any `dark:*` snippet classes here so snippet colors
-        // stay consistent across themes (matches light mode appearance).
-        const fallback = "bg-muted";
-        const tokens = (rawColor || "").split(/\s+/g).filter(Boolean);
-        const bgTokens = tokens.filter((c) => c.startsWith("bg-"));
-        const result = bgTokens.join(" ") || fallback;
+        const result = getSnippetHighlightBgClasses(rawColor, seed);
         highlightBgClassCacheRef.current.set(key, result);
         return result;
     }, []);
@@ -645,8 +641,9 @@ export function PromptAutocompleteTextarea({
                         // Non-highlighted text inherits from the overlay container.
                         nodes.push(valueToHighlight.slice(cursor, m.start));
                     }
-                    const bgClasses = buildHighlightBgClasses(m.snippet.color);
-                    const isRehydrationMatch = Boolean((m.snippet as PromptItem | undefined)?.sourceId);
+                    const snippet = m.snippet as PromptItem | undefined;
+                    const bgClasses = buildHighlightBgClasses(snippet?.color, getSnippetColorSeed(snippet || {}));
+                    const isRehydrationMatch = Boolean(snippet?.sourceId);
                     nodes.push(
                         <span
                             key={`${m.start}-${idx}`}
