@@ -75,21 +75,16 @@ export const COLORS = [
 ];
 
 /**
- * Get the next available color for a new snippet.
- * Prefers unused colors to avoid visual collision, falls back to cycling when all used.
+ * Get the next color for a new snippet.
+ * Chooses randomly from unused colors first, then randomly from the full palette once exhausted.
  */
 export const getNextSnippetColor = (existingSnippets: PromptItem[]): string => {
     const usedColors = new Set(existingSnippets.map(s => s.color).filter(Boolean));
+    const unusedColors = COLORS.filter((color) => !usedColors.has(color));
 
-    // Find first unused color
-    for (const color of COLORS) {
-        if (!usedColors.has(color)) {
-            return color;
-        }
-    }
-
-    // All colors used - cycle from beginning based on count
-    return COLORS[existingSnippets.length % COLORS.length];
+    const pool = unusedColors.length > 0 ? unusedColors : COLORS;
+    const randomIndex = Math.floor(Math.random() * pool.length);
+    return pool[randomIndex];
 };
 
 
