@@ -142,4 +142,75 @@ describe("PromptConstructor snippet sync", () => {
             expect(screen.getAllByText("Foo").length).toBeGreaterThan(1);
         });
     });
+
+    it("relinks matching text segments even when other linked blocks already exist", async () => {
+        const onUpdate = vi.fn();
+        const onUpdateMany = vi.fn();
+        const onUpdateSnippets = vi.fn();
+
+        const schema = {
+            prompt: { type: "string", widget: "textarea", title: "Prompt" },
+        };
+
+        const currentValues = { prompt: "bar, baz" };
+
+        const oldFoo: PromptItem = {
+            id: "s1",
+            type: "block",
+            label: "Foo",
+            content: "foo",
+            color: COLORS[0],
+        };
+        const baz: PromptItem = {
+            id: "s2",
+            type: "block",
+            label: "Baz",
+            content: "baz",
+            color: COLORS[1],
+        };
+
+        const nextFoo: PromptItem = {
+            ...oldFoo,
+            content: "bar",
+        };
+
+        const { rerender } = render(
+            <PromptConstructor
+                schema={schema}
+                onUpdate={onUpdate}
+                onUpdateMany={onUpdateMany}
+                currentValues={currentValues}
+                targetField="prompt"
+                onTargetChange={() => undefined}
+                onFinish={() => undefined}
+                snippets={[oldFoo, baz]}
+                onUpdateSnippets={onUpdateSnippets as unknown as Dispatch<SetStateAction<PromptItem[]>>}
+            />,
+            { wrapper: Providers }
+        );
+
+        await act(async () => {
+            await new Promise((resolve) => setTimeout(resolve, 0));
+        });
+
+        await act(async () => {
+            rerender(
+                <PromptConstructor
+                    schema={schema}
+                    onUpdate={onUpdate}
+                    onUpdateMany={onUpdateMany}
+                    currentValues={currentValues}
+                    targetField="prompt"
+                    onTargetChange={() => undefined}
+                    onFinish={() => undefined}
+                    snippets={[nextFoo, baz]}
+                    onUpdateSnippets={onUpdateSnippets as unknown as Dispatch<SetStateAction<PromptItem[]>>}
+                />
+            );
+        });
+
+        await waitFor(() => {
+            expect(screen.getAllByText("Foo").length).toBeGreaterThan(1);
+        });
+    });
 });

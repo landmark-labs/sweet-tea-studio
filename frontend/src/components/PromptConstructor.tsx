@@ -1073,6 +1073,36 @@ export const PromptConstructor = React.memo(function PromptConstructor({ schema,
                 return item;
             });
 
+            // Relink matching text fragments into snippet blocks while preserving
+            // existing linked/frozen blocks in the same field.
+            let relinkedTextSegments = false;
+            const segmentRelinked: PromptItem[] = [];
+            synced.forEach((item) => {
+                if (item.type !== "text" || !item.content) {
+                    segmentRelinked.push(item);
+                    return;
+                }
+
+                const rebuiltText = rebuildItemsForValue(item.content, snippetIndexRef.current);
+                const hasLinkedBlocksInText = rebuiltText.some((entry) => entry.type === "block" && !!entry.sourceId);
+                if (!hasLinkedBlocksInText) {
+                    segmentRelinked.push(item);
+                    return;
+                }
+
+                relinkedTextSegments = true;
+                rebuiltText.forEach((entry, entryIdx) => {
+                    segmentRelinked.push({
+                        ...entry,
+                        id: `${item.id}-relink-${entryIdx}`,
+                    });
+                });
+            });
+            if (relinkedTextSegments) {
+                synced = segmentRelinked;
+                didChangeField = true;
+            }
+
             // If this field currently has only text items, a library edit may create
             // a brand new match that should become a linked snippet brick.
             const hasLinkedBlocksBeforeRelink = synced.some(i => i.type === "block" && !!i.sourceId);
