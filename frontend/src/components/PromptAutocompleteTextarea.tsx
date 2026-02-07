@@ -642,7 +642,7 @@ export function PromptAutocompleteTextarea({
 
                 selectedMatches.forEach((m, idx) => {
                     if (m.start > cursor) {
-                        // Non-highlighted text: inherits `text-transparent dark:text-muted-foreground` from the backdrop container.
+                        // Non-highlighted text inherits from the overlay container.
                         nodes.push(valueToHighlight.slice(cursor, m.start));
                     }
                     const bgClasses = buildHighlightBgClasses(m.snippet.color);
@@ -654,8 +654,8 @@ export function PromptAutocompleteTextarea({
                                 bgClasses,
                                 "rounded-sm opacity-95 dark:opacity-100",
                                 isRehydrationMatch && "ring-2 ring-black/40 dark:ring-destructive ring-inset underline decoration-dashed decoration-black/60 dark:decoration-destructive underline-offset-2",
-                                // Keep highlight text transparent so the live textarea text remains authoritative.
-                                "text-transparent"
+                                // Dark mode renders highlighted snippet text in black for contrast.
+                                "text-transparent dark:text-black dark:font-medium"
                             )}
                         >
                             {valueToHighlight.slice(m.start, m.end)}
@@ -665,7 +665,7 @@ export function PromptAutocompleteTextarea({
                 });
 
                 if (cursor < valueToHighlight.length) {
-                    // Trailing non-highlighted text: inherits `text-transparent dark:text-muted-foreground` from the backdrop container.
+                    // Non-highlighted tail inherits from the overlay container.
                     nodes.push(valueToHighlight.slice(cursor));
                 }
 
@@ -846,8 +846,8 @@ export function PromptAutocompleteTextarea({
                         ref={backdropRef}
                         aria-hidden="true"
                         className={cn(
-                            // Match Textarea base styles EXACTLY. Keep it behind the textarea so text stays responsive.
-                            "absolute inset-0 z-0 p-3 text-xs font-mono whitespace-pre-wrap break-words overflow-auto bg-transparent border border-transparent pointer-events-none text-transparent",
+                            // Match Textarea metrics exactly; in dark mode this is the visible text layer.
+                            "absolute inset-0 z-0 p-3 text-xs font-mono whitespace-pre-wrap break-words overflow-auto bg-transparent border border-transparent pointer-events-none text-transparent dark:text-foreground",
                             // Must match textarea sizing/resize
                             className?.includes("h-") ? "" : "h-auto" // If height is fixed in class, it inherits naturally via inset. If auto, we might drift.
                             // Actually, Scroll Sync handles offset.
@@ -1012,7 +1012,7 @@ export function PromptAutocompleteTextarea({
                         highlightSnippets && isActive && "bg-accent/10", // slight tint if active but transparent
                         // Dark mode caret visibility: black when cursor is on light snippet highlights, white otherwise
                         showHighlightOverlay
-                            ? (isCursorInHighlight ? "dark:caret-black" : "dark:caret-white")
+                            ? (isCursorInHighlight ? "dark:text-transparent dark:caret-black" : "dark:text-transparent dark:caret-white")
                             : "dark:caret-white",
                         className,
                         // Ensure padding matches overlay
