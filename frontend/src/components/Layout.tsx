@@ -125,8 +125,8 @@ export default function Layout() {
             className={cn(
               "rounded-full border border-transparent transition-all",
               collapsed
-                ? "absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-8 w-8 hover:bg-transparent text-foreground/80 font-bold"
-                : "h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-hover"
+                ? "absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-8 w-8 hover:bg-transparent text-foreground/80 font-bold dark:!text-black"
+                : "h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-hover dark:!text-white"
             )}
             onClick={() => setCollapsed(!collapsed)}
           >
