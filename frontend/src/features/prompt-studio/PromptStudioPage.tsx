@@ -22,7 +22,7 @@ import { useUndoRedo } from "@/lib/undoRedo";
 import { useUndoToast } from "@/components/ui/undo-toast";
 import { ProjectGallery } from "@/components/ProjectGallery";
 import { MediaTray } from "@/components/MediaTray";
-import { useGenerationFeedStore, usePromptLibraryStore } from "@/lib/stores/promptDataStore";
+import { useGenerationFeedStore } from "@/lib/stores/promptDataStore";
 import { useGeneration } from "@/lib/GenerationContext";
 import { logClientEventThrottled } from "@/lib/clientDiagnostics";
 import { deletePipeParams, loadPipeParams, savePipeParams } from "@/lib/persistedState";
@@ -259,14 +259,6 @@ export default function PromptStudio() {
   const clearPendingCanvas = useCanvasStore(useCallback(state => state.clearPendingCanvas, []));
 
   const toggleMediaTray = useMediaTrayStore(useCallback((state) => state.toggleCollapsed, []));
-
-  // Prompt Library State - also using selectors
-  const setPrompts = usePromptLibraryStore(useCallback(state => state.setPrompts, []));
-  const clearPrompts = usePromptLibraryStore(useCallback(state => state.clearPrompts, []));
-  const shouldRefetchPrompts = usePromptLibraryStore(useCallback(state => state.shouldRefetch, []));
-  const [, setPromptLoading] = useState(false);
-  const [, setPromptError] = useState<string | null>(null);
-  const [promptSearch] = useState("");
 
   // Add a refresh key for gallery
   const [galleryRefresh, setGalleryRefresh] = useState(0);
@@ -2205,39 +2197,6 @@ export default function PromptStudio() {
       processPendingImage();
     }
   }, [selectedWorkflowId, selectedEngineId, selectedProject]);
-
-  const loadPromptLibrary = async (query?: string) => {
-    if (!selectedWorkflowId) {
-      clearPrompts();
-      return;
-    }
-    setPromptLoading(true);
-    setPromptError(null);
-    try {
-      const search = query ?? promptSearch;
-      if (!shouldRefetchPrompts(selectedWorkflowId, search)) {
-        setPromptLoading(false);
-        return;
-      }
-      const data = await api.getPrompts(search, parseInt(selectedWorkflowId));
-      setPrompts(data, selectedWorkflowId, search);
-    } catch (err) {
-      setPromptError(err instanceof Error ? err.message : "Failed to load prompts");
-    } finally {
-      setPromptLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (selectedWorkflowId) {
-      loadPromptLibrary();
-    } else {
-      clearPrompts();
-    }
-  }, [selectedWorkflowId]);
-
-
-
 
   // On mount, check if we have a running job in the feed and restore lastJobId to resume WS
   useEffect(() => {

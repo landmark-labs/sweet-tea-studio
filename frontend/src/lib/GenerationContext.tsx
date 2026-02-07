@@ -44,6 +44,8 @@ interface GenerationContextValue {
 }
 
 const GenerationContext = createContext<GenerationContextValue | null>(null);
+const QUICK_PANEL_RESULT_LIMIT = 42;
+const QUICK_PANEL_CACHE_KEY = "global-media-search";
 
 export function useGeneration() {
     const ctx = useContext(GenerationContext);
@@ -288,29 +290,29 @@ export function GenerationProvider({ children }: GenerationProviderProps) {
 
     // Load prompt library
     const loadPromptLibrary = useCallback(async () => {
-        if (!selectedWorkflowId) return;
-
-        if (!shouldRefetch(selectedWorkflowId, promptSearch)) return;
+        const search = promptSearch.trim();
+        if (!shouldRefetch(QUICK_PANEL_CACHE_KEY, search)) return;
 
         try {
             const data = await api.searchPromptMedia({
-                query: promptSearch,
-                workflowId: parseInt(selectedWorkflowId),
+                query: search || undefined,
                 offset: 0,
-                limit: 200,
+                limit: QUICK_PANEL_RESULT_LIMIT,
             });
-            setPrompts(data.items, selectedWorkflowId, promptSearch);
+            setPrompts(
+                data.items.slice(0, QUICK_PANEL_RESULT_LIMIT),
+                QUICK_PANEL_CACHE_KEY,
+                search
+            );
         } catch (err) {
             console.error("Failed to load prompts", err);
         }
-    }, [selectedWorkflowId, promptSearch, shouldRefetch, setPrompts]);
+    }, [promptSearch, shouldRefetch, setPrompts]);
 
-    // Load prompts when workflow or search changes
+    // Load prompts when the search context changes.
     useEffect(() => {
-        if (selectedWorkflowId) {
-            loadPromptLibrary();
-        }
-    }, [selectedWorkflowId, loadPromptLibrary]);
+        loadPromptLibrary();
+    }, [loadPromptLibrary]);
 
     // Apply prompt to form
     const applyPrompt = useCallback((prompt: PromptLibraryItem) => {

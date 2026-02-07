@@ -33,7 +33,9 @@ interface PromptLibraryQuickPanelProps {
   onApply: (prompt: PromptLibraryItem) => void;
 }
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 14;
+const MAX_PAGES = 3;
+const MAX_RESULTS = PAGE_SIZE * MAX_PAGES;
 
 export function PromptLibraryQuickPanel({
   open,
@@ -50,15 +52,17 @@ export function PromptLibraryQuickPanel({
   const [previewItem, setPreviewItem] = React.useState<PromptLibraryItem | null>(null);
   const [metadataItem, setMetadataItem] = React.useState<PromptLibraryItem | null>(null);
 
+  const cappedPrompts = React.useMemo(() => prompts.slice(0, MAX_RESULTS), [prompts]);
+
   React.useEffect(() => {
     setPage(0);
-  }, [searchValue, prompts.length]);
+  }, [searchValue, cappedPrompts.length]);
 
   if (!open) return null;
 
-  const pageCount = Math.max(1, Math.ceil(prompts.length / PAGE_SIZE));
+  const pageCount = Math.max(1, Math.ceil(cappedPrompts.length / PAGE_SIZE));
   const pageStart = page * PAGE_SIZE;
-  const pageItems = prompts.slice(pageStart, pageStart + PAGE_SIZE);
+  const pageItems = cappedPrompts.slice(pageStart, pageStart + PAGE_SIZE);
 
   const copyText = (value?: string | null) => {
     if (!value) return;
@@ -77,7 +81,13 @@ export function PromptLibraryQuickPanel({
           </div>
 
           <div className="p-2 space-y-2">
-            <div className="flex gap-2">
+            <form
+              className="flex gap-2"
+              onSubmit={(event) => {
+                event.preventDefault();
+                onSearchSubmit();
+              }}
+            >
               <div className="relative flex-1">
                 <Search className="absolute left-2 top-2 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -87,10 +97,10 @@ export function PromptLibraryQuickPanel({
                   className="pl-8 h-8 text-xs"
                 />
               </div>
-              <Button size="sm" variant="outline" className="h-8 text-xs px-2" onClick={onSearchSubmit}>
+              <Button type="submit" size="sm" variant="outline" className="h-8 text-xs px-2">
                 Go
               </Button>
-            </div>
+            </form>
 
             {error && <div className="text-xs text-destructive">{error}</div>}
             {loading && <div className="text-xs text-muted-foreground">Loading prompt library...</div>}
