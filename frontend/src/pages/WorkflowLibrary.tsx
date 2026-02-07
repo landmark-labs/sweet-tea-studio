@@ -622,9 +622,14 @@ export default function WorkflowLibrary() {
             const found = workflows.find((w) => w.id === editingWorkflowId);
             if (found) {
                 setEditingWorkflowLocal(found);
-                // Use persisted edits if available, otherwise init from workflow
-                if (!schemaEdits) {
-                    setSchemaEdits(found.input_schema ? JSON.parse(JSON.stringify(found.input_schema)) : null);
+                // Use persisted edits if they exist and have content, otherwise init from workflow
+                const needsSchema = !schemaEdits || Object.keys(schemaEdits).length === 0;
+                if (needsSchema) {
+                    const edits = found.input_schema ? JSON.parse(JSON.stringify(found.input_schema)) : {};
+                    const orderedIds = getNodeDisplayOrder(found.graph_json, edits);
+                    edits.__node_order = orderedIds;
+                    setSchemaEdits(edits);
+                    setNodeOrder(orderedIds);
                 }
                 if (!editName) {
                     setEditName(found.name);
@@ -972,7 +977,7 @@ export default function WorkflowLibrary() {
     }, [editingWorkflow, nodeOrder, schemaEdits]);
 
     if (editingWorkflow) {
-        const displayOrder = nodeOrder.length > 0 ? nodeOrder : getNodeDisplayOrder(editingWorkflow.graph_json, schemaEdits);
+        const displayOrder = nodeOrder.length > 0 ? nodeOrder : getNodeDisplayOrder(editingWorkflow.graph_json, schemaEdits || {});
         const sortedNodeIds = displayOrder;
 
 
@@ -980,6 +985,7 @@ export default function WorkflowLibrary() {
         const buildNodeRenderData = (nodeId: string): RenderNode | null => {
             const node = editingWorkflow.graph_json[nodeId];
             if (!node) return null;
+            if (!schemaEdits) return null;
 
             const allParams = Object.entries(schemaEdits)
                 .filter(([_, val]: [string, any]) => String(val.x_node_id) === String(nodeId));
