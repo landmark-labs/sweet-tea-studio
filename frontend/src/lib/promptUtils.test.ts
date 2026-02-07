@@ -45,4 +45,22 @@ describe("findCaptionInputFieldInSchema", () => {
 
         expect(key).toBe("30.free_text");
     });
+
+    it("ignores dropdown-backed string fields for caption targets", () => {
+        const key = findCaptionInputFieldInSchema({
+            "10.model_name": { type: "string", title: "Model", enum: ["a", "b"], x_use_media_caption: true },
+            "11.caption_text": { type: "string", title: "Caption" },
+        });
+
+        expect(key).toBe("11.caption_text");
+    });
+
+    it("returns null when no free-text fields are available", () => {
+        const key = findCaptionInputFieldInSchema({
+            "10.model_name": { type: "string", title: "Model", enum: ["a", "b"] },
+            "11.lora_name": { type: "string", title: "LoRA", widget: "select" },
+        });
+
+        expect(key).toBeNull();
+    });
 });

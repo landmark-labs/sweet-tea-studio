@@ -30,17 +30,38 @@ const isSchemaTextField = (field: any): boolean => {
     if (!field || typeof field !== "object") return false;
     const widget = String(field.widget || "").toLowerCase();
     const type = String(field.type || "").toLowerCase();
+    const hasStringEnum = Array.isArray(field.enum) && field.enum.length > 0;
+    const hasDynamicOptions =
+        Array.isArray(field.options) ||
+        Array.isArray(field.x_options) ||
+        Boolean(field.x_dynamic_options);
+    const isDropdownWidget =
+        widget === "select" ||
+        widget === "dropdown" ||
+        widget === "combo" ||
+        widget === "multiselect";
+    const isTextWidget = widget === "text" || widget === "textarea";
+    const isStringType = type === "string" || type === "string_literal";
+
+    // Caption targets must be free-text fields only.
     return (
-        widget === "text" ||
-        widget === "textarea" ||
-        type === "string" ||
-        type === "string_literal"
+        (isTextWidget || (isStringType && !widget)) &&
+        !hasStringEnum &&
+        !hasDynamicOptions &&
+        !isDropdownWidget
     );
 };
 
 const normalizeCaptionSourceSelection = (schema: any) => {
     if (!schema || typeof schema !== "object") return schema;
     const next = { ...schema };
+    Object.entries(next).forEach(([key, field]) => {
+        if (key.startsWith("__")) return;
+        if (!field || typeof field !== "object") return;
+        if ((field as any)?.x_use_media_caption && !isSchemaTextField(field)) {
+            delete (next[key] as any).x_use_media_caption;
+        }
+    });
     const selected = Object.entries(next)
         .filter(([key, field]) => {
             if (key.startsWith("__")) return false;
@@ -124,13 +145,6 @@ const NodeCard = ({ node, schemaEdits, setSchemaEdits }: NodeCardProps) => {
     };
 
     const paramCount = node.active.length + node.hidden.length;
-    const activeCaptionSourceKey = Object.entries(schemaEdits || {}).find(
-        ([key, field]) =>
-            !key.startsWith("__") &&
-            isSchemaTextField(field) &&
-            (field as any)?.x_use_media_caption === true
-    )?.[0] || null;
-
     const wrapWithTooltip = (content: React.ReactElement, tooltip?: string) => {
         if (!tooltip) return content;
         return (
@@ -252,8 +266,6 @@ const NodeCard = ({ node, schemaEdits, setSchemaEdits }: NodeCardProps) => {
                             <TableBody>
                                 {node.active.map(([key, field]: [string, any]) => {
                                     const tooltip = resolveParamTooltip(field);
-                                    const canUseCaption = isSchemaTextField(field);
-                                    const usesCaption = activeCaptionSourceKey === key;
                                     return (
                                         <TableRow key={key} className="hover:bg-muted/30">
                                             <TableCell className="py-2">
@@ -324,41 +336,11 @@ const NodeCard = ({ node, schemaEdits, setSchemaEdits }: NodeCardProps) => {
                                             )}
                                         </TableCell>
                                         <TableCell className="text-right py-2">
-                                            <div className="flex items-center justify-end gap-1">
-                                                {canUseCaption && (
-                                                    <Button
-                                                        variant={usesCaption ? "secondary" : "ghost"}
-                                                        size="sm"
-                                                        className={cn(
-                                                            "h-6 text-xs px-2",
-                                                            usesCaption
-                                                                ? "text-sky-700 dark:text-sky-300"
-                                                                : "text-muted-foreground"
-                                                        )}
-                                                        onClick={() => {
-                                                            const s = { ...schemaEdits };
-                                                            Object.entries(s).forEach(([schemaKey, schemaField]) => {
-                                                                if (schemaKey.startsWith("__")) return;
-                                                                if (!isSchemaTextField(schemaField)) return;
-                                                                if ((schemaField as any)?.x_use_media_caption) {
-                                                                    delete (s[schemaKey] as any).x_use_media_caption;
-                                                                }
-                                                            });
-                                                            if (!usesCaption) {
-                                                                s[key].x_use_media_caption = true;
-                                                            }
-                                                            setSchemaEdits(s);
-                                                        }}
-                                                    >
-                                                        {usesCaption ? "caption source" : "use caption"}
-                                                    </Button>
-                                                )}
-                                                <Button variant="ghost" size="sm" className="h-6 text-xs text-red-500 hover:text-red-700" onClick={() => {
-                                                    const s = { ...schemaEdits };
-                                                    s[key].__hidden = true;
-                                                    setSchemaEdits(s);
-                                                }}>Hide</Button>
-                                            </div>
+                                            <Button variant="ghost" size="sm" className="h-6 text-xs text-red-500 hover:text-red-700" onClick={() => {
+                                                const s = { ...schemaEdits };
+                                                s[key].__hidden = true;
+                                                setSchemaEdits(s);
+                                            }}>Hide</Button>
                                         </TableCell>
                                         </TableRow>
                                     );
@@ -556,6 +538,7 @@ export default function WorkflowLibrary() {
     const [nameError, setNameError] = useState("");
     const [isSaving, setIsSaving] = useState(false);
     const [isSyncingSchema, setIsSyncingSchema] = useState(false);
+    const [showCaptionFieldPicker, setShowCaptionFieldPicker] = useState(false);
 
     const generation = useGeneration();
 
@@ -812,6 +795,7 @@ export default function WorkflowLibrary() {
         setNodeOrder(orderedIds);
         setEditName(w.name);
         setNameError("");
+        setShowCaptionFieldPicker(false);
     };
 
     const validateName = (value: string, currentId?: number) => {
@@ -847,6 +831,7 @@ export default function WorkflowLibrary() {
             setEditingWorkflow(null);
             setNodeOrder([]);
             setSchemaEdits(null);
+            setShowCaptionFieldPicker(false);
             await loadWorkflows();
             await generation?.refreshWorkflows();
         } catch (err) {
@@ -956,6 +941,43 @@ export default function WorkflowLibrary() {
         const activeCaptionFieldTitle = activeCaptionFieldKey
             ? String(schemaEdits?.[activeCaptionFieldKey]?.title || activeCaptionFieldKey)
             : null;
+        const nodeOrderIndex = new Map(displayOrder.map((id, idx) => [String(id), idx]));
+        const captionFieldCandidates = Object.entries(schemaEdits || {})
+            .filter(([key, field]) => !key.startsWith("__") && isSchemaTextField(field))
+            .map(([key, field]) => {
+                const nodeId = String((field as any)?.x_node_id ?? key.split(".")[0] ?? "");
+                const graphNode = editingWorkflow.graph_json?.[nodeId];
+                const nodeLabel =
+                    String((field as any)?.x_node_alias || "").trim() ||
+                    String(graphNode?._meta?.title || graphNode?.title || (field as any)?.x_title || `node ${nodeId}`);
+                const fieldLabel = String((field as any)?.title || key.split(".").slice(-1)[0] || key);
+                return { key, nodeId, label: `${nodeLabel} -> ${fieldLabel}` };
+            })
+            .sort((a, b) => {
+                const aIndex = nodeOrderIndex.get(a.nodeId);
+                const bIndex = nodeOrderIndex.get(b.nodeId);
+                if (aIndex !== undefined && bIndex !== undefined && aIndex !== bIndex) {
+                    return aIndex - bIndex;
+                }
+                if (aIndex !== undefined && bIndex === undefined) return -1;
+                if (aIndex === undefined && bIndex !== undefined) return 1;
+                return a.label.localeCompare(b.label);
+            });
+
+        const setCaptionTargetField = (targetKey: string | null) => {
+            const s = { ...schemaEdits };
+            Object.entries(s).forEach(([schemaKey, schemaField]) => {
+                if (schemaKey.startsWith("__")) return;
+                if (!schemaField || typeof schemaField !== "object") return;
+                if ((schemaField as any)?.x_use_media_caption) {
+                    delete (s[schemaKey] as any).x_use_media_caption;
+                }
+            });
+            if (targetKey && s[targetKey] && isSchemaTextField(s[targetKey])) {
+                s[targetKey].x_use_media_caption = true;
+            }
+            setSchemaEdits(s);
+        };
 
         return (
             <div className="container mx-auto p-4 h-[calc(100vh-4rem)] flex flex-row gap-4">
@@ -995,16 +1017,53 @@ export default function WorkflowLibrary() {
                         <div className="text-[10px] text-muted-foreground text-right">{(editingWorkflow.description || "").length}/500</div>
                     </div>
 
-                    <div className="space-y-1 mb-4 rounded-md border border-border bg-muted/20 p-2">
-                        <Label className="text-sm">use media caption</Label>
+                    <div className="space-y-2 mb-4 rounded-md border border-border bg-muted/20 p-2">
+                        <div className="flex items-center justify-between gap-2">
+                            <Label className="text-sm">use media caption</Label>
+                            <Button
+                                type="button"
+                                variant={showCaptionFieldPicker ? "secondary" : "outline"}
+                                size="sm"
+                                className="h-7 text-xs"
+                                onClick={() => setShowCaptionFieldPicker((prev) => !prev)}
+                                disabled={captionFieldCandidates.length === 0}
+                            >
+                                use media caption
+                            </Button>
+                        </div>
                         <p className="text-[11px] text-muted-foreground">
                             {activeCaptionFieldTitle
                                 ? `target field: ${activeCaptionFieldTitle}`
                                 : "no field selected"}
                         </p>
-                        <p className="text-[10px] text-muted-foreground">
-                            choose a text field below using "use caption"
-                        </p>
+                        {captionFieldCandidates.length === 0 ? (
+                            <p className="text-[10px] text-muted-foreground">
+                                no free text fields are available in this pipe
+                            </p>
+                        ) : showCaptionFieldPicker ? (
+                            <div className="space-y-1">
+                                <Label htmlFor="caption-target-field" className="text-[10px] text-muted-foreground uppercase">
+                                    node to field
+                                </Label>
+                                <select
+                                    id="caption-target-field"
+                                    className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-xs"
+                                    value={activeCaptionFieldKey || ""}
+                                    onChange={(e) => setCaptionTargetField(e.target.value || null)}
+                                >
+                                    <option value="">no field selected</option>
+                                    {captionFieldCandidates.map((candidate) => (
+                                        <option key={candidate.key} value={candidate.key}>
+                                            {candidate.label}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        ) : (
+                            <p className="text-[10px] text-muted-foreground">
+                                press "use media caption" to select a node to field target
+                            </p>
+                        )}
                     </div>
 
 
@@ -1162,7 +1221,7 @@ export default function WorkflowLibrary() {
                                  variant="outline"
                                  size="sm"
                                  className="flex-1"
-                                 onClick={() => { setEditingWorkflow(null); setNodeOrder([]); }}
+                                 onClick={() => { setEditingWorkflow(null); setNodeOrder([]); setShowCaptionFieldPicker(false); }}
                                  disabled={isSaving || isSyncingSchema}
                              >
                                  Cancel

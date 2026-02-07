@@ -158,11 +158,24 @@ const isTextSchemaField = (field: Record<string, unknown> | undefined): boolean 
     if (!field) return false;
     const widget = String((field as any).widget || "").toLowerCase();
     const type = String((field as any).type || "").toLowerCase();
+    const hasStringEnum = Array.isArray((field as any).enum) && (field as any).enum.length > 0;
+    const hasDynamicOptions =
+        Array.isArray((field as any).options) ||
+        Array.isArray((field as any).x_options) ||
+        Boolean((field as any).x_dynamic_options);
+    const isDropdownWidget =
+        widget === "select" ||
+        widget === "dropdown" ||
+        widget === "combo" ||
+        widget === "multiselect";
+    const isTextWidget = widget === "textarea" || widget === "text";
+    const isStringType = type === "string" || type === "string_literal";
+
     return (
-        widget === "textarea" ||
-        widget === "text" ||
-        type === "string" ||
-        type === "string_literal"
+        (isTextWidget || (isStringType && !widget)) &&
+        !hasStringEnum &&
+        !hasDynamicOptions &&
+        !isDropdownWidget
     );
 };
 
