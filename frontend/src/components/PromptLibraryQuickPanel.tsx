@@ -112,9 +112,9 @@ export function PromptLibraryQuickPanel({
                         >
                           <div className="aspect-square bg-muted/30">
                             {isVideo ? (
-                              <video src={src} className="w-full h-full object-cover" preload="metadata" muted playsInline />
+                              <video src={src} className="w-full h-full object-contain" preload="metadata" muted playsInline />
                             ) : (
-                              <img src={src} className="w-full h-full object-cover" alt={prompt.prompt_name || `Image ${prompt.image_id}`} />
+                              <img src={src} className="w-full h-full object-contain" alt={prompt.prompt_name || `Image ${prompt.image_id}`} />
                             )}
                           </div>
                           <div className="p-1.5 space-y-1">

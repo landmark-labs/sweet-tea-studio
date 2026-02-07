@@ -144,7 +144,7 @@ export default function PromptLibrary() {
                       <img
                         src={`${IMAGE_API_BASE}/gallery/image/path?path=${encodeURIComponent(item.preview_path)}`}
                         alt={item.prompt_name || `image #${item.image_id}`}
-                        className="w-full h-full object-cover"
+                        className="w-full h-full object-contain"
                       />
                     </div>
                     <div className="p-2 space-y-1">
