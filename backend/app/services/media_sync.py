@@ -34,10 +34,20 @@ def maybe_resync_media_index(
             return False
         _LAST_RESYNC_TS = now
 
-    try:
-        from app.api.endpoints.gallery import resync_images_from_disk
+    # Run resync in background thread so caller returns immediately.
+    # This prevents the heavy disk scan from blocking API responses.
+    def _background_resync() -> None:
+        try:
+            from app.api.endpoints.gallery import resync_images_from_disk
+            from app.db.engine import engine as db_engine
+            from sqlmodel import Session as DbSession
 
-        resync_images_from_disk(session)
-        return True
-    except Exception:
-        return True
+            with DbSession(db_engine) as bg_session:
+                resync_images_from_disk(bg_session)
+        except Exception:
+            pass
+
+    import threading
+
+    threading.Thread(target=_background_resync, daemon=True).start()
+    return True
