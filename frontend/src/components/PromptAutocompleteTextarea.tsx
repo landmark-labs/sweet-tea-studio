@@ -698,7 +698,9 @@ export function PromptAutocompleteTextarea({
     // Determine if cursor is within a highlighted snippet (for dynamic caret color in dark mode)
     const isCursorInHighlight = useMemo(() => {
         if (!showHighlightOverlay || !highlightState?.matches) return false;
-        return highlightState.matches.some((m) => cursor >= m.start && cursor <= m.end);
+        // `findSnippetMatches` uses [start, end) ranges. Keep caret detection aligned so
+        // the caret switches back to white immediately after a highlighted snippet.
+        return highlightState.matches.some((m) => cursor >= m.start && cursor < m.end);
     }, [showHighlightOverlay, highlightState, cursor]);
 
     // Keep highlight overlay scroll/viewport aligned even when textarea scroll changes without onScroll events
