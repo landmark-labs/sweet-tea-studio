@@ -32,6 +32,8 @@ import { useStatusPollingStore } from "@/lib/stores/statusPollingStore";
 import { useGeneration } from "@/lib/GenerationContext";
 import { initClientDiagnostics } from "@/lib/clientDiagnostics";
 import { CanvasSidebar } from "@/components/CanvasSidebar";
+import { AuthAccountStatus } from "@/components/auth/AuthAccountStatus";
+import { EntitlementBanner } from "@/components/auth/EntitlementBanner";
 
 export default function Layout() {
   const [collapsed, setCollapsed] = useState(false);
@@ -257,8 +259,10 @@ export default function Layout() {
               </div>
 
               <UndoRedoBar />
+              <AuthAccountStatus />
             </div>
           </div>
+          <EntitlementBanner />
           <div className="flex-1 overflow-hidden relative">
             <Outlet context={{ feedOpen, setFeedOpen, paletteOpen, setPaletteOpen, libraryOpen, setLibraryOpen }} />
           </div>

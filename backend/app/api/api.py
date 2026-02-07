@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.endpoints import canvases, engines, jobs, workflows, gallery, library, files, vlm, projects, status, models, portfolio, snippets, database
+from app.api.endpoints import canvases, engines, jobs, workflows, gallery, library, files, vlm, projects, status, models, portfolio, snippets, database, auth_client
 
 api_router = APIRouter()
 api_router.include_router(engines.router, prefix="/engines", tags=["engines"])
@@ -16,3 +16,4 @@ api_router.include_router(models.router, tags=["models"])
 api_router.include_router(portfolio.router, prefix="/portfolio", tags=["portfolio"])
 api_router.include_router(snippets.router, prefix="/snippets", tags=["snippets"])
 api_router.include_router(database.router, prefix="/database", tags=["database"])
+api_router.include_router(auth_client.router, tags=["auth-client"])

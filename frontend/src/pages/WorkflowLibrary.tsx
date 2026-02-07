@@ -21,6 +21,7 @@ import { stripSchemaMeta } from "@/lib/schema";
 import { useGeneration } from "@/lib/GenerationContext";
 import { resolveParamTooltip } from "@/components/dynamic-form/fieldUtils";
 import { usePipesPageStore } from "@/lib/stores/pageStateStores";
+import { useAuth, type FeatureGateDecision } from "@/lib/auth";
 
 const arraysEqual = (a: string[], b: string[]) => {
     if (a.length !== b.length) return false;
@@ -443,6 +444,7 @@ const getNodeDisplayOrder = (graph: any, schema: any) => {
 interface SortableWorkflowCardProps {
     workflow: WorkflowTemplate;
     missing: string[];
+    installDecision: FeatureGateDecision;
     onViewGraph: (w: WorkflowTemplate) => void;
     onExport: (w: WorkflowTemplate) => void;
     onEdit: (w: WorkflowTemplate) => void;
@@ -455,6 +457,7 @@ interface SortableWorkflowCardProps {
 const SortableWorkflowCard = ({
     workflow: w,
     missing,
+    installDecision,
     onViewGraph,
     onExport,
     onEdit,
@@ -519,10 +522,20 @@ const SortableWorkflowCard = ({
                             <div className="flex items-center">
                                 <AlertTriangle className="w-3 h-3 mr-1" /> missing nodes
                             </div>
-                            <Button variant="ghost" size="sm" className="text-muted-foreground hover:bg-muted" onClick={() => onStartInstall(missing)}>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-muted-foreground hover:bg-muted"
+                                onClick={() => onStartInstall(missing)}
+                                disabled={!installDecision.allowed}
+                                title={!installDecision.allowed ? installDecision.reason : undefined}
+                            >
                                 install all
                             </Button>
                         </div>
+                        {!installDecision.allowed && (
+                            <div className="mb-2 text-[11px] text-muted-foreground">{installDecision.reason}</div>
+                        )}
                         <ul className="list-disc list-inside text-muted-foreground space-y-0.5">
                             {missing.map((node, i) => <li key={i} className="break-all">{node}</li>)}
                         </ul>
@@ -612,6 +625,7 @@ const SortableWorkflowCard = ({
 
 export default function WorkflowLibrary() {
     const generation = useGeneration();
+    const { canUseFeature } = useAuth();
     // Use workflows from context if available (faster on navigation)
     const contextWorkflows = generation?.workflows;
 
@@ -740,6 +754,8 @@ export default function WorkflowLibrary() {
         })
     );
     const [composeDescription, setComposeDescription] = useState("");
+    const autoInstallDecision = canUseFeature("auto_install_nodes");
+    const dependencyFixDecision = canUseFeature("dependency_fix");
 
     // --- Polling & Install Logic (Moved up to avoid initialization errors) ---
     const stopPolling = () => {
@@ -765,6 +781,26 @@ export default function WorkflowLibrary() {
     };
 
     const startInstall = async (missing: string[]) => {
+        const installGate = canUseFeature("auto_install_nodes", { invoked: true });
+        if (!installGate.allowed) {
+            setInstallOpen(true);
+            setInstallStatus({ status: "failed", error: installGate.reason, progress_text: "" });
+            return;
+        }
+
+        if (allowManualClone) {
+            const dependencyGate = canUseFeature("dependency_fix", { invoked: true });
+            if (!dependencyGate.allowed) {
+                setInstallOpen(true);
+                setInstallStatus({
+                    status: "failed",
+                    error: dependencyGate.reason,
+                    progress_text: "",
+                });
+                return;
+            }
+        }
+
         setInstallOpen(true);
         setInstallStatus({ status: "pending", progress_text: "Initializing..." });
         try {
@@ -792,6 +828,12 @@ export default function WorkflowLibrary() {
     };
 
     useEffect(() => {
+        if (!dependencyFixDecision.allowed && allowManualClone) {
+            setAllowManualClone(false);
+        }
+    }, [dependencyFixDecision.allowed, allowManualClone]);
+
+    useEffect(() => {
         // If context already has workflows, use them initially
         if (!showArchived && contextWorkflows && contextWorkflows.length > 0) {
             setWorkflows(contextWorkflows);
@@ -813,6 +855,15 @@ export default function WorkflowLibrary() {
         }
         return [];
     };
+
+    useEffect(() => {
+        if (!editingWorkflow || !schemaEdits) return;
+        const desiredOrder = getNodeDisplayOrder(editingWorkflow.graph_json, schemaEdits);
+        if (!arraysEqual(nodeOrder, desiredOrder)) {
+            setNodeOrder(desiredOrder);
+            setSchemaEdits((prev: any) => ({ ...prev, __node_order: desiredOrder }));
+        }
+    }, [editingWorkflow, nodeOrder, schemaEdits]);
 
     const isRestoringEditor = Boolean(editingWorkflowId) && !editingWorkflow && workflows.length === 0;
 
@@ -1048,15 +1099,6 @@ export default function WorkflowLibrary() {
             setIsSyncingSchema(false);
         }
     };
-
-    useEffect(() => {
-        if (!editingWorkflow || !schemaEdits) return;
-        const desiredOrder = getNodeDisplayOrder(editingWorkflow.graph_json, schemaEdits);
-        if (!arraysEqual(nodeOrder, desiredOrder)) {
-            setNodeOrder(desiredOrder);
-            setSchemaEdits((prev: any) => ({ ...prev, __node_order: desiredOrder }));
-        }
-    }, [editingWorkflow, nodeOrder, schemaEdits]);
 
     if (editingWorkflow) {
         const displayOrder = nodeOrder.length > 0 ? nodeOrder : getNodeDisplayOrder(editingWorkflow.graph_json, schemaEdits || {});
@@ -1653,6 +1695,7 @@ export default function WorkflowLibrary() {
                                     key={w.id}
                                     workflow={w}
                                     missing={missing}
+                                    installDecision={autoInstallDecision}
                                     onViewGraph={handleViewGraph}
                                     onExport={handleExport}
                                     onEdit={handleEdit}
@@ -1706,9 +1749,18 @@ export default function WorkflowLibrary() {
                         <div className="flex items-center justify-between rounded-md border border-border p-3 bg-muted/20">
                             <div>
                                 <div className="text-sm font-semibold">allow manual git clone fallback</div>
-                                <p className="text-xs text-muted-foreground">if comfyui manager fails, opt into raw git clone/install to continue.</p>
+                                <p className="text-xs text-muted-foreground">
+                                    if comfyui manager fails, opt into raw git clone/install to continue.
+                                </p>
+                                {!dependencyFixDecision.allowed && (
+                                    <p className="text-xs text-muted-foreground mt-1">{dependencyFixDecision.reason}</p>
+                                )}
                             </div>
-                            <Switch checked={allowManualClone} onCheckedChange={setAllowManualClone} />
+                            <Switch
+                                checked={allowManualClone}
+                                onCheckedChange={setAllowManualClone}
+                                disabled={!dependencyFixDecision.allowed}
+                            />
                         </div>
 
                         {!installStatus ? (
