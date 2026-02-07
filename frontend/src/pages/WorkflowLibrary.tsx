@@ -575,6 +575,8 @@ export default function WorkflowLibrary() {
     const [workflows, setWorkflows] = useState<WorkflowTemplate[]>([]);
     const showArchived = usePipesPageStore((state) => state.showArchived);
     const setShowArchived = usePipesPageStore((state) => state.setShowArchived);
+    const editingWorkflowId = usePipesPageStore((state) => state.editingWorkflowId);
+    const setEditingWorkflowId = usePipesPageStore((state) => state.setEditingWorkflowId);
     const [error, setError] = useState<string | null>(null);
     const [importFile, setImportFile] = useState<File | null>(null);
     const [importName, setImportName] = useState("");
@@ -583,13 +585,34 @@ export default function WorkflowLibrary() {
     const [isDialogOpen, setIsDialogOpen] = useState(false);
 
     // Edit State
-    const [editingWorkflow, setEditingWorkflow] = useState<WorkflowTemplate | null>(null);
+    const [editingWorkflow, setEditingWorkflowLocal] = useState<WorkflowTemplate | null>(null);
     const [schemaEdits, setSchemaEdits] = useState<any>(null);
     const [editName, setEditName] = useState("");
     const [nameError, setNameError] = useState("");
     const [isSaving, setIsSaving] = useState(false);
     const [isSyncingSchema, setIsSyncingSchema] = useState(false);
     const [showCaptionFieldPicker, setShowCaptionFieldPicker] = useState(false);
+
+    // Wrapper to keep store and local state in sync
+    const setEditingWorkflow = (wf: WorkflowTemplate | null) => {
+        setEditingWorkflowLocal(wf);
+        setEditingWorkflowId(wf?.id ?? null);
+    };
+
+    // Restore editing state when workflows load and we have a persisted ID
+    useEffect(() => {
+        if (editingWorkflowId && workflows.length > 0 && !editingWorkflow) {
+            const found = workflows.find((w) => w.id === editingWorkflowId);
+            if (found) {
+                setEditingWorkflowLocal(found);
+                setEditName(found.name);
+                setSchemaEdits(found.input_schema ? JSON.parse(JSON.stringify(found.input_schema)) : null);
+            } else {
+                // Workflow no longer exists, clear persisted ID
+                setEditingWorkflowId(null);
+            }
+        }
+    }, [workflows, editingWorkflowId, editingWorkflow]);
 
     const generation = useGeneration();
 

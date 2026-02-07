@@ -23,14 +23,18 @@ export const useProjectsPageStore = create<ProjectsPageState>()(
 // --- Pipes (Workflow Library) Page Store ---
 interface PipesPageState {
     showArchived: boolean;
+    editingWorkflowId: number | null;
     setShowArchived: (show: boolean) => void;
+    setEditingWorkflowId: (id: number | null) => void;
 }
 
 export const usePipesPageStore = create<PipesPageState>()(
     persist(
         (set) => ({
             showArchived: false,
+            editingWorkflowId: null,
             setShowArchived: (show) => set({ showArchived: show }),
+            setEditingWorkflowId: (id) => set({ editingWorkflowId: id }),
         }),
         {
             name: "ds_page_pipes",
