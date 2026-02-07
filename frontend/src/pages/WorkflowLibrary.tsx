@@ -84,6 +84,34 @@ const normalizeCaptionSourceSelection = (schema: any) => {
     return next;
 };
 
+const extractHiddenNodes = (graph: any): Record<string, boolean> => {
+    if (!graph || typeof graph !== "object") return {};
+    const result: Record<string, boolean> = {};
+    Object.entries(graph).forEach(([nodeId, node]) => {
+        if (!node || typeof node !== "object") return;
+        result[String(nodeId)] = Boolean((node as any)?._meta?.hiddenInControls);
+    });
+    return result;
+};
+
+const applyHiddenNodes = (graph: any, hiddenNodes: Record<string, boolean>): any => {
+    if (!graph || typeof graph !== "object") return graph;
+    const updatedGraph = { ...graph };
+    Object.entries(updatedGraph).forEach(([nodeId, node]) => {
+        if (!node || typeof node !== "object") return;
+        const nextHidden = hiddenNodes[String(nodeId)];
+        if (nextHidden === undefined) return;
+        updatedGraph[nodeId] = {
+            ...(node as any),
+            _meta: {
+                ...((node as any)._meta || {}),
+                hiddenInControls: Boolean(nextHidden),
+            },
+        };
+    });
+    return updatedGraph;
+};
+
 // --- Types ---
 type RenderNode = {
     id: string;
@@ -580,6 +608,10 @@ export default function WorkflowLibrary() {
     const setEditingWorkflowId = usePipesPageStore((state) => state.setEditingWorkflowId);
     const editName = usePipesPageStore((state) => state.editName);
     const setEditName = usePipesPageStore((state) => state.setEditName);
+    const editDescription = usePipesPageStore((state) => state.editDescription);
+    const setEditDescription = usePipesPageStore((state) => state.setEditDescription);
+    const hiddenNodes = usePipesPageStore((state) => state.hiddenNodes);
+    const setHiddenNodes = usePipesPageStore((state) => state.setHiddenNodes);
     const schemaEdits = usePipesPageStore((state) => state.schemaEdits);
     const setSchemaEdits = usePipesPageStore((state) => state.setSchemaEdits);
     const expandedNodes = usePipesPageStore((state) => state.expandedNodes);
@@ -611,6 +643,12 @@ export default function WorkflowLibrary() {
             if (!editName) {
                 setEditName(wf.name);
             }
+            if (!editDescription) {
+                setEditDescription(wf.description || "");
+            }
+            if (Object.keys(hiddenNodes).length === 0) {
+                setHiddenNodes(extractHiddenNodes(wf.graph_json));
+            }
         } else {
             clearEditingState();
         }
@@ -621,7 +659,12 @@ export default function WorkflowLibrary() {
         if (editingWorkflowId && workflows.length > 0 && !editingWorkflow) {
             const found = workflows.find((w) => w.id === editingWorkflowId);
             if (found) {
-                setEditingWorkflowLocal(found);
+                const restoredWorkflow = {
+                    ...found,
+                    description: editDescription || found.description || "",
+                    graph_json: applyHiddenNodes(found.graph_json, hiddenNodes),
+                };
+                setEditingWorkflowLocal(restoredWorkflow);
                 // Use persisted edits if they exist and have content, otherwise init from workflow
                 const needsSchema = !schemaEdits || Object.keys(schemaEdits).length === 0;
                 if (needsSchema) {
@@ -632,14 +675,20 @@ export default function WorkflowLibrary() {
                     setNodeOrder(orderedIds);
                 }
                 if (!editName) {
-                    setEditName(found.name);
+                    setEditName(restoredWorkflow.name);
+                }
+                if (!editDescription) {
+                    setEditDescription(found.description || "");
+                }
+                if (Object.keys(hiddenNodes).length === 0) {
+                    setHiddenNodes(extractHiddenNodes(found.graph_json));
                 }
             } else {
                 // Workflow no longer exists, clear persisted state
                 clearEditingState();
             }
         }
-    }, [workflows, editingWorkflowId, editingWorkflow]);
+    }, [workflows, editingWorkflowId, editingWorkflow, schemaEdits, editName, editDescription, hiddenNodes, setSchemaEdits, setEditName, setEditDescription, setHiddenNodes, clearEditingState]);
 
 
     const generation = useGeneration();
@@ -896,6 +945,8 @@ export default function WorkflowLibrary() {
         setSchemaEdits(edits);
         setNodeOrder(orderedIds);
         setEditName(w.name);
+        setEditDescription(w.description || "");
+        setHiddenNodes(extractHiddenNodes(w.graph_json));
         setNameError("");
         setShowCaptionFieldPicker(false);
     };
@@ -923,6 +974,8 @@ export default function WorkflowLibrary() {
         const payload: WorkflowTemplate = {
             ...editingWorkflow,
             name: editName.trim(),
+            description: editDescription.slice(0, 500),
+            graph_json: applyHiddenNodes(editingWorkflow.graph_json, hiddenNodes),
             input_schema: normalizedSchemaEdits
         };
 
@@ -952,6 +1005,8 @@ export default function WorkflowLibrary() {
             const updated = await api.syncWorkflowSchema(editingWorkflow.id);
             setWorkflows(prev => prev.map(w => w.id === updated.id ? updated : w));
             setEditingWorkflow(updated);
+            setEditDescription(updated.description || "");
+            setHiddenNodes(extractHiddenNodes(updated.graph_json));
 
             const edits = normalizeCaptionSourceSelection(JSON.parse(JSON.stringify(updated.input_schema)));
             const orderedIds = getNodeDisplayOrder(updated.graph_json, edits);
@@ -1033,6 +1088,7 @@ export default function WorkflowLibrary() {
                 _meta: { ...(targetNode._meta || {}), hiddenInControls: hidden }
             };
 
+            setHiddenNodes({ ...hiddenNodes, [String(nodeId)]: hidden });
             setEditingWorkflow({ ...editingWorkflow, graph_json: updatedGraph });
         };
         const activeCaptionFieldKey = Object.entries(schemaEdits || {}).find(
@@ -1110,14 +1166,14 @@ export default function WorkflowLibrary() {
                         <Label htmlFor="edit-description" className="text-sm">description</Label>
                         <Textarea
                             id="edit-description"
-                            value={editingWorkflow.description || ""}
-                            onChange={(e) => setEditingWorkflow({ ...editingWorkflow, description: e.target.value.slice(0, 500) })}
+                            value={editDescription}
+                            onChange={(e) => setEditDescription(e.target.value.slice(0, 500))}
                             placeholder="summarize what this pipe generates"
                             maxLength={500}
                             rows={6}
                             className="text-sm resize-none"
                         />
-                        <div className="text-[10px] text-muted-foreground text-right">{(editingWorkflow.description || "").length}/500</div>
+                        <div className="text-[10px] text-muted-foreground text-right">{editDescription.length}/500</div>
                     </div>
 
                     <div className="space-y-2 mb-4 rounded-md border border-border bg-muted/20 p-2">

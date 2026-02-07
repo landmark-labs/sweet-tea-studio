@@ -25,7 +25,8 @@ const PAGE_SIZE = 60;
 export default function PromptLibrary() {
   const searchInput = useLibraryPageStore((s) => s.searchInput);
   const setSearchInput = useLibraryPageStore((s) => s.setSearchInput);
-  const [query, setQuery] = React.useState("");
+  const query = useLibraryPageStore((s) => s.query);
+  const setQuery = useLibraryPageStore((s) => s.setQuery);
   const [items, setItems] = React.useState<PromptLibraryItem[]>([]);
   const [offset, setOffset] = React.useState(0);
   const [hasMore, setHasMore] = React.useState(true);
@@ -98,7 +99,7 @@ export default function PromptLibrary() {
       setHasMore(true);
       setQuery(searchInput.trim());
     },
-    [searchInput]
+    [searchInput, setQuery]
   );
 
   const handleApplyToConfigurator = React.useCallback((item: PromptLibraryItem) => {

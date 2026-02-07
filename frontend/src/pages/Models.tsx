@@ -58,16 +58,14 @@ export default function Models() {
   const [modelFolders, setModelFolders] = useState<ModelFolder[]>([]);
   const [modelsRoot, setModelsRoot] = useState<string>("");
 
-  const [downloadRows, setDownloadRows] = useState<{ target: string; url: string; id: number }[]>([
-    { target: "", url: "", id: Date.now() }
-  ]);
-
   const selectedCategory = useModelsPageStore((s) => s.selectedCategory);
   const setSelectedCategory = useModelsPageStore((s) => s.setSelectedCategory);
   const search = useModelsPageStore((s) => s.search);
   const setSearch = useModelsPageStore((s) => s.setSearch);
   const activeFolder = useModelsPageStore((s) => s.activeFolder);
   const setActiveFolder = useModelsPageStore((s) => s.setActiveFolder);
+  const downloadRows = useModelsPageStore((s) => s.downloadRows);
+  const setDownloadRows = useModelsPageStore((s) => s.setDownloadRows);
   // Removed single targetFolder state since it's now per-row
 
   // Fetch installed models from API
@@ -78,7 +76,6 @@ export default function Models() {
       const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
-        console.log("[Models] Fetched installed models:", data);
         // Map API response to component format
         const mapped: InstalledModel[] = data.map((m: any, index: number) => ({
           id: m.id || `model-${index}-${Date.now()}`,
@@ -89,7 +86,6 @@ export default function Models() {
           location: m.path || "",
           notes: m.meta?.description,
         }));
-        console.log("[Models] Mapped to:", mapped);
         setModels(mapped);
       } else {
         console.error("[Models] Failed response:", res.status, await res.text());
@@ -188,12 +184,11 @@ export default function Models() {
         row.target === "" ? { ...row, target: firstFolder } : row
       ));
     }
-  }, [modelFolders]);
+  }, [modelFolders, setDownloadRows]);
 
 
 
   const filteredModels = useMemo(() => {
-    console.log("[Models] Computing filteredModels. models.length:", models.length, "selectedCategory:", selectedCategory, "search:", search);
     const term = search.toLowerCase();
     const result = models.filter((m) => {
       const matchesSearch =
@@ -206,7 +201,6 @@ export default function Models() {
       const pathSegments = splitPathSegments(m.location.toLowerCase());
       return matchesSearch && pathSegments.includes(selectedCategory.toLowerCase());
     });
-    console.log("[Models] filteredModels result:", result.length);
     return result;
   }, [models, search, selectedCategory]);
 

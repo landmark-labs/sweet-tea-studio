@@ -50,12 +50,17 @@ export default function Gallery() {
     const setSelectedProjectId = useGalleryPageStore((s) => s.setSelectedProjectId);
     const selectedFolder = useGalleryPageStore((s) => s.selectedFolder);
     const setSelectedFolder = useGalleryPageStore((s) => s.setSelectedFolder);
+    const persistedSelectedIds = useGalleryPageStore((s) => s.selectedIds);
+    const setPersistedSelectedIds = useGalleryPageStore((s) => s.setSelectedIds);
     const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
     const [lastSelectedId, setLastSelectedId] = useState<number | null>(null);
     const [projects, setProjects] = useState<Project[]>([]);
-    const [cleanupMode, setCleanupMode] = useState(false);
-    const [selectionMode, setSelectionMode] = useState(false);
-    const [selectionModeManual, setSelectionModeManual] = useState(false); // Tracks if selection mode was activated via button
+    const cleanupMode = useGalleryPageStore((s) => s.cleanupMode);
+    const setCleanupMode = useGalleryPageStore((s) => s.setCleanupMode);
+    const selectionMode = useGalleryPageStore((s) => s.selectionMode);
+    const setSelectionMode = useGalleryPageStore((s) => s.setSelectionMode);
+    const selectionModeManual = useGalleryPageStore((s) => s.selectionModeManual);
+    const setSelectionModeManual = useGalleryPageStore((s) => s.setSelectionModeManual); // Tracks if selection mode was activated via button
     const [fullscreenIndex, setFullscreenIndex] = useState<number | null>(null);
     const [zoomScale, setZoomScale] = useState(1);
     const [panPosition, setPanPosition] = useState({ x: 0, y: 0 });
@@ -85,6 +90,32 @@ export default function Gallery() {
     const { recordChange } = useUndoRedo();
     const deleteUndoInFlightRef = useRef<Set<string>>(new Set());
     const cleanupModeRef = useRef(cleanupMode);
+    const didHydrateSelectionRef = useRef(false);
+
+    useEffect(() => {
+        if (!didHydrateSelectionRef.current) {
+            setSelectedIds(new Set(persistedSelectedIds));
+            didHydrateSelectionRef.current = true;
+            return;
+        }
+        setSelectedIds((prev) => {
+            const next = new Set(persistedSelectedIds);
+            if (next.size === prev.size && [...next].every((id) => prev.has(id))) {
+                return prev;
+            }
+            return next;
+        });
+    }, [persistedSelectedIds]);
+
+    useEffect(() => {
+        if (!didHydrateSelectionRef.current) return;
+        const next = Array.from(selectedIds).sort((a, b) => a - b);
+        const current = [...persistedSelectedIds].sort((a, b) => a - b);
+        if (next.length === current.length && next.every((id, idx) => id === current[idx])) {
+            return;
+        }
+        setPersistedSelectedIds(next);
+    }, [selectedIds, persistedSelectedIds, setPersistedSelectedIds]);
 
     // Keep fullscreen index valid when items update
     useEffect(() => {
@@ -135,13 +166,17 @@ export default function Gallery() {
     }, [selectedProjectId]);
 
     useEffect(() => {
+        selectedFolderRef.current = selectedFolder;
+    }, [selectedFolder]);
+
+    useEffect(() => {
         cleanupModeRef.current = cleanupMode;
     }, [cleanupMode]);
 
     const loadGallery = useCallback(async (
         query?: string,
         projectId?: number | null,
-        options?: { append?: boolean; loadAll?: boolean; folder?: string | null }
+        options?: { append?: boolean; loadAll?: boolean; folder?: string | null; preserveSelection?: boolean }
     ) => {
         const append = options?.append ?? false;
         const loadAll = options?.loadAll ?? false;
@@ -188,7 +223,12 @@ export default function Gallery() {
                 nextSkipRef.current = newSkip;
             }
             if (!append) {
-                setSelectedIds(new Set());
+                if (options?.preserveSelection) {
+                    const availableIds = new Set(data.map((entry) => entry.image.id));
+                    setSelectedIds((prev) => new Set(Array.from(prev).filter((id) => availableIds.has(id))));
+                } else {
+                    setSelectedIds(new Set());
+                }
                 setLastSelectedId(null);
                 setGridResetKey((prev) => prev + 1);
             }
@@ -305,7 +345,7 @@ export default function Gallery() {
     }, []);
 
     useEffect(() => {
-        loadGallery();
+        loadGallery(undefined, undefined, { preserveSelection: true });
         fetchProjects();
     }, [loadGallery, fetchProjects]);
 

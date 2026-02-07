@@ -34,22 +34,27 @@ export default function Projects() {
     const generation = useGeneration();
     const [projects, setProjects] = useState<Project[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [isCreateOpen, setIsCreateOpen] = useState(false);
-    const [newProjectName, setNewProjectName] = useState("");
     const [isCreating, setIsCreating] = useState(false);
 
     const showArchived = useProjectsPageStore((state) => state.showArchived);
     const setShowArchived = useProjectsPageStore((state) => state.setShowArchived);
+    const isCreateOpen = useProjectsPageStore((state) => state.isCreateOpen);
+    const setIsCreateOpen = useProjectsPageStore((state) => state.setIsCreateOpen);
+    const newProjectName = useProjectsPageStore((state) => state.newProjectName);
+    const setNewProjectName = useProjectsPageStore((state) => state.setNewProjectName);
+    const managingProjectId = useProjectsPageStore((state) => state.managingProjectId);
+    const setManagingProjectId = useProjectsPageStore((state) => state.setManagingProjectId);
+    const newFolderName = useProjectsPageStore((state) => state.newFolderName);
+    const setNewFolderName = useProjectsPageStore((state) => state.setNewFolderName);
 
     // Folder Management State
-    const [managingProject, setManagingProject] = useState<Project | null>(null);
-    const [newFolderName, setNewFolderName] = useState("");
     const [isAddingFolder, setIsAddingFolder] = useState(false);
     const [isDeletingFolder, setIsDeletingFolder] = useState<string | null>(null);
     const [isEmptyingTrash, setIsEmptyingTrash] = useState<string | null>(null);
 
     const reservedFolders = new Set(["input", "output", "masks"]);
     const contextProjects = generation?.projects ?? [];
+    const managingProject = managingProjectId ? projects.find((p) => p.id === managingProjectId) || null : null;
 
     const fetchProjects = async (options?: { background?: boolean }) => {
         if (!options?.background) {
@@ -76,6 +81,12 @@ export default function Projects() {
         }
         void fetchProjects();
     }, [showArchived, contextProjects]);
+
+    useEffect(() => {
+        if (managingProjectId && !projects.some((project) => project.id === managingProjectId)) {
+            setManagingProjectId(null);
+        }
+    }, [projects, managingProjectId, setManagingProjectId]);
 
     const handleCreateProject = async () => {
         if (!newProjectName.trim()) return;
@@ -118,25 +129,16 @@ export default function Projects() {
     };
 
     const handleAddFolder = async () => {
-        console.log("[Projects] handleAddFolder called", { managingProject, newFolderName, isAddingFolder });
         if (!managingProject || !newFolderName.trim()) {
-            console.log("[Projects] Bailing early - missing project or folder name");
             return;
         }
         setIsAddingFolder(true);
         try {
-            console.log("[Projects] Calling api.addProjectFolder", { projectId: managingProject.id, folderName: newFolderName.trim() });
             const updated = await api.addProjectFolder(managingProject.id, newFolderName.trim());
-            console.log("[Projects] API returned full response:", JSON.stringify(updated, null, 2));
-            console.log("[Projects] Returned config_json:", updated.config_json);
-            console.log("[Projects] Returned folders:", updated.config_json?.folders);
-
             // Update local state
             setProjects(prev => prev.map(p => p.id === updated.id ? updated : p));
-            setManagingProject(updated);
+            setManagingProjectId(updated.id);
             setNewFolderName("");
-
-            console.log("[Projects] State updated with new project data");
 
             // Refresh global context so Prompt Studio sees the new folder
             if (generation?.refreshProjects) {
@@ -298,7 +300,7 @@ export default function Projects() {
             </div>
 
             {/* Folder Management Dialog */}
-            <Dialog open={!!managingProject} onOpenChange={(open) => !open && setManagingProject(null)}>
+            <Dialog open={Boolean(managingProject)} onOpenChange={(open) => !open && setManagingProjectId(null)}>
                 <DialogContent>
                     <DialogHeader>
                         <DialogTitle>manage folders: {managingProject?.name}</DialogTitle>
@@ -358,7 +360,7 @@ export default function Projects() {
                                                             try {
                                                                 const updated = await api.deleteProjectFolder(managingProject.id, folder);
                                                                 setProjects(prev => prev.map(p => p.id === updated.id ? updated : p));
-                                                                setManagingProject(updated);
+                                                                setManagingProjectId(updated.id);
                                                                 if (generation?.refreshProjects) {
                                                                     generation.refreshProjects();
                                                                 }
@@ -386,13 +388,9 @@ export default function Projects() {
                             <Input
                                 placeholder="new folder name..."
                                 value={newFolderName}
-                                onChange={(e) => {
-                                    console.log("[Projects] Input onChange:", e.target.value);
-                                    setNewFolderName(e.target.value);
-                                }}
+                                onChange={(e) => setNewFolderName(e.target.value)}
                                 onKeyDown={(e) => {
                                     if (e.key === "Enter") {
-                                        console.log("[Projects] Enter key pressed");
                                         handleAddFolder();
                                     }
                                 }}
@@ -400,10 +398,7 @@ export default function Projects() {
                             <Button
                                 type="button"
                                 size="icon"
-                                onClick={() => {
-                                    console.log("[Projects] Button clicked! Current state:", { newFolderName, isAddingFolder, managingProject: !!managingProject });
-                                    handleAddFolder();
-                                }}
+                                onClick={handleAddFolder}
                                 disabled={isAddingFolder || !newFolderName.trim()}
                             >
                                 <FolderPlus size={16} />
@@ -492,7 +487,7 @@ export default function Projects() {
                                         key={project.id}
                                         project={project}
                                         formatDate={formatDate}
-                                        onManage={(p) => setManagingProject(p)}
+                                        onManage={(p) => setManagingProjectId(p.id)}
                                         onArchive={handleArchiveProject}
                                     />
                                 ))}
@@ -515,7 +510,7 @@ export default function Projects() {
                                 key={project.id}
                                 project={project}
                                 formatDate={formatDate}
-                                onManage={(p) => setManagingProject(p)}
+                                onManage={(p) => setManagingProjectId(p.id)}
                                 onUnarchive={handleUnarchiveProject}
                                 isArchived
                             />
