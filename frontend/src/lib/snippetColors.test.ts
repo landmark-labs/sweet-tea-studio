@@ -16,6 +16,11 @@ describe("normalizeSnippetColor", () => {
     const color = normalizeSnippetColor("bg-black border-cyan-500 text-cyan-200 dark:bg-black", "legacy-dark-snippet");
     expect(SNIPPET_COLORS).toContain(color);
   });
+
+  it("coerces legacy tailwind class sets that are not in the supported palette", () => {
+    const color = normalizeSnippetColor("bg-stone-900 border-stone-700 text-cyan-300", "legacy-stone");
+    expect(SNIPPET_COLORS).toContain(color);
+  });
 });
 
 describe("getSnippetHighlightBgClasses", () => {

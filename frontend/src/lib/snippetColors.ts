@@ -37,8 +37,6 @@ export const SNIPPET_COLORS = [
 ];
 
 const SNIPPET_COLOR_SET = new Set(SNIPPET_COLORS);
-const COLOR_TOKEN_RE = /^(bg|border|text)-/;
-const DARK_BG_RE = /^bg-(black|(?:slate|zinc|neutral|gray)-(?:8|9)\d{2}(?:\/\d+)?)$/;
 
 function hashToUint32(input: string): number {
   let hash = 2166136261;
@@ -59,14 +57,6 @@ export function normalizeSnippetColor(
 ): string {
   const stripped = stripDarkVariantClasses(rawColor).trim();
   if (SNIPPET_COLOR_SET.has(stripped)) return stripped;
-
-  const tokens = stripped.split(/\s+/g).filter(Boolean);
-  const colorTokens = tokens.filter((token) => COLOR_TOKEN_RE.test(token));
-  const bgToken = colorTokens.find((token) => token.startsWith("bg-"));
-
-  if (bgToken && !DARK_BG_RE.test(bgToken) && colorTokens.length > 0) {
-    return colorTokens.join(" ");
-  }
 
   const colorSeed = seed || stripped || "snippet";
   return deterministicPaletteColor(colorSeed);
